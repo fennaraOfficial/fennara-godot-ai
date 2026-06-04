@@ -8,6 +8,12 @@ https://www.youtube.com/watch?v=0Egu3S-9MM0
 
 Codex connects to Godot through Fennara MCP and works on GDQuest's open-source Godot 4 Open RPG project. The test shows Fennara helping the agent inspect an existing codebase, receive Godot feedback, patch a broken script, and continue.
 
+## Kantari Godot Demo Repository
+
+https://github.com/fennaraOfficial/kantari-godot-demo
+
+Kantari is a public Godot demo project made with Fennara. The repository includes a real saved Godot project with scenes, scripts, project settings, and the Fennara addon payload used during the workflow.
+
 ## Cinematic 2D Boss Fight With Codex + Fennara MCP
 
 https://youtu.be/KMRGHtficr8
