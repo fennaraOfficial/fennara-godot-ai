@@ -10,6 +10,8 @@ Codex connects to Godot through Fennara MCP and works on GDQuest's open-source G
 
 ## Kantari Godot Demo Repository
 
+https://www.youtube.com/watch?v=8y2Ub8pgNSs
+
 https://github.com/fennaraOfficial/kantari-godot-demo
 
 Kantari is a public Godot demo project made with Fennara. The repository includes a real saved Godot project with scenes, scripts, project settings, and the Fennara addon payload used during the workflow.
