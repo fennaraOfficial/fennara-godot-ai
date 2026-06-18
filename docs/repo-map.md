@@ -10,6 +10,7 @@ This file explains the main areas of the Fennara Godot MCP repository.
 | `media/` | Images and public demo assets used by docs and README files. |
 | `VERSION` | Repository version source of truth. |
 | `README.md` | Human-facing project overview and quick links. |
+| `install.ps1` / `install.sh` | Bootstrap scripts that install the Fennara CLI from GitHub releases. |
 | `AGENTS.md` | Instructions for coding agents working in this repository. |
 | `CONTEXT.md` | Shared vocabulary for Fennara concepts and architecture. |
 | `CONTRIBUTING.md` | Contribution rules, pull request expectations, and project boundaries. |
@@ -17,7 +18,7 @@ This file explains the main areas of the Fennara Godot MCP repository.
 | `llms.txt` | Short project index for language models and coding agents. |
 | `LICENSE.md` | Project license. |
 | `THIRD_PARTY_NOTICES.md` | Third-party notices. |
-| `local/` | Rust MCP server, local daemon, and command-line setup/update tools. |
+| `local/` | Rust CLI, MCP server, local daemon, and command-line setup/update tools. |
 | `fennara-cpp/` | C++ Godot GDExtension source. |
 | `godot/addons/fennara/` | Installable Godot addon payload. |
 | `templates/` | Generated project guidance templates. |

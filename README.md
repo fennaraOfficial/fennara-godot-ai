@@ -6,33 +6,76 @@ Game development breaks in places normal coding agents cannot see: script errors
 
 ## Start Here
 
-The supported setup path is documented here:
+Install the Fennara CLI:
 
-https://www.fennara.io/docs/get-started
+```powershell
+irm https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-mcp/main/install.ps1 | iex
+```
 
-The setup flow handles:
+```bash
+curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-mcp/main/install.sh | sh
+```
 
-- creating the local device identity
-- installing the Godot plugin
-- installing the local Fennara MCP server
-- choosing the Godot project Fennara should connect to
-- configuring supported MCP apps
+Then check the local install:
+
+```bash
+fennara doctor
+```
+
+Then install the Godot addon from inside your Godot project:
+
+```bash
+cd path/to/your-godot-project
+fennara install
+```
+
+For a C# Godot project, install C# support during setup:
+
+```bash
+fennara install --csharp
+```
+
+Then configure your MCP app:
+
+```bash
+fennara mcp-setup --claude
+```
+
+For Gemini or Antigravity:
+
+```bash
+fennara mcp-setup --gemini
+fennara mcp-setup --antigravity
+```
+
+Other supported MCP apps:
+
+```bash
+fennara mcp-setup --cursor
+fennara mcp-setup --vscode
+fennara mcp-setup --cline
+fennara mcp-setup --opencode
+fennara mcp-setup --windsurf
+fennara mcp-setup --kiro
+fennara mcp-setup --codex
+```
+
+When a new release is available, update from inside the project:
+
+```bash
+cd path/to/your-godot-project
+fennara update
+```
 
 ## Setup Steps
 
-1. Create a Fennara account.
-2. Open your Fennara dashboard.
-3. Copy the install command for your operating system.
-4. Run the command in your terminal.
-5. In the installer, choose the Godot project you want Fennara to use.
-6. If your project uses C#, choose C# support in Step 2. If you only use GDScript, you can skip C# support.
-7. In Step 3, choose the MCP app you want to connect, then click that app's config/update button.
-8. Open the Godot project and paste your API key in the Fennara plugin settings.
-9. Fully restart your MCP app so it reloads the Fennara MCP server.
-
-If your MCP app is not shown in the installer, finish the installer first, then use the manual MCP setup guide:
-
-https://www.fennara.io/docs/mcp#manual-setup
+1. Install the Fennara CLI.
+2. Run `fennara doctor` to verify the CLI is available.
+3. Open a terminal in your Godot project folder.
+4. Run `fennara install`.
+5. Open the Godot project and enable the Fennara addon.
+6. Run `fennara mcp-setup --claude`, `fennara mcp-setup --gemini`, or `fennara mcp-setup --antigravity`.
+7. Restart your MCP app so it reloads the Fennara MCP server.
 
 Other MCP apps can work when they support local stdio MCP servers and are configured manually.
 
@@ -49,10 +92,8 @@ If Fennara reports the expected Godot project, the MCP server and plugin are con
 If it does not appear, restart the MCP app and check:
 
 - the Fennara installer finished successfully
-- the MCP app was selected in installer Step 3
-- the app's config/update button was clicked
+- your MCP app is configured to run `fennara-mcp`
 - your Godot project is open
-- your API key is saved in the Fennara plugin settings
 
 ## What Fennara Tools Do
 
@@ -66,8 +107,6 @@ Fennara exposes Godot-aware tools for agent workflows:
 - runtime error capture
 - scene screenshots
 - scene validation
-- SemanticSearch for indexed project code
-- shader search
 
 For the full tools reference, see:
 

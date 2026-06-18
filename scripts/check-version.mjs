@@ -11,19 +11,26 @@ if (!/^\d+\.\d+\.\d+$/.test(version)) {
 }
 
 expect(
+  "godot/addons/fennara/VERSION",
+  new RegExp(`^${escapeRegExp(version)}\\r?\\n?$`),
+  `addon VERSION must be ${version}`,
+);
+
+expect(
   "local/Cargo.toml",
   new RegExp(`\\[workspace\\.package\\][\\s\\S]*?version\\s*=\\s*"${escapeRegExp(version)}"`),
   `workspace.package version must be ${version}`,
 );
 
 for (const manifest of [
+  "local/crates/fennara-cli/Cargo.toml",
   "local/crates/fennara-daemon/Cargo.toml",
   "local/crates/fennara-mcp/Cargo.toml",
 ]) {
   expect(manifest, /version\.workspace\s*=\s*true/, "crate version must use workspace.package");
 }
 
-for (const name of ["fennara-daemon", "fennara-mcp"]) {
+for (const name of ["fennara-cli", "fennara-daemon", "fennara-mcp"]) {
   expect(
     "local/Cargo.lock",
     new RegExp(`name = "${escapeRegExp(name)}"\\r?\\nversion = "${escapeRegExp(version)}"`),

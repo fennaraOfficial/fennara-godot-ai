@@ -15,9 +15,11 @@ rmSync(stageRoot, { recursive: true, force: true });
 mkdirSync(distDir, { recursive: true });
 
 const addonArchive = packageAddon();
+const cliArchive = packageCli();
 const localArchive = packageLocal();
 
 console.log(`Created ${path.relative(root, addonArchive)}`);
+console.log(`Created ${path.relative(root, cliArchive)}`);
 console.log(`Created ${path.relative(root, localArchive)}`);
 
 function packageAddon() {
@@ -39,12 +41,29 @@ function packageAddon() {
   return archive;
 }
 
+function packageCli() {
+  const stage = path.join(stageRoot, "cli");
+  const binDir = path.join(stage, "bin");
+  const releaseDir = path.join(root, "local", "target", "release");
+  const extension = platform === "windows" ? ".exe" : "";
+  const binary = `fennara${extension}`;
+
+  mkdirSync(binDir, { recursive: true });
+  copyFile(path.join(releaseDir, binary), path.join(binDir, binary));
+  copyFile(path.join(root, "VERSION"), path.join(stage, "VERSION"));
+
+  const archive = path.join(distDir, `fennara-cli-${platform}-${arch}-v${version}.zip`);
+  zipDirectory(stage, archive);
+  return archive;
+}
+
 function packageLocal() {
   const stage = path.join(stageRoot, "local");
   const binDir = path.join(stage, "bin");
   const releaseDir = path.join(root, "local", "target", "release");
   const extension = platform === "windows" ? ".exe" : "";
   const binaries = [
+    "fennara",
     "fennara-daemon",
     "fennara-daemon-runtime",
     "fennara-mcp",

@@ -235,7 +235,7 @@ godot::Dictionary inspect_project() {
 
     if (!lsp_installed) {
         status["state"] = "lsp_not_installed";
-        status["message"] = "C# LSP not available. Install C# support from the Fennara installer.";
+        status["message"] = "C# LSP not available. Run `fennara install --csharp` inside this Godot project or pass `--project <path>`.";
     } else if (projects.is_empty()) {
         status["state"] = "no_csharp_project";
         status["message"] = "No .csproj, .sln, or .slnx file found in this Godot project.";
