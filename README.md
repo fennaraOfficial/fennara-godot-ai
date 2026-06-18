@@ -6,17 +6,17 @@ Game development breaks in places normal coding agents cannot see: script errors
 
 ## Start Here
 
-Do not install Fennara by copying files from this repository. The supported setup path is the Fennara dashboard installer:
+The supported setup path is documented here:
 
 https://www.fennara.io/docs/get-started
 
-The installer handles:
+The setup flow handles:
 
 - creating the local device identity
 - installing the Godot plugin
 - installing the local Fennara MCP server
 - choosing the Godot project Fennara should connect to
-- configuring supported MCP apps such as Codex, Cursor, Cline, VS Code, Claude Code, Claude Desktop, and Antigravity
+- configuring supported MCP apps
 
 ## Setup Steps
 
@@ -75,11 +75,11 @@ https://www.fennara.io/docs/tools
 
 ## Demos
 
-Start with the real-project test: Fennara MCP with Codex on GDQuest's open-source Godot 4 Open RPG project.
+Start with the real-project test: Fennara MCP on GDQuest's open-source Godot 4 Open RPG project.
 
 [![Fennara MCP tested on a real Godot RPG project](https://img.youtube.com/vi/0Egu3S-9MM0/maxresdefault.jpg)](https://www.youtube.com/watch?v=0Egu3S-9MM0)
 
-In the demo, Codex works on an existing RPG codebase instead of an empty project. The first script breaks, Fennara returns Godot feedback, and Codex patches the implementation.
+In the demo, an AI coding agent works on an existing RPG codebase instead of an empty project. The first script breaks, Fennara returns Godot feedback, and the agent patches the implementation.
 
 More demos:
 
@@ -98,9 +98,14 @@ More demos:
 
 ## Repository Status
 
-This public repository is for discoverability, documentation, setup links, demo context, and public metadata. The installable Fennara plugin and MCP server are distributed through the Fennara installer, not by copying an `addons` folder from this repo.
+This repository is being prepared as the public source home for Fennara's Godot MCP tooling. Documentation, build instructions, and release workflows are being added incrementally.
 
-Some service-side components are not open source.
+Start with:
+
+- [Repo map](docs/repo-map.md)
+- [Architecture](docs/architecture.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
 
 ## License
 
