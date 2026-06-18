@@ -48,7 +48,7 @@ Fennara CLI {VERSION}
 Usage:
   fennara doctor [--repair]
   fennara install [--project <path>] [--version <version>] [--csharp]
-  fennara mcp-setup --claude|--gemini|--antigravity
+  fennara mcp-setup <target flags>
   fennara update [--version <version>] [--project <path>]
   fennara --version
   fennara --help

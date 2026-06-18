@@ -48,6 +48,18 @@ fennara mcp-setup --gemini
 fennara mcp-setup --antigravity
 ```
 
+Other supported MCP apps:
+
+```bash
+fennara mcp-setup --cursor
+fennara mcp-setup --vscode
+fennara mcp-setup --cline
+fennara mcp-setup --opencode
+fennara mcp-setup --windsurf
+fennara mcp-setup --kiro
+fennara mcp-setup --codex
+```
+
 When a new release is available, update from inside the project:
 
 ```bash
