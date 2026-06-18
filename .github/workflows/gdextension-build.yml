@@ -100,4 +100,4 @@ jobs:
         working-directory: fennara-cpp
         env:
           SCONS_CACHE: ${{ github.workspace }}/fennara-cpp/.scons_cache
-        run: scons platform=${{ matrix.platform }} target=editor
+        run: scons platform=${{ matrix.platform }} target=editor --debug=explain --cache-show
