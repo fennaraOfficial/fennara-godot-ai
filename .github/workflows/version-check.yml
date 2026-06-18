@@ -1,0 +1,41 @@
+name: Version Check
+
+on:
+  pull_request:
+    paths:
+      - VERSION
+      - scripts/check-version.mjs
+      - scripts/set-version.mjs
+      - local/Cargo.toml
+      - local/Cargo.lock
+      - local/crates/**/Cargo.toml
+      - fennara-cpp/include/fennara/local_bridge.hpp
+      - .github/workflows/version-check.yml
+  push:
+    branches: [main]
+    paths:
+      - VERSION
+      - scripts/check-version.mjs
+      - scripts/set-version.mjs
+      - local/Cargo.toml
+      - local/Cargo.lock
+      - local/crates/**/Cargo.toml
+      - fennara-cpp/include/fennara/local_bridge.hpp
+      - .github/workflows/version-check.yml
+
+jobs:
+  version-check:
+    name: Check synced versions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check versions
+        run: node scripts/check-version.mjs

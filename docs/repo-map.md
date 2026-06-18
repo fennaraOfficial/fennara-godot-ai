@@ -8,6 +8,7 @@ This file explains the main areas of the Fennara Godot MCP repository.
 | --- | --- |
 | `docs/` | Project documentation, setup notes, examples, demos, and public tool references. |
 | `media/` | Images and public demo assets used by docs and README files. |
+| `VERSION` | Repository version source of truth. |
 | `README.md` | Human-facing project overview and quick links. |
 | `AGENTS.md` | Instructions for coding agents working in this repository. |
 | `CONTEXT.md` | Shared vocabulary for Fennara concepts and architecture. |
