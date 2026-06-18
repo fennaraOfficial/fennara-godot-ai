@@ -4,7 +4,7 @@ Video:
 
 https://www.youtube.com/watch?v=0Egu3S-9MM0
 
-This demo tests Fennara MCP with Codex on GDQuest's open-source Godot 4 Open RPG project.
+This demo tests Fennara MCP on GDQuest's open-source Godot 4 Open RPG project.
 
 The point of the demo is not that an AI created a blank project from scratch. The point is that an AI agent worked inside an existing Godot RPG codebase, made mistakes, received feedback from Godot, patched the implementation, and continued.
 
@@ -28,7 +28,7 @@ The ability needed to:
 
 ## What Happened
 
-Codex connected to the live Godot project through Fennara MCP and inspected the project architecture.
+An AI coding agent connected to the live Godot project through Fennara MCP and inspected the project architecture.
 
 It used Fennara tools for:
 
@@ -41,7 +41,7 @@ It used Fennara tools for:
 
 The first implementation did not work perfectly. That was the useful part.
 
-Fennara returned feedback from Godot, Codex patched the broken script, adjusted the implementation, and continued until the feature worked in-game.
+Fennara returned feedback from Godot, the agent patched the broken script, adjusted the implementation, and continued until the feature worked in-game.
 
 ## Why This Matters
 

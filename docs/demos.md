@@ -6,7 +6,7 @@ This page collects Fennara demo videos showing different Godot AI and MCP workfl
 
 https://www.youtube.com/watch?v=0Egu3S-9MM0
 
-Codex connects to Godot through Fennara MCP and works on GDQuest's open-source Godot 4 Open RPG project. The test shows Fennara helping the agent inspect an existing codebase, receive Godot feedback, patch a broken script, and continue.
+An AI coding agent connects to Godot through Fennara MCP and works on GDQuest's open-source Godot 4 Open RPG project. The test shows Fennara helping the agent inspect an existing codebase, receive Godot feedback, patch a broken script, and continue.
 
 ## Kantari Godot Demo Repository
 
@@ -24,11 +24,11 @@ https://github.com/fennaraOfficial/fennara-asteroid-rush-demo
 
 Asteroid Rush is a public Godot demo project made with Fennara. The repository includes a stylized 3D arcade space runner with modular saved scenes, a visible editor-authored space environment, rocket-powered asteroid platforms, collectibles, HUD, particles, lighting, and a playable third-person controller.
 
-## Cinematic 2D Boss Fight With Codex + Fennara MCP
+## Cinematic 2D Boss Fight With Fennara MCP
 
 https://youtu.be/KMRGHtficr8
 
-Codex connects to Godot through Fennara MCP and builds a playable 2D boss encounter with real scenes, scripts, collision, UI, boss attacks, phase transitions, hazards, victory/defeat states, diagnostics, validation, and runtime fixes.
+An AI coding agent connects to Godot through Fennara MCP and builds a playable 2D boss encounter with real scenes, scripts, collision, UI, boss attacks, phase transitions, hazards, victory/defeat states, diagnostics, validation, and runtime fixes.
 
 ## FPS Prototype Built Inside Godot
 

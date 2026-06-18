@@ -22,7 +22,6 @@ ai-agent
 ai-game-development
 gamedev
 gdscript
-codex
 claude-code
 cursor
 ```
