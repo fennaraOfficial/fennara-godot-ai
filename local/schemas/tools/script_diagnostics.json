@@ -1,0 +1,24 @@
+{
+    "name": "script_diagnostics",
+    "description": "Fetch script and shader errors, warnings, info, and hints from the active Godot diagnostics sources. Targeted file_paths support .gd, .cs, and .gdshader files. scan_project: true scans all project .gd, .cs, and .gdshader files under res://. For requested .gd and .cs files, this also loads and instantiates project .tscn scenes in memory with Godot logging captured, then attaches script-related scene-load errors back to the script file with source='scene_load' and scene_path. Use this after editing scripts or shaders outside a tool path that already ran diagnostics, or when diagnosing script/shader errors that only appear when scenes are opened. Targeted calls support at most 5 files; use scan_project for broad checks.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "file_paths": {
+                "type": "array",
+                "description": "Specific .gd, .cs, or .gdshader file paths to check in one call. Hard limit: at most 5 files per targeted call. Omit when using scan_project. Required unless scan_project is true.",
+                "items": {
+                    "type": "string",
+                    "description": "Path to a .gd, .cs, or .gdshader file (e.g., 'scripts/player.gd', 'logic/Player.cs', 'shaders/water.gdshader', or 'res://scripts/player.gd')."
+                },
+                "minItems": 1,
+                "maxItems": 5
+            },
+            "scan_project": {
+                "type": "boolean",
+                "description": "When true, scan every .gd, .cs, and .gdshader file in the current Godot project under res:// in one call. This is intended for broad script and shader health checks after larger refactors. Required unless file_paths is provided."
+            }
+        },
+        "additionalProperties": false
+    }
+}

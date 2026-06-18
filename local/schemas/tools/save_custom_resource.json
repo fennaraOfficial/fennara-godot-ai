@@ -1,0 +1,27 @@
+{
+  "name": "save_custom_resource",
+  "description": "Create and save a custom .tres resource file. CRITICAL: For custom resource scripts (like UpgradeData, BusinessData, etc.), you MUST pass the full script path (res://path/to/script.gd) in resource_type, NOT just the class_name. Only use class names for built-in Godot types like 'Resource'.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "resource_path": {
+        "type": "string",
+        "description": "Output path for .tres file (e.g., 'res://resources/my_data.tres'). Will auto-append .tres if missing."
+      },
+      "resource_type": {
+        "type": "string",
+        "description": "MUST be the full script path for custom resources (e.g., 'res://data/UpgradeData.gd'). For built-in Godot types only, use class name (e.g., 'Resource'). NEVER pass just a class_name like 'UpgradeData' - always use the full res:// path."
+      },
+      "properties": {
+        "type": "object",
+        "description": "Dictionary of property names and values to set on the resource. Supports primitives, Vector2/3 (as {x, y, z}), Color (as {r, g, b, a}), and arrays.",
+        "additionalProperties": true
+      },
+      "script_path": {
+        "type": "string",
+        "description": "Optional: path to .gd script to attach to the resource (if creating a custom resource class). Use this if you want to attach a script separately from resource_type."
+      }
+    },
+    "required": ["resource_path", "resource_type", "properties"]
+  }
+}

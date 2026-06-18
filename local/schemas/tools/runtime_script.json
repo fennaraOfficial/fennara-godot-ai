@@ -1,0 +1,29 @@
+{
+  "name": "runtime_script",
+  "description": "Run one small GDScript inspector or input-driver probe inside a daemon-managed runtime_session. The script is saved/diagnosed, sent to the running scene through Fennara's runtime helper, and the tool waits for that script to complete, fail, or time out. Scripts must extend RefCounted, define `func run(ctx: Variant) -> void`, use explicit types for all local variables, and use `ctx.log(...)` for observations. Keep runtime logs token-efficient: log compact milestones, sampled state, final summaries, and capture labels; do not log every frame, loop iteration, action press/release, mouse move, or full node dump. In loops, accumulate counters, ranges, a few samples, and goal status, then emit one concise summary. Scripts may complete without closing the scene so follow-up runtime_script calls can inspect or drive the same running scene. Call `ctx.close_scene()` only for the final script when you intentionally want to end the runtime session, or use runtime_session.stop to close it externally. Fennara writes ctx logs, capture events, close requests, runtime errors, and completion markers into the raw runtime_session.log with fixed `FENNARA_SCRIPT_*` prefixes. The runtime_script tool result is an operational receipt: status, session_id, script_run_id, script_path, log path, diagnostics, scene_closed/session_active when available, and capture paths. It is not the source of truth for scene health. Always read runtime_session.log to understand startup errors, script logs, and runtime errors. Runtime ctx supports log(), wait(), capture(), press_action(), release_action(), tap_action(), action(), action_sequence(), click_at(), click_button(), find_button_by_text(), button_path_by_text(), set_mouse_position(), release_all_actions(), get_scene_root(), get_session_id(), get_script_run_id(), get_captures_dir(), and close_scene(). action_sequence steps can include {\"action\":\"move_right\",\"phase\":\"press\"}, {\"actions\":[\"move_right\",\"sprint\"],\"phase\":\"release\"}, {\"wait\":1.0}, {\"capture\":\"after_jump\"}, {\"click_at\":{\"x\":640,\"y\":360}}, {\"click_button\":\"HUD/StartButton\"}, and {\"mouse_position\":{\"x\":300,\"y\":200}}. click_button defaults to mouse-style clicking; pass {\"mode\":\"signal\"} only when real mouse routing is blocked. Do not guess InputMap action names or game semantics. Inspect project settings, InputMap, scripts, scene tree, camera/player math, UI, resources, and runtime state first, then compose primitive ctx actions for that specific game. Runtime control scripts may use bounded feedback loops inside one script: re-read live node transforms, compute direction/state, press/release primitive actions, stop immediately when the goal condition is met, and keep loops bounded by time or iteration count. If scenes can reload or nodes can respawn, re-fetch nodes inside the loop instead of holding stale references. Always release actions at the end of each loop cycle or call release_all_actions().",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "code": {
+        "type": "string",
+        "description": "Inline GDScript to save, diagnose, and run. Must extend RefCounted, define `func run(ctx: Variant) -> void`, and use explicit types for locals such as Node, Node3D, Dictionary, Array[Dictionary], String, float, bool, int, and Vector3. Omit `ctx.close_scene()` for incremental probes; call it only when this script should close the runtime session. For runtime driving, inspect game code/state first and compose primitive ctx actions; do not rely on assumed meanings like `move_left` = world-left. Pass either `code` or `script_path`, not both."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "Required. The active managed runtime session id returned by `runtime_session.start` or `runtime_session.status`."
+      },
+      "script_path": {
+        "type": "string",
+        "description": "Existing `res://...gd` runtime script to diagnose and run. Use this to rerun or patch a previously returned script path. Omit `ctx.close_scene()` for incremental probes; call it only when this script should close the runtime session. Pass either `code` or `script_path`, not both."
+      },
+      "timeout_ms": {
+        "type": "number",
+        "description": "Optional wait budget for this script result. The scene can stay running after the script completes; use runtime_session.stop or a final script with `ctx.close_scene()` when done."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  }
+}

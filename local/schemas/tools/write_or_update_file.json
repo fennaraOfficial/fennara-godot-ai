@@ -1,0 +1,49 @@
+{
+  "name": "write_or_update_file",
+  "description": "Write a new file, completely rewrite an existing file, or update specific sections of a file. Use mode='write' to create/overwrite entire files. Use mode='update' to replace specific code sections in existing files. NOTE: Modifying .gd, .cs, or .gdshader files automatically runs diagnostics on the edited file and appends syntax/type/reference or shader parser diagnostics to the result. Modifying a .gdshader also scans .tscn and .tres files that reference that shader and reserializes those owners through Godot so stale embedded ShaderMaterial data is rewritten; the result includes reserialized_resources, reserialize_warnings, and reserialize_skipped. BLOCKED PATHS: res://project.godot, res://.godot/, res://.git/, res://addons/fennara/, any plugin.cfg. Only write to user project files.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "mode": {
+        "type": "string",
+        "enum": [
+          "write",
+          "update"
+        ],
+        "description": "Operation mode: 'write' to create or completely rewrite a file with new content, 'update' to replace specific sections in an existing file"
+      },
+      "file_path": {
+        "type": "string",
+        "description": "Path to the file relative to project root (e.g., 'scripts/enemy.gd') or absolute path (e.g., 'res://scripts/enemy.gd')"
+      },
+      "content": {
+        "type": "string",
+        "description": "WRITE MODE ONLY: Full content of the file to write. Required when mode='write'."
+      },
+      "old_string": {
+        "type": "string",
+        "description": "UPDATE MODE ONLY: Exact code to find and replace. Must match exactly including whitespace and indentation. Required when mode='update'. If this appears multiple times in the file, include more surrounding code to make it unique."
+      },
+      "new_string": {
+        "type": "string",
+        "description": "UPDATE MODE ONLY: Code to insert in place of old_string. Can be empty string to delete code. Required when mode='update'."
+      },
+      "replace_all": {
+        "type": "boolean",
+        "description": "UPDATE MODE ONLY: Whether to replace all occurrences of old_string (default: false). If false and multiple matches exist, tool will return an error asking for more context."
+      },
+      "attach_to_scene": {
+        "type": "string",
+        "description": "WRITE MODE ONLY: Optional. Scene file path to attach this script to (e.g., 'scenes/player.tscn'). Only works for .gd scripts. Requires attach_to_node to also be specified."
+      },
+      "attach_to_node": {
+        "type": "string",
+        "description": "WRITE MODE ONLY: Optional. Node path within the scene to attach script to (e.g., 'Player', 'Enemy', '.' for root). Use get_node() syntax - do NOT include the scene root node name in the path unless targeting a child. Required if attach_to_scene is provided."
+      }
+    },
+    "required": [
+      "mode",
+      "file_path"
+    ]
+  }
+}

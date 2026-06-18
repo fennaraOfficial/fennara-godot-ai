@@ -1,0 +1,26 @@
+{
+  "name": "get_class_info",
+  "description_lines": [
+    "Inspect one or more Godot classes and return the API surface you should read before using `run_scene_edit_script`.",
+    "This tool returns documented properties, methods, signals, enums/constants, tutorials, the runtime parent chain, and direct children (`inherited_by`).",
+    "For resource classes, it also includes inherited properties from resource parents up through `Resource`, with only the inspector-style `Resource` base fields (`resource_local_to_scene`, `resource_path`, `resource_name`). For node classes, properties stay direct-only.",
+    "Before using `run_scene_edit_script` for scene or resource edits, you must use `get_class_info` first so you know the available API, which properties belong to the target class, and what parent/child classes exist.",
+    "Pass `class_names` for all lookups, including a single class. Hard limit: batched calls may include at most 3 classes. Split larger requests into multiple calls."
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "class_names": {
+        "type": "array",
+        "description": "Godot class names to inspect in one call. Use a one-item array for a single class. Hard limit: at most 3 classes per call. Split larger requests into multiple calls.",
+        "items": {
+          "type": "string",
+          "description": "Godot class name to inspect (e.g. 'CharacterBody3D', 'Sprite2D', 'ShaderMaterial', 'AudioStreamPlayer')."
+        },
+        "minItems": 1,
+        "maxItems": 3
+      }
+    },
+    "required": ["class_names"]
+  }
+}
