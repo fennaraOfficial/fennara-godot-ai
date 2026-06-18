@@ -1,10 +1,14 @@
 # Scripts
 
-This directory is reserved for repository scripts.
+This directory contains small repository maintenance scripts.
+
+Current scripts:
+
+- `set-version.mjs`: updates `VERSION`, Rust package metadata, the lockfile, and the C++ plugin version.
+- `check-version.mjs`: verifies versioned files are in sync.
 
 Planned responsibilities:
 
-- version updates
 - package assembly
 - release artifact checks
 - local development helpers
