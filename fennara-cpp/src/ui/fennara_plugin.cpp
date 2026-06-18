@@ -3,6 +3,7 @@
 #include "fennara/lsp/csharp_support.hpp"
 #include "fennara/local_bridge.hpp"
 #include "fennara/logger.hpp"
+#include "fennara/update_notice.hpp"
 
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/config_file.hpp>
@@ -38,6 +39,7 @@ void FennaraPlugin::_enter_tree() {
     local_bridge->set_name("FennaraLocalBridge");
     add_child(local_bridge);
     dock_instance->set_local_bridge(local_bridge);
+    update_notice::check_once();
 
     _ensure_runtime_helper_autoload();
 

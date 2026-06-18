@@ -29,7 +29,7 @@ cd path/to/your-godot-project
 fennara install
 ```
 
-When a new release is available, update the local Fennara runtime and addon package:
+When a new release is available, update from inside the project:
 
 ```bash
 cd path/to/your-godot-project
@@ -39,7 +39,7 @@ fennara update
 ## Setup Steps
 
 1. Install the Fennara CLI.
-2. Run `fennara doctor` to verify the local runtime layout.
+2. Run `fennara doctor` to verify the CLI is available.
 3. Open a terminal in your Godot project folder.
 4. Run `fennara install`.
 5. Open the Godot project and enable the Fennara addon.

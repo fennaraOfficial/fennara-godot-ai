@@ -1,6 +1,7 @@
 mod app_layout;
 mod doctor;
 mod project_install;
+mod release_package;
 mod release_update;
 
 use std::env;
@@ -43,15 +44,15 @@ Fennara CLI {VERSION}
 
 Usage:
   fennara doctor [--repair]
-  fennara install [--project <path>] [--source <path>]
+  fennara install [--project <path>] [--version <version>] [--source <path>]
   fennara update [--version <version>] [--project <path>]
   fennara --version
   fennara --help
 
 Commands:
   doctor     Inspect the local Fennara install layout
-  install    Install or update the Fennara Godot addon in a project
-  update     Download the latest local runtime and addon package
+  install    Set up Fennara in a Godot project
+  update     Update an existing Fennara project setup
 
 Options:
   --repair   Create missing base app-data directories during doctor

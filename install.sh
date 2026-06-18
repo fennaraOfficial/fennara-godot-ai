@@ -106,13 +106,9 @@ else
 fi
 
 bin_dir="$app_dir/bin"
-versions_dir="$app_dir/versions"
-cache_dir="$app_dir/cache"
-logs_dir="$app_dir/logs"
-tools_dir="$app_dir/tools"
 link_dir="$HOME/.local/bin"
-
 tmp_dir="$(mktemp -d)"
+
 cleanup() {
   rm -rf "$tmp_dir"
 }
@@ -122,87 +118,35 @@ echo "Fetching Fennara release metadata..."
 release_json="$tmp_dir/release.json"
 curl -fsSL -H "User-Agent: fennara-install" "$release_api" -o "$release_json"
 
-local_asset_url="$(
-  sed -nE 's/.*"browser_download_url": "([^"]*fennara-local-'"$platform"'-'"$arch"'-v[^"]*\.zip)".*/\1/p' "$release_json" |
-    head -n 1
-)"
-addon_asset_url="$(
-  sed -nE 's/.*"browser_download_url": "([^"]*fennara-addon-'"$platform"'-'"$arch"'-v[^"]*\.zip)".*/\1/p' "$release_json" |
+asset_url="$(
+  sed -nE 's/.*"browser_download_url": "([^"]*fennara-cli-'"$platform"'-'"$arch"'-v[^"]*\.zip)".*/\1/p' "$release_json" |
     head -n 1
 )"
 
-if [ -z "$local_asset_url" ]; then
-  echo "error: could not find fennara-local-$platform-$arch asset" >&2
-  exit 1
-fi
-if [ -z "$addon_asset_url" ]; then
-  echo "error: could not find fennara-addon-$platform-$arch asset" >&2
+if [ -z "$asset_url" ]; then
+  echo "error: could not find fennara-cli-$platform-$arch asset" >&2
   exit 1
 fi
 
-local_zip_path="$tmp_dir/fennara-local.zip"
-addon_zip_path="$tmp_dir/fennara-addon.zip"
-local_extract_dir="$tmp_dir/local"
-addon_extract_dir="$tmp_dir/addon"
-mkdir -p "$local_extract_dir" "$addon_extract_dir" "$bin_dir" "$versions_dir" "$cache_dir" "$logs_dir" "$tools_dir" "$link_dir"
+zip_path="$tmp_dir/fennara-cli.zip"
+extract_dir="$tmp_dir/extract"
+mkdir -p "$extract_dir" "$bin_dir" "$link_dir"
 
-echo "Downloading $(basename "$local_asset_url")..."
-curl -fL -H "User-Agent: fennara-install" "$local_asset_url" -o "$local_zip_path"
-unzip -q "$local_zip_path" -d "$local_extract_dir"
+echo "Downloading $(basename "$asset_url")..."
+curl -fL -H "User-Agent: fennara-install" "$asset_url" -o "$zip_path"
+unzip -q "$zip_path" -d "$extract_dir"
 
-echo "Downloading $(basename "$addon_asset_url")..."
-curl -fL -H "User-Agent: fennara-install" "$addon_asset_url" -o "$addon_zip_path"
-unzip -q "$addon_zip_path" -d "$addon_extract_dir"
-
-if [ ! -f "$local_extract_dir/VERSION" ]; then
-  echo "error: downloaded package is missing VERSION" >&2
+if [ ! -f "$extract_dir/bin/fennara" ]; then
+  echo "error: downloaded package is missing fennara" >&2
   exit 1
 fi
 
-package_version="$(tr -d '[:space:]' < "$local_extract_dir/VERSION")"
-if [ -z "$package_version" ]; then
-  echo "error: downloaded package has an empty VERSION" >&2
-  exit 1
-fi
+cp "$extract_dir/bin/fennara" "$bin_dir/fennara"
+chmod +x "$bin_dir/fennara"
+ln -sf "$bin_dir/fennara" "$link_dir/fennara"
 
-version_dir="$versions_dir/$package_version"
-addon_dir="$version_dir/addon"
-mkdir -p "$version_dir"
-
-for name in fennara fennara-mcp fennara-daemon; do
-  if [ ! -f "$local_extract_dir/bin/$name" ]; then
-    echo "error: downloaded package is missing $name" >&2
-    exit 1
-  fi
-  cp "$local_extract_dir/bin/$name" "$bin_dir/$name"
-  chmod +x "$bin_dir/$name"
-  ln -sf "$bin_dir/$name" "$link_dir/$name"
-done
-
-for name in fennara-mcp-runtime fennara-daemon-runtime; do
-  if [ ! -f "$local_extract_dir/bin/$name" ]; then
-    echo "error: downloaded package is missing $name" >&2
-    exit 1
-  fi
-  cp "$local_extract_dir/bin/$name" "$version_dir/$name"
-  chmod +x "$version_dir/$name"
-done
-
-rm -rf "$addon_dir"
-mkdir -p "$addon_dir"
-cp -R "$addon_extract_dir"/. "$addon_dir"/
-
-cat > "$app_dir/current.json" <<EOF
-{
-  "version": "$package_version",
-  "mcp_runtime": "versions/$package_version/fennara-mcp-runtime",
-  "daemon_runtime": "versions/$package_version/fennara-daemon-runtime",
-  "addon": "versions/$package_version/addon/addons/fennara"
-}
-EOF
-
-echo "Installed Fennara $package_version to $app_dir"
-"$bin_dir/fennara" doctor --repair
+echo "Verifying Fennara CLI..."
+"$bin_dir/fennara" --version
 
 ensure_profile_path() {
   profile_path=""
@@ -252,3 +196,12 @@ case ":$PATH:" in
     fi
     ;;
 esac
+
+if command -v fennara >/dev/null 2>&1; then
+  echo "fennara command: available"
+else
+  echo "fennara command: not available in this shell yet. Open a new terminal."
+fi
+
+echo "Installed Fennara CLI to $bin_dir"
+echo 'Run `fennara install` inside a Godot project or pass `--project <path>`.'

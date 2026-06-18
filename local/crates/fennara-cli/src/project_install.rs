@@ -1,46 +1,79 @@
-use crate::app_layout::{AppLayout, display_path, read_current_manifest, resolve_manifest_path};
-use serde_json::Value;
+use crate::app_layout::display_path;
+use crate::release_package;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 pub fn run(args: Vec<&str>) -> Result<(), String> {
     let options = InstallOptions::parse(args)?;
-    let project_dir = options
-        .project_dir
-        .unwrap_or(env::current_dir().map_err(|err| {
-            format!("failed to read the current directory; pass --project instead: {err}")
-        })?);
-
+    let project_dir = resolve_project_dir(options.project_dir)?;
     ensure_godot_project(&project_dir)?;
 
-    let source = match options.source_dir {
-        Some(path) => path,
-        None => installed_addon_source()?
-            .or_else(find_repo_addon_source)
-            .ok_or_else(|| {
-                "could not find an installed Fennara addon; run `fennara update` first".to_string()
-            })?,
-    };
-    ensure_addon_source(&source)?;
+    if project_addon_dir(&project_dir).exists() {
+        return Err(format!(
+            "Fennara is already installed in this project. Run `fennara update` from {} instead.",
+            display_path(&project_dir)
+        ));
+    }
 
+    let (version, source) = match options.source_dir {
+        Some(path) => ("local".to_string(), path),
+        None => {
+            let package = release_package::ensure_package(&options.version)?;
+            (package.version, package.addon_dir)
+        }
+    };
     install_addon(&project_dir, &source)?;
 
-    println!("Installed Fennara addon");
+    println!("Installed Fennara");
+    println!("version: {version}");
     println!("project: {}", display_path(&project_dir));
-    println!("source: {}", display_path(&source));
-    println!(
-        "target: {}",
-        display_path(&project_dir.join("addons").join("fennara"))
-    );
+    println!("next: run `fennara update` inside this project when a new release is available");
     Ok(())
+}
+
+pub fn resolve_project_dir(project_dir: Option<PathBuf>) -> Result<PathBuf, String> {
+    match project_dir {
+        Some(path) => Ok(path),
+        None => env::current_dir().map_err(|err| {
+            format!("failed to read the current directory; pass --project instead: {err}")
+        }),
+    }
+}
+
+pub fn is_godot_project(project_dir: &Path) -> bool {
+    project_dir.join("project.godot").is_file()
+}
+
+pub fn ensure_godot_project(project_dir: &Path) -> Result<(), String> {
+    if is_godot_project(project_dir) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} is not a Godot project. Run this inside a folder with project.godot or pass --project <path>.",
+            display_path(project_dir)
+        ))
+    }
+}
+
+pub fn has_fennara_addon(project_dir: &Path) -> bool {
+    project_addon_dir(project_dir)
+        .join("fennara.gdextension")
+        .is_file()
+}
+
+pub fn project_addon_version(project_dir: &Path) -> Option<String> {
+    fs::read_to_string(project_addon_dir(project_dir).join("VERSION"))
+        .ok()
+        .map(|version| version.trim().to_string())
+        .filter(|version| !version.is_empty())
 }
 
 pub fn install_addon(project_dir: &Path, source: &Path) -> Result<(), String> {
     ensure_godot_project(project_dir)?;
     ensure_addon_source(source)?;
 
-    let target = project_dir.join("addons").join("fennara");
+    let target = project_addon_dir(project_dir);
     if target.exists() {
         fs::remove_dir_all(&target).map_err(|err| {
             format!(
@@ -49,42 +82,48 @@ pub fn install_addon(project_dir: &Path, source: &Path) -> Result<(), String> {
             )
         })?;
     }
-    copy_dir(&source, &target)?;
-    Ok(())
+    copy_dir(source, &target)
+}
+
+pub fn project_addon_dir(project_dir: &Path) -> PathBuf {
+    project_dir.join("addons").join("fennara")
 }
 
 struct InstallOptions {
     project_dir: Option<PathBuf>,
     source_dir: Option<PathBuf>,
+    version: String,
 }
 
 impl InstallOptions {
     fn parse(args: Vec<&str>) -> Result<Self, String> {
         let mut project_dir = None;
         let mut source_dir = None;
+        let mut version = "latest".to_string();
         let mut index = 0;
 
         while index < args.len() {
             match args[index] {
                 "--project" => {
                     index += 1;
-                    let value = args
-                        .get(index)
-                        .ok_or_else(|| "--project requires a path".to_string())?;
-                    project_dir = Some(PathBuf::from(value));
+                    project_dir = Some(PathBuf::from(value_arg(&args, index, "--project")?));
                 }
                 arg if arg.starts_with("--project=") => {
                     project_dir = Some(PathBuf::from(arg.trim_start_matches("--project=")));
                 }
                 "--source" => {
                     index += 1;
-                    let value = args
-                        .get(index)
-                        .ok_or_else(|| "--source requires a path".to_string())?;
-                    source_dir = Some(PathBuf::from(value));
+                    source_dir = Some(PathBuf::from(value_arg(&args, index, "--source")?));
                 }
                 arg if arg.starts_with("--source=") => {
                     source_dir = Some(PathBuf::from(arg.trim_start_matches("--source=")));
+                }
+                "--version" => {
+                    index += 1;
+                    version = value_arg(&args, index, "--version")?.to_string();
+                }
+                arg if arg.starts_with("--version=") => {
+                    version = arg.trim_start_matches("--version=").to_string();
                 }
                 "-h" | "--help" => {
                     print_help();
@@ -98,71 +137,32 @@ impl InstallOptions {
         Ok(Self {
             project_dir,
             source_dir,
+            version,
         })
     }
+}
+
+fn value_arg<'a>(args: &'a [&str], index: usize, option: &str) -> Result<&'a str, String> {
+    args.get(index)
+        .copied()
+        .ok_or_else(|| format!("{option} requires a value"))
 }
 
 fn print_help() {
     println!(
         "\
-Install the Fennara Godot addon into a project.
+Install Fennara into a Godot project.
 
 Usage:
   fennara install
   fennara install --project <path>
-  fennara install --project <path> --source <addon-path>
+  fennara install --version 0.2.8 --project <path>
 "
     );
 }
 
-pub fn is_godot_project(project_dir: &Path) -> bool {
-    project_dir.join("project.godot").is_file()
-}
-
-pub fn ensure_godot_project(project_dir: &Path) -> Result<(), String> {
-    if is_godot_project(project_dir) {
-        Ok(())
-    } else {
-        Err(format!(
-            "{} is not a Godot project; run this inside a folder with project.godot or pass --project <path>",
-            display_path(project_dir)
-        ))
-    }
-}
-
-fn installed_addon_source() -> Result<Option<PathBuf>, String> {
-    let layout = AppLayout::detect()?;
-    let Some(manifest) = read_current_manifest(&layout.current_manifest_path)? else {
-        return Ok(None);
-    };
-    let Some(addon) = manifest.get("addon").and_then(Value::as_str) else {
-        return Ok(None);
-    };
-    let source = resolve_manifest_path(&layout.app_dir, addon);
-    Ok(source.is_dir().then_some(source))
-}
-
-fn find_repo_addon_source() -> Option<PathBuf> {
-    let current_dir = env::current_dir().ok();
-    let current_exe = env::current_exe()
-        .ok()
-        .and_then(|path| path.parent().map(Path::to_path_buf));
-
-    for root in [current_dir, current_exe].into_iter().flatten() {
-        for ancestor in root.ancestors() {
-            let candidate = ancestor.join("godot").join("addons").join("fennara");
-            if candidate.is_dir() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    None
-}
-
 fn ensure_addon_source(source: &Path) -> Result<(), String> {
-    let extension = source.join("fennara.gdextension");
-    if extension.is_file() {
+    if source.join("fennara.gdextension").is_file() {
         Ok(())
     } else {
         Err(format!(

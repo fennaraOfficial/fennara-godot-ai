@@ -51,6 +51,11 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
         arch_name()
     );
     println!(
+        "cli asset hint: fennara-cli-{}-{}-v{VERSION}.zip",
+        platform_name(),
+        arch_name()
+    );
+    println!(
         "addon asset hint: fennara-addon-{}-{}-v{VERSION}.zip",
         platform_name(),
         arch_name()

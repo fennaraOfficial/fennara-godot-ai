@@ -11,6 +11,12 @@ if (!/^\d+\.\d+\.\d+$/.test(version)) {
 }
 
 expect(
+  "godot/addons/fennara/VERSION",
+  new RegExp(`^${escapeRegExp(version)}\\r?\\n?$`),
+  `addon VERSION must be ${version}`,
+);
+
+expect(
   "local/Cargo.toml",
   new RegExp(`\\[workspace\\.package\\][\\s\\S]*?version\\s*=\\s*"${escapeRegExp(version)}"`),
   `workspace.package version must be ${version}`,

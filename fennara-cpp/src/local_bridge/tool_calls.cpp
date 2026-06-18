@@ -5,6 +5,7 @@
 #include "fennara/logger.hpp"
 #include "fennara/tool_call_log.hpp"
 #include "fennara/tool_results/formatters.hpp"
+#include "fennara/update_notice.hpp"
 
 #include <godot_cpp/classes/time.hpp>
 
@@ -110,6 +111,7 @@ godot::Dictionary _fennara_status_result() {
     result["tool_name"] = "fennara_status";
     result["godot_connected"] = true;
     result["mcp_mode"] = "local";
+    result["version"] = update_notice::status();
     result["addon_access"] = addon_access::status();
     godot::Array local_tools;
     local_tools.append("write_or_update_file");

@@ -12,6 +12,7 @@ if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
 }
 
 write("VERSION", `${version}\n`);
+write("godot/addons/fennara/VERSION", `${version}\n`);
 
 update("local/Cargo.toml", (text) => {
   if (/\[workspace\.package\][\s\S]*?version\s*=/.test(text)) {
