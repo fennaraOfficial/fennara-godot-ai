@@ -1,0 +1,33 @@
+{
+  "name": "get_node_properties",
+  "description": "Get the changed properties of one or more specific nodes in scene files. Only shows properties that differ from defaults. Embedded SubResources are expanded recursively; large or opaque resources such as TileSet, TileMapLayer data, GridMap data, MeshLibrary resources, Theme resources, AnimationTree graphs, AnimationLibrary, Animation, and SpriteFrames are summarized into readable API-oriented output. Use get_scene_tree first to find node paths. Use get_class_info to inspect the full API surface before editing with run_scene_edit_script. Hard limit: at most 5 targets per call.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "targets": {
+        "type": "array",
+        "description": "Node lookup targets to inspect in one call. Hard limit: at most 5 targets per call. Split larger batches into multiple calls.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "scene_path": {
+              "type": "string",
+              "description": "Path to the scene file (.tscn)"
+            },
+            "node_path": {
+              "type": "string",
+              "description": "Path to the node relative to scene root: '.' for root node, 'ChildName' for direct children, 'Child/GrandChild' for deeper nodes. Do NOT include the root node name in the path (wrong: 'Player/Sprite2D', correct: 'Sprite2D'). Run get_scene_tree first to see the node tree."
+            }
+          },
+          "required": [
+            "scene_path",
+            "node_path"
+          ]
+        },
+        "minItems": 1,
+        "maxItems": 5
+      }
+    },
+    "required": ["targets"]
+  }
+}

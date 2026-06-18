@@ -1,0 +1,20 @@
+{
+    "name": "validate_scene",
+    "description": "Validate one or more scene files for common issues: missing scripts/resources, script extends mismatch, unset export vars, invalid NodePath properties, invalid script $Node/get_node() references, duplicate sibling names, and cyclic scene dependencies. For scenes with no structural errors, Fennara also runs each scene headlessly for 3 seconds through the local daemon using up to 3 memory-throttled workers, then returns each scene's compacted runtime output inline and lists where the full result JSON and raw runtime logs were saved. It does not open scenes in the editor or scrape the editor Output panel. Use after scene edits when you want structural and brief startup/runtime verification. Hard limit: at most 10 scenes per call.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "scene_paths": {
+                "type": "array",
+                "description": "Scene paths to validate in one call. Hard limit: at most 10 scenes per call. Split larger batches into multiple calls.",
+                "items": {
+                    "type": "string",
+                    "description": "Path to the scene file (.tscn) to validate"
+                },
+                "minItems": 1,
+                "maxItems": 10
+            }
+        },
+        "required": ["scene_paths"]
+    }
+}

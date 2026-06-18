@@ -8,5 +8,7 @@ fennara-cpp/.scons_cache/
 fennara-cpp/.sconsign.dblite
 fennara-cpp/build/
 
+local/target/
+
 godot/addons/fennara/bin/*
 !godot/addons/fennara/bin/.gitkeep

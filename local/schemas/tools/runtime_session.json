@@ -1,0 +1,24 @@
+{
+  "name": "runtime_session",
+  "description": "Start, inspect, or stop a daemon-managed Godot runtime session. `start` first runs scene-execution gates: C# projects run `dotnet build`, the scene runs structural validate_scene preflight without a headless runtime pass, and Fennara checks autoload plus scene-attached scripts with targeted diagnostics. If those gates fail, the scene is not opened. If another runtime session is already running, start is blocked; call status or stop first. If gates pass, Fennara launches one scene in a separate windowed Godot process with the runtime helper enabled. The returned session_id can be reused for multiple runtime_script probes against the same running scene. End the session with runtime_session.stop or with a final runtime_script that calls ctx.close_scene(). The returned runtime_session.log path is the source of truth for scene startup output, runtime errors, runtime_script ctx.log output, capture events, and completion markers. Artifacts and raw stdout/stderr logs are saved under the current tool log directory.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["start", "status", "stop"],
+        "description": "The runtime session operation. `status` is safe anytime and returns known log/artifact paths. `start` runs preflight gates and then creates a managed logged runtime session only if they pass and no other runtime session is currently running. `stop` closes a running session when you are done or when cleanup is needed. For scene behavior, read the returned runtime_session.log rather than relying on extracted summaries."
+      },
+      "scene_path": {
+        "type": "string",
+        "description": "Required for action `start`. The exact `res://` path to a `.tscn` scene to play."
+      },
+      "max_run_seconds": {
+        "type": "number",
+        "description": "Optional for action `start`; reserved for future auto-stop behavior. Stop the session explicitly when done."
+      }
+    },
+    "required": ["action"],
+    "additionalProperties": false
+  }
+}

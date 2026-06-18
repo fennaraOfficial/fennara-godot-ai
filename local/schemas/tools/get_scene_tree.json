@@ -1,0 +1,20 @@
+{
+  "name": "get_scene_tree",
+  "description": "Inspect one or more scene files and get a tree structure of all nodes with their types, scripts, and instanced scenes. Automatically groups consecutive numbered nodes (e.g., Bush1, Bush2, Bush3 becomes 'Bush1-3') for cleaner output. Use this for structured .tscn scene inspection. Hard limit: at most 5 scenes per call.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "scene_paths": {
+        "type": "array",
+        "description": "Scene paths to inspect in one call. Hard limit: at most 5 scenes per call. Split larger batches into multiple calls.",
+        "items": {
+          "type": "string",
+          "description": "Path to the scene file to inspect (e.g., 'scenes/level.tscn' or 'res://scenes/level.tscn')"
+        },
+        "minItems": 1,
+        "maxItems": 5
+      }
+    },
+    "required": ["scene_paths"]
+  }
+}

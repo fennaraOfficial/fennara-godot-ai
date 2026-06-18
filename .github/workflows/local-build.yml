@@ -1,0 +1,65 @@
+name: Local Build
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "local/**"
+      - ".github/workflows/local-build.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "local/**"
+      - ".github/workflows/local-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+          - platform: linux
+            os: ubuntu-latest
+          - platform: macos
+            os: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            local/target
+          key: local-cargo-${{ runner.os }}-${{ hashFiles('local/Cargo.lock') }}
+          restore-keys: |
+            local-cargo-${{ runner.os }}-
+
+      - name: Test
+        working-directory: local
+        run: cargo test --locked
+
+      - name: Build release binaries
+        working-directory: local
+        run: cargo build --release --locked

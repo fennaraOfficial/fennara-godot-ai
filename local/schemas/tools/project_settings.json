@@ -1,0 +1,57 @@
+{
+  "name": "project_settings",
+  "description": "Read, write, remove, or inspect Godot project settings. Use 'list' to inspect settings actually saved/changed in this project's project.godot. Use 'find_setting' to discover available Godot ProjectSettings keys by prefix or query before get/set. For input actions, pass 'events' array instead of 'value' to build proper InputEvent objects.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["get", "set", "remove", "list", "find_setting"],
+        "description": "get: read an exact setting key. set: create/update an exact setting key. remove: remove an exact setting key. list: list settings actually saved in project.godot, optionally filtered by prefix. find_setting: search all Godot-known ProjectSettings keys by non-empty prefix/key or query."
+      },
+      "key": {
+        "type": "string",
+        "description": "Exact setting path for get/set/remove. For list and find_setting, this may be used as a prefix filter (e.g. 'display/window/', 'autoload/', 'input/', 'rendering/anti_aliasing/')."
+      },
+      "value": {
+        "description": "Value to set. Type depends on setting: int for dimensions/enums, bool for toggles, string for paths/names, float for physics. For autoloads use '*res://path/to/script.gd' format. Not used with input actions (use 'events' instead)."
+      },
+      "events": {
+        "type": "array",
+        "description": "Input events array. Only for input actions (key starts with 'input/'). Each event: {event_type: 'key'|'mouse_button'|'joypad_button'|'joypad_motion', keycode?: int, physical_keycode?: int, ctrl_pressed?: bool, shift_pressed?: bool, alt_pressed?: bool, button_index?: int, axis?: int, axis_value?: float}. Keycodes: 32=Space, 87=W, 65=A, 83=S, 68=D, 16777232=Up, 16777234=Down, 16777231=Left, 16777233=Right. Joypad buttons: 0=A, 1=B, 2=X, 3=Y. Axes: 0=LStickX, 1=LStickY, 2=RStickX, 3=RStickY.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "event_type": {
+              "type": "string",
+              "enum": ["key", "mouse_button", "joypad_button", "joypad_motion"]
+            },
+            "keycode": { "type": "integer" },
+            "physical_keycode": { "type": "integer" },
+            "ctrl_pressed": { "type": "boolean" },
+            "shift_pressed": { "type": "boolean" },
+            "alt_pressed": { "type": "boolean" },
+            "meta_pressed": { "type": "boolean" },
+            "button_index": { "type": "integer" },
+            "axis": { "type": "integer" },
+            "axis_value": { "type": "number" }
+          },
+          "required": ["event_type"]
+        }
+      },
+      "deadzone": {
+        "type": "number",
+        "description": "Deadzone for input actions (0.0-1.0, default 0.5). Only used when setting input actions with events."
+      },
+      "prefix": {
+        "type": "string",
+        "description": "Prefix filter for list or find_setting. For list, empty/missing prefix is safe and returns only settings saved in project.godot. For find_setting, prefix or query must be non-empty to avoid dumping every Godot-known setting."
+      },
+      "query": {
+        "type": "string",
+        "description": "Substring search for find_setting when you know a concept but not the exact namespace (e.g. 'viewport', 'msaa', 'physics'). find_setting requires a non-empty query, prefix, or key."
+      }
+    },
+    "required": ["action"]
+  }
+}
