@@ -29,6 +29,25 @@ cd path/to/your-godot-project
 fennara install
 ```
 
+For a C# Godot project, install C# support during setup:
+
+```bash
+fennara install --csharp
+```
+
+Then configure your MCP app:
+
+```bash
+fennara mcp-setup --claude
+```
+
+For Gemini or Antigravity:
+
+```bash
+fennara mcp-setup --gemini
+fennara mcp-setup --antigravity
+```
+
 When a new release is available, update from inside the project:
 
 ```bash
@@ -43,7 +62,7 @@ fennara update
 3. Open a terminal in your Godot project folder.
 4. Run `fennara install`.
 5. Open the Godot project and enable the Fennara addon.
-6. Configure your MCP app to run the local `fennara-mcp` command.
+6. Run `fennara mcp-setup --claude`, `fennara mcp-setup --gemini`, or `fennara mcp-setup --antigravity`.
 7. Restart your MCP app so it reloads the Fennara MCP server.
 
 Other MCP apps can work when they support local stdio MCP servers and are configured manually.

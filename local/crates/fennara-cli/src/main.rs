@@ -1,5 +1,7 @@
 mod app_layout;
+mod csharp_support;
 mod doctor;
+mod mcp_setup;
 mod project_install;
 mod release_package;
 mod release_update;
@@ -32,6 +34,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         }
         Some("doctor") => doctor::run(args.iter().skip(1).map(String::as_str).collect()),
         Some("install") => project_install::run(args.iter().skip(1).map(String::as_str).collect()),
+        Some("mcp-setup") => mcp_setup::run(args.iter().skip(1).map(String::as_str).collect()),
         Some("update") => release_update::run(args.iter().skip(1).map(String::as_str).collect()),
         Some(command) => Err(format!("unknown command: {command}")),
     }
@@ -44,7 +47,8 @@ Fennara CLI {VERSION}
 
 Usage:
   fennara doctor [--repair]
-  fennara install [--project <path>] [--version <version>] [--source <path>]
+  fennara install [--project <path>] [--version <version>] [--csharp]
+  fennara mcp-setup --claude|--gemini|--antigravity
   fennara update [--version <version>] [--project <path>]
   fennara --version
   fennara --help
@@ -52,6 +56,7 @@ Usage:
 Commands:
   doctor     Inspect the local Fennara install layout
   install    Set up Fennara in a Godot project
+  mcp-setup  Configure an MCP app to launch Fennara
   update     Update an existing Fennara project setup
 
 Options:
