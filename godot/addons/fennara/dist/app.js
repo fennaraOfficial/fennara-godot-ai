@@ -37,6 +37,7 @@
   const keyStatus = document.querySelector("[data-key-status]");
   const sendButton = document.querySelector("[data-send-button]");
   const revertButton = document.querySelector("[data-revert-button]");
+  const saveSettingsButton = document.querySelector("[data-save-settings]");
   const appShell = document.querySelector(".app-shell");
   const markdown = window.markdownit({
     html: false,
@@ -82,6 +83,7 @@
   let usageCloseTimer = 0;
   let canRevert = false;
   let modelPicker = null;
+  let pendingSettingsPayload = null;
   const transcriptRenderer = window.FennaraTranscriptRenderer.createTranscriptRenderer({
     transcript,
     markdown,
@@ -122,6 +124,7 @@
       appShell?.setAttribute("data-connection", "online");
       send({ type: "get_settings", request_id: nextRequestId("settings") });
       modelPicker?.requestModels();
+      flushPendingSettings();
     });
 
     socket.addEventListener("message", (event) => {
@@ -475,7 +478,7 @@
     return "$" + cost.toFixed(2);
   }
 
-  function applySettings(settings) {
+  function applySettings(settings, options = {}) {
     if (!settings) {
       return;
     }
@@ -497,7 +500,7 @@
     if (keyStatus) {
       keyStatus.textContent = hasOpenRouterKey ? "OpenRouter key saved locally" : "OpenRouter key not set";
     }
-    if (apiKeyInput) {
+    if (apiKeyInput && (!options.preserveTypedKey || !apiKeyInput.value.trim())) {
       apiKeyInput.value = "";
       apiKeyInput.placeholder = hasOpenRouterKey ? "Saved locally. Enter a new key to replace it." : "sk-or-...";
     }
@@ -570,11 +573,45 @@
     return send(payload);
   }
 
+  function setSettingsSaving(saving) {
+    if (!saveSettingsButton) {
+      return;
+    }
+    saveSettingsButton.disabled = saving;
+    saveSettingsButton.textContent = saving ? "Saving..." : "Save locally";
+  }
+
+  function flushPendingSettings() {
+    if (!pendingSettingsPayload || !socket || socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    socket.send(JSON.stringify(pendingSettingsPayload));
+    return true;
+  }
+
+  function queueSettingsSave(payload) {
+    pendingSettingsPayload = payload;
+    setSettingsSaving(true);
+    if (flushPendingSettings()) {
+      return true;
+    }
+    appendSystem("Connecting to local daemon...");
+    connect();
+    return true;
+  }
+
   function handleDaemonMessage(message) {
     if (message.type === "settings" || message.type === "settings_saved") {
-      applySettings(message.settings);
+      const requestId = String(message.request_id || "");
+      const isExplicitSave = requestId.startsWith("save-settings");
+      applySettings(message.settings, { preserveTypedKey: !isExplicitSave });
       if (message.type === "settings_saved") {
-        if (!String(message.request_id || "").startsWith("silent-settings")) {
+        if (pendingSettingsPayload?.request_id === message.request_id) {
+          pendingSettingsPayload = null;
+          setSettingsSaving(false);
+          settingsDialog?.close();
+        }
+        if (!requestId.startsWith("silent-settings")) {
           appendSystem("Settings saved locally.");
           window.setTimeout(clearSystemStatus, 1200);
         }
@@ -716,6 +753,10 @@
     }
     if (message.type === "error") {
       appendSystem(message.message || "Chat request failed.");
+      if (pendingSettingsPayload?.request_id === message.request_id) {
+        pendingSettingsPayload = null;
+        setSettingsSaving(false);
+      }
       transcriptRenderer.resetActiveAssistant();
       setStreaming(false);
       updateRevertButton();
@@ -826,7 +867,7 @@
     });
   }
 
-  document.querySelector("[data-save-settings]")?.addEventListener("click", (event) => {
+  saveSettingsButton?.addEventListener("click", (event) => {
     event.preventDefault();
     const payload = {
       type: "save_settings",
@@ -838,9 +879,7 @@
     if (key) {
       payload.openrouter_api_key = key;
     }
-    if (send(payload)) {
-      settingsDialog?.close();
-    }
+    queueSettingsSave(payload);
   });
 
   reasoningEffortControls.forEach((control) => {
