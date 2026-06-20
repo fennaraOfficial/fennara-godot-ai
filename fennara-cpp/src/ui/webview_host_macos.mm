@@ -234,7 +234,6 @@ bool start(void **webview, void **parent_window, godot::Control *owner, const go
 
         *webview = view;
         *parent_window = target_window;
-        output_log("macOS webview started");
         debug_log("macOS webview start ok view={" + view_debug_string(view) +
                   "} window={" + window_debug_string(target_window) + "}");
         ok = true;
@@ -279,9 +278,9 @@ void resize_to(void *webview, void **parent_window, godot::Control *owner) {
             [content addSubview:view];
             *parent_window = target_window;
             current_window = target_window;
-            output_log("macOS webview reparented view=" + ptr_string(view) +
-                       " new_window=" + ptr_string(target_window) +
-                       " content=" + ptr_string(content));
+            debug_log("macOS webview reparented view=" + ptr_string(view) +
+                      " new_window=" + ptr_string(target_window) +
+                      " content=" + ptr_string(content));
         } else {
             debug_log("macOS webview reparent skipped: target equals current window");
         }
