@@ -72,7 +72,7 @@ jobs:
 
       - name: Install Linux build dependencies
         if: steps.source.outputs.available == 'true' && matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+        run: sudo apt-get update && sudo apt-get install -y build-essential
 
       - name: Compute godot-cpp cache key
         if: steps.source.outputs.available == 'true'
@@ -80,7 +80,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          source_hash="${{ hashFiles('fennara-cpp/SConstruct', 'fennara-cpp/src/**/*', 'fennara-cpp/include/**/*', 'fennara-cpp/tools/**/*', 'fennara-cpp/vendor/webview/include/**/*', 'fennara-cpp/godot-cpp/SConstruct', 'fennara-cpp/godot-cpp/tools/**/*.py', 'fennara-cpp/godot-cpp/include/**/*.h', 'fennara-cpp/godot-cpp/include/**/*.hpp', 'fennara-cpp/godot-cpp/gdextension/*.json') }}"
+          source_hash="${{ hashFiles('fennara-cpp/godot-cpp/SConstruct', 'fennara-cpp/godot-cpp/tools/**/*.py', 'fennara-cpp/godot-cpp/include/**/*.h', 'fennara-cpp/godot-cpp/include/**/*.hpp', 'fennara-cpp/godot-cpp/gdextension/*.json') }}"
           image_id="${ImageOS:-${RUNNER_OS:-unknown}}-${ImageVersion:-unknown}"
           if [[ "${RUNNER_OS}" == "Windows" ]]; then
             toolchain_id="$(powershell -NoProfile -Command '$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"; if (Test-Path $vswhere) { $install = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath; if ($install) { $versions = Get-ChildItem (Join-Path $install "VC\Tools\MSVC") -Directory | Sort-Object Name -Descending; if ($versions) { $versions[0].Name } } }' | tr -d '\r')"

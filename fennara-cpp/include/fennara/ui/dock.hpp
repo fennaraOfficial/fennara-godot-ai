@@ -14,6 +14,7 @@ class FennaraDock : public godot::Control {
 
 protected:
     static void _bind_methods();
+    void _notification(int what);
 
 private:
     FennaraLocalBridge *local_bridge = nullptr;
@@ -30,6 +31,7 @@ private:
 
     void _build_ui();
     void _try_start_webview();
+    void _sync_webview_bounds();
     void _refresh_status();
     void _on_mcp_target_state_changed(bool active);
     godot::String _chat_url() const;

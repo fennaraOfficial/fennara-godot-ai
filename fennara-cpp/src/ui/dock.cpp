@@ -82,9 +82,36 @@ void FennaraDock::_process(double delta) {
             _refresh_status();
         }
     }
-    if (webview_host && webview_host->is_started() && webview_region) {
-        webview_host->resize_to(webview_region);
+    _sync_webview_bounds();
+}
+
+void FennaraDock::_notification(int what) {
+    if (!webview_host || !webview_host->is_started()) {
+        return;
     }
+
+    switch (what) {
+        case NOTIFICATION_VISIBILITY_CHANGED:
+        case NOTIFICATION_RESIZED:
+        case NOTIFICATION_THEME_CHANGED:
+            _sync_webview_bounds();
+            break;
+        default:
+            break;
+    }
+}
+
+void FennaraDock::_sync_webview_bounds() {
+    if (!webview_host || !webview_host->is_started()) {
+        return;
+    }
+
+    if (!is_visible_in_tree()) {
+        webview_host->set_visible(false);
+        return;
+    }
+
+    webview_host->resize_to(webview_region ? webview_region : this);
 }
 
 void FennaraDock::_build_ui() {

@@ -3,9 +3,7 @@
 #include <godot_cpp/classes/control.hpp>
 #include <godot_cpp/variant/string.hpp>
 
-#include <mutex>
 #include <string>
-#include <thread>
 
 namespace fennara {
 
@@ -16,6 +14,7 @@ public:
 
     bool start(godot::Control *owner, const godot::String &url);
     void resize_to(godot::Control *owner);
+    void set_visible(bool visible);
     void stop();
     bool is_started() const;
 
@@ -23,8 +22,6 @@ private:
     void *webview = nullptr;
     void *widget = nullptr;
     void *parent_window = nullptr;
-    std::thread webview_thread;
-    std::mutex webview_mutex;
     godot::String current_url;
     bool started = false;
     int current_window_id = -1;

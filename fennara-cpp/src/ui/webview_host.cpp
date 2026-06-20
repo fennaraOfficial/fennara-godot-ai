@@ -10,8 +10,8 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#endif
 #include <webview/webview.h>
+#endif
 
 #include <string>
 
@@ -29,7 +29,14 @@ void output_error(const godot::String &message) {
     godot::UtilityFunctions::push_error(godot::String("[Fennara] ") + message);
 }
 
-#ifdef _WIN32
+struct WebviewGeometry {
+    bool visible = false;
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+};
+
 int owner_window_id(godot::Control *owner) {
     if (owner == nullptr) {
         return 0;
@@ -40,7 +47,26 @@ int owner_window_id(godot::Control *owner) {
     }
     return window->get_window_id();
 }
-#endif
+
+WebviewGeometry compute_webview_geometry(godot::Control *owner) {
+    WebviewGeometry geometry;
+    if (owner == nullptr || !owner->is_visible_in_tree()) {
+        return geometry;
+    }
+
+    godot::Vector2 size = owner->get_size();
+    if (size.x <= 0 || size.y <= 0) {
+        return geometry;
+    }
+
+    godot::Vector2 screen_position = owner->get_screen_position();
+    geometry.visible = true;
+    geometry.x = static_cast<int>(screen_position.x);
+    geometry.y = static_cast<int>(screen_position.y);
+    geometry.width = static_cast<int>(size.x);
+    geometry.height = static_cast<int>(size.y);
+    return geometry;
+}
 
 bool editor_is_headless() {
     godot::DisplayServer *display = godot::DisplayServer::get_singleton();
@@ -121,34 +147,9 @@ bool WebviewHost::start(godot::Control *owner, const godot::String &url) {
     return true;
 #else
     (void)owner;
-    std::string url_utf8 = url.utf8().get_data();
-    current_url = url;
-    started = true;
-
-    webview_thread = std::thread([this, url_utf8]() {
-        webview_t local_webview = webview_create(0, nullptr);
-        if (local_webview == nullptr) {
-            return;
-        }
-        {
-            std::lock_guard<std::mutex> lock(webview_mutex);
-            webview = local_webview;
-        }
-        webview_set_title(local_webview, "Fennara Chat");
-        webview_set_size(local_webview, 1120, 760, WEBVIEW_HINT_NONE);
-        webview_navigate(local_webview, url_utf8.c_str());
-        webview_run(local_webview);
-        webview_destroy(local_webview);
-        {
-            std::lock_guard<std::mutex> lock(webview_mutex);
-            if (webview == local_webview) {
-                webview = nullptr;
-            }
-        }
-    });
-
-    output_log("Web chat native webview window started");
-    return true;
+    (void)url;
+    output_error("Web chat native webview is not wired for this platform build yet");
+    return false;
 #endif
 }
 
@@ -163,17 +164,9 @@ void WebviewHost::resize_to(godot::Control *owner) {
         return;
     }
 
+    WebviewGeometry geometry = compute_webview_geometry(owner);
     HWND hwnd = reinterpret_cast<HWND>(widget);
-    if (!owner->is_visible_in_tree()) {
-        ShowWindow(hwnd, SW_HIDE);
-        return;
-    }
-
-    godot::Vector2 screen_position = owner->get_screen_position();
-    godot::Vector2 size = owner->get_size();
-    int width = static_cast<int>(size.x);
-    int height = static_cast<int>(size.y);
-    if (width <= 0 || height <= 0) {
+    if (!geometry.visible) {
         ShowWindow(hwnd, SW_HIDE);
         return;
     }
@@ -190,8 +183,8 @@ void WebviewHost::resize_to(godot::Control *owner) {
 
     HWND parent_hwnd = reinterpret_cast<HWND>(parent_window);
     POINT origin{
-        static_cast<LONG>(screen_position.x),
-        static_cast<LONG>(screen_position.y),
+        static_cast<LONG>(geometry.x),
+        static_cast<LONG>(geometry.y),
     };
     if (parent_hwnd != nullptr) {
         ScreenToClient(parent_hwnd, &origin);
@@ -199,21 +192,40 @@ void WebviewHost::resize_to(godot::Control *owner) {
     int x = static_cast<int>(origin.x);
     int y = static_cast<int>(origin.y);
 
-    MoveWindow(hwnd, x, y, width, height, TRUE);
+    SetWindowPos(
+        hwnd,
+        nullptr,
+        x,
+        y,
+        geometry.width,
+        geometry.height,
+        SWP_NOACTIVATE | SWP_NOZORDER);
     ShowWindow(hwnd, SW_SHOW);
 
-    if (x != last_x || y != last_y || width != last_width || height != last_height) {
+    if (x != last_x || y != last_y || geometry.width != last_width ||
+        geometry.height != last_height) {
         last_x = x;
         last_y = y;
-        last_width = width;
-        last_height = height;
+        last_width = geometry.width;
+        last_height = geometry.height;
         output_log("Web chat geometry x=" + godot::String::num_int64(x) +
                    " y=" + godot::String::num_int64(y) +
-                   " w=" + godot::String::num_int64(width) +
-                   " h=" + godot::String::num_int64(height));
+                   " w=" + godot::String::num_int64(geometry.width) +
+                   " h=" + godot::String::num_int64(geometry.height));
     }
 #else
     (void)owner;
+#endif
+}
+
+void WebviewHost::set_visible(bool visible) {
+#ifdef _WIN32
+    if (!started || widget == nullptr) {
+        return;
+    }
+    ShowWindow(reinterpret_cast<HWND>(widget), visible ? SW_SHOW : SW_HIDE);
+#else
+    (void)visible;
 #endif
 }
 
@@ -226,16 +238,6 @@ void WebviewHost::stop() {
     output_log("Web chat destroying native webview");
     if (webview != nullptr) {
         webview_destroy(static_cast<webview_t>(webview));
-    }
-#else
-    {
-        std::lock_guard<std::mutex> lock(webview_mutex);
-        if (webview != nullptr) {
-            webview_terminate(static_cast<webview_t>(webview));
-        }
-    }
-    if (webview_thread.joinable()) {
-        webview_thread.join();
     }
 #endif
 

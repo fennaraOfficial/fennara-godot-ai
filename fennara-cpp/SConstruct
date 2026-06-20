@@ -7,17 +7,9 @@ CacheDir(os.environ.get("SCONS_CACHE", ".scons_cache/"))
 
 env = SConscript("godot-cpp/SConstruct")
 
-env.Append(CPPPATH=["vendor/webview/include"])
-
 if env["platform"] == "windows":
-    env.Append(CPPPATH=["vendor/webview2/include"])
+    env.Append(CPPPATH=["vendor/webview/include", "vendor/webview2/include"])
     env.Append(LIBS=["advapi32", "comdlg32", "ole32", "shell32", "shlwapi", "user32", "version"])
-elif env["platform"] == "linux":
-    env.ParseConfig("pkg-config --cflags --libs gtk+-3.0 webkit2gtk-4.1")
-    env.Append(LIBS=["dl"])
-elif env["platform"] == "macos":
-    env.Append(LINKFLAGS=["-framework", "WebKit"])
-    env.Append(LIBS=["dl"])
 
 # Auto-discover include directories
 for root, dirs, files in os.walk("include"):
@@ -33,7 +25,7 @@ sources += glob.glob("src/**/*.c", recursive=True)
 
 build_sources = [s.replace("src", build_dir, 1) for s in sources]
 
-# Output binaries to the installable Godot addon payload.
+# Output binary to the installable Godot addon payload.
 out_dir = "../godot/addons/fennara/bin"
 
 if env["platform"] == "macos":
