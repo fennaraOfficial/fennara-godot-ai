@@ -90,38 +90,8 @@ static bool is_rg_executable_token(const godot::String &token) {
 static bool normalize_search_path(const godot::String &path_in,
                                   godot::String &normalized_path_out,
                                   godot::String &error_out) {
-    godot::String path = path_in.replace("\\", "/");
-    if (path.is_empty()) {
-        error_out = "rg search path cannot be empty";
-        return false;
-    }
-
-    if (path.begins_with("user://")) {
-        normalized_path_out = path;
-        return true;
-    }
-
-    godot::String project_root =
-        godot::ProjectSettings::get_singleton()->globalize_path("res://");
-    godot::String normalized_project_root = project_root.replace("\\", "/");
-    if (path.begins_with(normalized_project_root)) {
-        normalized_path_out =
-            godot::String("res://") + path.substr(normalized_project_root.length());
-        return true;
-    }
-
-    if (path.begins_with("res://")) {
-        normalized_path_out = path;
-        return true;
-    }
-
-    if (path.contains(":") || path.begins_with("/")) {
-        error_out = godot::String("rg path is outside project scope: ") + path_in;
-        return false;
-    }
-
-    normalized_path_out = fennara::normalize_path(path);
-    return true;
+    return normalize_scoped_path(path_in, normalized_path_out, error_out, "rg",
+                                 true);
 }
 
 static godot::Array collect_search_paths(const godot::Dictionary &op,
@@ -132,16 +102,26 @@ static godot::Array collect_search_paths(const godot::Dictionary &op,
     godot::Array raw_paths = fennara::safe_get_array(op, "paths");
     if (!raw_paths.is_empty()) {
         for (int i = 0; i < raw_paths.size(); i++) {
-            godot::String path = raw_paths[i];
-            if (!path.is_empty()) {
-                normalized_paths.append(fennara::normalize_path(path));
+            godot::String normalized_path;
+            godot::String error;
+            if (!normalize_search_path(godot::String(raw_paths[i]), normalized_path,
+                                       error)) {
+                errors.append(error);
+                continue;
             }
+            normalized_paths.append(normalized_path);
         }
     }
 
     if (normalized_paths.is_empty()) {
-        normalized_paths.append(
-            fennara::normalize_path(op.get("path", godot::String("res://"))));
+        godot::String normalized_path;
+        godot::String error;
+        if (!normalize_search_path(op.get("path", godot::String("res://")),
+                                   normalized_path, error)) {
+            errors.append(error);
+        } else {
+            normalized_paths.append(normalized_path);
+        }
     }
 
     for (int i = 0; i < extra_paths.size(); i++) {

@@ -249,6 +249,16 @@ bool tokenize_command(const godot::String &command,
     return true;
 }
 
+bool has_parent_path_component(const godot::String &path) {
+    godot::PackedStringArray parts = path.replace("\\", "/").split("/", false);
+    for (int i = 0; i < parts.size(); i++) {
+        if (parts[i] == "..") {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool normalize_scoped_path(const godot::String &path_in,
                            godot::String &normalized_path_out,
                            godot::String &error_out,
@@ -257,6 +267,11 @@ bool normalize_scoped_path(const godot::String &path_in,
     godot::String path = path_in.replace("\\", "/");
     if (path.is_empty()) {
         error_out = op_name + godot::String(" path cannot be empty");
+        return false;
+    }
+    if (has_parent_path_component(path)) {
+        error_out = op_name +
+                    godot::String(" path cannot contain '..': ") + path_in;
         return false;
     }
 

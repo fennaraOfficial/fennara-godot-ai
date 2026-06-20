@@ -176,6 +176,9 @@
     }
 
     function updateAssistantText(text) {
+      if (!activeAssistant && !String(text || "").trim()) {
+        return;
+      }
       const message = activeAssistant || startAssistantMessage();
       message.dataset.rawText = text;
       pendingAssistantText = text;

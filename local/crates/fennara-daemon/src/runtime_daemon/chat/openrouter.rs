@@ -265,11 +265,13 @@ where
         })
         .await?;
     }
-    on_item(StreamItem::Text {
-        content: final_text.clone(),
-        done: true,
-    })
-    .await?;
+    if !final_text.is_empty() {
+        on_item(StreamItem::Text {
+            content: final_text.clone(),
+            done: true,
+        })
+        .await?;
+    }
     let mut tool_calls = tool_entries.into_iter().collect::<Vec<(usize, Value)>>();
     tool_calls.sort_by_key(|(index, _)| *index);
     let tool_calls = tool_calls
@@ -472,7 +474,8 @@ struct SseParts {
 }
 
 fn parse_sse_payloads(buffer: &str) -> SseParts {
-    let parts: Vec<&str> = buffer.split("\n\n").collect();
+    let normalized = buffer.replace("\r\n", "\n").replace('\r', "\n");
+    let parts: Vec<&str> = normalized.split("\n\n").collect();
     let rest = parts.last().copied().unwrap_or_default().to_string();
     let events = parts
         .iter()
