@@ -77,6 +77,21 @@ NSRect frame_for_geometry(NSWindow *window, Geometry geometry) {
     return [content convertRect:window_rect fromView:nil];
 }
 
+NSWindow *native_window_for_owner(godot::Control *owner) {
+    godot::DisplayServer *display = godot::DisplayServer::get_singleton();
+    if (display == nullptr || owner == nullptr) {
+        return nil;
+    }
+
+    int64_t native_window = display->window_get_native_handle(
+        godot::DisplayServer::WINDOW_HANDLE,
+        owner_window_id(owner));
+    if (native_window == 0) {
+        return nil;
+    }
+    return reinterpret_cast<NSWindow *>(native_window);
+}
+
 } // namespace
 
 bool start(void **webview, void **parent_window, godot::Control *owner, const godot::String &url) {
@@ -84,23 +99,15 @@ bool start(void **webview, void **parent_window, godot::Control *owner, const go
         return false;
     }
 
-    godot::DisplayServer *display = godot::DisplayServer::get_singleton();
-    if (display == nullptr) {
-        return false;
-    }
-
-    int64_t native_window = display->window_get_native_handle(
-        godot::DisplayServer::WINDOW_HANDLE,
-        owner_window_id(owner));
-    if (native_window == 0) {
+    NSWindow *target_window = native_window_for_owner(owner);
+    if (target_window == nil) {
         return false;
     }
 
     std::string url_utf8 = url.utf8().get_data();
     __block bool ok = false;
     run_on_main_sync(^{
-        NSWindow *window = reinterpret_cast<NSWindow *>(native_window);
-        NSView *content = [window contentView];
+        NSView *content = [target_window contentView];
         if (content == nil) {
             return;
         }
@@ -122,27 +129,44 @@ bool start(void **webview, void **parent_window, godot::Control *owner, const go
         }
 
         *webview = view;
-        *parent_window = window;
+        *parent_window = target_window;
         ok = true;
     });
     return ok;
 }
 
-void resize_to(void *webview, void *parent_window, godot::Control *owner) {
+void resize_to(void *webview, void **parent_window, godot::Control *owner) {
     if (webview == nullptr || parent_window == nullptr) {
         return;
     }
 
     Geometry geometry = compute_geometry(owner);
+    NSWindow *target_window = native_window_for_owner(owner);
     run_on_main_sync(^{
         WKWebView *view = reinterpret_cast<WKWebView *>(webview);
-        NSWindow *window = reinterpret_cast<NSWindow *>(parent_window);
+        NSWindow *current_window = reinterpret_cast<NSWindow *>(*parent_window);
         if (!geometry.visible) {
             [view setHidden:YES];
             return;
         }
+        if (target_window == nil) {
+            [view setHidden:YES];
+            return;
+        }
 
-        [view setFrame:frame_for_geometry(window, geometry)];
+        if (target_window != current_window) {
+            NSView *content = [target_window contentView];
+            if (content == nil) {
+                [view setHidden:YES];
+                return;
+            }
+            [view removeFromSuperview];
+            [content addSubview:view];
+            *parent_window = target_window;
+            current_window = target_window;
+        }
+
+        [view setFrame:frame_for_geometry(current_window, geometry)];
         [view setHidden:NO];
     });
 }

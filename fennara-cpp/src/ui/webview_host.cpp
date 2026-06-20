@@ -20,7 +20,7 @@ namespace fennara {
 #ifdef __APPLE__
 namespace mac_webview {
 bool start(void **webview, void **parent_window, godot::Control *owner, const godot::String &url);
-void resize_to(void *webview, void *parent_window, godot::Control *owner);
+void resize_to(void *webview, void **parent_window, godot::Control *owner);
 void set_visible(void *webview, bool visible);
 void stop(void **webview, void **parent_window);
 } // namespace mac_webview
@@ -234,7 +234,7 @@ void WebviewHost::resize_to(godot::Control *owner) {
     }
 #else
 #ifdef __APPLE__
-    mac_webview::resize_to(webview, parent_window, owner);
+    mac_webview::resize_to(webview, &parent_window, owner);
 #else
     (void)owner;
 #endif
