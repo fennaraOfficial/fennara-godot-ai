@@ -4,17 +4,67 @@
 #include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/window.hpp>
 #include <godot_cpp/variant/string.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 
 #import <Cocoa/Cocoa.h>
 #import <WebKit/WebKit.h>
 
 #include <dispatch/dispatch.h>
+#include <cstdint>
 #include <string>
 
 namespace fennara {
 namespace mac_webview {
 
 namespace {
+
+godot::String ptr_string(const void *ptr) {
+    return godot::String::num_uint64(reinterpret_cast<uint64_t>(ptr), 16);
+}
+
+godot::String rect_string(NSRect rect) {
+    return "x=" + godot::String::num(rect.origin.x) +
+           " y=" + godot::String::num(rect.origin.y) +
+           " w=" + godot::String::num(rect.size.width) +
+           " h=" + godot::String::num(rect.size.height);
+}
+
+void output_log(const godot::String &message) {
+    godot::UtilityFunctions::print(godot::String("[Fennara] ") + message);
+}
+
+godot::String bool_string(bool value) {
+    return value ? "true" : "false";
+}
+
+godot::String window_debug_string(NSWindow *window) {
+    if (window == nil) {
+        return "nil";
+    }
+    NSView *content = [window contentView];
+    return "ptr=" + ptr_string(window) +
+           " key=" + bool_string([window isKeyWindow]) +
+           " main=" + bool_string([window isMainWindow]) +
+           " visible=" + bool_string([window isVisible]) +
+           " miniaturized=" + bool_string([window isMiniaturized]) +
+           " frame=(" + rect_string([window frame]) + ")" +
+           " content=" + ptr_string(content) +
+           " content_frame=(" + rect_string(content != nil ? [content frame] : NSZeroRect) + ")" +
+           " content_bounds=(" + rect_string(content != nil ? [content bounds] : NSZeroRect) + ")" +
+           " scale=" + godot::String::num([window backingScaleFactor]);
+}
+
+godot::String view_debug_string(WKWebView *view) {
+    if (view == nil) {
+        return "nil";
+    }
+    return "ptr=" + ptr_string(view) +
+           " hidden=" + bool_string([view isHidden]) +
+           " frame=(" + rect_string([view frame]) + ")" +
+           " bounds=(" + rect_string([view bounds]) + ")" +
+           " superview=" + ptr_string([view superview]) +
+           " window=" + ptr_string([view window]);
+}
 
 struct Geometry {
     bool visible = false;
@@ -38,20 +88,36 @@ int owner_window_id(godot::Control *owner) {
 Geometry compute_geometry(godot::Control *owner) {
     Geometry geometry;
     if (owner == nullptr || !owner->is_visible_in_tree()) {
+        output_log("macOS webview geometry hidden owner_null=" +
+                   godot::String(owner == nullptr ? "true" : "false"));
         return geometry;
     }
 
     godot::Vector2 size = owner->get_size();
     if (size.x <= 0 || size.y <= 0) {
+        output_log("macOS webview geometry empty size=" +
+                   godot::String::num(size.x) + "x" + godot::String::num(size.y));
         return geometry;
     }
 
     godot::Vector2 screen_position = owner->get_screen_position();
+    godot::Vector2 global_position = owner->get_global_position();
+    godot::Vector2 position = owner->get_position();
     geometry.visible = true;
     geometry.x = static_cast<int>(screen_position.x);
     geometry.y = static_cast<int>(screen_position.y);
     geometry.width = static_cast<int>(size.x);
     geometry.height = static_cast<int>(size.y);
+    output_log("macOS webview geometry visible screen=" +
+               godot::String::num(screen_position.x) + "," +
+               godot::String::num(screen_position.y) +
+               " global=" + godot::String::num(global_position.x) + "," +
+               godot::String::num(global_position.y) +
+               " local=" + godot::String::num(position.x) + "," +
+               godot::String::num(position.y) +
+               " size=" + godot::String::num(size.x) + "x" + godot::String::num(size.y) +
+               " visible_tree=" + bool_string(owner->is_visible_in_tree()) +
+               " owner_window_id=" + godot::String::num_int64(owner_window_id(owner)));
     return geometry;
 }
 
@@ -74,7 +140,17 @@ NSRect frame_for_geometry(NSWindow *window, Geometry geometry) {
         geometry.width,
         geometry.height);
     NSRect window_rect = [window convertRectFromScreen:screen_rect];
-    return [content convertRect:window_rect fromView:nil];
+    NSRect content_rect = [content convertRect:window_rect fromView:nil];
+    output_log("macOS webview frame conversion window=" + ptr_string(window) +
+               " content=" + ptr_string(content) +
+               " backing_scale=" + godot::String::num([window backingScaleFactor]) +
+               " screen_frame=(" + rect_string(screen_frame) + ")" +
+               " screen_rect=(" + rect_string(screen_rect) + ")" +
+               " window_rect=(" + rect_string(window_rect) + ")" +
+               " content_rect=(" + rect_string(content_rect) + ")" +
+               " content_bounds=(" + rect_string([content bounds]) + ")" +
+               " window_frame=(" + rect_string([window frame]) + ")");
+    return content_rect;
 }
 
 NSWindow *native_window_for_owner(godot::Control *owner) {
@@ -87,8 +163,13 @@ NSWindow *native_window_for_owner(godot::Control *owner) {
         godot::DisplayServer::WINDOW_HANDLE,
         owner_window_id(owner));
     if (native_window == 0) {
+        output_log("macOS webview native window missing owner_window_id=" +
+                   godot::String::num_int64(owner_window_id(owner)));
         return nil;
     }
+    output_log("macOS webview native window owner_window_id=" +
+               godot::String::num_int64(owner_window_id(owner)) +
+               " ptr=" + ptr_string(reinterpret_cast<void *>(native_window)));
     return reinterpret_cast<NSWindow *>(native_window);
 }
 
@@ -101,6 +182,7 @@ bool start(void **webview, void **parent_window, godot::Control *owner, const go
 
     NSWindow *target_window = native_window_for_owner(owner);
     if (target_window == nil) {
+        output_log("macOS webview start failed: target window nil");
         return false;
     }
 
@@ -109,6 +191,8 @@ bool start(void **webview, void **parent_window, godot::Control *owner, const go
     run_on_main_sync(^{
         NSView *content = [target_window contentView];
         if (content == nil) {
+            output_log("macOS webview start failed: content view nil target=" +
+                       ptr_string(target_window));
             return;
         }
 
@@ -116,6 +200,7 @@ bool start(void **webview, void **parent_window, godot::Control *owner, const go
         WKWebView *view = [[WKWebView alloc] initWithFrame:NSZeroRect configuration:configuration];
         [configuration release];
         if (view == nil) {
+            output_log("macOS webview start failed: WKWebView nil");
             return;
         }
 
@@ -130,6 +215,8 @@ bool start(void **webview, void **parent_window, godot::Control *owner, const go
 
         *webview = view;
         *parent_window = target_window;
+        output_log("macOS webview start ok view={" + view_debug_string(view) +
+                   "} window={" + window_debug_string(target_window) + "}");
         ok = true;
     });
     return ok;
@@ -145,11 +232,17 @@ void resize_to(void *webview, void **parent_window, godot::Control *owner) {
     run_on_main_sync(^{
         WKWebView *view = reinterpret_cast<WKWebView *>(webview);
         NSWindow *current_window = reinterpret_cast<NSWindow *>(*parent_window);
+        output_log("macOS webview resize begin view={" + view_debug_string(view) +
+                   "} current_window={" + window_debug_string(current_window) +
+                   "} target_window={" + window_debug_string(target_window) +
+                   "} visible=" + godot::String(geometry.visible ? "true" : "false"));
         if (!geometry.visible) {
+            output_log("macOS webview resize hiding: geometry not visible");
             [view setHidden:YES];
             return;
         }
         if (target_window == nil) {
+            output_log("macOS webview resize hiding: target window nil");
             [view setHidden:YES];
             return;
         }
@@ -157,6 +250,8 @@ void resize_to(void *webview, void **parent_window, godot::Control *owner) {
         if (target_window != current_window) {
             NSView *content = [target_window contentView];
             if (content == nil) {
+                output_log("macOS webview resize hiding: reparent content nil target=" +
+                           ptr_string(target_window));
                 [view setHidden:YES];
                 return;
             }
@@ -164,10 +259,21 @@ void resize_to(void *webview, void **parent_window, godot::Control *owner) {
             [content addSubview:view];
             *parent_window = target_window;
             current_window = target_window;
+            output_log("macOS webview reparented view=" + ptr_string(view) +
+                       " new_window=" + ptr_string(target_window) +
+                       " content=" + ptr_string(content) +
+                       " view_after={" + view_debug_string(view) + "}");
+        } else {
+            output_log("macOS webview reparent skipped: target equals current window");
         }
 
-        [view setFrame:frame_for_geometry(current_window, geometry)];
+        NSRect final_frame = frame_for_geometry(current_window, geometry);
+        output_log("macOS webview frame before set view={" + view_debug_string(view) + "}");
+        [view setFrame:final_frame];
+        output_log("macOS webview final frame=(" + rect_string(final_frame) +
+                   ") view_after_set={" + view_debug_string(view) + "} hidden=false");
         [view setHidden:NO];
+        output_log("macOS webview visible after setHidden view={" + view_debug_string(view) + "}");
     });
 }
 
@@ -178,6 +284,8 @@ void set_visible(void *webview, bool visible) {
 
     run_on_main_sync(^{
         WKWebView *view = reinterpret_cast<WKWebView *>(webview);
+        output_log("macOS webview set_visible view=" + ptr_string(view) +
+                   " visible=" + godot::String(visible ? "true" : "false"));
         [view setHidden:visible ? NO : YES];
     });
 }
@@ -193,6 +301,7 @@ void stop(void **webview, void **parent_window) {
     void *view_ptr = *webview;
     run_on_main_sync(^{
         WKWebView *view = reinterpret_cast<WKWebView *>(view_ptr);
+        output_log("macOS webview stop view=" + ptr_string(view));
         [view removeFromSuperview];
         [view release];
     });
