@@ -3,7 +3,9 @@
 #include <godot_cpp/classes/control.hpp>
 #include <godot_cpp/variant/string.hpp>
 
+#include <mutex>
 #include <string>
+#include <thread>
 
 namespace fennara {
 
@@ -21,6 +23,8 @@ private:
     void *webview = nullptr;
     void *widget = nullptr;
     void *parent_window = nullptr;
+    std::thread webview_thread;
+    std::mutex webview_mutex;
     godot::String current_url;
     bool started = false;
     int current_window_id = -1;

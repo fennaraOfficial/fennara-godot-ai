@@ -10,8 +10,8 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <webview/webview.h>
 #endif
+#include <webview/webview.h>
 
 #include <string>
 
@@ -29,6 +29,7 @@ void output_error(const godot::String &message) {
     godot::UtilityFunctions::push_error(godot::String("[Fennara] ") + message);
 }
 
+#ifdef _WIN32
 int owner_window_id(godot::Control *owner) {
     if (owner == nullptr) {
         return 0;
@@ -38,6 +39,14 @@ int owner_window_id(godot::Control *owner) {
         return 0;
     }
     return window->get_window_id();
+}
+#endif
+
+bool editor_is_headless() {
+    godot::DisplayServer *display = godot::DisplayServer::get_singleton();
+    godot::OS *os = godot::OS::get_singleton();
+    return (os != nullptr && os->has_feature("headless")) ||
+           (display != nullptr && display->get_name().to_lower() == "headless");
 }
 
 } // namespace
@@ -52,6 +61,11 @@ bool WebviewHost::start(godot::Control *owner, const godot::String &url) {
         return true;
     }
 
+    if (editor_is_headless()) {
+        output_log("Web chat host skipped: headless editor has no native window");
+        return false;
+    }
+
 #ifdef _WIN32
     if (owner == nullptr) {
         output_error("Web chat host cannot start: owner Control is null");
@@ -61,14 +75,6 @@ bool WebviewHost::start(godot::Control *owner, const godot::String &url) {
     godot::DisplayServer *display = godot::DisplayServer::get_singleton();
     if (display == nullptr) {
         output_error("Web chat host cannot start: DisplayServer is unavailable");
-        return false;
-    }
-    godot::OS *os = godot::OS::get_singleton();
-    bool headless =
-        (os != nullptr && os->has_feature("headless")) ||
-        display->get_name().to_lower() == "headless";
-    if (headless) {
-        output_log("Web chat host skipped: headless editor has no native window");
         return false;
     }
 
@@ -115,9 +121,34 @@ bool WebviewHost::start(godot::Control *owner, const godot::String &url) {
     return true;
 #else
     (void)owner;
-    (void)url;
-    output_error("Web chat native webview is not wired for this platform build yet");
-    return false;
+    std::string url_utf8 = url.utf8().get_data();
+    current_url = url;
+    started = true;
+
+    webview_thread = std::thread([this, url_utf8]() {
+        webview_t local_webview = webview_create(0, nullptr);
+        if (local_webview == nullptr) {
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lock(webview_mutex);
+            webview = local_webview;
+        }
+        webview_set_title(local_webview, "Fennara Chat");
+        webview_set_size(local_webview, 1120, 760, WEBVIEW_HINT_NONE);
+        webview_navigate(local_webview, url_utf8.c_str());
+        webview_run(local_webview);
+        webview_destroy(local_webview);
+        {
+            std::lock_guard<std::mutex> lock(webview_mutex);
+            if (webview == local_webview) {
+                webview = nullptr;
+            }
+        }
+    });
+
+    output_log("Web chat native webview window started");
+    return true;
 #endif
 }
 
@@ -181,6 +212,8 @@ void WebviewHost::resize_to(godot::Control *owner) {
                    " w=" + godot::String::num_int64(width) +
                    " h=" + godot::String::num_int64(height));
     }
+#else
+    (void)owner;
 #endif
 }
 
@@ -193,6 +226,16 @@ void WebviewHost::stop() {
     output_log("Web chat destroying native webview");
     if (webview != nullptr) {
         webview_destroy(static_cast<webview_t>(webview));
+    }
+#else
+    {
+        std::lock_guard<std::mutex> lock(webview_mutex);
+        if (webview != nullptr) {
+            webview_terminate(static_cast<webview_t>(webview));
+        }
+    }
+    if (webview_thread.joinable()) {
+        webview_thread.join();
     }
 #endif
 
