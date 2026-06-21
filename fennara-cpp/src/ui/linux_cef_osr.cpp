@@ -16,10 +16,10 @@
 #include <godot_cpp/variant/packed_byte_array.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <chrono>
 #include <mutex>
-#include <random>
 #include <string>
 #include <vector>
 namespace fennara::linux_cef_osr {
@@ -45,16 +45,12 @@ void ensure_dir(const godot::String &path) {
 }
 
 godot::String process_profile_name() {
+    static std::atomic<uint32_t> counter{0};
     godot::OS *os = godot::OS::get_singleton();
     const int32_t pid = os != nullptr ? os->get_process_id() : 0;
     const auto now = std::chrono::system_clock::now().time_since_epoch();
     const auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-    uint32_t nonce = 0;
-    try {
-        nonce = std::random_device{}();
-    } catch (...) {
-        nonce = static_cast<uint32_t>(millis);
-    }
+    const uint32_t nonce = counter.fetch_add(1, std::memory_order_relaxed);
     return "godot-" + godot::String::num_int64(pid) +
            "-" + godot::String::num_int64(millis) +
            "-" + godot::String::num_int64(nonce);
