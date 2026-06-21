@@ -102,6 +102,45 @@ void linux_webview_debug_log(const godot::String &message) {
     output_log(godot::String("Linux webview debug: ") + message);
 }
 
+godot::String linux_display_summary() {
+    godot::String summary = "unknown";
+    GdkDisplay *display = gdk_display_get_default();
+    if (display != nullptr) {
+        const char *name = gdk_display_get_name(display);
+        summary = godot::String(name != nullptr ? name : "unnamed");
+    }
+
+    godot::DisplayServer *godot_display = godot::DisplayServer::get_singleton();
+    if (godot_display != nullptr) {
+        summary += " godot_display=" + godot_display->get_name();
+    }
+    return summary;
+}
+
+godot::String linux_owner_summary(godot::Control *owner, const WebviewGeometry &geometry) {
+    if (owner == nullptr) {
+        return "owner=null";
+    }
+
+    godot::Vector2 size = owner->get_size();
+    godot::Vector2 global_position = owner->get_global_position();
+    godot::Vector2 screen_position = owner->get_screen_position();
+
+    return "owner_window_id=" + godot::String::num_int64(owner_window_id(owner)) +
+           " visible=" + godot::String(owner->is_visible_in_tree() ? "true" : "false") +
+           " geom_visible=" + godot::String(geometry.visible ? "true" : "false") +
+           " global=(" + godot::String::num(global_position.x) +
+           "," + godot::String::num(global_position.y) + ")" +
+           " screen=(" + godot::String::num(screen_position.x) +
+           "," + godot::String::num(screen_position.y) + ")" +
+           " size=(" + godot::String::num(size.x) +
+           "," + godot::String::num(size.y) + ")" +
+           " computed=(" + godot::String::num_int64(geometry.x) +
+           "," + godot::String::num_int64(geometry.y) +
+           "," + godot::String::num_int64(geometry.width) +
+           "x" + godot::String::num_int64(geometry.height) + ")";
+}
+
 void pump_linux_webview_events() {
     int iterations = 0;
     while (g_main_context_pending(nullptr) && iterations < 64) {
@@ -203,10 +242,8 @@ bool WebviewHost::start(godot::Control *owner, const godot::String &url) {
     WebviewGeometry geometry = compute_webview_geometry(owner);
     int width = geometry.width > 0 ? geometry.width : 420;
     int height = geometry.height > 0 ? geometry.height : 720;
-    linux_webview_debug_log("start requested visible=" +
-                            godot::String(geometry.visible ? "true" : "false") +
-                            " owner_size=" + godot::String::num_int64(geometry.width) +
-                            "x" + godot::String::num_int64(geometry.height) +
+    linux_webview_debug_log("start display=" + linux_display_summary());
+    linux_webview_debug_log("start " + linux_owner_summary(owner, geometry) +
                             " initial_window_size=" + godot::String::num_int64(width) +
                             "x" + godot::String::num_int64(height));
 
@@ -315,6 +352,15 @@ void WebviewHost::resize_to(godot::Control *owner) {
     mac_webview::resize_to(webview, &parent_window, owner);
 #elif defined(__linux__)
     WebviewGeometry geometry = compute_webview_geometry(owner);
+    int geometry_visible_state = geometry.visible ? 1 : 0;
+    if (geometry_visible_state != last_geometry_visible_state ||
+        geometry.x != last_x || geometry.y != last_y ||
+        geometry.width != last_width || geometry.height != last_height) {
+        linux_webview_debug_log("dock geometry " + linux_owner_summary(owner, geometry));
+        last_x = geometry.x;
+        last_y = geometry.y;
+        last_geometry_visible_state = geometry_visible_state;
+    }
     if (geometry.visible && geometry.width > 0 && geometry.height > 0 &&
         (geometry.width != last_width || geometry.height != last_height)) {
         linux_webview_debug_log("resize standalone window size=" +
@@ -390,6 +436,7 @@ void WebviewHost::stop() {
     last_width = -1;
     last_height = -1;
     last_visible_state = -1;
+    last_geometry_visible_state = -1;
 }
 
 bool WebviewHost::is_started() const {
