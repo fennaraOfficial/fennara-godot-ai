@@ -108,8 +108,8 @@ void pump_linux_webview_events() {
         g_main_context_iteration(nullptr, FALSE);
         iterations++;
     }
-    if (iterations > 0) {
-        linux_webview_debug_log("pumped gtk events count=" + godot::String::num_int64(iterations));
+    if (iterations >= 64) {
+        linux_webview_debug_log("gtk event pump hit iteration cap");
     }
 }
 #endif
@@ -315,30 +315,19 @@ void WebviewHost::resize_to(godot::Control *owner) {
     mac_webview::resize_to(webview, &parent_window, owner);
 #elif defined(__linux__)
     WebviewGeometry geometry = compute_webview_geometry(owner);
-    if (parent_window != nullptr) {
-        GtkWidget *window = static_cast<GtkWidget *>(parent_window);
-        if (!geometry.visible) {
-            linux_webview_debug_log("resize hiding window: owner not visible");
-            gtk_widget_hide(window);
-        } else {
-            gtk_widget_show(window);
-            if (geometry.width > 0 && geometry.height > 0 &&
-                (geometry.width != last_width || geometry.height != last_height)) {
-                linux_webview_debug_log("resize window size=" +
-                                        godot::String::num_int64(geometry.width) +
-                                        "x" + godot::String::num_int64(geometry.height) +
-                                        " previous=" + godot::String::num_int64(last_width) +
-                                        "x" + godot::String::num_int64(last_height));
-                webview_set_size(static_cast<webview_t>(webview),
-                                 geometry.width,
-                                 geometry.height,
-                                 WEBVIEW_HINT_NONE);
-                last_width = geometry.width;
-                last_height = geometry.height;
-            }
-        }
-    } else {
-        linux_webview_debug_log("resize skipped: native window handle is null");
+    if (geometry.visible && geometry.width > 0 && geometry.height > 0 &&
+        (geometry.width != last_width || geometry.height != last_height)) {
+        linux_webview_debug_log("resize standalone window size=" +
+                                godot::String::num_int64(geometry.width) +
+                                "x" + godot::String::num_int64(geometry.height) +
+                                " previous=" + godot::String::num_int64(last_width) +
+                                "x" + godot::String::num_int64(last_height));
+        webview_set_size(static_cast<webview_t>(webview),
+                         geometry.width,
+                         geometry.height,
+                         WEBVIEW_HINT_NONE);
+        last_width = geometry.width;
+        last_height = geometry.height;
     }
     pump_linux_webview_events();
 #else
@@ -356,20 +345,14 @@ void WebviewHost::set_visible(bool visible) {
 #elif defined(__APPLE__)
     mac_webview::set_visible(webview, visible);
 #elif defined(__linux__)
-    if (!started || parent_window == nullptr) {
-        linux_webview_debug_log("set_visible skipped started=" +
-                                godot::String(started ? "true" : "false") +
-                                " window_null=" +
-                                godot::String(parent_window == nullptr ? "true" : "false"));
+    if (!started) {
         return;
     }
-    linux_webview_debug_log(godot::String("set_visible ") +
-                            (visible ? godot::String("true") : godot::String("false")));
-    GtkWidget *window = static_cast<GtkWidget *>(parent_window);
-    if (visible) {
-        gtk_widget_show(window);
-    } else {
-        gtk_widget_hide(window);
+    int visible_state = visible ? 1 : 0;
+    if (visible_state != last_visible_state) {
+        linux_webview_debug_log(godot::String("standalone window ignores dock visibility request ") +
+                                (visible ? godot::String("true") : godot::String("false")));
+        last_visible_state = visible_state;
     }
     pump_linux_webview_events();
 #else
@@ -406,6 +389,7 @@ void WebviewHost::stop() {
     last_y = -1;
     last_width = -1;
     last_height = -1;
+    last_visible_state = -1;
 }
 
 bool WebviewHost::is_started() const {

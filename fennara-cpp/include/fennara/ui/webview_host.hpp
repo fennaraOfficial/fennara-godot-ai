@@ -29,6 +29,7 @@ private:
     int last_y = -1;
     int last_width = -1;
     int last_height = -1;
+    int last_visible_state = -1;
 };
 
 } // namespace fennara
