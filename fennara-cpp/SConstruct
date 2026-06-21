@@ -50,15 +50,4 @@ else:
 
 targets = [library]
 
-if env["platform"] == "linux":
-    helper_env = env.Clone()
-    helper_env.Append(CPPPATH=["vendor/webview/include"])
-    helper_env.Append(CXXFLAGS=["-fexceptions"])
-    helper_env.ParseConfig("pkg-config --cflags --libs gtk+-3.0 webkit2gtk-4.1")
-    helper = helper_env.Program(
-        "{}/fennara-chat-webview".format(out_dir),
-        source=["helpers/linux_chat_webview.cpp"],
-    )
-    targets.append(helper)
-
 Default(targets)

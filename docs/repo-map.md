@@ -40,6 +40,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `fennara-cpp/SConstruct` | GDExtension build entrypoint. |
 | `fennara-cpp/include/` | Public C++ headers. |
 | `fennara-cpp/src/` | C++ implementation. |
+| `fennara-cpp/src/ui/webview_host*` | Native in-editor chat webview host and platform backends. |
 | `fennara-cpp/src/tools/` | Godot-facing tool implementations. |
 | `fennara-cpp/src/lsp/` | Script diagnostics and language-server helpers. |
 | `fennara-cpp/src/runtime/` | Runtime capture/session support used by runtime tools. |
@@ -79,7 +80,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | Change generated project guidance | `local/templates/` and `local/crates/fennara-cli/src/project_guidance.rs` |
 | Change MCP app setup | `local/crates/fennara-cli/src/mcp_setup.rs` |
 | Change runtime session behavior | `fennara-cpp/src/tools/runtime_session/` and `local/crates/fennara-daemon/` |
-| Change in-editor chat UI | `ui/chat/`, `godot/addons/fennara/dist/`, and `fennara-cpp/src/ui/dock.cpp` |
+| Change in-editor chat UI | `ui/chat/`, `godot/addons/fennara/dist/`, `fennara-cpp/src/ui/dock.cpp`, and `fennara-cpp/src/ui/webview_host*` |
 | Change vendored chat UI libraries | `ui/chat/vendor/`, `godot/addons/fennara/dist/vendor/`, and `THIRD_PARTY_NOTICES.md` |
 | Change C# support | `fennara-cpp/src/lsp/` and `local/crates/fennara-cli/src/csharp_support.rs` |
 | Change release packages | `scripts/package-preview.mjs` and `.github/workflows/release.yml` |

@@ -1,5 +1,7 @@
 #ifdef __APPLE__
 
+#include "webview_backend.hpp"
+
 #include <godot_cpp/classes/control.hpp>
 #include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/window.hpp>
@@ -12,6 +14,7 @@
 #include <dispatch/dispatch.h>
 #include <cstdlib>
 #include <cstdint>
+#include <memory>
 #include <string>
 
 namespace fennara {
@@ -331,6 +334,71 @@ void stop(void **webview, void **parent_window) {
 }
 
 } // namespace mac_webview
+
+namespace webview_backend {
+
+class MacWebviewBackend : public NativeWebviewBackend {
+public:
+    ~MacWebviewBackend() override {
+        stop();
+    }
+
+    bool start(godot::Control *owner, const godot::String &url) override {
+        if (started) {
+            output_log("Web chat host already started");
+            return true;
+        }
+
+        if (mac_webview::start(&webview, &parent_window, owner, url)) {
+            current_url = url;
+            started = true;
+            resize_to(owner);
+            output_log("Web chat native macOS webview started");
+            return true;
+        }
+        output_error("Web chat native macOS webview could not start");
+        return false;
+    }
+
+    void resize_to(godot::Control *owner) override {
+        if (!started || owner == nullptr) {
+            return;
+        }
+        mac_webview::resize_to(webview, &parent_window, owner);
+    }
+
+    void set_visible(bool visible) override {
+        if (!started) {
+            return;
+        }
+        mac_webview::set_visible(webview, visible);
+    }
+
+    void stop() override {
+        if (!started) {
+            return;
+        }
+        mac_webview::stop(&webview, &parent_window);
+        current_url = "";
+        started = false;
+    }
+
+    bool is_started() const override {
+        return started;
+    }
+
+private:
+    void *webview = nullptr;
+    void *parent_window = nullptr;
+    godot::String current_url;
+    bool started = false;
+};
+
+std::unique_ptr<NativeWebviewBackend> create_backend() {
+    return std::make_unique<MacWebviewBackend>();
+}
+
+} // namespace webview_backend
 } // namespace fennara
 
 #endif
