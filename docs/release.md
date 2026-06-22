@@ -291,7 +291,7 @@ Use `promote_latest: false` only when publishing a version that should not becom
 On Windows:
 
 ```powershell
-irm https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-mcp/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.ps1 | iex
 fennara --version
 fennara doctor
 ```

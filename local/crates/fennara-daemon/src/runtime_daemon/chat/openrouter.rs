@@ -354,7 +354,7 @@ fn openrouter_headers(api_key: &str) -> Result<reqwest::header::HeaderMap, Strin
     );
     headers.insert(
         "HTTP-Referer",
-        "https://github.com/fennaraOfficial/fennara-godot-mcp"
+        "https://github.com/fennaraOfficial/fennara-godot-ai"
             .parse()
             .map_err(|error| format!("invalid referer header: {error}"))?,
     );

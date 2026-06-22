@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Fennara Godot MCP.
+Thanks for helping improve Fennara Godot AI.
 
 ## Good Contributions
 

@@ -14,7 +14,7 @@ See [Setup](setup.md).
 
 Open the latest GitHub release:
 
-https://github.com/fennaraOfficial/fennara-godot-mcp/releases/latest
+https://github.com/fennaraOfficial/fennara-godot-ai/releases/latest
 
 Download the release manifest, the CLI and local runtime files for your
 platform, plus the shared addon zip.
