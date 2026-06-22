@@ -5,8 +5,9 @@
   const AUTO_SCROLL_THRESHOLD = 72;
   const DAEMON_RECONNECT_DELAY_MS = 250;
   const MAX_IMAGE_ATTACHMENTS = 4;
-  const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
-  const MAX_TOTAL_IMAGE_BYTES = 8 * 1024 * 1024;
+  const MAX_RAW_IMAGE_BYTES = 8 * 1024 * 1024;
+  const MAX_SEND_IMAGE_BYTES = 3 * 1024 * 1024;
+  const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
   const SHOW_RELOAD_BUTTON = true;
   const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
   const COPY_ICON = '<svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11c0-2.83 0-4.24.88-5.12C7.76 5 9.17 5 12 5h3c2.83 0 4.24 0 5.12.88C21 6.76 21 8.17 21 11v5c0 2.83 0 4.24-.88 5.12C19.24 22 17.83 22 15 22h-3c-2.83 0-4.24 0-5.12-.88C6 20.24 6 18.83 6 16v-5Z"></path><path d="M6 19a3 3 0 0 1-3-3v-6c0-3.77 0-5.66 1.17-6.83C5.34 2 7.23 2 11 2h4a3 3 0 0 1 3 3"></path></svg>';
@@ -952,24 +953,29 @@
         appendSystem(validationError);
         continue;
       }
-      const totalSize = attachedImages.reduce((sum, image) => sum + image.size, 0) + file.size;
-      if (totalSize > MAX_TOTAL_IMAGE_BYTES) {
-        appendSystem(`Attached images must be ${formatBytes(MAX_TOTAL_IMAGE_BYTES)} total or less.`);
-        continue;
-      }
       try {
         const dataUrl = await readFileAsDataUrl(file);
-        const base64 = dataUrl.split(",", 2)[1] || "";
-        if (!base64) {
-          appendSystem("Could not read that image.");
+        const prepared = await prepareImageForChat({
+          base64: dataUrl.split(",", 2)[1] || "",
+          mimeType,
+          name: file.name || "pasted image",
+          size: file.size,
+        });
+        if (!prepared) {
+          appendSystem("Image is too large. Try a smaller screenshot.");
+          continue;
+        }
+        const totalSize = attachedImages.reduce((sum, image) => sum + image.size, 0) + prepared.size;
+        if (totalSize > MAX_TOTAL_IMAGE_BYTES) {
+          appendSystem(`Attached images must be ${formatBytes(MAX_TOTAL_IMAGE_BYTES)} total or less.`);
           continue;
         }
         attachedImages.push({
           id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          base64,
-          mime_type: mimeType,
-          name: file.name || "pasted image",
-          size: file.size,
+          base64: prepared.base64,
+          mime_type: prepared.mimeType,
+          name: prepared.name,
+          size: prepared.size,
           description: file.name || "user image",
         });
         added += 1;
@@ -998,7 +1004,7 @@
     return unique;
   }
 
-  function addImagePayload(image) {
+  async function addImagePayload(image) {
     const base64 = String(image?.base64 || "");
     const mimeType = String(image?.mime_type || "").toLowerCase();
     const size = Number(image?.size || 0);
@@ -1013,23 +1019,32 @@
       appendSystem("Unsupported image type. Use PNG, JPEG, WebP, or GIF.");
       return false;
     }
-    if (size > MAX_IMAGE_BYTES) {
-      appendSystem(`Each image must be ${formatBytes(MAX_IMAGE_BYTES)} or smaller.`);
+    if (size > MAX_RAW_IMAGE_BYTES) {
+      appendSystem("Image is too large. Try a smaller screenshot.");
       return false;
     }
-    const totalSize = attachedImages.reduce((sum, item) => sum + item.size, 0) + size;
+    const prepared = await prepareImageForChat({
+      base64,
+      mimeType,
+      name: String(image?.name || "pasted image"),
+      size,
+    });
+    if (!prepared) {
+      appendSystem("Image is too large. Try a smaller screenshot.");
+      return false;
+    }
+    const totalSize = attachedImages.reduce((sum, item) => sum + item.size, 0) + prepared.size;
     if (totalSize > MAX_TOTAL_IMAGE_BYTES) {
       appendSystem(`Attached images must be ${formatBytes(MAX_TOTAL_IMAGE_BYTES)} total or less.`);
       return false;
     }
-    const name = String(image?.name || "pasted image");
     attachedImages.push({
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      base64,
-      mime_type: mimeType,
-      name,
-      size,
-      description: name,
+      base64: prepared.base64,
+      mime_type: prepared.mimeType,
+      name: prepared.name,
+      size: prepared.size,
+      description: prepared.name,
     });
     renderAttachmentPreview();
     return true;
@@ -1060,10 +1075,76 @@
     if (!SUPPORTED_IMAGE_TYPES.has(mimeType)) {
       return "Unsupported image type. Use PNG, JPEG, WebP, or GIF.";
     }
-    if (file.size > MAX_IMAGE_BYTES) {
-      return `Each image must be ${formatBytes(MAX_IMAGE_BYTES)} or smaller.`;
+    if (file.size > MAX_RAW_IMAGE_BYTES) {
+      return "Image is too large. Try a smaller screenshot.";
     }
     return "";
+  }
+
+  async function prepareImageForChat(image) {
+    if (!image.base64) {
+      return null;
+    }
+    if (image.size <= MAX_SEND_IMAGE_BYTES) {
+      return image;
+    }
+    if (image.mimeType === "image/gif") {
+      return null;
+    }
+    return compressImageForChat(image);
+  }
+
+  async function compressImageForChat(image) {
+    const dataUrl = `data:${image.mimeType};base64,${image.base64}`;
+    const loaded = await loadImage(dataUrl);
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return null;
+    }
+
+    let scale = Math.min(1, Math.sqrt(MAX_SEND_IMAGE_BYTES / Math.max(image.size, 1)) * 0.92);
+    const qualities = [0.82, 0.72, 0.62, 0.52];
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      canvas.width = Math.max(1, Math.round(loaded.width * scale));
+      canvas.height = Math.max(1, Math.round(loaded.height * scale));
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(loaded, 0, 0, canvas.width, canvas.height);
+      for (const quality of qualities) {
+        const blob = await canvasToBlob(canvas, "image/jpeg", quality);
+        if (blob && blob.size <= MAX_SEND_IMAGE_BYTES) {
+          return {
+            base64: await blobToBase64(blob),
+            mimeType: "image/jpeg",
+            name: image.name.replace(/\.[^.]+$/, "") + ".jpg",
+            size: blob.size,
+          };
+        }
+      }
+      scale *= 0.82;
+    }
+    return null;
+  }
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = src;
+    });
+  }
+
+  function canvasToBlob(canvas, type, quality) {
+    return new Promise((resolve) => {
+      canvas.toBlob(resolve, type, quality);
+    });
+  }
+
+  async function blobToBase64(blob) {
+    const dataUrl = await readFileAsDataUrl(blob);
+    return dataUrl.split(",", 2)[1] || "";
   }
 
   function readFileAsDataUrl(file) {
@@ -1148,8 +1229,9 @@
 
   window.FennaraNativePasteboard = {
     receiveImage(image) {
-      addImagePayload(image);
-      window.setTimeout(resizePrompt, 0);
+      addImagePayload(image).finally(() => {
+        window.setTimeout(resizePrompt, 0);
+      });
     },
     receiveError(error) {
       const message = String(error?.message || "Could not paste that image.");
