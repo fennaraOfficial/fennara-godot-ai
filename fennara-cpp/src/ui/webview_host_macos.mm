@@ -18,7 +18,7 @@
 #include <memory>
 #include <string>
 
-static const NSUInteger kMaxPasteImageBytes = 3 * 1024 * 1024;
+static const NSUInteger kMaxPasteImageBytes = 8 * 1024 * 1024;
 
 @interface FennaraMacWebViewDelegate : NSObject <WKUIDelegate, WKScriptMessageHandler>
 @property(nonatomic, assign) WKWebView *webView;
@@ -71,7 +71,7 @@ static const NSUInteger kMaxPasteImageBytes = 3 * 1024 * 1024;
     NSString *mimeType = @"image/png";
     NSString *name = @"pasted-image.png";
     if (![self imageDataIsSmallEnough:imageData]) {
-        [self sendPasteboardError:@"Each image must be 3 MB or smaller."];
+        [self sendPasteboardError:@"Image is too large. Try a smaller screenshot."];
         return;
     }
 
@@ -79,14 +79,14 @@ static const NSUInteger kMaxPasteImageBytes = 3 * 1024 * 1024;
         NSData *tiffData = [pasteboard dataForType:NSPasteboardTypeTIFF];
         if (tiffData != nil) {
             if (![self imageDataIsSmallEnough:tiffData]) {
-                [self sendPasteboardError:@"Each image must be 3 MB or smaller."];
+                [self sendPasteboardError:@"Image is too large. Try a smaller screenshot."];
                 return;
             }
             NSImageRep *rep = [NSBitmapImageRep imageRepWithData:tiffData];
             if ([rep isKindOfClass:[NSBitmapImageRep class]]) {
                 imageData = [(NSBitmapImageRep *)rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
                 if (![self imageDataIsSmallEnough:imageData]) {
-                    [self sendPasteboardError:@"Each image must be 3 MB or smaller."];
+                    [self sendPasteboardError:@"Image is too large. Try a smaller screenshot."];
                     return;
                 }
             }
@@ -114,12 +114,12 @@ static const NSUInteger kMaxPasteImageBytes = 3 * 1024 * 1024;
             if ([url getResourceValue:&fileSize forKey:NSURLFileSizeKey error:nil] &&
                 fileSize != nil &&
                 [fileSize unsignedLongLongValue] > kMaxPasteImageBytes) {
-                [self sendPasteboardError:@"Each image must be 3 MB or smaller."];
+                [self sendPasteboardError:@"Image is too large. Try a smaller screenshot."];
                 return;
             }
             imageData = [NSData dataWithContentsOfURL:url];
             if (![self imageDataIsSmallEnough:imageData]) {
-                [self sendPasteboardError:@"Each image must be 3 MB or smaller."];
+                [self sendPasteboardError:@"Image is too large. Try a smaller screenshot."];
                 return;
             }
             name = url.lastPathComponent.length > 0 ? url.lastPathComponent : name;
