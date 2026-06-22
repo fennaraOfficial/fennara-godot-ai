@@ -937,11 +937,6 @@
   function imageDebug(message, detail = null) {
     const text = `[Fennara images] ${message}`;
     console.debug(text, detail || "");
-    if (detail) {
-      appendSystem(`${text}: ${detail}`);
-    } else {
-      appendSystem(text);
-    }
   }
 
   function describeFile(file) {
@@ -1386,6 +1381,10 @@
   }
 
   prompt?.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "v") {
+      window.setTimeout(requestNativePastedImage, 0);
+      return;
+    }
     if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
       return;
     }
