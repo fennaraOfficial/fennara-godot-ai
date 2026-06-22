@@ -311,6 +311,9 @@ struct cef_client_t {
 };
 
 struct cef_api_t {
+    int (*cef_execute_process)(const cef_main_args_t *args,
+                               void *application,
+                               void *windows_sandbox_info) = nullptr;
     int (*cef_initialize)(const cef_main_args_t *args,
                           const cef_settings_t *settings,
                           void *application,

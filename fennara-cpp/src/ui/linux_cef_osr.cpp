@@ -331,6 +331,13 @@ bool LinuxCefOsrWebview::start(godot::Control *owner, const godot::String &url) 
     cef_main_args_t args;
     args.argc = 1;
     args.argv = argv;
+    const int process_exit_code = api.cef_execute_process(&args, nullptr, nullptr);
+    if (process_exit_code >= 0) {
+        webview_backend::output_error(
+            "Web chat Linux CEF execute_process unexpectedly handled the Godot process");
+        cef.reset();
+        return false;
+    }
     if (api.cef_initialize(&args, &settings, nullptr, nullptr) == 0) {
         webview_backend::output_error("Web chat Linux CEF initialization failed");
         cef.reset();

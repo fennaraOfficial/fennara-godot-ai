@@ -83,7 +83,8 @@ bool resolve_symbol(void *handle, const char *name, T &out, godot::String &missi
 
 std::unique_ptr<capi::cef_api_t> resolve_api(void *handle, godot::String &missing_name) {
     auto api = std::make_unique<capi::cef_api_t>();
-    if (!resolve_symbol(handle, "cef_initialize", api->cef_initialize, missing_name) ||
+    if (!resolve_symbol(handle, "cef_execute_process", api->cef_execute_process, missing_name) ||
+        !resolve_symbol(handle, "cef_initialize", api->cef_initialize, missing_name) ||
         !resolve_symbol(handle, "cef_shutdown", api->cef_shutdown, missing_name) ||
         !resolve_symbol(handle, "cef_do_message_loop_work", api->cef_do_message_loop_work, missing_name) ||
         !resolve_symbol(handle,
@@ -372,7 +373,7 @@ LoadResult load() {
 
     const std::string libcef_path = utf8(result.status.libcef_path);
     dlerror();
-    void *handle = dlopen(libcef_path.c_str(), RTLD_NOW | RTLD_LOCAL);
+    void *handle = dlopen(libcef_path.c_str(), RTLD_NOW | RTLD_GLOBAL);
     if (handle == nullptr) {
         const char *error = dlerror();
         result.status = make_status(
