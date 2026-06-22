@@ -10,6 +10,7 @@ use super::{
 
 const CHAT_LIST_LIMIT: i64 = 40;
 const REPLAY_MESSAGE_LIMIT: i64 = 40;
+const MAX_IMAGE_METADATA_MESSAGES_PER_CHAT: i64 = 12;
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ChatSummary {
@@ -229,8 +230,46 @@ pub(crate) fn ensure_chat_in_scope(scope: &ProjectScope, chat_id: &str) -> Resul
         .ok_or_else(|| "Chat not found for this project.".to_string())
 }
 
-pub(crate) fn insert_user_message(chat_id: &str, content: &str) -> Result<StoredMessage, String> {
-    insert_message(chat_id, "user", "done", content, None, None, None)
+pub(crate) fn insert_user_message(
+    chat_id: &str,
+    content: &str,
+    metadata: Option<&Value>,
+) -> Result<StoredMessage, String> {
+    let message = insert_message(chat_id, "user", "done", content, None, None, None)?;
+    if let Some(metadata) = metadata {
+        let conn = connection()?;
+        let metadata_json = serde_json::to_string(metadata).map_err(|error| error.to_string())?;
+        let now = now_ms();
+        conn.execute(
+            "UPDATE chat_messages SET metadata_json = ?2, updated_at_ms = ?3 WHERE id = ?1",
+            params![message.id, metadata_json, now],
+        )
+        .map_err(to_store_error)?;
+        prune_old_image_metadata(&conn, chat_id)?;
+        return get_message(&conn, &message.id)?.ok_or_else(|| "Message not found.".to_string());
+    }
+    Ok(message)
+}
+
+fn prune_old_image_metadata(conn: &Connection, chat_id: &str) -> Result<(), String> {
+    let now = now_ms();
+    conn.execute(
+        "UPDATE chat_messages
+         SET metadata_json = NULL,
+             updated_at_ms = ?2
+         WHERE id IN (
+           SELECT id
+           FROM chat_messages
+           WHERE chat_id = ?1
+             AND role = 'user'
+             AND metadata_json LIKE '%\"images\"%'
+           ORDER BY sequence DESC
+           LIMIT -1 OFFSET ?3
+         )",
+        params![chat_id, now, MAX_IMAGE_METADATA_MESSAGES_PER_CHAT],
+    )
+    .map_err(to_store_error)?;
+    Ok(())
 }
 
 pub(crate) fn insert_assistant_placeholder(chat_id: &str) -> Result<StoredMessage, String> {

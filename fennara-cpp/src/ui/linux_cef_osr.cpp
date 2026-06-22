@@ -2,6 +2,7 @@
 
 #include "linux_cef_osr.hpp"
 
+#include "linux_cef_bridge_loader.hpp"
 #include "linux_cef_bridge_api.hpp"
 #include "linux_cef_input.hpp"
 #include "webview_backend.hpp"
@@ -9,15 +10,12 @@
 #include "fennara/app_paths.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
-#include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
 #include <godot_cpp/classes/os.hpp>
-#include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
+#include <godot_cpp/core/object.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
-
-#include <dlfcn.h>
 
 #include <algorithm>
 #include <atomic>
@@ -32,7 +30,6 @@ namespace {
 using namespace fennara::linux_cef_runtime;
 
 constexpr int kMinimumDimension = 1;
-constexpr const char *kBridgeAddonPath = "res://addons/fennara/bin/libfennara_linux_cef_bridge.so";
 
 std::string utf8(const godot::String &value) {
     return value.utf8().get_data();
@@ -52,14 +49,6 @@ void ensure_dir(const godot::String &path) {
     }
 }
 
-godot::String bridge_library_path() {
-    godot::ProjectSettings *settings = godot::ProjectSettings::get_singleton();
-    if (settings == nullptr) {
-        return kBridgeAddonPath;
-    }
-    return settings->globalize_path(kBridgeAddonPath);
-}
-
 godot::String process_profile_name() {
     static std::atomic<uint32_t> counter{0};
     godot::OS *os = godot::OS::get_singleton();
@@ -72,68 +61,6 @@ godot::String process_profile_name() {
            "-" + godot::String::num_int64(nonce);
 }
 
-class BridgeLibrary {
-public:
-    ~BridgeLibrary() {
-        close();
-    }
-
-    bool load(godot::String &error_message) {
-        const godot::String path = bridge_library_path();
-        if (!godot::FileAccess::file_exists(path)) {
-            error_message = "Linux CEF bridge library is missing: " + path;
-            return false;
-        }
-
-        dlerror();
-        handle = dlopen(utf8(path).c_str(), RTLD_NOW | RTLD_LOCAL);
-        if (handle == nullptr) {
-            const char *error = dlerror();
-            error_message = godot::String("Linux CEF bridge library could not be opened: ") +
-                            path +
-                            (error != nullptr ? godot::String(" (") + error + ")" : godot::String());
-            return false;
-        }
-
-        dlerror();
-        auto get_api = reinterpret_cast<fennara_linux_cef_bridge_get_api_t>(
-            dlsym(handle, "fennara_linux_cef_bridge_get_api"));
-        const char *symbol_error = dlerror();
-        if (symbol_error != nullptr || get_api == nullptr) {
-            error_message = "Linux CEF bridge library is missing fennara_linux_cef_bridge_get_api: " + path;
-            close();
-            return false;
-        }
-
-        api_ptr = get_api(FENNARA_LINUX_CEF_BRIDGE_API_VERSION);
-        if (api_ptr == nullptr ||
-            api_ptr->version != FENNARA_LINUX_CEF_BRIDGE_API_VERSION ||
-            api_ptr->size < sizeof(fennara_cef_bridge_api)) {
-            error_message = "Linux CEF bridge library has an incompatible API version: " + path;
-            close();
-            return false;
-        }
-
-        return true;
-    }
-
-    void close() {
-        api_ptr = nullptr;
-        if (handle != nullptr) {
-            dlclose(handle);
-            handle = nullptr;
-        }
-    }
-
-    const fennara_cef_bridge_api *api() const {
-        return api_ptr;
-    }
-
-private:
-    void *handle = nullptr;
-    const fennara_cef_bridge_api *api_ptr = nullptr;
-};
-
 void bridge_log(const char *message, void *user_data) {
     (void)user_data;
     if (message != nullptr) {
@@ -145,7 +72,7 @@ void bridge_log(const char *message, void *user_data) {
 
 struct LinuxCefOsrWebview::CefObjects {
     LoadResult runtime;
-    BridgeLibrary bridge;
+    linux_cef_bridge_loader::BridgeLibrary bridge;
     fennara_cef_bridge_browser *browser = nullptr;
     std::mutex frame_mutex;
     std::vector<uint8_t> rgba;
@@ -218,8 +145,10 @@ LinuxCefOsrWebview::~LinuxCefOsrWebview() {
 }
 
 godot::Control *LinuxCefOsrWebview::create_control() {
+    godot::TextureRect *texture_rect = current_texture_rect();
     if (texture_rect == nullptr) {
         texture_rect = memnew(godot::TextureRect);
+        texture_rect_id = texture_rect->get_instance_id();
         texture_rect->set_expand_mode(godot::TextureRect::EXPAND_IGNORE_SIZE);
         texture_rect->set_stretch_mode(godot::TextureRect::STRETCH_SCALE);
         texture_rect->set_clip_contents(true);
@@ -260,7 +189,7 @@ bool LinuxCefOsrWebview::start(godot::Control *owner, const godot::String &url) 
         cef.reset();
         return false;
     }
-    debug_log("bridge ready path=" + bridge_library_path());
+    debug_log("bridge ready path=" + cef->bridge.path());
 
     const godot::String session_name = process_profile_name();
     const godot::String profile_dir =
@@ -307,23 +236,19 @@ bool LinuxCefOsrWebview::start(godot::Control *owner, const godot::String &url) 
     settings.root_cache_path = root_cache_path.c_str();
     settings.cache_path = cache_path.c_str();
     settings.log_file = log_file.c_str();
-    debug_log("calling cef_execute_process argv0=" + godot::String(executable_path.c_str()));
     const int process_exit_code = api->execute_process(&settings, &callbacks);
-    debug_log("cef_execute_process returned " + godot::String::num_int64(process_exit_code));
     if (process_exit_code >= 0) {
         webview_backend::output_error(
             "Web chat Linux CEF execute_process unexpectedly handled the Godot process");
         cef.reset();
         return false;
     }
-    debug_log("calling cef_initialize");
     if (api->initialize(&settings, &callbacks) == 0) {
         webview_backend::output_error("Web chat Linux CEF initialization failed");
         cef.reset();
         return false;
     }
     cef->initialized = true;
-    debug_log("cef_initialize succeeded");
 
     godot::Vector2 size = owner->get_size();
     cef->width = clamp_dimension(size.x);
@@ -332,14 +257,14 @@ bool LinuxCefOsrWebview::start(godot::Control *owner, const godot::String &url) 
               godot::String::num_int64(cef->width) + "x" +
               godot::String::num_int64(cef->height));
 
-    debug_log("calling cef_browser_host_create_browser_sync url=" + url);
+    debug_log("creating CEF bridge browser url=" + url);
     const std::string browser_url = utf8(url);
     fennara_cef_bridge_browser_config browser_config{};
     browser_config.url = browser_url.c_str();
     browser_config.width = cef->width;
     browser_config.height = cef->height;
     cef->browser = api->create_browser(&browser_config, &callbacks);
-    debug_log("cef_browser_host_create_browser_sync returned " +
+    debug_log("CEF bridge browser create returned " +
               godot::String(cef->browser == nullptr ? "null" : "browser"));
 
     if (cef->browser == nullptr) {
@@ -371,6 +296,7 @@ void LinuxCefOsrWebview::resize_to(godot::Control *owner) {
 }
 
 void LinuxCefOsrWebview::set_visible(bool visible) {
+    godot::TextureRect *texture_rect = current_texture_rect();
     if (texture_rect != nullptr) {
         texture_rect->set_visible(visible);
     }
@@ -422,6 +348,7 @@ void LinuxCefOsrWebview::process(double delta) {
         texture = godot::ImageTexture::create_from_image(image);
         texture_width = width;
         texture_height = height;
+        godot::TextureRect *texture_rect = current_texture_rect();
         if (texture_rect != nullptr) {
             texture_rect->set_texture(texture);
         }
@@ -441,6 +368,7 @@ bool LinuxCefOsrWebview::handle_input(const godot::Ref<godot::InputEvent> &event
     }
 
     bool request_focus = false;
+    godot::TextureRect *texture_rect = current_texture_rect();
     const bool handled = input::handle_input(event, api, cef->browser, texture_rect, cef->width, cef->height, cef->mouse_state, request_focus);
     if (request_focus) {
         set_focused(true);
@@ -492,6 +420,7 @@ void LinuxCefOsrWebview::stop() {
     texture.unref();
     texture_width = 0;
     texture_height = 0;
+    godot::TextureRect *texture_rect = current_texture_rect();
     if (texture_rect != nullptr) {
         texture_rect->set_texture(godot::Ref<godot::Texture2D>());
     }
@@ -499,6 +428,14 @@ void LinuxCefOsrWebview::stop() {
 
 bool LinuxCefOsrWebview::is_started() const {
     return started;
+}
+
+godot::TextureRect *LinuxCefOsrWebview::current_texture_rect() const {
+    if (texture_rect_id == 0) {
+        return nullptr;
+    }
+    return godot::Object::cast_to<godot::TextureRect>(
+        godot::ObjectDB::get_instance(texture_rect_id));
 }
 
 } // namespace fennara::linux_cef_osr

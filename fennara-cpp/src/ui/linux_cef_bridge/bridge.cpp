@@ -14,9 +14,13 @@
 #include <string>
 #include <vector>
 
+#include <unistd.h>
+
 namespace fennara_cef_bridge_impl {
 
 constexpr int kMinimumDimension = 1;
+constexpr int kClosePumpAttempts = 200;
+constexpr useconds_t kClosePumpDelayUs = 10000;
 
 void emit_log(const fennara_cef_bridge_callbacks *callbacks, const std::string &message) {
     if (callbacks != nullptr && callbacks->log != nullptr) {
@@ -112,11 +116,17 @@ public:
     void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
         (void)browser;
         browser_ = nullptr;
+        closed_.store(true, std::memory_order_release);
+    }
+
+    bool IsClosed() const {
+        return closed_.load(std::memory_order_acquire);
     }
 
 private:
     CefRefPtr<OsrRenderHandler> render_handler_;
     CefRefPtr<CefBrowser> browser_;
+    std::atomic<bool> closed_{ false };
 
     IMPLEMENT_REFCOUNTING(OsrClient);
     DISALLOW_COPY_AND_ASSIGN(OsrClient);
@@ -248,8 +258,12 @@ void bridge_close_browser(fennara_cef_bridge_browser *browser) {
     }
     if (browser->browser) {
         browser->browser->GetHost()->CloseBrowser(true);
-        browser->browser = nullptr;
+        for (int i = 0; i < kClosePumpAttempts && browser->client && !browser->client->IsClosed(); i++) {
+            CefDoMessageLoopWork();
+            usleep(kClosePumpDelayUs);
+        }
     }
+    browser->browser = nullptr;
     browser->client = nullptr;
     browser->render_handler = nullptr;
     delete browser;

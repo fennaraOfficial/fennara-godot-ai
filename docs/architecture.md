@@ -44,7 +44,8 @@ The Linux path renders browser pixels inside a Godot `Control` and routes the
 CEF message loop through the dock process hook. The GDExtension discovers the
 shared CEF runtime, validates its `fennara-cef-runtime.json` marker and
 required files, dynamically opens `libcef.so`, then dlopens the small
-`libfennara_linux_cef_bridge.so` addon library. That bridge is built from the
+`libfennara_linux_cef_bridge.so` addon library through a focused bridge loader.
+That bridge is built from the
 pinned official CEF 139 `libcef_dll_wrapper` source and owns the C++ CEF
 objects (`CefClient`, `CefRenderHandler`, `CefRefPtr`) used to initialize CEF in
 windowless mode, create the browser for the packaged chat URL, and copy paint

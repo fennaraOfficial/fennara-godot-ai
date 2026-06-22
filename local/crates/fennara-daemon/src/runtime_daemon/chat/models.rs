@@ -365,6 +365,21 @@ pub(crate) fn model_supports_text_chat(model: &Value) -> bool {
     has_text_input && has_text_output
 }
 
+pub(crate) fn model_supports_image_chat(model: &Value) -> bool {
+    if !model_supports_text_chat(model) {
+        return false;
+    }
+    let architecture = model.get("architecture");
+    string_array_contains(
+        architecture.and_then(|value| value.get("input_modalities")),
+        "image",
+    ) || string_array_contains(model.get("input_modalities"), "image")
+        || architecture
+            .and_then(|value| value.get("modality"))
+            .and_then(Value::as_str)
+            .is_some_and(|modality| modality.to_ascii_lowercase().contains("image"))
+}
+
 fn clean_display_name(name: &str) -> String {
     name.split_once(':')
         .map(|(_, display)| display.trim())

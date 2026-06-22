@@ -15,6 +15,7 @@ use super::state::AppState;
 use crate::runtime_daemon::godot_bridge;
 
 mod ids;
+mod images;
 mod models;
 mod openrouter;
 mod schema;
@@ -37,6 +38,7 @@ struct ClientRequest {
     request_id: Option<String>,
     chat_id: Option<String>,
     message: Option<String>,
+    images: Option<Vec<images::ClientImage>>,
     model: Option<String>,
     reasoning_effort: Option<String>,
     openrouter_api_key: Option<String>,
@@ -149,6 +151,7 @@ where
         }),
     )
     .await?;
+    send_project_status(sender, None, state, bound_project).await?;
     let scope = &bound_project.scope;
     match store::open_active_or_create(scope, &settings.model, &settings.reasoning_effort) {
         Ok(opened) => {
@@ -195,6 +198,13 @@ where
                 }),
             )
             .await
+        }
+        "get_project_status" => send_project_status(sender, request_id, state, bound_project).await,
+        "set_mcp_target" => {
+            match godot_bridge::set_active_project_session(state, &bound_project.session_id).await {
+                Ok(()) => send_project_status(sender, request_id, state, bound_project).await,
+                Err(error) => send_error(sender, request_id, "target_set_failed", &error).await,
+            }
         }
         "list_chats" => {
             let scope = &bound_project.scope;
@@ -418,6 +428,42 @@ where
     .map_err(|_| ())
 }
 
+async fn send_project_status<S>(
+    sender: &mut S,
+    request_id: Option<String>,
+    state: &AppState,
+    bound_project: &BoundChatProject,
+) -> Result<(), S::Error>
+where
+    S: Sink<Message> + Unpin,
+    S::Error: std::fmt::Debug,
+{
+    let status = godot_bridge::current_status_value(state).await;
+    let version_status = godot_bridge::call_tool_value_for_session(
+        state,
+        Some(&bound_project.session_id),
+        "fennara_status",
+        json!({}),
+    )
+    .await
+    .get("result")
+    .and_then(|result| result.get("version"))
+    .cloned()
+    .unwrap_or_else(|| json!({}));
+
+    send_json(
+        sender,
+        json!({
+            "type": "project_status",
+            "request_id": request_id,
+            "bound_session_id": bound_project.session_id,
+            "daemon": status,
+            "version": version_status
+        }),
+    )
+    .await
+}
+
 async fn run_chat<S>(
     sender: &mut S,
     active_chat_id: &mut Option<String>,
@@ -432,8 +478,18 @@ where
     let request_id = request.request_id.clone();
     let message = request.message.unwrap_or_default();
     let message = message.trim();
-    if message.is_empty() {
-        return send_error(sender, request_id, "bad_request", "Message is required.").await;
+    let user_images = match images::validate_images(request.images) {
+        Ok(images) => images,
+        Err(error) => return send_error(sender, request_id, "bad_request", &error).await,
+    };
+    if message.is_empty() && user_images.is_empty() {
+        return send_error(
+            sender,
+            request_id,
+            "bad_request",
+            "Message or image is required.",
+        )
+        .await;
     }
 
     let settings = load_settings();
@@ -493,8 +549,12 @@ where
         return send_error(sender, request_id, "snapshot_failed", error).await;
     }
     state.revertable_chats.write().await.insert(chat_id.clone());
-    let mut openrouter_messages = build_messages(&replay_messages, message);
-    let user_message = match store::insert_user_message(&chat_id, message) {
+    let mut openrouter_messages = build_messages(&replay_messages, message, &user_images);
+    let user_message = match store::insert_user_message(
+        &chat_id,
+        message,
+        images::metadata_value(&user_images).as_ref(),
+    ) {
         Ok(message) => message,
         Err(error) => return send_error(sender, request_id, "chat_store_failed", &error).await,
     };

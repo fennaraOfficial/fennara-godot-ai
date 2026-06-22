@@ -29,6 +29,28 @@ pub(crate) async fn status(State(state): State<AppState>) -> Json<DaemonStatus> 
     Json(current_status(&state).await)
 }
 
+pub(crate) async fn current_status_value(state: &AppState) -> Value {
+    serde_json::to_value(current_status(state).await).unwrap_or_else(|_| {
+        json!({
+            "ok": false,
+            "error": "Failed to serialize daemon status."
+        })
+    })
+}
+
+pub(crate) async fn set_active_project_session(
+    state: &AppState,
+    session_id: &str,
+) -> Result<(), String> {
+    if !state.projects.read().await.contains_key(session_id) {
+        return Err("That Godot project is no longer connected.".to_string());
+    }
+    *state.active_session_id.write().await = Some(session_id.to_string());
+    *state.active_project_explicit.write().await = true;
+    broadcast_active_project_changed(state).await;
+    Ok(())
+}
+
 pub(crate) async fn call_tool(
     State(state): State<AppState>,
     Json(request): Json<ToolCallRequest>,
@@ -270,12 +292,7 @@ async fn handle_godot_socket(socket: WebSocket, state: AppState) {
                             .and_then(Value::as_str)
                             .or(session_id.as_deref())
                         {
-                            if state.projects.read().await.contains_key(next_session_id) {
-                                *state.active_session_id.write().await =
-                                    Some(next_session_id.to_string());
-                                *state.active_project_explicit.write().await = true;
-                                broadcast_active_project_changed(&state).await;
-                            }
+                            let _ = set_active_project_session(&state, next_session_id).await;
                         }
                     } else if value.get("type").and_then(Value::as_str)
                         == Some("warm_get_class_info_docs")

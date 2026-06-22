@@ -79,8 +79,8 @@ run but any related functionality may become broken or disabled.
 * Localized resources.
   Locale file loading can be disabled completely using
   CefSettings.pack_loading_disabled. The locales directory path can be
-  customized using CefSettings.locales_dir_path. 
- 
+  customized using CefSettings.locales_dir_path.
+
   * locales/
     Directory containing localized resources used by CEF, Chromium and Blink. A
     .pak file is loaded from this directory based on the value of environment

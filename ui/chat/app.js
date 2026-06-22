@@ -4,6 +4,11 @@
   const USER_COLLAPSE_CHARS = 700;
   const AUTO_SCROLL_THRESHOLD = 72;
   const DAEMON_RECONNECT_DELAY_MS = 250;
+  const MAX_IMAGE_ATTACHMENTS = 4;
+  const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+  const MAX_TOTAL_IMAGE_BYTES = 8 * 1024 * 1024;
+  const SHOW_RELOAD_BUTTON = true;
+  const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
   const COPY_ICON = '<svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11c0-2.83 0-4.24.88-5.12C7.76 5 9.17 5 12 5h3c2.83 0 4.24 0 5.12.88C21 6.76 21 8.17 21 11v5c0 2.83 0 4.24-.88 5.12C19.24 22 17.83 22 15 22h-3c-2.83 0-4.24 0-5.12-.88C6 20.24 6 18.83 6 16v-5Z"></path><path d="M6 19a3 3 0 0 1-3-3v-6c0-3.77 0-5.66 1.17-6.83C5.34 2 7.23 2 11 2h4a3 3 0 0 1 3 3"></path></svg>';
   const CHECK_ICON = '<svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m20 6-11 11-5-5"></path></svg>';
 
@@ -20,11 +25,24 @@
   const chatTitle = document.querySelector("[data-chat-title]");
   const composer = document.querySelector("[data-composer]");
   const prompt = document.querySelector("[data-prompt]");
+  const attachImageButton = document.querySelector("[data-attach-image]");
+  const imageInput = document.querySelector("[data-image-input]");
+  const attachmentPreview = document.querySelector("[data-attachment-preview]");
   const apiKeyInput = document.querySelector("[data-api-key]");
   const modelInput = document.querySelector("[data-model]");
   const modelStatuses = document.querySelectorAll("[data-model-status]");
   const chatSizeStatus = document.querySelector("[data-chat-size]");
   const sessionCostStatus = document.querySelector("[data-session-cost]");
+  const setMcpTargetButton = document.querySelector("[data-set-mcp-target]");
+  const targetPillText = document.querySelector("[data-target-pill-text]");
+  const targetMenu = document.querySelector("[data-target-menu]");
+  const targetPopoverTitle = document.querySelector("[data-target-popover-title]");
+  const targetPopoverText = document.querySelector("[data-target-popover-text]");
+  const versionMenu = document.querySelector("[data-version-menu]");
+  const versionWarning = document.querySelector("[data-version-warning]");
+  const versionPopover = document.querySelector("[data-version-popover]");
+  const versionWarningText = document.querySelector("[data-version-warning-text]");
+  const versionCommand = document.querySelector("[data-version-command]");
   const usageContainer = document.querySelector(".composer-usage");
   const usagePopover = document.querySelector("[data-usage-popover]");
   const usageTotalCost = document.querySelector("[data-usage-total-cost]");
@@ -38,6 +56,7 @@
   const sendButton = document.querySelector("[data-send-button]");
   const revertButton = document.querySelector("[data-revert-button]");
   const saveSettingsButton = document.querySelector("[data-save-settings]");
+  const reloadButton = document.querySelector("[data-reload-ui]");
   const appShell = document.querySelector(".app-shell");
   const markdown = window.markdownit({
     html: false,
@@ -80,10 +99,12 @@
   let sessionCost = 0;
   let activeTurnCost = 0;
   let latestPromptTokens = 0;
+  let projectStatusTimer = 0;
   let usageCloseTimer = 0;
   let canRevert = false;
   let modelPicker = null;
   let pendingSettingsPayload = null;
+  let attachedImages = [];
   const transcriptRenderer = window.FennaraTranscriptRenderer.createTranscriptRenderer({
     transcript,
     markdown,
@@ -123,6 +144,8 @@
     socket.addEventListener("open", () => {
       appShell?.setAttribute("data-connection", "online");
       send({ type: "get_settings", request_id: nextRequestId("settings") });
+      requestProjectStatus();
+      startProjectStatusPolling();
       modelPicker?.requestModels();
       flushPendingSettings();
     });
@@ -139,6 +162,7 @@
 
     socket.addEventListener("close", () => {
       appShell?.setAttribute("data-connection", "offline");
+      stopProjectStatusPolling();
       reconnectTimer = window.setTimeout(connect, DAEMON_RECONNECT_DELAY_MS);
     });
   }
@@ -150,6 +174,20 @@
     }
     socket.send(JSON.stringify(payload));
     return true;
+  }
+
+  function requestProjectStatus() {
+    return send({ type: "get_project_status", request_id: nextRequestId("project-status") });
+  }
+
+  function startProjectStatusPolling() {
+    stopProjectStatusPolling();
+    projectStatusTimer = window.setInterval(requestProjectStatus, 5000);
+  }
+
+  function stopProjectStatusPolling() {
+    window.clearInterval(projectStatusTimer);
+    projectStatusTimer = 0;
   }
 
   function setStreaming(nextStreaming) {
@@ -193,8 +231,8 @@
     updateRevertButton();
   }
 
-  function appendMessage(role, text) {
-    return transcriptRenderer.appendMessage(role, text);
+  function appendMessage(role, text, attachments = []) {
+    return transcriptRenderer.appendMessage(role, text, attachments);
   }
 
   function renderStoredMessages(messages) {
@@ -218,7 +256,7 @@
         pendingHiddenAssistantCost += storedMessageCost(message);
         continue;
       }
-      const node = appendMessage(message.role, message.content || "");
+      const node = appendMessage(message.role, message.content || "", imagesFromMetadata(message.metadata_json));
       if (message.role === "assistant" && shouldShowStoredAssistantActions(message)) {
         const usage = parseUsage(message.usage_json) || { cost: message.cost };
         const visibleCost = usageCost(usage);
@@ -263,6 +301,24 @@
       status,
       content: message.content || "",
     });
+  }
+
+  function imagesFromMetadata(raw) {
+    if (!raw) {
+      return [];
+    }
+    try {
+      const metadata = typeof raw === "string" ? JSON.parse(raw) : raw;
+      const images = Array.isArray(metadata?.images) ? metadata.images : [];
+      return images.filter((image) =>
+        image &&
+        SUPPORTED_IMAGE_TYPES.has(String(image.mime_type || "").toLowerCase()) &&
+        typeof image.base64 === "string" &&
+        image.base64.length > 0
+      );
+    } catch {
+      return [];
+    }
   }
 
   function appendStoredThinking(text) {
@@ -395,6 +451,75 @@
     sessionCostStatus.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
     if (shouldOpen) {
       positionUsagePopover();
+    }
+  }
+
+  function basename(path) {
+    return String(path || "").split(/[\\/]/).filter(Boolean).pop() || "";
+  }
+
+  function applyProjectStatus(message) {
+    const daemon = message.daemon || {};
+    const boundSessionId = message.bound_session_id || "";
+    const connectedProjects = Array.isArray(daemon.connected_projects) ? daemon.connected_projects : [];
+    const boundProject =
+      connectedProjects.find((project) => project.session_id === boundSessionId) ||
+      daemon.active_project ||
+      {};
+    const activeProject = daemon.active_project || null;
+    const isTarget = Boolean(daemon.active_session_id && daemon.active_session_id === boundSessionId);
+    const targetName = activeProject?.project_name || basename(activeProject?.project_path) || "No MCP target";
+    const boundName = boundProject?.project_name || basename(boundProject?.project_path) || "Godot project";
+    const boundPath = boundProject?.project_path || "";
+
+    if (targetMenu) {
+      targetMenu.hidden = false;
+    }
+    if (setMcpTargetButton) {
+      setMcpTargetButton.classList.toggle("is-target", isTarget);
+      setMcpTargetButton.classList.remove("is-setting");
+      setMcpTargetButton.classList.toggle("has-other-target", Boolean(activeProject) && !isTarget);
+    }
+    if (targetPillText) {
+      targetPillText.textContent = isTarget ? "MCP target" : "Use for MCP";
+    }
+    if (targetPopoverTitle && targetPopoverText) {
+      targetPopoverTitle.textContent = isTarget ? `${boundName} is the MCP target` : "Use this project for MCP";
+      targetPopoverText.textContent = isTarget
+        ? "External MCP clients send Godot tool calls here."
+        : activeProject
+          ? `Current target: ${targetName}. Click to switch MCP to this project.`
+          : "No target is selected. Click to use this project.";
+    }
+
+    applyVersionWarning(message.version || {});
+  }
+
+  function applyVersionWarning(version) {
+    const outdated = Boolean(version.outdated);
+    if (!versionMenu || !versionWarning) {
+      return;
+    }
+    versionMenu.hidden = !outdated;
+    versionWarning.setAttribute("aria-expanded", "false");
+    if (!outdated) {
+      return;
+    }
+    const current = version.current_version || "installed";
+    const latest = version.latest_version || "latest";
+    if (versionWarningText) {
+      versionWarningText.innerHTML = [
+        `Current: ${markdown.utils.escapeHtml(current)}`,
+        `Available: ${markdown.utils.escapeHtml(latest)}`,
+        "",
+        "Close Godot, then run this in the current project.",
+      ].join("<br>");
+    }
+    if (versionCommand) {
+      versionCommand.textContent = "fennara update";
+    }
+    if (versionPopover) {
+      versionPopover.hidden = false;
     }
   }
 
@@ -638,6 +763,10 @@
       updateChatSize();
       return;
     }
+    if (message.type === "project_status") {
+      applyProjectStatus(message);
+      return;
+    }
     if (message.type === "chat_opened") {
       activeChatId = message.chat?.id || null;
       updateChatTitle(message.chat);
@@ -697,7 +826,11 @@
       activeTurnCost = 0;
       activeChatId = message.chat_id || activeChatId;
       if (message.user_message) {
-        appendMessage("user", message.user_message.content || "");
+        appendMessage(
+          "user",
+          message.user_message.content || "",
+          imagesFromMetadata(message.user_message.metadata_json),
+        );
       }
       canRevert = Boolean(message.can_revert);
       updateRevertButton();
@@ -796,8 +929,124 @@
     clearTranscript(true);
     send({ type: "new_chat", request_id: nextRequestId("new-chat") });
     prompt.value = "";
+    clearAttachments();
     resizePrompt();
     prompt.focus();
+  }
+
+  async function addImageFiles(files) {
+    const imageFiles = Array.from(files || []).filter((file) => file && file.type?.startsWith("image/"));
+    if (imageFiles.length === 0) {
+      return;
+    }
+    for (const file of imageFiles) {
+      if (attachedImages.length >= MAX_IMAGE_ATTACHMENTS) {
+        appendSystem(`Attach up to ${MAX_IMAGE_ATTACHMENTS} images.`);
+        break;
+      }
+      const validationError = validateImageFile(file);
+      if (validationError) {
+        appendSystem(validationError);
+        continue;
+      }
+      const totalSize = attachedImages.reduce((sum, image) => sum + image.size, 0) + file.size;
+      if (totalSize > MAX_TOTAL_IMAGE_BYTES) {
+        appendSystem(`Attached images must be ${formatBytes(MAX_TOTAL_IMAGE_BYTES)} total or less.`);
+        continue;
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const base64 = dataUrl.split(",", 2)[1] || "";
+        if (!base64) {
+          appendSystem("Could not read that image.");
+          continue;
+        }
+        attachedImages.push({
+          id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          base64,
+          mime_type: file.type,
+          name: file.name || "pasted image",
+          size: file.size,
+          description: file.name || "user image",
+        });
+      } catch {
+        appendSystem("Could not read that image.");
+      }
+    }
+    renderAttachmentPreview();
+  }
+
+  function validateImageFile(file) {
+    if (!SUPPORTED_IMAGE_TYPES.has(file.type)) {
+      return "Unsupported image type. Use PNG, JPEG, WebP, or GIF.";
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      return `Each image must be ${formatBytes(MAX_IMAGE_BYTES)} or smaller.`;
+    }
+    return "";
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener("load", () => resolve(String(reader.result || "")));
+      reader.addEventListener("error", reject);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function renderAttachmentPreview() {
+    if (!attachmentPreview) {
+      return;
+    }
+    attachmentPreview.hidden = attachedImages.length === 0;
+    attachmentPreview.replaceChildren();
+    for (const image of attachedImages) {
+      const chip = document.createElement("figure");
+      chip.className = "attachment-chip";
+      const preview = document.createElement("button");
+      preview.type = "button";
+      preview.className = "attachment-preview-button";
+      preview.setAttribute("aria-label", `Open ${image.name || "attached image"}`);
+      const img = document.createElement("img");
+      img.alt = image.name || "Attached image";
+      img.src = `data:${image.mime_type};base64,${image.base64}`;
+      preview.addEventListener("click", () => transcriptRenderer.openImagePreview(img.src, img.alt));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "attachment-remove-button";
+      remove.setAttribute("aria-label", "Remove image");
+      remove.textContent = "x";
+      remove.addEventListener("click", () => {
+        attachedImages = attachedImages.filter((item) => item.id !== image.id);
+        renderAttachmentPreview();
+      });
+      preview.append(img);
+      chip.append(preview, remove);
+      attachmentPreview.append(chip);
+    }
+  }
+
+  function clearAttachments() {
+    attachedImages = [];
+    if (imageInput) {
+      imageInput.value = "";
+    }
+    renderAttachmentPreview();
+  }
+
+  function attachmentPayload() {
+    return attachedImages.map((image) => ({
+      base64: image.base64,
+      mime_type: image.mime_type,
+      description: image.description,
+      name: image.name,
+      size: image.size,
+    }));
+  }
+
+  function formatBytes(bytes) {
+    return `${Math.round(bytes / 1024 / 1024)} MB`;
   }
 
   document.querySelectorAll("[data-open-settings]").forEach((button) => {
@@ -807,7 +1056,12 @@
     button.addEventListener("click", openModelPicker);
   });
 
-  document.querySelector("[data-reload-ui]")?.addEventListener("click", reloadUi);
+  if (reloadButton) {
+    reloadButton.hidden = !SHOW_RELOAD_BUTTON;
+    if (SHOW_RELOAD_BUTTON) {
+      reloadButton.addEventListener("click", reloadUi);
+    }
+  }
   document.querySelectorAll("[data-copy-code]").forEach((button) => {
     button.addEventListener("click", async () => {
       const code = button.closest(".code-block")?.querySelector("code")?.textContent ?? "";
@@ -824,6 +1078,14 @@
   document.querySelectorAll("[data-new-chat]").forEach((button) => {
     button.addEventListener("click", startNewChat);
   });
+  attachImageButton?.addEventListener("click", () => {
+    imageInput?.click();
+  });
+  imageInput?.addEventListener("change", () => {
+    addImageFiles(imageInput.files).finally(() => {
+      imageInput.value = "";
+    });
+  });
   usageContainer?.addEventListener("mouseenter", showUsagePopover);
   usageContainer?.addEventListener("mouseleave", hideUsagePopoverSoon);
   usagePopover?.addEventListener("mouseenter", showUsagePopover);
@@ -839,6 +1101,16 @@
       request_id: nextRequestId("revert-chat"),
       chat_id: activeChatId,
     });
+  });
+  setMcpTargetButton?.addEventListener("click", () => {
+    if (setMcpTargetButton.classList.contains("is-target")) {
+      return;
+    }
+    setMcpTargetButton.classList.add("is-setting");
+    if (targetPillText) {
+      targetPillText.textContent = "Setting";
+    }
+    send({ type: "set_mcp_target", request_id: nextRequestId("set-target") });
   });
   sendButton?.addEventListener("click", (event) => {
     if (!chatStreaming) {
@@ -929,7 +1201,7 @@
       return;
     }
     const text = prompt.value.trim();
-    if (!text) {
+    if (!text && attachedImages.length === 0) {
       return;
     }
     if (!hasOpenRouterKey) {
@@ -939,16 +1211,23 @@
     const model = cleanUiModelId(modelInput?.value || currentModel);
     currentReasoningEffort = cleanReasoningEffort(currentReasoningEffort);
     transcriptRenderer.resetStreamState();
-    send({
+    const payload = {
       type: "send_chat",
       request_id: nextRequestId("chat"),
       chat_id: activeChatId,
       message: text,
       model,
       reasoning_effort: currentReasoningEffort,
-    });
-    prompt.value = "";
-    resizePrompt();
+    };
+    const images = attachmentPayload();
+    if (images.length > 0) {
+      payload.images = images;
+    }
+    if (send(payload)) {
+      prompt.value = "";
+      clearAttachments();
+      resizePrompt();
+    }
   });
 
   function cleanUiModelId(modelId) {
@@ -973,7 +1252,16 @@
     composer?.requestSubmit();
   });
   prompt?.addEventListener("input", resizePrompt);
-  prompt?.addEventListener("paste", () => window.setTimeout(resizePrompt, 0));
+  prompt?.addEventListener("paste", (event) => {
+    const files = Array.from(event.clipboardData?.items || [])
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter(Boolean);
+    if (files.length > 0) {
+      addImageFiles(files);
+    }
+    window.setTimeout(resizePrompt, 0);
+  });
 
   clearTranscript();
   appendSystem("Connecting to local daemon...");

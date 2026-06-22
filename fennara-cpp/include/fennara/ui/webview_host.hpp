@@ -5,6 +5,7 @@
 #include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/variant/string.hpp>
 
+#include <cstdint>
 #include <memory>
 
 namespace fennara {
@@ -31,8 +32,11 @@ public:
     bool is_started() const;
 
 private:
+    godot::Control *current_internal_control() const;
+
     std::unique_ptr<webview_backend::NativeWebviewBackend> backend;
     godot::Control *internal_control = nullptr;
+    uint64_t internal_control_id = 0;
 };
 
 } // namespace fennara

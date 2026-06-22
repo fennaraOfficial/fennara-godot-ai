@@ -16,6 +16,29 @@
         </button>
         <h1 class="chat-title" data-chat-title>Scene Diagnostics</h1>
         <div class="toolbar" aria-label="Chat toolbar">
+          <div class="target-menu" data-target-menu hidden>
+            <button class="target-pill" type="button" data-set-mcp-target>
+              <span class="project-status-dot" aria-hidden="true"></span>
+              <span data-target-pill-text>MCP target</span>
+            </button>
+            <div class="target-popover" role="tooltip" data-target-popover>
+              <strong data-target-popover-title>MCP target</strong>
+              <span data-target-popover-text></span>
+            </div>
+          </div>
+          <div class="version-menu" data-version-menu hidden>
+            <button class="icon-button version-button" type="button" aria-label="Fennara update available" aria-expanded="false" data-version-warning>
+              <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 19V5"></path>
+                <path d="m6.5 10.5 5.5-5.5 5.5 5.5"></path>
+              </svg>
+            </button>
+            <div class="version-popover" role="tooltip" data-version-popover>
+              <strong>Update available</strong>
+              <span data-version-warning-text>Close Godot, then run this command in the current project.</span>
+              <code data-version-command>fennara update</code>
+            </div>
+          </div>
           <button class="icon-button" type="button" title="Settings" aria-label="Settings" data-open-settings>
             <svg class="svg-icon svg-fill-icon" viewBox="0 0 1024 1024" aria-hidden="true">
               <path d="M600.7 64a32 32 0 0 1 30.5 22.2l35.2 109.4a351.8 351.8 0 0 1 42.4 24.5l112.4-24.2a32 32 0 0 1 34.4 15.4l88.7 153.5a32 32 0 0 1-4 37.5l-77.1 85.1a357.1 357.1 0 0 1 0 49l77.1 85.3a32 32 0 0 1 4 37.5l-88.7 153.6a32 32 0 0 1-34.4 15.3L708.8 803.9a351.8 351.8 0 0 1-42.4 24.5l-35.2 109.4a32 32 0 0 1-30.5 22.2H423.3a32 32 0 0 1-30.5-22.2l-35.1-109.3a351.6 351.6 0 0 1-42.6-24.6l-112.3 24.2a32 32 0 0 1-34.4-15.4L79.7 659.2a32 32 0 0 1 4-37.5l77.1-85.3a357.1 357.1 0 0 1 0-48.9l-77.1-85.2a32 32 0 0 1-4-37.5l88.7-153.6a32 32 0 0 1 34.4-15.3l112.3 24.3a351.6 351.6 0 0 1 42.6-24.6l35.2-109.4A32 32 0 0 1 423.2 64h177.5Zm-23.4 64H446.7l-36.3 113.1-24.5 12a294.1 294.1 0 0 0-34.8 20.1l-22.7 15.4-116.2-25.1-65.3 113.2 79.7 88.2-1.9 27.1a293.1 293.1 0 0 0 0 40.2l1.9 27.1-79.8 88.2 65.3 113.2 116.2-25 22.7 15.3a294.1 294.1 0 0 0 34.8 20.1l24.5 12L446.7 896h130.7l36.5-113.2 24.4-11.9a288.3 288.3 0 0 0 34.8-20.1l22.6-15.3 116.3 25 65.3-113.2-79.8-88.2 1.9-27.1a293.1 293.1 0 0 0 0-40.3l-1.9-27.1 79.8-88.1L812 263.4l-116.3 25-22.6-15.2a287.6 287.6 0 0 0-34.8-20.1l-24.4-11.9L577.3 128ZM512 320a192 192 0 1 1 0 384 192 192 0 0 1 0-384Zm0 64a128 128 0 1 0 0 256 128 128 0 0 0 0-256Z"></path>
@@ -164,6 +187,7 @@
 
       <form class="composer" data-composer>
         <div class="composer-card">
+          <div class="composer-attachments" data-attachment-preview hidden></div>
           <textarea
             rows="1"
             name="prompt"
@@ -173,6 +197,20 @@
           ></textarea>
           <div class="composer-actions">
             <div class="composer-controls">
+              <button
+                class="composer-icon-button"
+                type="button"
+                title="Attach image"
+                aria-label="Attach image"
+                data-attach-image
+              >
+                <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                  <circle cx="8.5" cy="10.5" r="1.5"></circle>
+                  <path d="m21 15-4.5-4.5L9 18"></path>
+                </svg>
+              </button>
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple data-image-input hidden />
               <button
                 class="composer-model-button"
                 type="button"
@@ -265,24 +303,10 @@
             <span>OpenRouter API key</span>
             <input type="password" autocomplete="off" placeholder="sk-or-..." data-api-key />
           </label>
-          <label>
-            <span>Model</span>
-            <input type="text" value="openrouter/auto" list="model-suggestions" data-model />
-            <datalist id="model-suggestions"></datalist>
-          </label>
-          <label>
-            <span>Reasoning effort</span>
-            <select data-reasoning-effort>
-              <option value="low">Low</option>
-              <option value="medium" selected>Medium</option>
-              <option value="high">High</option>
-            </select>
-          </label>
           <p class="settings-status" data-key-status>OpenRouter key not set</p>
-          <p class="settings-status">Current model: <span data-model-status>openrouter/auto</span></p>
           <p class="settings-note">
             The key is saved by the local daemon outside the Godot project and is never sent back to this page.
-            The daemon only sends text-chat model requests to OpenRouter.
+            Chat requests are sent to OpenRouter by the local daemon.
           </p>
           <menu>
             <button class="secondary-button" value="cancel">Cancel</button>

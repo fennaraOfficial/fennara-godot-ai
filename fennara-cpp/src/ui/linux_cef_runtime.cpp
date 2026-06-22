@@ -192,6 +192,39 @@ RuntimeStatus validate_runtime_dir(const godot::String &runtime_dir) {
         version);
 }
 
+RuntimeStatus scan_runtime_dirs(godot::DirAccess *dir, const godot::String &root, const RuntimeStatus &first_problem) {
+    RuntimeStatus problem = first_problem;
+    bool saw_runtime_dir = false;
+    dir->list_dir_begin();
+    while (true) {
+        godot::String name = dir->get_next();
+        if (name.is_empty()) {
+            break;
+        }
+        if (name == "." || name == ".." || !dir->current_is_dir()) {
+            continue;
+        }
+
+        saw_runtime_dir = true;
+        RuntimeStatus status = validate_runtime_dir(root.path_join(name));
+        if (status.ok()) {
+            dir->list_dir_end();
+            return status;
+        }
+        if (problem.message.is_empty()) {
+            problem = status;
+        }
+    }
+    dir->list_dir_end();
+
+    if (!saw_runtime_dir && problem.message.is_empty()) {
+        return make_status(
+            StatusCode::Missing,
+            "Linux CEF runtime root has no version directories: " + root);
+    }
+    return problem;
+}
+
 RuntimeStatus discover_in_root(const godot::String &root) {
     godot::Ref<godot::DirAccess> dir = godot::DirAccess::open(root);
     if (dir.is_null()) {
@@ -212,45 +245,21 @@ RuntimeStatus discover_in_root(const godot::String &root) {
             platform != "linux" ||
             platform_arch != current_platform_arch() ||
             !relative_path_is_safe(dir_name)) {
-            return make_status(
+            RuntimeStatus current_problem = make_status(
                 StatusCode::Corrupt,
                 "Linux CEF current runtime marker is invalid: " + current_path,
                 root,
                 current_path);
+            return scan_runtime_dirs(dir.ptr(), root, current_problem);
         }
-        return validate_runtime_dir(root.path_join(dir_name));
+        RuntimeStatus current_status = validate_runtime_dir(root.path_join(dir_name));
+        if (current_status.ok()) {
+            return current_status;
+        }
+        return scan_runtime_dirs(dir.ptr(), root, current_status);
     }
 
-    RuntimeStatus first_problem;
-    bool saw_runtime_dir = false;
-    dir->list_dir_begin();
-    while (true) {
-        godot::String name = dir->get_next();
-        if (name.is_empty()) {
-            break;
-        }
-        if (name == "." || name == ".." || !dir->current_is_dir()) {
-            continue;
-        }
-
-        saw_runtime_dir = true;
-        RuntimeStatus status = validate_runtime_dir(root.path_join(name));
-        if (status.ok()) {
-            dir->list_dir_end();
-            return status;
-        }
-        if (first_problem.message.is_empty()) {
-            first_problem = status;
-        }
-    }
-    dir->list_dir_end();
-
-    if (!saw_runtime_dir) {
-        return make_status(
-            StatusCode::Missing,
-            "Linux CEF runtime root has no version directories: " + root);
-    }
-    return first_problem;
+    return scan_runtime_dirs(dir.ptr(), root, RuntimeStatus());
 }
 
 } // namespace

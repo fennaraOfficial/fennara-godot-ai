@@ -1,4 +1,8 @@
 @media (max-width: 560px) {
+  .target-pill {
+    max-width: 86px;
+  }
+
   .message {
     max-width: 100%;
   }

@@ -6,6 +6,7 @@
 
 #include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/os.hpp>
+#include <godot_cpp/core/object.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 namespace fennara {
@@ -70,9 +71,11 @@ godot::Control *WebviewHost::create_internal_control() {
     if (!uses_internal_surface()) {
         return nullptr;
     }
+    internal_control = current_internal_control();
     if (internal_control == nullptr) {
         internal_control = backend->create_internal_control();
         if (internal_control != nullptr) {
+            internal_control_id = internal_control->get_instance_id();
             internal_control->set_visible(false);
         }
     }
@@ -89,6 +92,7 @@ void WebviewHost::set_visible(bool visible) {
     if (backend != nullptr) {
         backend->set_visible(visible);
     }
+    internal_control = current_internal_control();
     if (internal_control != nullptr) {
         internal_control->set_visible(visible);
     }
@@ -123,6 +127,7 @@ void WebviewHost::stop() {
     if (backend != nullptr) {
         backend->stop();
     }
+    internal_control = current_internal_control();
     if (internal_control != nullptr) {
         internal_control->set_visible(false);
     }
@@ -130,6 +135,14 @@ void WebviewHost::stop() {
 
 bool WebviewHost::is_started() const {
     return backend != nullptr && backend->is_started();
+}
+
+godot::Control *WebviewHost::current_internal_control() const {
+    if (internal_control_id == 0) {
+        return nullptr;
+    }
+    return godot::Object::cast_to<godot::Control>(
+        godot::ObjectDB::get_instance(internal_control_id));
 }
 
 } // namespace fennara

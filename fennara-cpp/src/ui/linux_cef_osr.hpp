@@ -11,6 +11,7 @@
 #include <godot_cpp/classes/texture_rect.hpp>
 #include <godot_cpp/variant/string.hpp>
 
+#include <cstdint>
 #include <memory>
 
 namespace fennara::linux_cef_osr {
@@ -34,7 +35,9 @@ public:
 private:
     struct CefObjects;
 
-    godot::TextureRect *texture_rect = nullptr;
+    godot::TextureRect *current_texture_rect() const;
+
+    uint64_t texture_rect_id = 0;
     godot::Ref<godot::ImageTexture> texture;
     std::unique_ptr<CefObjects> cef;
     int texture_width = 0;

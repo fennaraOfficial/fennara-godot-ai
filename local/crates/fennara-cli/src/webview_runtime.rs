@@ -61,6 +61,7 @@ pub fn ensure_for_current_platform(
 
     let target_dir = layout.linux_cef_runtime_dir(platform_arch, version);
     if runtime_complete(&target_dir, &manifest) {
+        write_current_runtime(&target_dir, &manifest)?;
         return Ok(Some(format!(
             "webview runtime: Linux CEF runtime is installed at {}",
             display_path(&target_dir)
@@ -147,6 +148,10 @@ pub fn report_for_doctor(layout: &AppLayout, repair: bool) -> Result<(), String>
     if repair {
         let removed = cleanup_stale_process_dirs(&layout.webview_profile_root().join("cef"))?;
         println!("linux cef stale profile cleanup: removed {removed}");
+        if runtime_complete(&runtime_dir, &manifest) {
+            write_current_runtime(&runtime_dir, &manifest)?;
+            println!("linux cef current marker: repaired");
+        }
     }
     Ok(())
 }

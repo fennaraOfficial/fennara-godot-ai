@@ -283,6 +283,7 @@ name = "fennara-daemon"
 version = "0.2.8"
 dependencies = [
  "axum",
+ "base64",
  "futures-util",
  "reqwest",
  "rusqlite",

@@ -8,6 +8,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -22,6 +23,7 @@ const args = parseArgs(process.argv.slice(2));
 const cefRoot = requiredPath("cef-root");
 const version = requiredArg("version");
 const outDir = path.resolve(root, args["out-dir"] ?? "dist/cef-runtime");
+const manifestOut = args["write-manifest"] ? path.resolve(root, args["write-manifest"]) : null;
 const dryRun = Boolean(args["dry-run"]);
 const platformArch = "linux-x64";
 const assetName = `fennara-webview-cef-linux-x64-${version}.zip`;
@@ -56,8 +58,12 @@ for (const item of plan) {
   copyFile(item.source, path.join(stageDir, item.relative));
 }
 validateRequiredFiles(stageDir, requiredFiles);
+stripRuntimeBinaries(stageDir);
 zipDirectory(stageDir, archivePath);
 const sha256 = sha256File(archivePath);
+if (manifestOut) {
+  writeRuntimeManifest(manifestOut, sha256);
+}
 
 console.log(`Created ${path.relative(root, archivePath)}`);
 console.log(`sha256: ${sha256}`);
@@ -150,6 +156,47 @@ function validateRequiredFiles(baseDir, files) {
   }
 }
 
+function stripRuntimeBinaries(baseDir) {
+  if (process.platform !== "linux") {
+    return;
+  }
+
+  const binaries = [
+    "libcef.so",
+    "libEGL.so",
+    "libGLESv2.so",
+    "libvk_swiftshader.so",
+    "libvulkan.so.1",
+    "fennara_cef_helper",
+    "chrome-sandbox",
+  ];
+
+  for (const relative of binaries) {
+    const file = path.join(baseDir, relative);
+    if (!existsSync(file)) {
+      continue;
+    }
+
+    const result = spawnSync("strip", ["--strip-unneeded", file], {
+      cwd: root,
+      stdio: relative === "libcef.so" ? "inherit" : "ignore",
+    });
+    if (result.status !== 0 && relative === "libcef.so") {
+      throw new Error("Failed to strip required CEF binary libcef.so");
+    }
+  }
+
+  const libcef = path.join(baseDir, "libcef.so");
+  if (!existsSync(libcef) || statSync(libcef).size === 0) {
+    throw new Error("Stripped CEF runtime is missing a usable libcef.so");
+  }
+
+  const readelf = spawnSync("readelf", ["-h", libcef], { cwd: root, stdio: "ignore" });
+  if (readelf.status !== 0) {
+    throw new Error("Stripped libcef.so is not a readable ELF shared library");
+  }
+}
+
 function zipDirectory(sourceDir, archive) {
   rmSync(archive, { force: true });
   const script = [
@@ -186,6 +233,24 @@ function readManifest() {
 
 function sha256File(file) {
   return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+function writeRuntimeManifest(target, sha256) {
+  const nextManifest = {
+    ...manifest,
+    version,
+    enabled: true,
+    archive: {
+      ...(manifest.archive ?? {}),
+      format: "zip",
+      name: assetName,
+      url: null,
+      sha256,
+    },
+  };
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, `${JSON.stringify(nextManifest, null, 2)}\n`);
+  console.log(`Updated ${path.relative(root, target)}`);
 }
 
 function copyFile(source, target) {
@@ -257,6 +322,7 @@ Prepare the separate Linux x64 CEF runtime asset.
 
 Usage:
   node scripts/prepare-linux-cef-runtime.mjs --cef-root <cef_binary_dir> --version <cef-version> [--out-dir <dir>]
+  node scripts/prepare-linux-cef-runtime.mjs --cef-root <cef_binary_dir> --version <cef-version> --write-manifest <path>
   node scripts/prepare-linux-cef-runtime.mjs --cef-root <cef_binary_dir> --version <cef-version> --helper <fennara_cef_helper> [--dry-run]
 
 The CEF directory may be an official cef_binary_*_linux64 or

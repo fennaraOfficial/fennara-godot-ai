@@ -150,7 +150,7 @@ pub(crate) async fn execute(
     {
         metadata["plugin_metadata"] = plugin_metadata.clone();
     }
-    let mcp_markdown = markdown_from_response(&response, &formatted, name);
+    let mcp_markdown = strip_update_notice(&markdown_from_response(&response, &formatted, name));
     let plugin_markdown = plugin_markdown_for(name, &mcp_markdown, &metadata, &raw_result, ok);
     let target_keys = target_keys_from_metadata(&metadata);
     let model_followup_messages = model_followups_for(name, &raw_result);
@@ -164,6 +164,14 @@ pub(crate) async fn execute(
         target_keys,
         model_followup_messages,
     }
+}
+
+fn strip_update_notice(markdown: &str) -> String {
+    const MARKER: &str = "\n\n---\n\nFennara is out of date.";
+    markdown
+        .find(MARKER)
+        .map(|index| markdown[..index].trim_end().to_string())
+        .unwrap_or_else(|| markdown.to_string())
 }
 
 fn failed_tool(name: &str, error: String) -> ExecutedTool {
