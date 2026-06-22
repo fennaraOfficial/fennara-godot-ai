@@ -935,10 +935,11 @@
   }
 
   async function addImageFiles(files) {
-    const imageFiles = Array.from(files || []).filter((file) => file && file.type?.startsWith("image/"));
+    const imageFiles = uniqueFiles(files).filter((file) => file && file.type?.startsWith("image/"));
     if (imageFiles.length === 0) {
-      return;
+      return 0;
     }
+    let added = 0;
     for (const file of imageFiles) {
       if (attachedImages.length >= MAX_IMAGE_ATTACHMENTS) {
         appendSystem(`Attach up to ${MAX_IMAGE_ATTACHMENTS} images.`);
@@ -969,11 +970,67 @@
           size: file.size,
           description: file.name || "user image",
         });
+        added += 1;
       } catch {
         appendSystem("Could not read that image.");
       }
     }
     renderAttachmentPreview();
+    return added;
+  }
+
+  function uniqueFiles(files) {
+    const seen = new Set();
+    const unique = [];
+    for (const file of Array.from(files || [])) {
+      if (!file) {
+        continue;
+      }
+      const key = [file.name || "", file.type || "", file.size || 0, file.lastModified || 0].join(":");
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(file);
+    }
+    return unique;
+  }
+
+  function addImagePayload(image) {
+    const base64 = String(image?.base64 || "");
+    const mimeType = String(image?.mime_type || "").toLowerCase();
+    const size = Number(image?.size || 0);
+    if (!base64 || !mimeType) {
+      return false;
+    }
+    if (attachedImages.length >= MAX_IMAGE_ATTACHMENTS) {
+      appendSystem(`Attach up to ${MAX_IMAGE_ATTACHMENTS} images.`);
+      return false;
+    }
+    if (!SUPPORTED_IMAGE_TYPES.has(mimeType)) {
+      appendSystem("Unsupported image type. Use PNG, JPEG, WebP, or GIF.");
+      return false;
+    }
+    if (size > MAX_IMAGE_BYTES) {
+      appendSystem(`Each image must be ${formatBytes(MAX_IMAGE_BYTES)} or smaller.`);
+      return false;
+    }
+    const totalSize = attachedImages.reduce((sum, item) => sum + item.size, 0) + size;
+    if (totalSize > MAX_TOTAL_IMAGE_BYTES) {
+      appendSystem(`Attached images must be ${formatBytes(MAX_TOTAL_IMAGE_BYTES)} total or less.`);
+      return false;
+    }
+    const name = String(image?.name || "pasted image");
+    attachedImages.push({
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      base64,
+      mime_type: mimeType,
+      name,
+      size,
+      description: name,
+    });
+    renderAttachmentPreview();
+    return true;
   }
 
   function validateImageFile(file) {
@@ -1048,6 +1105,35 @@
   function formatBytes(bytes) {
     return `${Math.round(bytes / 1024 / 1024)} MB`;
   }
+
+  function nativePasteboardBridge() {
+    return window.webkit?.messageHandlers?.fennaraPasteboard;
+  }
+
+  function requestNativePastedImage() {
+    const bridge = nativePasteboardBridge();
+    if (!bridge) {
+      return false;
+    }
+    try {
+      bridge.postMessage({ type: "paste_image" });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  window.FennaraNativePasteboard = {
+    receiveImage(image) {
+      addImagePayload(image);
+      window.setTimeout(resizePrompt, 0);
+    },
+    receiveError(error) {
+      const message = String(error?.message || "Could not paste that image.");
+      appendSystem(message);
+      window.setTimeout(resizePrompt, 0);
+    },
+  };
 
   document.querySelectorAll("[data-open-settings]").forEach((button) => {
     button.addEventListener("click", openSettings);
@@ -1253,12 +1339,20 @@
   });
   prompt?.addEventListener("input", resizePrompt);
   prompt?.addEventListener("paste", (event) => {
-    const files = Array.from(event.clipboardData?.items || [])
+    const directFiles = Array.from(event.clipboardData?.files || []);
+    const itemFiles = Array.from(event.clipboardData?.items || [])
       .filter((item) => item.kind === "file")
       .map((item) => item.getAsFile())
       .filter(Boolean);
+    const files = [...directFiles, ...itemFiles];
     if (files.length > 0) {
-      addImageFiles(files);
+      addImageFiles(files).then((added) => {
+        if (added === 0) {
+          requestNativePastedImage();
+        }
+      });
+    } else {
+      requestNativePastedImage();
     }
     window.setTimeout(resizePrompt, 0);
   });
