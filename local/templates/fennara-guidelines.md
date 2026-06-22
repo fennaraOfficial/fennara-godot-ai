@@ -87,18 +87,21 @@ When searching for Fennara MCP tools through a tool-search system, search for al
 Use this query:
 
 ```text
-fennara_status write_or_update_file run_scene_edit_script get_scene_tree save_custom_resource script_diagnostics screenshot_scene get_node_properties get_class_info validate_scene project_settings runtime_session runtime_script scrape_editor
+fennara_status read_file file_ops write_or_update_file run_scene_edit_script get_scene_tree save_custom_resource script_diagnostics screenshot_scene get_node_properties get_class_info validate_scene project_settings runtime_session runtime_script scrape_editor
 ```
 
 If the search tool has a `limit` option, set it to `20` or higher. Do this even when you only need one specific tool, because low result limits can bury relevant Fennara tools below the cutoff.
 
 After the search returns, read the returned tool schemas before calling any tool. If `fennara_status` reports that a tool exists but the callable schema is not exposed yet, retry tool discovery with the exact tool name, the full query above, and a high limit.
 
-## Fennara MCP Does Not Replace Normal File Reading
+## Fennara MCP Does Not Replace Normal Repository Navigation
 
-Fennara MCP intentionally does not expose broad file-reading tools like `read_file`.
+Fennara MCP includes scoped `read_file` and `file_ops` helpers for cases where
+Godot-side path normalization, image handling, or bundled ripgrep search is
+useful.
 
-Use your MCP app's own file tools for ordinary file reading, diffs, repository navigation, and non-Godot text inspection.
+Use your MCP app's own file tools for broad ordinary file reading, diffs,
+repository navigation, and non-Godot text inspection.
 
 Use Fennara MCP for Godot-aware work: inspecting scene trees, node properties, native Godot APIs, runtime errors, editor debugger snapshots, diagnostics, validation, screenshots, and project settings.
 
@@ -145,7 +148,7 @@ If a Fennara tool call takes unusually long or times out, do not immediately ret
 
 ## Runtime Sessions
 
-`runtime_session` starts, checks, or stops one daemon-managed windowed Godot runtime session. `start` first runs scene-execution gates: C# projects run `dotnet build`, the requested scene gets structural `validate_scene` preflight without a headless runtime run, and Fennara checks autoload plus scene-attached scripts with targeted diagnostics. If those fail, Fennara does not open the scene. If another runtime session is already running, `start` is blocked; call `runtime_session.status` to inspect it or `runtime_session.stop` to close it before starting another scene. If it starts, the returned `runtime_session.log` is the source of truth for scene startup output, raw Godot stdout/stderr, runtime errors, `FENNARA_SCRIPT_*` markers, `ctx.log(...)` messages, captures, and completion/failure events. The log is written live as the scene and runtime scripts run, so during one still-running session you can inspect or search `runtime_session.log` between `runtime_script` calls before deciding the next script. Read that log after `runtime_session.start`, after every `runtime_script`, and when checking `runtime_session.status`.
+`runtime_session` starts, checks, or stops one daemon-managed windowed Godot runtime session. `start` first runs scene-execution gates: C# projects run `dotnet build`, the requested scene gets structural `validate_scene` preflight without a headless runtime run, and Fennara checks autoload plus scene-attached scripts with targeted diagnostics. If those fail, Fennara does not open the scene. Fennara currently allows one managed runtime session globally across all connected Godot editors; if another runtime session is already running, `start` is blocked. Call `runtime_session.status` to inspect it or `runtime_session.stop` to close it before starting another scene. If it starts, the returned `runtime_session.log` is the source of truth for scene startup output, raw Godot stdout/stderr, runtime errors, `FENNARA_SCRIPT_*` markers, `ctx.log(...)` messages, captures, and completion/failure events. The log is written live as the scene and runtime scripts run, so during one still-running session you can inspect or search `runtime_session.log` between `runtime_script` calls before deciding the next script. Read that log after `runtime_session.start`, after every `runtime_script`, and when checking `runtime_session.status`.
 
 `runtime_script` sends one short `RefCounted` GDScript inspector/input-driver probe into that running scene through Fennara's runtime helper. A script may complete without closing the scene; that is the normal incremental workflow when you want to submit another runtime_script against the same live scene. Treat the `runtime_script` tool result as an operational receipt, not proof that the scene had no runtime errors. Close the scene when finished with `runtime_session.stop` or with a final script that calls `ctx.close_scene()`.
 

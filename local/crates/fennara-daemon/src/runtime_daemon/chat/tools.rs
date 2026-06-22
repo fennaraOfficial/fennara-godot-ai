@@ -119,12 +119,19 @@ pub(crate) fn is_allowed_tool(name: &str) -> bool {
     ALLOWED_TOOL_NAMES.contains(&name)
 }
 
-pub(crate) async fn execute(state: &AppState, name: &str, arguments: &Value) -> ExecutedTool {
+pub(crate) async fn execute(
+    state: &AppState,
+    session_id: &str,
+    name: &str,
+    arguments: &Value,
+) -> ExecutedTool {
     if !is_allowed_tool(name) {
         return failed_tool(name, format!("Unsupported plugin chat tool: {name}"));
     }
 
-    let response = godot_bridge::call_tool_value(state, name, arguments.clone()).await;
+    let response =
+        godot_bridge::call_tool_value_for_session(state, Some(session_id), name, arguments.clone())
+            .await;
     let ok = response.get("ok").and_then(Value::as_bool).unwrap_or(false);
     let raw_result = response
         .get("raw_result")
@@ -143,7 +150,7 @@ pub(crate) async fn execute(state: &AppState, name: &str, arguments: &Value) -> 
     {
         metadata["plugin_metadata"] = plugin_metadata.clone();
     }
-    let mcp_markdown = markdown_from_response(&response, &formatted, name);
+    let mcp_markdown = strip_update_notice(&markdown_from_response(&response, &formatted, name));
     let plugin_markdown = plugin_markdown_for(name, &mcp_markdown, &metadata, &raw_result, ok);
     let target_keys = target_keys_from_metadata(&metadata);
     let model_followup_messages = model_followups_for(name, &raw_result);
@@ -157,6 +164,14 @@ pub(crate) async fn execute(state: &AppState, name: &str, arguments: &Value) -> 
         target_keys,
         model_followup_messages,
     }
+}
+
+fn strip_update_notice(markdown: &str) -> String {
+    const MARKER: &str = "\n\n---\n\nFennara is out of date.";
+    markdown
+        .find(MARKER)
+        .map(|index| markdown[..index].trim_end().to_string())
+        .unwrap_or_else(|| markdown.to_string())
 }
 
 fn failed_tool(name: &str, error: String) -> ExecutedTool {

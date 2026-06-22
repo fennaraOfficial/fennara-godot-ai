@@ -3,7 +3,8 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
-use super::models::model_supports_text_chat;
+use super::images::ChatImage;
+use super::models::{model_supports_image_chat, model_supports_text_chat};
 use super::settings::DEFAULT_MODEL;
 
 const OPENROUTER_API_BASE: &str = "https://openrouter.ai/api/v1";
@@ -50,7 +51,7 @@ where
     Fut: std::future::Future<Output = Result<bool, String>>,
 {
     let client = Client::new();
-    validate_text_chat_model(&client, model).await?;
+    validate_chat_model(&client, model, messages_include_images(messages)).await?;
 
     let response = client
         .post(format!("{OPENROUTER_API_BASE}/chat/completions"))
@@ -306,10 +307,17 @@ where
     })
 }
 
-pub(crate) fn build_messages(history: &[Value], user_message: &str) -> Vec<Value> {
+pub(crate) fn build_messages(
+    history: &[Value],
+    user_message: &str,
+    user_images: &[ChatImage],
+) -> Vec<Value> {
     let mut messages = vec![json!({ "role": "system", "content": SYSTEM_PROMPT })];
     messages.extend(history.iter().cloned());
-    messages.push(json!({ "role": "user", "content": user_message }));
+    messages.push(json!({
+        "role": "user",
+        "content": super::images::user_content_value(user_message, user_images)
+    }));
     messages
 }
 
@@ -370,7 +378,11 @@ fn apply_nitro_variant(model: &str) -> String {
     }
 }
 
-async fn validate_text_chat_model(client: &Client, model: &str) -> Result<(), String> {
+async fn validate_chat_model(
+    client: &Client,
+    model: &str,
+    needs_image_input: bool,
+) -> Result<(), String> {
     let clean = model.trim().trim_end_matches(":nitro");
     if clean == DEFAULT_MODEL {
         return Ok(());
@@ -406,12 +418,35 @@ async fn validate_text_chat_model(client: &Client, model: &str) -> Result<(), St
         return Err(format!("OpenRouter model not found: {clean}"));
     };
 
+    if needs_image_input && !model_supports_image_chat(model_info) {
+        return Err(format!(
+            "{clean} does not advertise image input in OpenRouter metadata."
+        ));
+    }
     if model_supports_text_chat(model_info) {
         return Ok(());
     }
     Err(format!(
         "{clean} does not advertise text input and text output in OpenRouter metadata."
     ))
+}
+
+fn messages_include_images(messages: &[Value]) -> bool {
+    messages.iter().any(value_includes_image)
+}
+
+fn value_includes_image(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => {
+            object
+                .get("type")
+                .and_then(Value::as_str)
+                .is_some_and(|kind| kind == "image_url")
+                || object.values().any(value_includes_image)
+        }
+        Value::Array(items) => items.iter().any(value_includes_image),
+        _ => false,
+    }
 }
 
 fn has_route_variant(model: &str) -> bool {

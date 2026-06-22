@@ -21,9 +21,81 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  linux-cef-runtime:
+    name: prepare Linux CEF runtime
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify release input
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::Release workflow must run from main."
+            exit 1
+          fi
+
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [[ "${version}" != "${{ inputs.version }}" ]]; then
+            echo "::error::VERSION (${version}) does not match workflow input (${{ inputs.version }})."
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux CEF packaging dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential bzip2 binutils
+
+      - name: Prepare Linux CEF SDK
+        id: linux_cef_sdk
+        run: |
+          node scripts/prepare-linux-cef-sdk.mjs \
+            --out-dir "${RUNNER_TEMP}/fennara-cef-sdk" \
+            --download-dir "${RUNNER_TEMP}/fennara-cef-download"
+
+      - name: Build Linux CEF runtime release asset
+        run: |
+          node scripts/prepare-linux-cef-runtime.mjs \
+            --cef-root "${{ steps.linux_cef_sdk.outputs.cef_root }}" \
+            --version "139.0.28+g55ab8a8+chromium-139.0.7258.139" \
+            --out-dir dist/linux-cef-runtime-release \
+            --write-manifest dist/generated-linux-cef-manifest/linux-cef.json
+
+      - name: Validate generated Linux CEF runtime asset
+        run: |
+          cp dist/generated-linux-cef-manifest/linux-cef.json local/webview-runtimes/linux-cef.json
+          node scripts/check-linux-cef-runtime-release.mjs --assets-dir dist/linux-cef-runtime-release
+
+      - name: Upload generated Linux CEF manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennara-generated-linux-cef-manifest
+          path: dist/generated-linux-cef-manifest/linux-cef.json
+          if-no-files-found: error
+
+      - name: Upload Linux CEF runtime release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennara-release-linux-cef-runtime
+          path: dist/linux-cef-runtime-release/*.zip
+          if-no-files-found: error
+
   package:
     name: package ${{ matrix.platform }} ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
+    needs: linux-cef-runtime
 
     strategy:
       fail-fast: false
@@ -69,6 +141,16 @@ jobs:
       - name: Check version sync
         run: node scripts/check-version.mjs
 
+      - name: Download generated Linux CEF manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: fennara-generated-linux-cef-manifest
+          path: generated-linux-cef-manifest
+
+      - name: Use generated Linux CEF manifest
+        shell: bash
+        run: cp generated-linux-cef-manifest/linux-cef.json local/webview-runtimes/linux-cef.json
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -79,7 +161,21 @@ jobs:
 
       - name: Install Linux build dependencies
         if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential
+        run: sudo apt-get update && sudo apt-get install -y build-essential bzip2 pkg-config ripgrep
+
+      - name: Install Windows ripgrep
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: choco install ripgrep -y --no-progress
+
+      - name: Install macOS ripgrep
+        if: matrix.platform == 'macos'
+        run: brew install ripgrep
+
+      - name: Prepare Linux CEF SDK
+        if: matrix.platform == 'linux'
+        id: linux_cef_sdk
+        run: node scripts/prepare-linux-cef-sdk.mjs
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -147,6 +243,7 @@ jobs:
         working-directory: fennara-cpp
         env:
           SCONS_CACHE: ${{ github.workspace }}/fennara-cpp/.scons_cache
+          FENNARA_CEF_ROOT: ${{ steps.linux_cef_sdk.outputs.cef_root }}
         run: scons platform=${{ matrix.platform }} target=editor --debug=explain --cache-show
 
       - name: Build local tools
@@ -214,12 +311,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Download release archives
         uses: actions/download-artifact@v4
         with:
           path: release-assets
           pattern: fennara-release-*
           merge-multiple: true
+
+      - name: Download generated Linux CEF manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: fennara-generated-linux-cef-manifest
+          path: generated-linux-cef-manifest
+
+      - name: Validate Linux CEF runtime release asset
+        run: |
+          cp generated-linux-cef-manifest/linux-cef.json local/webview-runtimes/linux-cef.json
+          node scripts/check-linux-cef-runtime-release.mjs --assets-dir release-assets
 
       - name: Publish release
         env:

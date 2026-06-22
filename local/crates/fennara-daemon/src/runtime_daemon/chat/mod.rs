@@ -11,10 +11,11 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
 
-use super::state::{AppState, GodotProjectStatus};
+use super::state::AppState;
 use crate::runtime_daemon::godot_bridge;
 
 mod ids;
+mod images;
 mod models;
 mod openrouter;
 mod schema;
@@ -37,9 +38,16 @@ struct ClientRequest {
     request_id: Option<String>,
     chat_id: Option<String>,
     message: Option<String>,
+    images: Option<Vec<images::ClientImage>>,
     model: Option<String>,
     reasoning_effort: Option<String>,
     openrouter_api_key: Option<String>,
+}
+
+#[derive(Clone)]
+struct BoundChatProject {
+    session_id: String,
+    scope: store::ProjectScope,
 }
 
 pub(crate) async fn chat_ws(
@@ -48,12 +56,14 @@ pub(crate) async fn chat_ws(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> Response {
-    if !is_allowed_browser_origin(&headers)
-        || !chat_token_matches(&state, query.chat_token.as_deref()).await
-    {
+    if !is_allowed_browser_origin(&headers) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    ws.on_upgrade(move |socket| handle_chat_socket(socket, state))
+    let Some(bound_project) = project_for_chat_token(&state, query.chat_token.as_deref()).await
+    else {
+        return StatusCode::FORBIDDEN.into_response();
+    };
+    ws.on_upgrade(move |socket| handle_chat_socket(socket, state, bound_project))
         .into_response()
 }
 
@@ -64,23 +74,30 @@ fn is_allowed_browser_origin(headers: &HeaderMap) -> bool {
     origin == "null" || origin.starts_with("file://")
 }
 
-async fn chat_token_matches(state: &AppState, token: Option<&str>) -> bool {
+async fn project_for_chat_token(state: &AppState, token: Option<&str>) -> Option<BoundChatProject> {
     let Some(token) = token.filter(|value| !value.is_empty()) else {
-        return false;
+        return None;
     };
     state
         .projects
         .read()
         .await
         .values()
-        .any(|project| project.chat_token.as_deref() == Some(token))
+        .find(|project| project.chat_token.as_deref() == Some(token))
+        .map(|project| BoundChatProject {
+            session_id: project.session_id.clone(),
+            scope: store::ProjectScope {
+                project_path: project.project_path.clone(),
+                project_name: project.project_name.clone(),
+            },
+        })
 }
 
-async fn handle_chat_socket(socket: WebSocket, state: AppState) {
+async fn handle_chat_socket(socket: WebSocket, state: AppState, bound_project: BoundChatProject) {
     let (mut sender, mut receiver) = socket.split();
     let mut active_chat_id: Option<String> = None;
 
-    if send_initial_state(&mut sender, &mut active_chat_id, &state)
+    if send_initial_state(&mut sender, &mut active_chat_id, &state, &bound_project)
         .await
         .is_err()
     {
@@ -94,9 +111,15 @@ async fn handle_chat_socket(socket: WebSocket, state: AppState) {
                         send_error(&mut sender, None, "bad_request", "Invalid chat request.").await;
                     continue;
                 };
-                if handle_request(&mut sender, &mut active_chat_id, &state, request)
-                    .await
-                    .is_err()
+                if handle_request(
+                    &mut sender,
+                    &mut active_chat_id,
+                    &state,
+                    &bound_project,
+                    request,
+                )
+                .await
+                .is_err()
                 {
                     break;
                 }
@@ -112,6 +135,7 @@ async fn send_initial_state<S>(
     sender: &mut S,
     active_chat_id: &mut Option<String>,
     state: &AppState,
+    bound_project: &BoundChatProject,
 ) -> Result<(), S::Error>
 where
     S: Sink<Message> + Unpin,
@@ -127,8 +151,9 @@ where
         }),
     )
     .await?;
-    let scope = project_scope(state).await;
-    match store::open_active_or_create(&scope, &settings.model, &settings.reasoning_effort) {
+    send_project_status(sender, None, state, bound_project).await?;
+    let scope = &bound_project.scope;
+    match store::open_active_or_create(scope, &settings.model, &settings.reasoning_effort) {
         Ok(opened) => {
             *active_chat_id = Some(opened.chat.id.clone());
             send_json(
@@ -147,13 +172,14 @@ where
             send_error(sender, None, "chat_store_failed", &error).await?;
         }
     }
-    send_chat_list(sender, None, &scope).await
+    send_chat_list(sender, None, scope).await
 }
 
 async fn handle_request<S>(
     sender: &mut S,
     active_chat_id: &mut Option<String>,
     state: &AppState,
+    bound_project: &BoundChatProject,
     request: ClientRequest,
 ) -> Result<(), ()>
 where
@@ -173,9 +199,16 @@ where
             )
             .await
         }
+        "get_project_status" => send_project_status(sender, request_id, state, bound_project).await,
+        "set_mcp_target" => {
+            match godot_bridge::set_active_project_session(state, &bound_project.session_id).await {
+                Ok(()) => send_project_status(sender, request_id, state, bound_project).await,
+                Err(error) => send_error(sender, request_id, "target_set_failed", &error).await,
+            }
+        }
         "list_chats" => {
-            let scope = project_scope(state).await;
-            send_chat_list(sender, request_id, &scope).await
+            let scope = &bound_project.scope;
+            send_chat_list(sender, request_id, scope).await
         }
         "list_models" => {
             let settings = load_settings();
@@ -196,8 +229,8 @@ where
                     .await
                     .map_err(|_| ());
             };
-            let scope = project_scope(state).await;
-            match store::open_chat(&scope, chat_id) {
+            let scope = &bound_project.scope;
+            match store::open_chat(scope, chat_id) {
                 Ok(opened) => {
                     *active_chat_id = Some(opened.chat.id.clone());
                     send_json(
@@ -238,8 +271,8 @@ where
         }
         "new_chat" => {
             let settings = load_settings();
-            let scope = project_scope(state).await;
-            match store::create_chat(&scope, &settings.model, &settings.reasoning_effort) {
+            let scope = &bound_project.scope;
+            match store::create_chat(scope, &settings.model, &settings.reasoning_effort) {
                 Ok(opened) => {
                     *active_chat_id = Some(opened.chat.id.clone());
                     if send_json(
@@ -270,7 +303,7 @@ where
                     {
                         return Err(());
                     }
-                    send_chat_list(sender, None, &scope).await
+                    send_chat_list(sender, None, scope).await
                 }
                 Err(error) => send_error(sender, request_id, "chat_create_failed", &error).await,
             }
@@ -281,14 +314,14 @@ where
                     .await
                     .map_err(|_| ());
             };
-            let scope = project_scope(state).await;
-            match store::archive_chat(&scope, chat_id) {
+            let scope = &bound_project.scope;
+            match store::archive_chat(scope, chat_id) {
                 Ok(()) => {
                     if active_chat_id.as_deref() == Some(chat_id) {
                         *active_chat_id = None;
                     }
                     state.revertable_chats.write().await.remove(chat_id);
-                    send_chat_list(sender, request_id, &scope).await
+                    send_chat_list(sender, request_id, scope).await
                 }
                 Err(error) => send_error(sender, request_id, "chat_delete_failed", &error).await,
             }
@@ -315,8 +348,8 @@ where
                     .await
                     .map_err(|_| ());
             };
-            let scope = project_scope(state).await;
-            if let Err(error) = store::ensure_chat_in_scope(&scope, &chat_id) {
+            let scope = &bound_project.scope;
+            if let Err(error) = store::ensure_chat_in_scope(scope, &chat_id) {
                 return send_error(sender, request_id, "chat_scope_mismatch", &error)
                     .await
                     .map_err(|_| ());
@@ -335,7 +368,12 @@ where
                 .ok()
                 .flatten()
                 .unwrap_or_default();
-            let snapshot_result = godot_bridge::revert_snapshot_turn(state, &chat_id).await;
+            let snapshot_result = godot_bridge::revert_snapshot_turn_for_session(
+                state,
+                Some(&bound_project.session_id),
+                &chat_id,
+            )
+            .await;
             if snapshot_result.get("ok").and_then(Value::as_bool) == Some(false) {
                 let error = snapshot_result
                     .get("error")
@@ -345,7 +383,7 @@ where
                     .await
                     .map_err(|_| ());
             }
-            match store::revert_last_turn(&scope, &chat_id) {
+            match store::revert_last_turn(scope, &chat_id) {
                 Ok(opened) => {
                     state.revertable_chats.write().await.remove(&chat_id);
                     let restored_message = snapshot_result
@@ -371,12 +409,12 @@ where
                     {
                         return Err(());
                     }
-                    send_chat_list(sender, None, &scope).await
+                    send_chat_list(sender, None, scope).await
                 }
                 Err(error) => send_error(sender, request_id, "revert_failed", &error).await,
             }
         }
-        "send_chat" => run_chat(sender, active_chat_id, state, request).await,
+        "send_chat" => run_chat(sender, active_chat_id, state, bound_project, request).await,
         _ => {
             send_error(
                 sender,
@@ -390,10 +428,47 @@ where
     .map_err(|_| ())
 }
 
+async fn send_project_status<S>(
+    sender: &mut S,
+    request_id: Option<String>,
+    state: &AppState,
+    bound_project: &BoundChatProject,
+) -> Result<(), S::Error>
+where
+    S: Sink<Message> + Unpin,
+    S::Error: std::fmt::Debug,
+{
+    let status = godot_bridge::current_status_value(state).await;
+    let version_status = godot_bridge::call_tool_value_for_session(
+        state,
+        Some(&bound_project.session_id),
+        "fennara_status",
+        json!({}),
+    )
+    .await
+    .get("result")
+    .and_then(|result| result.get("version"))
+    .cloned()
+    .unwrap_or_else(|| json!({}));
+
+    send_json(
+        sender,
+        json!({
+            "type": "project_status",
+            "request_id": request_id,
+            "bound_session_id": bound_project.session_id,
+            "daemon": status,
+            "version": version_status
+        }),
+    )
+    .await
+}
+
 async fn run_chat<S>(
     sender: &mut S,
     active_chat_id: &mut Option<String>,
     state: &AppState,
+    bound_project: &BoundChatProject,
     request: ClientRequest,
 ) -> Result<(), S::Error>
 where
@@ -403,8 +478,18 @@ where
     let request_id = request.request_id.clone();
     let message = request.message.unwrap_or_default();
     let message = message.trim();
-    if message.is_empty() {
-        return send_error(sender, request_id, "bad_request", "Message is required.").await;
+    let user_images = match images::validate_images(request.images) {
+        Ok(images) => images,
+        Err(error) => return send_error(sender, request_id, "bad_request", &error).await,
+    };
+    if message.is_empty() && user_images.is_empty() {
+        return send_error(
+            sender,
+            request_id,
+            "bad_request",
+            "Message or image is required.",
+        )
+        .await;
     }
 
     let settings = load_settings();
@@ -423,7 +508,7 @@ where
     };
 
     let model = request.model.unwrap_or(settings.model);
-    let scope = project_scope(state).await;
+    let scope = &bound_project.scope;
     let reasoning_effort = settings::clean_reasoning_effort(
         request
             .reasoning_effort
@@ -433,14 +518,14 @@ where
     .to_string();
     let chat_id = match request.chat_id.or_else(|| active_chat_id.clone()) {
         Some(chat_id) => chat_id,
-        None => match store::create_chat(&scope, &model, &reasoning_effort) {
+        None => match store::create_chat(scope, &model, &reasoning_effort) {
             Ok(opened) => opened.chat.id,
             Err(error) => {
                 return send_error(sender, request_id, "chat_create_failed", &error).await;
             }
         },
     };
-    if let Err(error) = store::ensure_chat_in_scope(&scope, &chat_id) {
+    if let Err(error) = store::ensure_chat_in_scope(scope, &chat_id) {
         return send_error(sender, request_id, "chat_scope_mismatch", &error).await;
     }
     state.cancelled_chats.write().await.remove(&chat_id);
@@ -449,7 +534,13 @@ where
         Ok(messages) => messages,
         Err(error) => return send_error(sender, request_id, "chat_replay_failed", &error).await,
     };
-    let snapshot_result = godot_bridge::begin_snapshot_turn(state, &chat_id, message).await;
+    let snapshot_result = godot_bridge::begin_snapshot_turn_for_session(
+        state,
+        Some(&bound_project.session_id),
+        &chat_id,
+        message,
+    )
+    .await;
     if snapshot_result.get("ok").and_then(Value::as_bool) == Some(false) {
         let error = snapshot_result
             .get("error")
@@ -458,8 +549,12 @@ where
         return send_error(sender, request_id, "snapshot_failed", error).await;
     }
     state.revertable_chats.write().await.insert(chat_id.clone());
-    let mut openrouter_messages = build_messages(&replay_messages, message);
-    let user_message = match store::insert_user_message(&chat_id, message) {
+    let mut openrouter_messages = build_messages(&replay_messages, message, &user_images);
+    let user_message = match store::insert_user_message(
+        &chat_id,
+        message,
+        images::metadata_value(&user_images).as_ref(),
+    ) {
         Ok(message) => message,
         Err(error) => return send_error(sender, request_id, "chat_store_failed", &error).await,
     };
@@ -476,7 +571,7 @@ where
         }),
     )
     .await?;
-    send_chat_list(sender, None, &scope).await?;
+    send_chat_list(sender, None, scope).await?;
 
     let assistant_message = match store::insert_assistant_placeholder(&chat_id) {
         Ok(message) => message,
@@ -545,7 +640,7 @@ where
                 }),
             )
             .await?;
-            return send_chat_list(sender, None, &scope).await;
+            return send_chat_list(sender, None, scope).await;
         }
 
         let usage = streamed.usage.clone();
@@ -597,7 +692,7 @@ where
                     sender,
                     request_id,
                     state,
-                    &scope,
+                    scope,
                     &chat_id,
                     &current_assistant.id,
                     &streamed.completion.content,
@@ -636,13 +731,14 @@ where
             )
             .await?;
 
-            let result = tools::execute(state, &tool_name, &arguments).await;
+            let result =
+                tools::execute(state, &bound_project.session_id, &tool_name, &arguments).await;
             if is_chat_cancelled(state, &chat_id).await {
                 return finish_cancelled_turn(
                     sender,
                     request_id,
                     state,
-                    &scope,
+                    scope,
                     &chat_id,
                     &current_assistant.id,
                     &streamed.completion.content,
@@ -722,7 +818,7 @@ where
         }),
     )
     .await?;
-    send_chat_list(sender, None, &scope).await
+    send_chat_list(sender, None, scope).await
 }
 
 async fn finish_cancelled_turn<S>(
@@ -974,25 +1070,6 @@ where
         }
         Err(error) => send_error(sender, request_id, "chat_store_failed", &error).await,
     }
-}
-
-async fn project_scope(state: &AppState) -> store::ProjectScope {
-    active_project(state)
-        .await
-        .map(|project| store::ProjectScope {
-            project_path: project.project_path,
-            project_name: project.project_name,
-        })
-        .unwrap_or_default()
-}
-
-async fn active_project(state: &AppState) -> Option<GodotProjectStatus> {
-    let active_session_id = state.active_session_id.read().await.clone();
-    let projects = state.projects.read().await;
-    active_session_id
-        .as_ref()
-        .and_then(|session_id| projects.get(session_id))
-        .cloned()
 }
 
 async fn send_json<S>(sender: &mut S, payload: Value) -> Result<(), S::Error>

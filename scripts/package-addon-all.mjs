@@ -23,6 +23,8 @@ if (partRoots.length === 0) {
 for (const partRoot of partRoots) {
   copyDir(partRoot, stageDir);
 }
+assertNoBundledCef(path.join(stageDir, "addons", "fennara"));
+assertBundledRipgrep(path.join(stageDir, "addons", "fennara"));
 
 zipDirectory(stageDir, archive);
 copyFileSync(archive, latestArchive);
@@ -119,5 +121,44 @@ function exists(filePath) {
     return true;
   } catch {
     return false;
+  }
+}
+
+function assertNoBundledCef(addonRoot) {
+  const forbidden = new Set([
+    "libcef.so",
+    "fennara_cef_helper",
+    "chrome-sandbox",
+    "icudtl.dat",
+    "resources.pak",
+    "v8_context_snapshot.bin",
+  ]);
+  visit(addonRoot);
+
+  function visit(current) {
+    for (const entry of readdirSync(current)) {
+      const filePath = path.join(current, entry);
+      if (statSync(filePath).isDirectory()) {
+        visit(filePath);
+      } else if (forbidden.has(entry)) {
+        throw new Error(
+          `CEF runtime file ${path.relative(root, filePath)} must not be packaged inside fennara-addon-*`
+        );
+      }
+    }
+  }
+}
+
+function assertBundledRipgrep(addonRoot) {
+  const required = [
+    "bin/rg-windows-x86_64.exe",
+    "bin/rg-linux-x86_64",
+    "bin/rg-macos-arm64",
+  ];
+  for (const relative of required) {
+    const filePath = path.join(addonRoot, ...relative.split("/"));
+    if (!exists(filePath)) {
+      throw new Error(`Missing bundled ripgrep binary in addon archive: ${relative}`);
+    }
   }
 }

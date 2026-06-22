@@ -29,6 +29,28 @@ pub(crate) async fn status(State(state): State<AppState>) -> Json<DaemonStatus> 
     Json(current_status(&state).await)
 }
 
+pub(crate) async fn current_status_value(state: &AppState) -> Value {
+    serde_json::to_value(current_status(state).await).unwrap_or_else(|_| {
+        json!({
+            "ok": false,
+            "error": "Failed to serialize daemon status."
+        })
+    })
+}
+
+pub(crate) async fn set_active_project_session(
+    state: &AppState,
+    session_id: &str,
+) -> Result<(), String> {
+    if !state.projects.read().await.contains_key(session_id) {
+        return Err("That Godot project is no longer connected.".to_string());
+    }
+    *state.active_session_id.write().await = Some(session_id.to_string());
+    *state.active_project_explicit.write().await = true;
+    broadcast_active_project_changed(state).await;
+    Ok(())
+}
+
 pub(crate) async fn call_tool(
     State(state): State<AppState>,
     Json(request): Json<ToolCallRequest>,
@@ -37,11 +59,20 @@ pub(crate) async fn call_tool(
 }
 
 pub(crate) async fn call_tool_value(state: &AppState, tool: &str, args: Value) -> Value {
+    call_tool_value_for_session(state, None, tool, args).await
+}
+
+pub(crate) async fn call_tool_value_for_session(
+    state: &AppState,
+    session_id: Option<&str>,
+    tool: &str,
+    args: Value,
+) -> Value {
     let request_id = format!(
         "local-tool-{}",
         state.request_counter.fetch_add(1, Ordering::Relaxed) + 1
     );
-    let (session_id, sender) = match select_target_session(state).await {
+    let (session_id, sender) = match select_session(state, session_id).await {
         Ok(target) => target,
         Err(error) => return json!({ "ok": false, "error": error }),
     };
@@ -90,13 +121,15 @@ pub(crate) async fn call_tool_value(state: &AppState, tool: &str, args: Value) -
     }
 }
 
-pub(crate) async fn begin_snapshot_turn(
+pub(crate) async fn begin_snapshot_turn_for_session(
     state: &AppState,
+    session_id: Option<&str>,
     chat_id: &str,
     user_message: &str,
 ) -> Value {
     call_plugin_request(
         state,
+        session_id,
         json!({
             "type": "snapshot_begin_turn",
             "chat_id": chat_id,
@@ -107,9 +140,14 @@ pub(crate) async fn begin_snapshot_turn(
     .await
 }
 
-pub(crate) async fn revert_snapshot_turn(state: &AppState, chat_id: &str) -> Value {
+pub(crate) async fn revert_snapshot_turn_for_session(
+    state: &AppState,
+    session_id: Option<&str>,
+    chat_id: &str,
+) -> Value {
     call_plugin_request(
         state,
+        session_id,
         json!({
             "type": "snapshot_revert",
             "chat_id": chat_id
@@ -119,12 +157,17 @@ pub(crate) async fn revert_snapshot_turn(state: &AppState, chat_id: &str) -> Val
     .await
 }
 
-async fn call_plugin_request(state: &AppState, mut payload: Value, timeout: Duration) -> Value {
+async fn call_plugin_request(
+    state: &AppState,
+    session_id: Option<&str>,
+    mut payload: Value,
+    timeout: Duration,
+) -> Value {
     let request_id = format!(
         "local-plugin-{}",
         state.request_counter.fetch_add(1, Ordering::Relaxed) + 1
     );
-    let (session_id, sender) = match select_target_session(state).await {
+    let (session_id, sender) = match select_session(state, session_id).await {
         Ok(target) => target,
         Err(error) => return json!({ "ok": false, "error": error }),
     };
@@ -249,12 +292,7 @@ async fn handle_godot_socket(socket: WebSocket, state: AppState) {
                             .and_then(Value::as_str)
                             .or(session_id.as_deref())
                         {
-                            if state.projects.read().await.contains_key(next_session_id) {
-                                *state.active_session_id.write().await =
-                                    Some(next_session_id.to_string());
-                                *state.active_project_explicit.write().await = true;
-                                broadcast_active_project_changed(&state).await;
-                            }
+                            let _ = set_active_project_session(&state, next_session_id).await;
                         }
                     } else if value.get("type").and_then(Value::as_str)
                         == Some("warm_get_class_info_docs")
@@ -331,12 +369,20 @@ async fn current_status(state: &AppState) -> DaemonStatus {
     }
 }
 
-async fn select_target_session(
+async fn select_session(
     state: &AppState,
+    requested_session_id: Option<&str>,
 ) -> Result<(String, mpsc::UnboundedSender<Message>), String> {
     let senders = state.godot_senders.read().await;
     if senders.is_empty() {
         return Err("Open a Godot project with Fennara enabled.".to_string());
+    }
+
+    if let Some(session_id) = requested_session_id {
+        if let Some(sender) = senders.get(session_id) {
+            return Ok((session_id.to_string(), sender.clone()));
+        }
+        return Err("The Godot project that owns this chat is no longer connected.".to_string());
     }
 
     if let Some(active_session_id) = state.active_session_id.read().await.clone() {

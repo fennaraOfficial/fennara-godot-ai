@@ -82,14 +82,21 @@
       }
     }
 
-    function appendMessage(role, text) {
+    function appendMessage(role, text, attachments = []) {
       const shouldStick = isNearBottom();
+      const images = normalizeAttachments(attachments);
       const message = document.createElement("article");
       message.className = "message " + role;
+      message.classList.toggle("has-attachments", images.length > 0);
       message.dataset.rawText = text;
+
+      if (images.length > 0) {
+        message.append(renderAttachmentGrid(images, "message-attachments"));
+      }
 
       const body = document.createElement("div");
       body.className = role === "assistant" ? "message-body markdown-body" : "message-body";
+      body.hidden = role === "user" && !String(text || "").trim() && images.length > 0;
       if (role === "assistant") {
         renderMarkdown(body, text);
       } else {
@@ -97,7 +104,7 @@
       }
 
       message.append(body);
-      if (role === "user") {
+      if (role === "user" && text) {
         addUserCollapse(message, body, text);
       }
       transcript?.append(message);
@@ -354,6 +361,92 @@
       message.append(toggle);
     }
 
+    function normalizeAttachments(attachments) {
+      if (!Array.isArray(attachments)) {
+        return [];
+      }
+      return attachments
+        .map((image) => {
+          const mime = String(image?.mime_type || image?.type || "").toLowerCase();
+          const base64 = String(image?.base64 || "").trim();
+          if (!base64 || !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mime)) {
+            return null;
+          }
+          return {
+            base64,
+            mime_type: mime,
+            name: String(image?.name || image?.description || "Attached image").slice(0, 120),
+          };
+        })
+        .filter(Boolean);
+    }
+
+    function renderAttachmentGrid(images, className) {
+      const grid = document.createElement("div");
+      grid.className = className;
+      grid.dataset.count = String(images.length);
+      for (const image of images) {
+        const figure = document.createElement("figure");
+        const button = document.createElement("button");
+        const img = document.createElement("img");
+        button.type = "button";
+        button.className = "message-attachment-button";
+        button.setAttribute("aria-label", `Open ${image.name || "attached image"}`);
+        img.loading = "lazy";
+        img.alt = image.name || "Attached image";
+        img.src = `data:${image.mime_type};base64,${image.base64}`;
+        button.addEventListener("click", () => openImagePreview(img.src, img.alt));
+        button.append(img);
+        figure.append(button);
+        grid.append(figure);
+      }
+      return grid;
+    }
+
+    function openImagePreview(src, alt) {
+      let preview = document.querySelector("[data-image-preview]");
+      if (!preview) {
+        preview = document.createElement("div");
+        preview.className = "image-preview";
+        preview.dataset.imagePreview = "";
+        preview.hidden = true;
+        preview.innerHTML = [
+          '<button class="image-preview-backdrop" type="button" aria-label="Close image preview" data-image-preview-close></button>',
+          '<figure class="image-preview-card">',
+          '<button class="image-preview-close" type="button" aria-label="Close image preview" data-image-preview-close>×</button>',
+          '<img alt="" data-image-preview-img />',
+          "</figure>",
+        ].join("");
+        preview.addEventListener("click", (event) => {
+          if (event.target.closest("[data-image-preview-close]")) {
+            closeImagePreview(preview);
+          }
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape" && !preview.hidden) {
+            closeImagePreview(preview);
+          }
+        });
+        document.body.append(preview);
+      }
+
+      const img = preview.querySelector("[data-image-preview-img]");
+      if (img) {
+        img.src = src;
+        img.alt = alt || "Attached image";
+      }
+      preview.hidden = false;
+      preview.querySelector(".image-preview-close")?.focus();
+    }
+
+    function closeImagePreview(preview) {
+      preview.hidden = true;
+      const img = preview.querySelector("[data-image-preview-img]");
+      if (img) {
+        img.removeAttribute("src");
+      }
+    }
+
     return {
       addActionsToMessage,
       addAssistantActions,
@@ -363,6 +456,7 @@
       clear,
       clearSystemStatus,
       flashCopied,
+      openImagePreview,
       renderMarkdown,
       resetActiveAssistant,
       resetStreamState,
