@@ -1,4 +1,4 @@
-# Fennara Godot MCP
+# Fennara Godot AI
 
 Fennara is a Godot MCP and AI plugin workflow for AI agents working inside real Godot projects.
 

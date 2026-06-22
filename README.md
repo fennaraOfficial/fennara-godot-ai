@@ -1,4 +1,4 @@
-# Fennara Godot MCP
+# Fennara Godot AI
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Fennara-5865F2?logo=discord&logoColor=white)](https://discord.com/invite/3fF4ft9PTk)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
@@ -39,13 +39,13 @@ Follow these steps in order.
 Windows:
 
 ```powershell
-irm https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-mcp/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.ps1 | iex
 ```
 
 macOS / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-mcp/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.sh | sh
 ```
 
 Check the install:
@@ -176,11 +176,11 @@ See [Demos](docs/demos.md) for more videos from the Fennara channel.
 
 ## Star History
 
-<a href="https://www.star-history.com/#fennaraOfficial/fennara-godot-mcp&Date">
+<a href="https://www.star-history.com/#fennaraOfficial/fennara-godot-ai&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=fennaraOfficial/fennara-godot-mcp&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=fennaraOfficial/fennara-godot-mcp&type=Date" />
-    <img alt="Fennara Godot MCP Star History" src="https://api.star-history.com/svg?repos=fennaraOfficial/fennara-godot-mcp&type=Date" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=fennaraOfficial/fennara-godot-ai&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=fennaraOfficial/fennara-godot-ai&type=Date" />
+    <img alt="Fennara Godot AI Star History" src="https://api.star-history.com/svg?repos=fennaraOfficial/fennara-godot-ai&type=Date" />
   </picture>
 </a>
 

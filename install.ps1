@@ -12,7 +12,7 @@ if ($Help) {
 Install Fennara CLI.
 
 Usage:
-  irm https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-mcp/main/install.ps1 | iex
+  irm https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.ps1 | iex
   ./install.ps1 -Version 0.2.8
 
 Options:
@@ -24,7 +24,7 @@ Options:
   exit 0
 }
 
-$repo = "fennaraOfficial/fennara-godot-mcp"
+$repo = "fennaraOfficial/fennara-godot-ai"
 $platform = "windows"
 $arch = "x86_64"
 

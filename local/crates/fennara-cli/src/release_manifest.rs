@@ -231,9 +231,9 @@ fn parse_semver_core(value: &str) -> Option<[u64; 3]> {
 
 fn update_cli_instruction() -> &'static str {
     if cfg!(target_os = "windows") {
-        "Update the CLI first: irm https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-mcp/main/install.ps1 | iex"
+        "Update the CLI first: irm https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.ps1 | iex"
     } else {
-        "Update the CLI first: curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-mcp/main/install.sh | sh"
+        "Update the CLI first: curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.sh | sh"
     }
 }
 

@@ -9,7 +9,7 @@ use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use zip::ZipArchive;
 
-const REPO: &str = "fennaraOfficial/fennara-godot-mcp";
+const REPO: &str = "fennaraOfficial/fennara-godot-ai";
 
 pub struct InstalledPackage {
     pub version: String,

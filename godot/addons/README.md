@@ -11,7 +11,7 @@ Keeping the repository payload under `godot/addons/` lets packaging and local te
 
 ## Current Addon
 
-`fennara/` is the installable Fennara Godot MCP addon. It contains:
+`fennara/` is the installable Fennara Godot AI addon. It contains:
 
 - `fennara.gdextension`, the Godot entry point for the native extension.
 - `bin/`, platform editor binaries built from `fennara-cpp/`.

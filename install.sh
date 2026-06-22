@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-REPO="fennaraOfficial/fennara-godot-mcp"
+REPO="fennaraOfficial/fennara-godot-ai"
 VERSION="latest"
 INSTALL_DIR="${FENNARA_INSTALL_DIR:-}"
 MODIFY_PATH=1
@@ -11,8 +11,8 @@ usage() {
 Install Fennara CLI.
 
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-mcp/main/install.sh | sh
-  curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-mcp/main/install.sh | sh -s -- --version 0.2.8
+  curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.sh | sh
+  curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.sh | sh -s -- --version 0.2.8
 
 Options:
   -v, --version <version>      Install a specific version without v prefix. Default: latest

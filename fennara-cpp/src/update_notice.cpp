@@ -17,7 +17,7 @@ namespace fennara::update_notice {
 namespace {
 
 constexpr const char *kLatestReleasePath =
-    "/repos/fennaraOfficial/fennara-godot-mcp/releases/latest";
+    "/repos/fennaraOfficial/fennara-godot-ai/releases/latest";
 
 bool g_checked = false;
 bool g_update_available = false;
@@ -95,7 +95,7 @@ godot::Dictionary get_github_latest_release(int timeout_ms) {
 
     godot::PackedStringArray headers;
     headers.append("Accept: application/vnd.github+json");
-    headers.append("User-Agent: fennara-godot-mcp");
+    headers.append("User-Agent: fennara-godot-ai");
 
     uint64_t deadline = godot::Time::get_singleton()->get_ticks_msec() + timeout_ms;
     bool request_sent = false;
