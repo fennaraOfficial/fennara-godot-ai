@@ -326,7 +326,11 @@ bool LinuxCefOsrWebview::start(godot::Control *owner, const godot::String &url) 
     settings.cache_path = cache_path.str;
     settings.log_file = log_file.str;
 
+    std::string executable_path = utf8(godot::OS::get_singleton()->get_executable_path());
+    char *argv[] = { executable_path.data(), nullptr };
     cef_main_args_t args;
+    args.argc = 1;
+    args.argv = argv;
     if (api.cef_initialize(&args, &settings, nullptr, nullptr) == 0) {
         webview_backend::output_error("Web chat Linux CEF initialization failed");
         cef.reset();
