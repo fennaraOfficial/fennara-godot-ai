@@ -483,9 +483,7 @@ void LinuxCefOsrWebview::set_focused(bool next_focused) {
         return;
     }
 
-    if (host->send_focus_event != nullptr) {
-        host->send_focus_event(host, next_focused ? 1 : 0);
-    } else if (host->set_focus != nullptr) {
+    if (host->set_focus != nullptr) {
         host->set_focus(host, next_focused ? 1 : 0);
     } else {
         return;
