@@ -37,6 +37,8 @@ private:
     godot::TextureRect *texture_rect = nullptr;
     godot::Ref<godot::ImageTexture> texture;
     std::unique_ptr<CefObjects> cef;
+    int texture_width = 0;
+    int texture_height = 0;
     bool started = false;
     bool focused = false;
 };

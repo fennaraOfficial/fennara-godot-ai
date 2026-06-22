@@ -418,8 +418,10 @@ void LinuxCefOsrWebview::process(double delta) {
         return;
     }
 
-    if (texture.is_null()) {
+    if (texture.is_null() || width != texture_width || height != texture_height) {
         texture = godot::ImageTexture::create_from_image(image);
+        texture_width = width;
+        texture_height = height;
         if (texture_rect != nullptr) {
             texture_rect->set_texture(texture);
         }
@@ -488,6 +490,8 @@ void LinuxCefOsrWebview::stop() {
     started = false;
     focused = false;
     texture.unref();
+    texture_width = 0;
+    texture_height = 0;
     if (texture_rect != nullptr) {
         texture_rect->set_texture(godot::Ref<godot::Texture2D>());
     }
