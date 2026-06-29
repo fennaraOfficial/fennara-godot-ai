@@ -285,6 +285,7 @@ dependencies = [
  "axum",
  "base64",
  "futures-util",
+ "libc",
  "reqwest",
  "rusqlite",
  "serde",

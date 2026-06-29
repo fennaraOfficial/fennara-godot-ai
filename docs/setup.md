@@ -117,8 +117,9 @@ open Godot editor gets its own writable CEF profile/cache/log directories under
 the Fennara app-data `cache/webview/profiles/cef/` and `logs/webview/cef/`
 roots, so multiple editors can keep embedded chat open at the same time.
 
-The built-in chat has its own provider settings. It can use OpenRouter, Ollama
-Cloud, DeepSeek, Z.AI, local Ollama, or LM Studio. These settings are separate
+The built-in chat has its own provider settings. It can use OpenAI, Anthropic,
+OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax,
+local Ollama, or LM Studio. These settings are separate
 from Claude Code, Codex, Cursor, Gemini, or any other external MCP app.
 Provider keys and local base URLs are stored locally outside the Godot project.
 

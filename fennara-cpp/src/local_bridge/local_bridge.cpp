@@ -20,6 +20,9 @@ void FennaraLocalBridge::_bind_methods() {
     godot::ClassDB::bind_method(
         godot::D_METHOD("request_get_class_info_warmup"),
         &FennaraLocalBridge::request_get_class_info_warmup);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("_focus_project_file_reference", "path", "start_line", "end_line", "attempt"),
+        &FennaraLocalBridge::_focus_project_file_reference);
 }
 
 void FennaraLocalBridge::_ready() {

@@ -75,15 +75,26 @@ and revert. External MCP clients still route through the daemon's active target.
 Chat provider settings are global for now, while chats remain project-scoped.
 Cloud chat providers use locally stored API keys; local providers use base URLs
 stored by the daemon. The current built-in chat provider set is OpenRouter,
-Ollama Cloud, DeepSeek, Z.AI, local Ollama, and LM Studio. Ollama defaults to
+OpenAI, Anthropic, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, local Ollama, and LM Studio. Ollama defaults to
 `http://127.0.0.1:11434`; LM Studio defaults to `http://127.0.0.1:1234/v1`.
 The daemon chat runtime resolves selected models through a small provider catalog
 before making requests. Canonical model refs use `provider/model`, so
 `openrouter/google/example` resolves provider `openrouter` and model
 `google/example`; existing OpenRouter model ids such as `google/example` remain
-accepted as legacy selections. Providers share OpenAI-compatible chat adapters
-where possible, with provider quirks isolated in provider modules and normalized
-stream/error events above the adapter boundary.
+accepted as legacy selections. Native `openai/...` and `anthropic/...` refs use
+the official providers; use `openrouter/openai/...` or
+`openrouter/anthropic/...` for those vendors through OpenRouter. Providers share OpenAI-compatible or
+Anthropic-compatible chat adapters where possible, with provider quirks isolated
+in provider modules and normalized stream/error events above the adapter
+boundary.
+
+Built-in chat turns also write a local-only diagnostic trace into the same
+`chat.sqlite` app-data database, in `chat_trace_events`, separate from transcript
+tables. Trace rows use stable turn/generation/tool/bridge IDs plus timings,
+statuses, counts, and bounded summaries; raw prompts and full tool results are
+not captured by default. The daemon exposes a small local debug read endpoint at
+`/chat/traces` for filtering by `chat_id`, `trace_id`, `turn_id`, or
+`generation_id`.
 
 ## Install Layout
 
@@ -206,6 +217,13 @@ MCP runtime
 The MCP client can read and write normal files by itself. Fennara tools focus on
 Godot-specific feedback: scene structure, node properties, diagnostics,
 validation, runtime state, screenshots, and editor-aware edits.
+
+Built-in chat tool calls add one daemon-owned permission gate before forwarding
+to Godot. The chat settings approval mode is either `ask` or `full_access`.
+Read-only tools are allowed immediately. Project mutation and runtime execution
+tools wait for a UI approval in `ask` mode and auto-run in `full_access` mode.
+Hard safety checks inside the Godot tools, such as blocked internal addon paths,
+still apply in both modes.
 
 ## Updates
 

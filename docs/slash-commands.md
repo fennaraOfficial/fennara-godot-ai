@@ -24,7 +24,7 @@ For the built-in chat dock:
 /provider
 ```
 
-Connect OpenRouter, Ollama Cloud, DeepSeek, Z.AI, local Ollama, or LM Studio.
+Connect OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, local Ollama, or LM Studio.
 
 Then:
 

@@ -1,11 +1,15 @@
 use std::collections::BTreeMap;
 
+use super::anthropic;
+use super::anthropic_providers;
 use super::catalog_cache;
 use super::deepseek;
 use super::lmstudio;
 use super::models_dev::OpenRouterCatalog;
+use super::moonshot;
 use super::ollama;
 use super::ollama_cloud;
+use super::openai;
 use super::openrouter;
 use super::types::{
     ModelDefinition, ModelId, ModelRef, ProviderDefinition, ProviderId, ProviderSettings,
@@ -24,33 +28,87 @@ pub(crate) struct Catalog {
 impl Catalog {
     pub(crate) fn from_settings(settings: &ProviderSettings) -> Self {
         let needs_hosted_catalog =
-            key_or_env_present(settings.openrouter_api_key.as_ref(), "OPENROUTER_API_KEY")
+            key_or_env_present(settings.openai_api_key.as_ref(), openai::API_KEY_ENV)
+                || key_or_env_present(settings.anthropic_api_key.as_ref(), anthropic::API_KEY_ENV)
+                || key_or_env_present(settings.openrouter_api_key.as_ref(), "OPENROUTER_API_KEY")
                 || key_or_env_present(settings.ollama_cloud_api_key.as_ref(), "OLLAMA_API_KEY")
                 || key_or_env_present(settings.lmstudio_api_key.as_ref(), lmstudio::API_KEY_ENV)
                 || key_or_env_present(settings.deepseek_api_key.as_ref(), deepseek::API_KEY_ENV)
-                || key_or_env_present(settings.zai_api_key.as_ref(), zai::API_KEY_ENV);
+                || key_or_env_present(settings.zai_api_key.as_ref(), zai::API_KEY_ENV)
+                || key_or_env_present(settings.moonshot_api_key.as_ref(), moonshot::API_KEY_ENV)
+                || key_or_env_present(settings.moonshot_cn_api_key.as_ref(), moonshot::API_KEY_ENV)
+                || key_or_env_present(
+                    settings.kimi_api_key.as_ref(),
+                    anthropic_providers::KIMI_API_KEY_ENV,
+                )
+                || key_or_env_present(
+                    settings.minimax_api_key.as_ref(),
+                    anthropic_providers::MINIMAX_API_KEY_ENV,
+                )
+                || key_or_env_present(
+                    settings.minimax_coding_plan_api_key.as_ref(),
+                    anthropic_providers::MINIMAX_API_KEY_ENV,
+                )
+                || key_or_env_present(
+                    settings.minimax_cn_api_key.as_ref(),
+                    anthropic_providers::MINIMAX_API_KEY_ENV,
+                )
+                || key_or_env_present(
+                    settings.minimax_cn_coding_plan_api_key.as_ref(),
+                    anthropic_providers::MINIMAX_API_KEY_ENV,
+                );
         let hosted_catalog = needs_hosted_catalog
             .then(catalog_cache::load_disk_blocking)
             .and_then(Result::ok);
         Self::from_settings_and_openrouter(
             settings,
             hosted_catalog.as_ref().map(|cached| &cached.catalog),
+            hosted_catalog.as_ref().map(|cached| &cached.openai),
+            hosted_catalog.as_ref().map(|cached| &cached.anthropic),
             hosted_catalog.as_ref().map(|cached| &cached.ollama_cloud),
             hosted_catalog.as_ref().map(|cached| &cached.lmstudio),
             hosted_catalog.as_ref().map(|cached| &cached.deepseek),
             hosted_catalog.as_ref().map(|cached| &cached.zai),
+            hosted_catalog.as_ref().map(|cached| &cached.moonshot),
+            hosted_catalog.as_ref().map(|cached| &cached.moonshot_cn),
+            hosted_catalog
+                .as_ref()
+                .map(|cached| &cached.kimi_for_coding),
+            hosted_catalog.as_ref().map(|cached| &cached.minimax),
+            hosted_catalog
+                .as_ref()
+                .map(|cached| &cached.minimax_coding_plan),
+            hosted_catalog.as_ref().map(|cached| &cached.minimax_cn),
+            hosted_catalog
+                .as_ref()
+                .map(|cached| &cached.minimax_cn_coding_plan),
         )
     }
 
     pub(crate) fn from_settings_and_openrouter(
         settings: &ProviderSettings,
         hosted_openrouter: Option<&OpenRouterCatalog>,
+        hosted_openai: Option<&OpenRouterCatalog>,
+        hosted_anthropic: Option<&OpenRouterCatalog>,
         hosted_ollama_cloud: Option<&OpenRouterCatalog>,
         hosted_lmstudio: Option<&OpenRouterCatalog>,
         hosted_deepseek: Option<&OpenRouterCatalog>,
         hosted_zai: Option<&OpenRouterCatalog>,
+        hosted_moonshot: Option<&OpenRouterCatalog>,
+        hosted_moonshot_cn: Option<&OpenRouterCatalog>,
+        hosted_kimi_for_coding: Option<&OpenRouterCatalog>,
+        hosted_minimax: Option<&OpenRouterCatalog>,
+        hosted_minimax_coding_plan: Option<&OpenRouterCatalog>,
+        hosted_minimax_cn: Option<&OpenRouterCatalog>,
+        hosted_minimax_cn_coding_plan: Option<&OpenRouterCatalog>,
     ) -> Self {
         let mut catalog = Self::default();
+        catalog.insert_provider(openai::provider_definition(
+            settings.openai_api_key.as_deref(),
+        ));
+        catalog.insert_provider(anthropic::provider_definition(
+            settings.anthropic_api_key.as_deref(),
+        ));
         catalog.insert_provider(openrouter::provider_definition(
             settings.openrouter_api_key.as_deref(),
         ));
@@ -65,6 +123,29 @@ impl Catalog {
             settings.deepseek_api_key.as_deref(),
         ));
         catalog.insert_provider(zai::provider_definition(settings.zai_api_key.as_deref()));
+        catalog.insert_provider(moonshot::provider_definition(
+            settings.moonshot_api_key.as_deref(),
+        ));
+        catalog.insert_provider(moonshot::cn_provider_definition(
+            settings.moonshot_cn_api_key.as_deref(),
+        ));
+        catalog.insert_anthropic_provider(
+            ProviderId::KIMI_FOR_CODING,
+            settings.kimi_api_key.as_deref(),
+        );
+        catalog.insert_anthropic_provider(ProviderId::MINIMAX, settings.minimax_api_key.as_deref());
+        catalog.insert_anthropic_provider(
+            ProviderId::MINIMAX_CODING_PLAN,
+            settings.minimax_coding_plan_api_key.as_deref(),
+        );
+        catalog.insert_anthropic_provider(
+            ProviderId::MINIMAX_CN,
+            settings.minimax_cn_api_key.as_deref(),
+        );
+        catalog.insert_anthropic_provider(
+            ProviderId::MINIMAX_CN_CODING_PLAN,
+            settings.minimax_cn_coding_plan_api_key.as_deref(),
+        );
         catalog.insert_provider(ollama::provider_definition(&settings.ollama_base_url));
         catalog.insert_provider(local_provider_alias(&settings.ollama_base_url));
 
@@ -84,6 +165,8 @@ impl Catalog {
                 catalog.insert_model(openrouter::model_definition(model, None));
             }
         }
+        catalog.insert_hosted_catalog(hosted_openai);
+        catalog.insert_hosted_catalog(hosted_anthropic);
         if let Some(hosted_ollama_cloud) = hosted_ollama_cloud {
             for model in &hosted_ollama_cloud.models {
                 catalog.insert_model(model.definition.clone());
@@ -104,6 +187,21 @@ impl Catalog {
                 catalog.insert_model(model.definition.clone());
             }
         }
+        if let Some(hosted_moonshot) = hosted_moonshot {
+            for model in &hosted_moonshot.models {
+                catalog.insert_model(model.definition.clone());
+            }
+        }
+        if let Some(hosted_moonshot_cn) = hosted_moonshot_cn {
+            for model in &hosted_moonshot_cn.models {
+                catalog.insert_model(model.definition.clone());
+            }
+        }
+        catalog.insert_hosted_catalog(hosted_kimi_for_coding);
+        catalog.insert_hosted_catalog(hosted_minimax);
+        catalog.insert_hosted_catalog(hosted_minimax_coding_plan);
+        catalog.insert_hosted_catalog(hosted_minimax_cn);
+        catalog.insert_hosted_catalog(hosted_minimax_cn_coding_plan);
         for model in &settings.custom_models {
             if let Ok(model_ref) = model_ref_from_selection(model, &catalog) {
                 catalog.ensure_model_for_ref(&model_ref);
@@ -168,6 +266,20 @@ impl Catalog {
             .insert((model.provider.clone(), model.id.clone()), model);
     }
 
+    fn insert_anthropic_provider(&mut self, provider_id: &str, api_key: Option<&str>) {
+        if let Some(provider) = anthropic_providers::provider_definition(provider_id, api_key) {
+            self.insert_provider(provider);
+        }
+    }
+
+    fn insert_hosted_catalog(&mut self, catalog: Option<&OpenRouterCatalog>) {
+        if let Some(catalog) = catalog {
+            for model in &catalog.models {
+                self.insert_model(model.definition.clone());
+            }
+        }
+    }
+
     fn ensure_model_for_ref(&mut self, model_ref: &ModelRef) {
         if self
             .models
@@ -222,12 +334,20 @@ fn resolve_model(
 
 fn dynamic_model(provider_id: &ProviderId, model_id: &ModelId) -> ModelDefinition {
     match provider_id.as_str() {
+        ProviderId::OPENAI => openai::model_definition(model_id.as_str(), None),
+        ProviderId::ANTHROPIC => anthropic::model_definition(model_id.as_str(), None),
         ProviderId::OPENROUTER => openrouter::model_definition(model_id.as_str(), None),
         ProviderId::OLLAMA => ollama::model_definition(model_id.as_str(), None),
         ProviderId::OLLAMA_CLOUD => ollama_cloud::model_definition(model_id.as_str(), None),
         ProviderId::LMSTUDIO => lmstudio::model_definition(model_id.as_str(), None),
         ProviderId::DEEPSEEK => deepseek::model_definition(model_id.as_str(), None),
         ProviderId::ZAI => zai::model_definition(model_id.as_str(), None),
+        ProviderId::MOONSHOTAI | ProviderId::MOONSHOTAI_CN => {
+            moonshot::model_definition(provider_id.as_str(), model_id.as_str(), None)
+        }
+        provider if anthropic_providers::is_anthropic_provider(provider) => {
+            anthropic_providers::model_definition(provider, model_id.as_str(), None)
+        }
         ProviderId::LOCAL => {
             let mut model = ollama::model_definition(model_id.as_str(), None);
             model.provider = ProviderId::unchecked(ProviderId::LOCAL);
@@ -262,15 +382,25 @@ fn key_or_env_present(key: Option<&String>, env_var: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::super::types::AdapterKind;
     use super::*;
 
     fn test_catalog() -> Catalog {
         Catalog::from_settings(&ProviderSettings {
+            openai_api_key: None,
+            anthropic_api_key: None,
             openrouter_api_key: None,
             ollama_cloud_api_key: None,
             lmstudio_api_key: None,
             deepseek_api_key: None,
             zai_api_key: None,
+            moonshot_api_key: None,
+            moonshot_cn_api_key: None,
+            kimi_api_key: None,
+            minimax_api_key: None,
+            minimax_coding_plan_api_key: None,
+            minimax_cn_api_key: None,
+            minimax_cn_coding_plan_api_key: None,
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
             custom_models: Vec::new(),
@@ -294,5 +424,97 @@ mod tests {
 
         assert_eq!(model_ref.provider.as_str(), "openrouter");
         assert_eq!(model_ref.model.as_str(), "google/gemini-3.5-flash");
+    }
+
+    #[test]
+    fn moonshot_model_refs_resolve_to_native_provider() {
+        let catalog = test_catalog();
+        let model_ref = model_ref_from_selection("moonshotai/kimi-k2.7-code", &catalog).unwrap();
+        let resolved = catalog.resolve(&model_ref).unwrap();
+
+        assert_eq!(model_ref.provider.as_str(), ProviderId::MOONSHOTAI);
+        assert_eq!(model_ref.model.as_str(), "kimi-k2.7-code");
+        assert_eq!(resolved.model.adapter_model_id, "kimi-k2.7-code");
+        assert_eq!(
+            resolved.provider.base_url.as_deref(),
+            Some(moonshot::API_BASE)
+        );
+    }
+
+    #[test]
+    fn official_openai_and_anthropic_refs_resolve_to_native_providers() {
+        let catalog = test_catalog();
+        let openai_ref = model_ref_from_selection("openai/gpt-5.1", &catalog).unwrap();
+        let openai = catalog.resolve(&openai_ref).unwrap();
+
+        assert_eq!(openai_ref.provider.as_str(), ProviderId::OPENAI);
+        assert_eq!(openai.model.adapter_model_id, "gpt-5.1");
+        assert_eq!(openai.provider.adapter, AdapterKind::OpenAiCompatibleChat);
+        assert_eq!(openai.provider.base_url.as_deref(), Some(openai::API_BASE));
+
+        let anthropic_ref =
+            model_ref_from_selection("anthropic/claude-sonnet-4.5", &catalog).unwrap();
+        let anthropic_resolved = catalog.resolve(&anthropic_ref).unwrap();
+
+        assert_eq!(anthropic_ref.provider.as_str(), ProviderId::ANTHROPIC);
+        assert_eq!(
+            anthropic_resolved.model.adapter_model_id,
+            "claude-sonnet-4.5"
+        );
+        assert_eq!(
+            anthropic_resolved.provider.adapter,
+            AdapterKind::AnthropicCompatibleMessages
+        );
+        assert_eq!(
+            anthropic_resolved.provider.base_url.as_deref(),
+            Some(anthropic::API_BASE)
+        );
+    }
+
+    #[test]
+    fn anthropic_provider_model_refs_resolve_to_native_provider() {
+        let catalog = test_catalog();
+        let kimi_ref = model_ref_from_selection("kimi-for-coding/k2p7", &catalog).unwrap();
+        let kimi = catalog.resolve(&kimi_ref).unwrap();
+
+        assert_eq!(kimi_ref.provider.as_str(), ProviderId::KIMI_FOR_CODING);
+        assert_eq!(kimi.model.adapter_model_id, "k2p7");
+        assert_eq!(
+            kimi.provider.base_url.as_deref(),
+            Some(anthropic_providers::KIMI_API_BASE)
+        );
+
+        for (selection, provider_id, base_url) in [
+            (
+                "minimax/MiniMax-M3",
+                ProviderId::MINIMAX,
+                anthropic_providers::MINIMAX_API_BASE,
+            ),
+            (
+                "minimax-coding-plan/MiniMax-M3",
+                ProviderId::MINIMAX_CODING_PLAN,
+                anthropic_providers::MINIMAX_API_BASE,
+            ),
+            (
+                "minimax-cn/MiniMax-M3",
+                ProviderId::MINIMAX_CN,
+                anthropic_providers::MINIMAX_CN_API_BASE,
+            ),
+            (
+                "minimax-cn-coding-plan/MiniMax-M3",
+                ProviderId::MINIMAX_CN_CODING_PLAN,
+                anthropic_providers::MINIMAX_CN_API_BASE,
+            ),
+        ] {
+            let model_ref = model_ref_from_selection(selection, &catalog).unwrap();
+            let resolved = catalog.resolve(&model_ref).unwrap();
+            assert_eq!(model_ref.provider.as_str(), provider_id);
+            assert_eq!(resolved.model.adapter_model_id, "MiniMax-M3");
+            assert_eq!(
+                resolved.provider.adapter,
+                AdapterKind::AnthropicCompatibleMessages
+            );
+            assert_eq!(resolved.provider.base_url.as_deref(), Some(base_url));
+        }
     }
 }

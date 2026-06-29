@@ -7,12 +7,21 @@ use std::fmt;
 pub(crate) struct ProviderId(String);
 
 impl ProviderId {
+    pub(crate) const OPENAI: &'static str = "openai";
+    pub(crate) const ANTHROPIC: &'static str = "anthropic";
     pub(crate) const OPENROUTER: &'static str = "openrouter";
     pub(crate) const OLLAMA: &'static str = "ollama";
     pub(crate) const OLLAMA_CLOUD: &'static str = "ollama-cloud";
     pub(crate) const LMSTUDIO: &'static str = "lmstudio";
     pub(crate) const DEEPSEEK: &'static str = "deepseek";
     pub(crate) const ZAI: &'static str = "zai";
+    pub(crate) const MOONSHOTAI: &'static str = "moonshotai";
+    pub(crate) const MOONSHOTAI_CN: &'static str = "moonshotai-cn";
+    pub(crate) const KIMI_FOR_CODING: &'static str = "kimi-for-coding";
+    pub(crate) const MINIMAX: &'static str = "minimax";
+    pub(crate) const MINIMAX_CODING_PLAN: &'static str = "minimax-coding-plan";
+    pub(crate) const MINIMAX_CN: &'static str = "minimax-cn";
+    pub(crate) const MINIMAX_CN_CODING_PLAN: &'static str = "minimax-cn-coding-plan";
     pub(crate) const LOCAL: &'static str = "local";
 
     pub(crate) fn new(value: impl Into<String>) -> Option<Self> {
@@ -108,6 +117,7 @@ impl ModelRef {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum AdapterKind {
     OpenAiCompatibleChat,
+    AnthropicCompatibleMessages,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -117,6 +127,8 @@ pub(crate) enum Auth {
     Env { var: String },
     Bearer { secret_name: String },
     InlineBearer { value: String },
+    EnvHeader { name: String, var: String },
+    InlineHeader { name: String, value: String },
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -247,11 +259,20 @@ pub(crate) struct ResolvedModel {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ProviderSettings {
+    pub(crate) openai_api_key: Option<String>,
+    pub(crate) anthropic_api_key: Option<String>,
     pub(crate) openrouter_api_key: Option<String>,
     pub(crate) ollama_cloud_api_key: Option<String>,
     pub(crate) lmstudio_api_key: Option<String>,
     pub(crate) deepseek_api_key: Option<String>,
     pub(crate) zai_api_key: Option<String>,
+    pub(crate) moonshot_api_key: Option<String>,
+    pub(crate) moonshot_cn_api_key: Option<String>,
+    pub(crate) kimi_api_key: Option<String>,
+    pub(crate) minimax_api_key: Option<String>,
+    pub(crate) minimax_coding_plan_api_key: Option<String>,
+    pub(crate) minimax_cn_api_key: Option<String>,
+    pub(crate) minimax_cn_coding_plan_api_key: Option<String>,
     pub(crate) ollama_base_url: String,
     pub(crate) lmstudio_base_url: String,
     pub(crate) custom_models: Vec<String>,
@@ -281,6 +302,15 @@ pub(crate) enum StreamItem {
         arguments: String,
         done: bool,
     },
+    FunctionCallError {
+        id: String,
+        name: String,
+        arguments: String,
+        message: String,
+    },
+    Status {
+        message: String,
+    },
     Usage(Value),
 }
 
@@ -288,6 +318,37 @@ pub(crate) enum StreamItem {
 pub(crate) struct ChatCompletion {
     pub(crate) content: String,
     pub(crate) tool_calls: Vec<Value>,
+    pub(crate) finish_reason: super::stream::FinishReason,
+    pub(crate) tool_call_observation: ToolCallObservation,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct ToolCallObservation {
+    pub(crate) observed: usize,
+    pub(crate) malformed: Vec<MalformedToolCall>,
+}
+
+impl ToolCallObservation {
+    pub(crate) fn none() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn has_observed(&self) -> bool {
+        self.observed > 0
+    }
+
+    pub(crate) fn has_malformed(&self) -> bool {
+        !self.malformed.is_empty()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct MalformedToolCall {
+    pub(crate) id: String,
+    pub(crate) name: Option<String>,
+    pub(crate) arguments: String,
+    pub(crate) message: String,
+    pub(crate) raw: Option<String>,
 }
 
 #[cfg(test)]

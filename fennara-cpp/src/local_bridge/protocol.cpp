@@ -9,9 +9,82 @@
 #include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/classes/rendering_device.hpp>
+#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/time.hpp>
+#include <godot_cpp/variant/array.hpp>
 
 namespace fennara {
+
+namespace {
+
+constexpr int32_t MAX_CHAT_CONTEXT_SNIPPET_CHARS = 64000;
+
+godot::String setting_value_or_empty(godot::ProjectSettings *settings,
+                                     const godot::String &key) {
+    if (settings == nullptr || !settings->has_setting(key)) {
+        return "";
+    }
+    return godot::String(settings->get_setting(key, ""));
+}
+
+bool has_any_method(const godot::String &method, const godot::String &expected) {
+    return method.strip_edges().to_lower() == expected;
+}
+
+godot::String device_type_name(godot::RenderingDevice::DeviceType type) {
+    switch (type) {
+        case godot::RenderingDevice::DEVICE_TYPE_INTEGRATED_GPU:
+            return "integrated_gpu";
+        case godot::RenderingDevice::DEVICE_TYPE_DISCRETE_GPU:
+            return "discrete_gpu";
+        case godot::RenderingDevice::DEVICE_TYPE_VIRTUAL_GPU:
+            return "virtual_gpu";
+        case godot::RenderingDevice::DEVICE_TYPE_CPU:
+            return "cpu";
+        case godot::RenderingDevice::DEVICE_TYPE_OTHER:
+            return "other";
+        default:
+            return "unknown";
+    }
+}
+
+godot::Array active_os_feature_tags(godot::OS *os) {
+    godot::Array features;
+    if (os == nullptr) {
+        return features;
+    }
+
+    static const char *candidates[] = {
+        "editor",
+        "template",
+        "debug",
+        "release",
+        "windows",
+        "macos",
+        "linux",
+        "bsd",
+        "android",
+        "ios",
+        "web",
+        "mobile",
+        "pc",
+        "x11",
+        "wayland",
+        "server",
+        "headless",
+    };
+
+    for (const char *candidate : candidates) {
+        godot::String feature(candidate);
+        if (os->has_feature(feature)) {
+            features.append(feature);
+        }
+    }
+    return features;
+}
+
+} // namespace
 
 void FennaraLocalBridge::_send_hello() {
     godot::Dictionary payload;
@@ -19,14 +92,15 @@ void FennaraLocalBridge::_send_hello() {
     payload["session_id"] = _session_id;
     payload["project_name"] = _project_name();
     payload["project_path"] = _project_path();
+    payload["godot_executable_path"] = _godot_executable_path();
     payload["plugin_version"] = PLUGIN_VERSION;
     payload["chat_token"] = _chat_token;
     payload["godot_version"] = godot::String(godot::Engine::get_singleton()->get_version_info()["string"]);
     payload["csharp_support"] = csharp_support::inspect_project();
+    payload["rendering_context"] = collect_rendering_context();
 
     godot::Array tools;
     tools.append("read_file");
-    tools.append("file_ops");
     tools.append("write_or_update_file");
     tools.append("run_scene_edit_script");
     tools.append("get_scene_tree");
@@ -50,6 +124,97 @@ void FennaraLocalBridge::_send_hello() {
     } else {
         FLOG_ERR("Local bridge failed to send hello");
     }
+}
+
+godot::Dictionary FennaraLocalBridge::collect_rendering_context() {
+    godot::Dictionary context;
+    context["schema_version"] = "rendering-context-v1";
+
+    godot::ProjectSettings *settings = godot::ProjectSettings::get_singleton();
+    godot::String project_method =
+        setting_value_or_empty(settings, "rendering/renderer/rendering_method");
+    godot::String project_method_mobile =
+        setting_value_or_empty(settings, "rendering/renderer/rendering_method.mobile");
+    godot::String project_method_web =
+        setting_value_or_empty(settings, "rendering/renderer/rendering_method.web");
+    godot::String project_device_driver =
+        setting_value_or_empty(settings, "rendering/rendering_device/driver");
+
+    godot::Dictionary project_settings;
+    project_settings["rendering/renderer/rendering_method"] = project_method;
+    project_settings["rendering/renderer/rendering_method.mobile"] = project_method_mobile;
+    project_settings["rendering/renderer/rendering_method.web"] = project_method_web;
+    project_settings["rendering/rendering_device/driver"] = project_device_driver;
+    context["project_settings"] = project_settings;
+    context["project_rendering_method"] = project_method;
+    context["project_rendering_method_mobile"] = project_method_mobile;
+    context["project_rendering_method_web"] = project_method_web;
+    context["project_rendering_device_driver"] = project_device_driver;
+
+    godot::RenderingServer *server = godot::RenderingServer::get_singleton();
+    godot::String runtime_method;
+    godot::String runtime_driver;
+    bool has_rendering_device = false;
+    if (server != nullptr) {
+        runtime_method = server->get_current_rendering_method();
+        runtime_driver = server->get_current_rendering_driver_name();
+        has_rendering_device = server->get_rendering_device() != nullptr;
+        context["video_adapter_name"] = server->get_video_adapter_name();
+        context["video_adapter_vendor"] = server->get_video_adapter_vendor();
+        context["video_adapter_type"] = device_type_name(server->get_video_adapter_type());
+        context["video_adapter_api_version"] = server->get_video_adapter_api_version();
+    } else {
+        context["video_adapter_name"] = "";
+        context["video_adapter_vendor"] = "";
+        context["video_adapter_type"] = "";
+        context["video_adapter_api_version"] = "";
+    }
+    context["runtime_rendering_method"] = runtime_method;
+    context["runtime_rendering_driver_name"] = runtime_driver;
+    context["has_rendering_device"] = has_rendering_device;
+
+    godot::OS *os = godot::OS::get_singleton();
+    context["os_name"] = os != nullptr ? os->get_name() : godot::String();
+    context["os_distribution_name"] = os != nullptr ? os->get_distribution_name() : godot::String();
+    context["os_version"] = os != nullptr ? os->get_version() : godot::String();
+    context["os_model_name"] = os != nullptr ? os->get_model_name() : godot::String();
+    context["os_feature_tags"] = active_os_feature_tags(os);
+
+    bool runtime_compat = has_any_method(runtime_method, "gl_compatibility");
+    bool project_compat = has_any_method(project_method, "gl_compatibility") ||
+                          has_any_method(project_method_mobile, "gl_compatibility") ||
+                          has_any_method(project_method_web, "gl_compatibility");
+    bool runtime_mobile = has_any_method(runtime_method, "mobile");
+    bool project_mobile = has_any_method(project_method, "mobile") ||
+                          has_any_method(project_method_mobile, "mobile") ||
+                          has_any_method(project_method_web, "mobile");
+    bool runtime_forward_plus = has_any_method(runtime_method, "forward_plus");
+    bool project_forward_plus = has_any_method(project_method, "forward_plus");
+
+    context["is_compatibility"] = runtime_compat || project_compat;
+    context["is_mobile_renderer"] = runtime_mobile || project_mobile;
+    context["is_forward_plus"] = runtime_forward_plus || project_forward_plus;
+    bool renderer_setting_mismatch =
+        !project_method.is_empty() && !runtime_method.is_empty() &&
+        project_method.strip_edges().to_lower() != runtime_method.strip_edges().to_lower();
+    context["renderer_setting_mismatch"] = renderer_setting_mismatch;
+
+    godot::Array warnings;
+    if (runtime_compat || project_compat) {
+        warnings.append("Compatibility/OpenGL renderer is active or configured; verify shader, screen/depth texture, compute, post-processing, lighting, particles, and advanced 3D feature support before suggesting changes.");
+    }
+    if (runtime_mobile || project_mobile) {
+        warnings.append("Mobile renderer is active or configured; check advanced 3D effects, post-processing, particles, light counts, and texture/render target assumptions.");
+    }
+    if (renderer_setting_mismatch) {
+        warnings.append("Project rendering method differs from the current runtime rendering method; prefer runtime values for the connected editor session and inspect project overrides before changing renderer-sensitive assets.");
+    }
+    if (!has_rendering_device) {
+        warnings.append("RenderingDevice is unavailable from the current renderer; compute shader and low-level RenderingDevice suggestions are unsafe unless another target explicitly supports them.");
+    }
+    context["warnings"] = warnings;
+
+    return context;
 }
 
 void FennaraLocalBridge::request_get_class_info_warmup() {
@@ -210,6 +375,37 @@ bool FennaraLocalBridge::set_as_active_project() {
     return true;
 }
 
+bool FennaraLocalBridge::send_chat_context_snippet(const godot::String &path,
+                                                   int32_t start_line,
+                                                   int32_t end_line,
+                                                   const godot::String &text) {
+    if (!is_daemon_connected()) {
+        return false;
+    }
+
+    godot::String clean_path = path.strip_edges();
+    godot::String clean_text = text.replace("\r\n", "\n").replace("\r", "\n");
+    if (clean_path.is_empty() || clean_text.strip_edges().is_empty() ||
+        start_line <= 0 || end_line < start_line) {
+        return false;
+    }
+
+    if (clean_text.length() > MAX_CHAT_CONTEXT_SNIPPET_CHARS) {
+        clean_text = clean_text.substr(0, MAX_CHAT_CONTEXT_SNIPPET_CHARS) +
+                     "\n... [truncated by Fennara]\n";
+    }
+
+    godot::Dictionary payload;
+    payload["type"] = "chat_context_snippet";
+    payload["session_id"] = _session_id;
+    payload["path"] = clean_path;
+    payload["start_line"] = start_line;
+    payload["end_line"] = end_line;
+    payload["text"] = clean_text;
+    _send_json(payload);
+    return true;
+}
+
 void FennaraLocalBridge::_send_json(const godot::Dictionary &payload) {
     if (!_ws.is_valid() || _ws->get_ready_state() != godot::WebSocketPeer::STATE_OPEN) {
         return;
@@ -255,6 +451,15 @@ godot::String FennaraLocalBridge::_project_path() const {
     }
 
     return settings->globalize_path("res://");
+}
+
+godot::String FennaraLocalBridge::_godot_executable_path() const {
+    godot::OS *os = godot::OS::get_singleton();
+    if (os == nullptr) {
+        return "";
+    }
+
+    return os->get_executable_path().strip_edges();
 }
 
 } // namespace fennara

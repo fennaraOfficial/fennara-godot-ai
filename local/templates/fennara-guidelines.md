@@ -87,7 +87,7 @@ When searching for Fennara MCP tools through a tool-search system, search for al
 Use this query:
 
 ```text
-fennara_status read_file file_ops write_or_update_file run_scene_edit_script get_scene_tree save_custom_resource script_diagnostics screenshot_scene get_node_properties get_class_info validate_scene project_settings runtime_session runtime_script scrape_editor
+fennara_status read_file write_or_update_file run_scene_edit_script get_scene_tree save_custom_resource script_diagnostics screenshot_scene get_node_properties get_class_info validate_scene project_settings runtime_session runtime_script scrape_editor
 ```
 
 If the search tool has a `limit` option, set it to `20` or higher. Do this even when you only need one specific tool, because low result limits can bury relevant Fennara tools below the cutoff.
@@ -96,14 +96,29 @@ After the search returns, read the returned tool schemas before calling any tool
 
 ## Fennara MCP Does Not Replace Normal Repository Navigation
 
-Fennara MCP includes scoped `read_file` and `file_ops` helpers for cases where
-Godot-side path normalization, image handling, or bundled ripgrep search is
-useful.
+Fennara MCP includes scoped `read_file` for cases where Godot-side path
+normalization or image handling is useful.
 
 Use your MCP app's own file tools for broad ordinary file reading, diffs,
 repository navigation, and non-Godot text inspection.
 
 Use Fennara MCP for Godot-aware work: inspecting scene trees, node properties, native Godot APIs, runtime errors, editor debugger snapshots, diagnostics, validation, screenshots, and project settings.
+
+## Renderer-Sensitive Work
+
+Forward+, Mobile, and Compatibility are different Godot 4 renderer modes, not quality presets. Forward+ has the broadest modern 3D feature set. Mobile is Vulkan-oriented but optimized/reduced for mobile and lower-end GPUs. Compatibility is OpenGL-oriented and is the highest-risk mode for renderer-incompatible suggestions.
+
+Before changing or recommending shaders, ShaderMaterials, Viewports, screen/depth texture effects, post-processing, Environment settings, lighting, particles, decals, reflection probes, SDFGI, SSAO/SSIL/SSR, volumetric fog, HDR/MSAA, render textures, compute shaders, texture formats, or advanced 3D rendering features, inspect the current renderer.
+
+Use `fennara_status` first when available; it may expose `rendering_context` with runtime renderer, project renderer settings, rendering driver/backend, `has_rendering_device`, OS feature tags, adapter info, and warnings. If that context is missing or stale, use `project_settings` to inspect `rendering/renderer/rendering_method`, platform overrides such as `rendering/renderer/rendering_method.mobile` and `rendering/renderer/rendering_method.web`, and related `rendering/` keys.
+
+Be especially careful in Compatibility/OpenGL projects. Do not assume Forward+ shader or rendering advice will work there. Compatibility is high risk for compute shaders, screen/depth texture assumptions, advanced post-processing, SDFGI, volumetric fog, SSAO/SSIL/SSR, decals, GPU particle collisions/attractors, high dynamic light counts, HDR/linear color assumptions, MSAA/render-target behavior, and some texture/compression formats.
+
+Mobile and web targets can be more constrained than the editor renderer. If the project exports to Android, iOS, or Web, inspect target/platform context before promising renderer-specific behavior.
+
+If `has_rendering_device` is false, do not suggest compute shaders or low-level RenderingDevice workflows unless the user explicitly targets another renderer/platform that supports them. If project renderer settings differ from the runtime renderer, report the mismatch and prefer runtime renderer facts for the connected editor session.
+
+When any Godot behavior, API, setting, renderer feature, shader compatibility, platform support, export behavior, or Godot-version-specific detail is unclear, search the current official Godot docs or other authoritative online sources. Do not avoid web research when uncertainty could lead to wrong Godot advice; use online search as a primary tool for resolving uncertainty, then ground the answer in the project facts from Fennara.
 
 ## How To Understand Code And Assets
 

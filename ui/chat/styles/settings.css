@@ -13,6 +13,7 @@
 }
 
 .settings-panel {
+  position: relative;
   display: grid;
   gap: 10px;
   padding: 10px;
@@ -62,6 +63,36 @@
   color: var(--text);
 }
 
+.settings-panel .settings-radio {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  color: var(--text);
+}
+
+.settings-radio input {
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+}
+
+.settings-radio span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-radio strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.settings-radio small {
+  color: var(--faint);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
 .settings-check input {
   width: 15px;
   height: 15px;
@@ -83,4 +114,32 @@
   justify-content: flex-end;
   margin: 0;
   padding: 0;
+}
+
+.settings-panel .primary-button:disabled,
+.settings-panel .primary-button:disabled:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+  color: var(--faint);
+  cursor: default;
+}
+
+.settings-toast {
+  position: absolute;
+  right: 10px;
+  bottom: 50px;
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid rgba(155, 199, 154, 0.42);
+  border-radius: var(--radius);
+  background: #203021;
+  color: var(--success);
+  box-shadow: 0 10px 24px var(--shadow);
+  font-size: 12px;
+  font-weight: 650;
+  pointer-events: none;
+}
+
+.settings-toast[hidden] {
+  display: none;
 }

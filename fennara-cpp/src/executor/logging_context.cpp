@@ -1,5 +1,6 @@
 #include "fennara/executor.hpp"
 #include "fennara/logger.hpp"
+#include "fennara/ui/dock.hpp"
 
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
@@ -203,6 +204,7 @@ void FennaraExecutor::_focus_script(const godot::String &script_path) const {
         return;
     }
 
+    FennaraDock::release_active_webview_keyboard_focus();
     editor->edit_script(script, -1, 0, true);
     editor->set_main_screen_editor("Script");
 }

@@ -1,0 +1,33 @@
+{
+  "name": "exec_command",
+  "description": "Run one non-interactive shell command on the host from the Fennara daemon. Defaults to the active Godot project root as cwd. Shell commands use real filesystem paths, not res:// paths. Phase one has no PTY, no background sessions, no stdin, and no custom environment.",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["command"],
+    "properties": {
+      "command": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Shell command string to run."
+      },
+      "cwd": {
+        "type": "string",
+        "description": "Optional working directory. Defaults to the active project root. Relative paths resolve under the project root. Absolute paths must stay inside the project root."
+      },
+      "timeout_ms": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Optional timeout in milliseconds. Fennara applies a reasonable default and a hard maximum."
+      },
+      "shell": {
+        "type": "string",
+        "description": "Optional explicit supported shell name or path: zsh, bash, sh, pwsh, powershell, or cmd. Unknown shells are rejected."
+      },
+      "justification": {
+        "type": "string",
+        "description": "Optional user-facing reason shown in approval UI when approval is required."
+      }
+    }
+  }
+}

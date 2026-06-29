@@ -6,10 +6,25 @@
 #include "fennara/snapshot_manager.hpp"
 #include "fennara/tool_call_log.hpp"
 #include "fennara/tool_results/formatters.hpp"
+#include "fennara/ui/dock.hpp"
 #include "fennara/update_notice.hpp"
 
+#include <godot_cpp/classes/code_edit.hpp>
+#include <godot_cpp/classes/control.hpp>
+#include <godot_cpp/classes/editor_interface.hpp>
+#include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/node.hpp>
+#include <godot_cpp/classes/resource.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
+#include <godot_cpp/classes/script.hpp>
+#include <godot_cpp/classes/script_editor.hpp>
+#include <godot_cpp/classes/script_editor_base.hpp>
+#include <godot_cpp/classes/text_edit.hpp>
+#include <godot_cpp/core/object.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
+
+#include <algorithm>
 
 namespace fennara {
 
@@ -18,7 +33,6 @@ namespace {
 bool _is_local_bridge_tool(const godot::String &tool) {
     return tool == "fennara_status" ||
            tool == "read_file" ||
-           tool == "file_ops" ||
            tool == "write_or_update_file" ||
            tool == "run_scene_edit_script" ||
            tool == "get_scene_tree" ||
@@ -46,9 +60,6 @@ godot::String _friendly_mcp_tool_action(const godot::String &tool,
     }
     if (tool == "read_file") {
         return "Reading project file";
-    }
-    if (tool == "file_ops") {
-        return "Exploring project files";
     }
     if (tool == "run_scene_edit_script") {
         godot::String scene_path = args.get("scene_path", "");
@@ -123,9 +134,9 @@ godot::Dictionary _fennara_status_result() {
     result["mcp_mode"] = "local";
     result["version"] = update_notice::status();
     result["addon_access"] = addon_access::status();
+    result["rendering_context"] = FennaraLocalBridge::collect_rendering_context();
     godot::Array local_tools;
     local_tools.append("read_file");
-    local_tools.append("file_ops");
     local_tools.append("write_or_update_file");
     local_tools.append("run_scene_edit_script");
     local_tools.append("get_scene_tree");
@@ -188,6 +199,80 @@ godot::Variant _mcp_model_facing_result(const godot::Dictionary &result) {
     return result;
 }
 
+bool _is_script_path(const godot::String &path) {
+    godot::String clean = path.to_lower();
+    return clean.ends_with(".gd") || clean.ends_with(".cs");
+}
+
+bool _is_scene_path(const godot::String &path) {
+    godot::String clean = path.to_lower();
+    return clean.ends_with(".tscn") || clean.ends_with(".scn");
+}
+
+godot::String _clean_project_file_path(const godot::String &raw_path) {
+    return raw_path.strip_edges().replace("\\", "/").simplify_path();
+}
+
+int32_t _optional_line_number(const godot::Dictionary &message,
+                              const godot::String &key,
+                              int32_t fallback) {
+    godot::Variant value = message.get(key, fallback);
+    switch (value.get_type()) {
+        case godot::Variant::INT:
+            return static_cast<int32_t>(value);
+        case godot::Variant::FLOAT:
+            return static_cast<int32_t>(static_cast<double>(value));
+        case godot::Variant::STRING: {
+            godot::String text = godot::String(value).strip_edges();
+            if (text.is_valid_int()) {
+                return text.to_int();
+            }
+            if (text.is_valid_float()) {
+                return static_cast<int32_t>(text.to_float());
+            }
+            return fallback;
+        }
+        default:
+            return fallback;
+    }
+}
+
+godot::CodeEdit *find_code_edit(godot::Node *node) {
+    if (node == nullptr) {
+        return nullptr;
+    }
+    if (auto *code_edit = godot::Object::cast_to<godot::CodeEdit>(node)) {
+        return code_edit;
+    }
+    const int32_t child_count = node->get_child_count();
+    for (int32_t i = 0; i < child_count; i++) {
+        if (auto *found = find_code_edit(node->get_child(i))) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+godot::TextEdit *find_text_edit(godot::Node *node) {
+    if (node == nullptr) {
+        return nullptr;
+    }
+    if (auto *text_edit = godot::Object::cast_to<godot::TextEdit>(node)) {
+        return text_edit;
+    }
+    const int32_t child_count = node->get_child_count();
+    for (int32_t i = 0; i < child_count; i++) {
+        if (auto *found = find_text_edit(node->get_child(i))) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+int32_t display_line_to_editor_index(int32_t line) {
+    return line > 0 ? line - 1 : -1;
+}
+
 } // namespace
 
 void FennaraLocalBridge::_handle_message(const godot::Dictionary &message) {
@@ -198,6 +283,8 @@ void FennaraLocalBridge::_handle_message(const godot::Dictionary &message) {
         _handle_snapshot_begin_turn(message);
     } else if (type == "snapshot_revert") {
         _handle_snapshot_revert(message);
+    } else if (type == "open_project_file") {
+        _handle_open_project_file(message);
     } else if (type == "active_project_changed") {
         bool active = message.get("is_active", false);
         _active_mcp_target_name = godot::String(message.get("active_project_name", "")).strip_edges();
@@ -207,6 +294,161 @@ void FennaraLocalBridge::_handle_message(const godot::Dictionary &message) {
             emit_signal("mcp_target_state_changed", active);
         }
     }
+}
+
+void FennaraLocalBridge::_handle_open_project_file(const godot::Dictionary &message) {
+    godot::Dictionary response;
+    response["type"] = "project_file_result";
+    response["request_id"] = message.get("request_id", "");
+
+    godot::String path = message.get("path", "");
+    int32_t start_line = _optional_line_number(message, "start_line", 0);
+    int32_t end_line = _optional_line_number(message, "end_line", start_line);
+    godot::Dictionary result =
+        _open_project_file_reference(path, start_line, end_line);
+    godot::Array keys = result.keys();
+    for (int i = 0; i < keys.size(); i++) {
+        response[keys[i]] = result[keys[i]];
+    }
+    _send_json(response);
+}
+
+godot::Dictionary FennaraLocalBridge::_open_project_file_reference(
+    const godot::String &raw_path,
+    int32_t start_line,
+    int32_t end_line) {
+    godot::Dictionary result;
+    result["ok"] = false;
+
+    godot::String path = _clean_project_file_path(raw_path);
+    result["path"] = path;
+    result["start_line"] = start_line;
+    result["end_line"] = end_line;
+
+    if (path.is_empty() || !path.begins_with("res://")) {
+        result["error"] = "Project file links must use a full res:// path.";
+        return result;
+    }
+    if (start_line < 0 || end_line < 0 || (end_line > 0 && start_line > 0 && end_line < start_line)) {
+        result["error"] = "Project file link line range is invalid.";
+        return result;
+    }
+    if (!godot::FileAccess::file_exists(path)) {
+        result["error"] = "Project file not found: " + path;
+        return result;
+    }
+
+    godot::EditorInterface *editor = godot::EditorInterface::get_singleton();
+    if (editor == nullptr) {
+        result["error"] = "Godot editor interface is unavailable.";
+        return result;
+    }
+
+    bool opened = false;
+    FennaraDock::release_active_webview_keyboard_focus();
+    if (_is_scene_path(path)) {
+        editor->open_scene_from_path(path);
+        opened = true;
+    } else {
+        godot::Ref<godot::Resource> resource =
+            godot::ResourceLoader::get_singleton()->load(path);
+        godot::Ref<godot::Script> script = resource;
+        if (script.is_valid() && _is_script_path(path)) {
+            editor->edit_script(script, -1, 0, true);
+            editor->set_main_screen_editor("Script");
+            if (start_line > 0) {
+                call_deferred("_focus_project_file_reference", path, start_line, end_line, 1);
+            }
+            opened = true;
+        } else if (resource.is_valid()) {
+            editor->edit_resource(resource);
+            opened = true;
+        } else {
+            editor->select_file(path);
+            opened = true;
+        }
+    }
+
+    result["ok"] = true;
+    result["opened"] = opened;
+    return result;
+}
+
+void FennaraLocalBridge::_focus_project_file_reference(godot::String path,
+                                                       int32_t start_line,
+                                                       int32_t end_line,
+                                                       int32_t attempt) {
+    constexpr int32_t MAX_FOCUS_ATTEMPTS = 8;
+    auto retry = [&]() {
+        if (attempt < MAX_FOCUS_ATTEMPTS) {
+            call_deferred("_focus_project_file_reference", path, start_line, end_line, attempt + 1);
+        }
+    };
+
+    if (!_is_script_path(path) || start_line <= 0) {
+        return;
+    }
+
+    godot::EditorInterface *editor = godot::EditorInterface::get_singleton();
+    if (editor == nullptr) {
+        retry();
+        return;
+    }
+    godot::ScriptEditor *script_editor = editor->get_script_editor();
+    if (script_editor == nullptr) {
+        retry();
+        return;
+    }
+
+    godot::Ref<godot::Script> current_script = script_editor->get_current_script();
+    if (current_script.is_null()) {
+        retry();
+        return;
+    }
+    if (current_script.is_valid() && current_script->get_path() != path) {
+        retry();
+        return;
+    }
+
+    godot::ScriptEditorBase *current_editor = script_editor->get_current_editor();
+    if (current_editor == nullptr) {
+        retry();
+        return;
+    }
+
+    godot::Control *base_editor = current_editor->get_base_editor();
+    if (base_editor == nullptr) {
+        retry();
+        return;
+    }
+    godot::TextEdit *text_edit = find_code_edit(base_editor);
+    if (text_edit == nullptr) {
+        text_edit = find_text_edit(base_editor);
+    }
+    if (text_edit == nullptr) {
+        retry();
+        return;
+    }
+
+    FennaraDock::release_active_webview_keyboard_focus();
+    const int32_t line_count = text_edit->get_line_count();
+    if (line_count <= 0) {
+        retry();
+        return;
+    }
+
+    int32_t from_line = std::clamp(display_line_to_editor_index(start_line), 0, line_count - 1);
+    int32_t to_line = display_line_to_editor_index(end_line > 0 ? end_line : start_line);
+    to_line = std::clamp(to_line, from_line, line_count - 1);
+    const int32_t center_line = from_line + ((to_line - from_line) / 2);
+    const int32_t to_column = text_edit->get_line(to_line).length();
+
+    text_edit->grab_focus();
+    text_edit->deselect();
+    text_edit->set_caret_line(from_line, false);
+    text_edit->set_caret_column(0, false);
+    text_edit->select(from_line, 0, to_line, to_column);
+    text_edit->set_line_as_center_visible(center_line);
 }
 
 void FennaraLocalBridge::_handle_tool_call(const godot::Dictionary &message) {

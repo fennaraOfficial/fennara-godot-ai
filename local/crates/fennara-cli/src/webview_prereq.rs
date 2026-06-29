@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 #[cfg(target_os = "windows")]
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
 const WEBVIEW2_URL: &str = "https://developer.microsoft.com/microsoft-edge/webview2/";
 
 pub fn warn_for_current_platform() -> Result<(), String> {

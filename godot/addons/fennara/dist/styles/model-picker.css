@@ -325,8 +325,13 @@
 .provider-options {
   display: grid;
   gap: 0;
+  max-height: min(266px, calc(100vh - 132px));
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 6px 8px 8px;
   border-top: 1px solid var(--line);
+  scrollbar-gutter: stable;
 }
 
 .provider-row {

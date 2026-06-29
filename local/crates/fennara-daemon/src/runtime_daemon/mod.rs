@@ -9,6 +9,7 @@ use tokio::sync::oneshot;
 pub(crate) mod chat;
 pub(crate) mod docs_cache;
 pub(crate) mod godot_bridge;
+pub(crate) mod permissions;
 pub(crate) mod process_helpers;
 pub(crate) mod runtime_sessions;
 pub(crate) mod scene_runner;
@@ -31,6 +32,7 @@ pub async fn run() {
         .route("/shutdown", post(shutdown))
         .route("/chat", get(chat::chat_index_redirect))
         .route("/chat/", get(chat::chat_index))
+        .route("/chat/traces", get(chat::chat_traces))
         .route("/chat/{*path}", get(chat::chat_asset))
         .route("/chat/ws", get(chat::chat_ws))
         .route("/tools/call", post(godot_bridge::call_tool))

@@ -10,21 +10,26 @@ use futures_util::{Sink, SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+use tokio::sync::broadcast;
 
-use super::{DAEMON_HOST, DAEMON_PORT, state::AppState};
+use super::{DAEMON_HOST, DAEMON_PORT, permissions::ToolApprovalReview, state::AppState};
 use crate::runtime_daemon::godot_bridge;
 
 mod assets;
 mod auth;
+pub(crate) mod context;
+mod exec_command;
 mod generation;
 mod ids;
 mod images;
 mod models;
+mod prompt;
 mod providers;
 mod schema;
 mod settings;
 mod store;
 mod tools;
+pub(crate) mod trace;
 
 pub(crate) use assets::{chat_asset, chat_index, chat_index_redirect};
 use settings::{SaveSettingsRequest, load_settings, save_settings};
@@ -42,6 +47,10 @@ struct ClientRequest {
     chat_id: Option<String>,
     message: Option<String>,
     images: Option<Vec<images::ClientImage>>,
+    context_snippets: Option<Vec<context::ClientContextSnippet>>,
+    path: Option<String>,
+    start_line: Option<u32>,
+    end_line: Option<u32>,
     model: Option<String>,
     reasoning_effort: Option<String>,
     openrouter_api_key: Option<String>,
@@ -49,7 +58,11 @@ struct ClientRequest {
     provider_api_keys: Option<BTreeMap<String, String>>,
     ollama_base_url: Option<String>,
     provider_base_urls: Option<BTreeMap<String, String>>,
+    approval_mode: Option<String>,
+    approval_id: Option<String>,
+    decision: Option<String>,
     force: Option<bool>,
+    refresh_local: Option<bool>,
     chat_surface: Option<String>,
 }
 
@@ -74,6 +87,25 @@ pub(crate) async fn chat_ws(
     };
     ws.on_upgrade(move |socket| handle_chat_socket(socket, state, bound_project))
         .into_response()
+}
+
+pub(crate) async fn chat_traces(Query(query): Query<trace::TraceQuery>) -> axum::Json<Value> {
+    if !query.has_filter() {
+        return axum::Json(json!({
+            "ok": false,
+            "error": "Pass chat_id, trace_id, turn_id, or generation_id."
+        }));
+    }
+    match trace::list_events(&query) {
+        Ok(events) => axum::Json(json!({
+            "ok": true,
+            "events": events
+        })),
+        Err(error) => axum::Json(json!({
+            "ok": false,
+            "error": error
+        })),
+    }
 }
 
 fn is_allowed_browser_origin(headers: &HeaderMap) -> bool {
@@ -112,6 +144,7 @@ async fn project_for_chat_token(state: &AppState, token: Option<&str>) -> Option
 async fn handle_chat_socket(socket: WebSocket, state: AppState, bound_project: BoundChatProject) {
     let (mut sender, mut receiver) = socket.split();
     let mut active_chat_id: Option<String> = None;
+    let mut context_receiver = state.chat_context_sender.subscribe();
 
     if send_initial_state(&mut sender, &mut active_chat_id, &state, &bound_project)
         .await
@@ -119,30 +152,51 @@ async fn handle_chat_socket(socket: WebSocket, state: AppState, bound_project: B
     {
         return;
     }
-    while let Some(message) = receiver.next().await {
-        match message {
-            Ok(Message::Text(text)) => {
-                let Ok(request) = serde_json::from_str::<ClientRequest>(&text) else {
-                    let _ =
-                        send_error(&mut sender, None, "bad_request", "Invalid chat request.").await;
-                    continue;
-                };
-                if handle_request(
-                    &mut sender,
-                    &mut active_chat_id,
-                    &state,
-                    &bound_project,
-                    request,
-                )
-                .await
-                .is_err()
-                {
+
+    loop {
+        tokio::select! {
+            message = receiver.next() => {
+                let Some(message) = message else {
                     break;
+                };
+                match message {
+                    Ok(Message::Text(text)) => {
+                        let Ok(request) = serde_json::from_str::<ClientRequest>(&text) else {
+                            let _ =
+                                send_error(&mut sender, None, "bad_request", "Invalid chat request.").await;
+                            continue;
+                        };
+                        if handle_request(
+                            &mut sender,
+                            &mut active_chat_id,
+                            &state,
+                            &bound_project,
+                            request,
+                        )
+                        .await
+                        .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Ok(Message::Close(_)) => break,
+                    Ok(_) => {}
+                    Err(_) => break,
                 }
             }
-            Ok(Message::Close(_)) => break,
-            Ok(_) => {}
-            Err(_) => break,
+            received = context_receiver.recv() => {
+                match received {
+                    Ok(snippet) => {
+                        if snippet.session_id == bound_project.session_id &&
+                            send_json(&mut sender, snippet.to_client_message()).await.is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
         }
     }
 }
@@ -223,13 +277,39 @@ where
                 Err(error) => send_error(sender, request_id, "target_set_failed", &error).await,
             }
         }
+        "open_project_file" => {
+            let Some(path) = request.path.as_deref() else {
+                return send_error(sender, request_id, "bad_request", "path is required.")
+                    .await
+                    .map_err(|_| ());
+            };
+            let result = godot_bridge::open_project_file_for_session(
+                state,
+                Some(&bound_project.session_id),
+                path,
+                request.start_line,
+                request.end_line,
+            )
+            .await;
+            if result.get("ok").and_then(Value::as_bool) == Some(false) {
+                let error = result
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Could not open that project file.");
+                return send_error(sender, request_id, "project_file_open_failed", error)
+                    .await
+                    .map_err(|_| ());
+            }
+            send_json(sender, project_file_opened_message(request_id, result)).await
+        }
         "list_chats" => {
             let scope = &bound_project.scope;
             send_chat_list(sender, request_id, scope).await
         }
         "list_models" => {
             let settings = load_settings();
-            let catalog = models::list_models(&settings).await;
+            let catalog =
+                models::list_models(&settings, request.refresh_local.unwrap_or(true)).await;
             send_json(
                 sender,
                 json!({
@@ -255,7 +335,9 @@ where
                     .await
                 }
                 Err(error) => {
-                    let status = models::list_models(&load_settings()).await.catalog_status;
+                    let status = models::list_models(&load_settings(), false)
+                        .await
+                        .catalog_status;
                     send_json(
                         sender,
                         json!({
@@ -309,6 +391,7 @@ where
                 model: request.model,
                 reasoning_effort: request.reasoning_effort,
                 chat_surface: request.chat_surface,
+                approval_mode: request.approval_mode,
             };
             match save_settings(update) {
                 Ok(settings) => {
@@ -411,6 +494,47 @@ where
             )
             .await
         }
+        "review_tool_approval" => {
+            let Some(approval_id) = request.approval_id.as_deref() else {
+                return send_error(
+                    sender,
+                    request_id,
+                    "bad_request",
+                    "approval_id is required.",
+                )
+                .await
+                .map_err(|_| ());
+            };
+            let Some(decision) = parse_tool_approval_review(request.decision.as_deref()) else {
+                return send_error(
+                    sender,
+                    request_id,
+                    "bad_request",
+                    "decision must be approved, denied, or cancelled.",
+                )
+                .await
+                .map_err(|_| ());
+            };
+            match resolve_tool_approval(state, &bound_project.session_id, approval_id, decision)
+                .await
+            {
+                Ok(()) => {
+                    send_json(
+                        sender,
+                        json!({
+                            "type": "tool_approval_reviewed",
+                            "request_id": request_id,
+                            "approval_id": approval_id,
+                            "decision": decision
+                        }),
+                    )
+                    .await
+                }
+                Err(error) => {
+                    send_error(sender, request_id, "approval_review_failed", &error).await
+                }
+            }
+        }
         "revert_chat" => {
             let Some(chat_id) = request.chat_id.or_else(|| active_chat_id.clone()) else {
                 return send_error(sender, request_id, "bad_request", "chat_id is required.")
@@ -498,6 +622,56 @@ where
         }
     }
     .map_err(|_| ())
+}
+
+fn parse_tool_approval_review(decision: Option<&str>) -> Option<ToolApprovalReview> {
+    match decision?.trim().to_ascii_lowercase().as_str() {
+        "approved" | "approve" => Some(ToolApprovalReview::Approved),
+        "denied" | "deny" => Some(ToolApprovalReview::Denied),
+        "cancelled" | "canceled" | "cancel" => Some(ToolApprovalReview::Cancelled),
+        _ => None,
+    }
+}
+
+async fn resolve_tool_approval(
+    state: &AppState,
+    session_id: &str,
+    approval_id: &str,
+    decision: ToolApprovalReview,
+) -> Result<(), String> {
+    let pending = state
+        .pending_tool_approvals
+        .write()
+        .await
+        .remove(approval_id)
+        .ok_or_else(|| "That approval request is no longer pending.".to_string())?;
+    if pending.request.session_id != session_id {
+        state
+            .pending_tool_approvals
+            .write()
+            .await
+            .insert(approval_id.to_string(), pending);
+        return Err("That approval request belongs to another Godot session.".to_string());
+    }
+    pending
+        .responder
+        .send(decision)
+        .map_err(|_| "The waiting tool call is no longer active.".to_string())
+}
+
+fn project_file_opened_message(request_id: Option<String>, result: Value) -> Value {
+    let mut payload = json!({
+        "type": "project_file_opened",
+        "request_id": request_id,
+    });
+    if let (Some(payload), Some(result)) = (payload.as_object_mut(), result.as_object()) {
+        for (key, value) in result {
+            if key != "type" && key != "request_id" {
+                payload.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    payload
 }
 
 async fn send_project_status<S>(

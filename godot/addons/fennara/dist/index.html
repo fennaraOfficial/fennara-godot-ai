@@ -264,9 +264,21 @@
               </div>
             </div>
             <div class="composer-submit-actions">
-              <button class="secondary-button revert-button" type="button" title="Revert last AI turn" data-revert-button disabled>
-                Revert
-              </button>
+              <span class="revert-maintenance" data-revert-maintenance>
+                <button
+                  class="secondary-button revert-button"
+                  type="button"
+                  title="Currently under maintenance"
+                  aria-describedby="revert-maintenance-tooltip"
+                  data-revert-button
+                  disabled
+                >
+                  Revert
+                </button>
+                <span class="revert-maintenance-tooltip" id="revert-maintenance-tooltip" role="tooltip">
+                  Currently under maintenance
+                </span>
+              </span>
               <button class="primary-button send-button" type="submit" data-send-button>
                 <span class="send-label">Send</span>
               </button>
@@ -374,6 +386,23 @@
             <button class="icon-button" type="submit" aria-label="Close settings">x</button>
           </header>
           <fieldset class="settings-group">
+            <legend>Tool approvals</legend>
+            <label class="settings-radio">
+              <input type="radio" name="approval_mode" value="ask" data-approval-mode checked />
+              <span>
+                <strong>Ask for approval</strong>
+                <small>Read-only tools run. Project changes and runtime actions wait for you.</small>
+              </span>
+            </label>
+            <label class="settings-radio">
+              <input type="radio" name="approval_mode" value="full_access" data-approval-mode />
+              <span>
+                <strong>Full access</strong>
+                <small>Project changes and runtime actions run without prompting. Hard safety blocks still apply.</small>
+              </span>
+            </label>
+          </fieldset>
+          <fieldset class="settings-group">
             <legend>Chat display</legend>
             <label class="settings-check">
               <input type="checkbox" data-chat-surface-browser />
@@ -386,9 +415,12 @@
               Restart Godot for this change to take effect.
             </p>
           </fieldset>
+          <p class="settings-toast" role="status" aria-live="polite" data-settings-saved-toast hidden>
+            Settings saved
+          </p>
           <menu>
             <button class="secondary-button" value="cancel">Cancel</button>
-            <button class="primary-button" value="default" data-save-settings>Save locally</button>
+            <button class="primary-button" value="default" data-save-settings disabled>Save</button>
           </menu>
         </form>
       </dialog>
@@ -399,6 +431,20 @@
     <script src="./vendor/purify.min.js"></script>
     <script src="./model-picker.js"></script>
     <script src="./transcript-renderer.js"></script>
+    <script src="./daemon-client.js"></script>
+    <script src="./attachment-manager.js"></script>
+    <script src="./stored-transcript.js"></script>
+    <script src="./usage-summary.js"></script>
+    <script src="./command-palette.js"></script>
+    <script src="./project-status.js"></script>
+    <script src="./project-file-links.js"></script>
+    <script src="./provider-popovers.js"></script>
+    <script src="./settings-panel.js"></script>
+    <script src="./chat-navigation.js"></script>
+    <script src="./composer-actions.js"></script>
+    <script src="./effort-controls.js"></script>
+    <script src="./overlay-manager.js"></script>
+    <script src="./shell-bindings.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

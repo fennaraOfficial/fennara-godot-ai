@@ -6,6 +6,7 @@
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/classes/web_socket_peer.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
 
 #include <cstdint>
@@ -32,7 +33,12 @@ public:
     godot::String get_active_mcp_target_path() const;
     godot::String get_device_id() const;
     godot::String get_chat_token() const;
+    static godot::Dictionary collect_rendering_context();
     void request_get_class_info_warmup();
+    bool send_chat_context_snippet(const godot::String &path,
+                                   int32_t start_line,
+                                   int32_t end_line,
+                                   const godot::String &text);
 
 private:
     static constexpr const char *LOCAL_DAEMON_WS_URL = "ws://127.0.0.1:41287/godot/ws";
@@ -62,6 +68,14 @@ private:
     void _handle_tool_call(const godot::Dictionary &message);
     void _handle_snapshot_begin_turn(const godot::Dictionary &message);
     void _handle_snapshot_revert(const godot::Dictionary &message);
+    void _handle_open_project_file(const godot::Dictionary &message);
+    godot::Dictionary _open_project_file_reference(const godot::String &path,
+                                                   int32_t start_line,
+                                                   int32_t end_line);
+    void _focus_project_file_reference(godot::String path,
+                                       int32_t start_line,
+                                       int32_t end_line,
+                                       int32_t attempt);
     void _on_async_tool_call_completed(const godot::Array &results, godot::String request_id, godot::String tool_name, godot::Dictionary input, uint64_t started_at_ms, godot::Object *executor);
     void _send_json(const godot::Dictionary &payload);
     void _maybe_send_get_class_info_warmup();
@@ -70,6 +84,7 @@ private:
     godot::String _make_chat_token() const;
     godot::String _project_name() const;
     godot::String _project_path() const;
+    godot::String _godot_executable_path() const;
 };
 
 } // namespace fennara
