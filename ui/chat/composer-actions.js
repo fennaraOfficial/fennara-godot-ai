@@ -19,7 +19,6 @@
     const providerConnected = callbacks.providerConnected || (() => false);
     const openProviderPicker = callbacks.openProviderPicker || function () {};
     const openModelPicker = callbacks.openModelPicker || function () {};
-    const openProviderKeyPrompt = callbacks.openProviderKeyPrompt || function () {};
     const cleanModelId = callbacks.cleanModelId || ((modelId) => String(modelId || "").trim());
     const resetStreamState = callbacks.resetStreamState || function () {};
     const nextRequestId = callbacks.nextRequestId || (() => "chat");
@@ -64,7 +63,7 @@
         return;
       }
       if (providerRequiresApiKey(currentProvider) && !providerConnected(currentProvider)) {
-        openProviderKeyPrompt(currentProvider);
+        openProviderPicker();
         return;
       }
       const model = cleanModelId(modelInput?.value || currentModel);

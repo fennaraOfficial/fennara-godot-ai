@@ -140,6 +140,7 @@
   let providerRegistry = [];
   let providerMetadata = new Map();
   let keyPromptProvider = "";
+  let defaultModel = "";
   let ollamaBaseUrl = DEFAULT_OLLAMA_BASE_URL;
   let providerBaseUrls = new Map(Object.entries(DEFAULT_LOCAL_BASE_URLS));
   let ollamaModels = [];
@@ -206,8 +207,6 @@
     hasOllamaCloudKey: () => hasOllamaCloudKey,
     getOllamaModels: () => ollamaModels,
     openProviderPicker,
-    openOpenRouterKeyPrompt,
-    openProviderKeyPrompt,
     onSelect: selectModel,
     onEscapeClose: focusComposer,
     onRequestModels: () => requestModelList({ refreshOllama: true }),
@@ -404,7 +403,6 @@
       providerConnected,
       openProviderPicker,
       openModelPicker,
-      openProviderKeyPrompt,
       cleanModelId: cleanUiModelId,
       resetStreamState: () => transcriptRenderer.resetStreamState(),
       nextRequestId,
@@ -714,9 +712,18 @@
     applyProviderRegistry(settings);
     hasOpenRouterKey = providerConnected("openrouter") || Boolean(settings.has_openrouter_key);
     hasOllamaCloudKey = providerConnected("ollama-cloud") || Boolean(settings.has_ollama_cloud_key);
-    const savedModel = cleanUiModelId(settings.model || settings.default_model || "");
-    currentProvider = providerFromModel(savedModel) || currentProvider;
-    currentModel = savedModel || currentModel;
+    defaultModel = cleanUiModelId(settings.default_model || defaultModel);
+    const savedModel = cleanUiModelId(settings.model || "");
+    const savedProvider = providerFromModel(savedModel);
+    if (savedModel && !isUnavailableDefaultModel(savedModel, savedProvider)) {
+      currentProvider = savedProvider || currentProvider;
+      currentModel = savedModel;
+    } else if (savedModel === defaultModel && isUnavailableDefaultModel(savedModel, savedProvider)) {
+      currentModel = "";
+      if (currentProvider === savedProvider) {
+        currentProvider = "";
+      }
+    }
     currentReasoningEffort = cleanReasoningEffort(settings.reasoning_effort);
     currentChatSurface = cleanChatSurface(settings.chat_surface);
     currentApprovalMode = cleanApprovalMode(settings.approval_mode);
@@ -862,7 +869,21 @@
   }
 
   function currentModelLabel() {
-    return currentModel ? modelPicker?.displayName(currentModel) || currentModel : "No model";
+    if (!currentModel || isUnavailableDefaultModel(currentModel)) {
+      return "No model";
+    }
+    return modelPicker?.displayName(currentModel) || currentModel;
+  }
+
+  function isUnavailableDefaultModel(modelId, providerId = providerFromModel(modelId)) {
+    const clean = cleanUiModelId(modelId);
+    return Boolean(
+      clean
+        && defaultModel
+        && clean === defaultModel
+        && providerRequiresApiKey(providerId)
+        && !providerConnected(providerId),
+    );
   }
 
   function providerFromModel(modelId) {
@@ -1015,6 +1036,9 @@
 
   function hasUsableModel() {
     if (!currentModel || !currentProvider) {
+      return false;
+    }
+    if (isUnavailableDefaultModel(currentModel, currentProvider)) {
       return false;
     }
     if (currentProviderIsLocal()) {
@@ -1443,11 +1467,7 @@
       updateRevertButton();
       deleteOptimisticRequest(message.request_id || "");
       if (message.code === "provider_auth_error" || message.code === "missing_openrouter_key") {
-        if (currentProvider && providerRequiresApiKey(currentProvider)) {
-          openProviderKeyPrompt(currentProvider);
-        } else {
-          openProviderPicker();
-        }
+        openProviderPicker();
       }
     }
   }

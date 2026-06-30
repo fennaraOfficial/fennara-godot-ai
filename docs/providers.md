@@ -6,27 +6,39 @@ External MCP apps are different. Claude Code, Claude Desktop, Codex, Cursor, Gem
 
 ## Supported Providers
 
-| Provider | Type | Model Id Shape | Notes |
+| Provider | How To Connect | Model Id Shape | Notes |
 | --- | --- | --- | --- |
-| OpenAI | Cloud API key | `openai/<model>` | Uses OpenAI's official API with `OPENAI_API_KEY`. |
-| Anthropic | Cloud API key | `anthropic/<model>` | Uses Anthropic's official Messages API with `ANTHROPIC_API_KEY`. |
-| OpenRouter | Cloud API key | `openrouter/<model>` or legacy `<provider>/<model>` | Existing OpenRouter model ids such as `google/gemini...` remain accepted. |
-| Ollama Cloud | Cloud API key | `ollama-cloud/<model>` | Uses Ollama's hosted OpenAI-compatible API. |
-| DeepSeek | Cloud API key | `deepseek/<model>` | Uses DeepSeek's OpenAI-compatible API. |
-| Z.AI | Cloud API key | `zai/<model>` | Uses Z.AI's OpenAI-compatible API. |
-| Moonshot AI | Cloud API key | `moonshotai/<model>` | Uses Moonshot's OpenAI-compatible API. |
-| Moonshot AI (China) | Cloud API key | `moonshotai-cn/<model>` | Uses Moonshot China's OpenAI-compatible API. |
-| Kimi For Coding | Cloud API key | `kimi-for-coding/<model>` | Uses Kimi's Anthropic-compatible Messages API. |
-| MiniMax | Cloud API key | `minimax/<model>` | Uses MiniMax's Anthropic-compatible Messages API. |
-| MiniMax Token Plan | Cloud API key | `minimax-coding-plan/<model>` | Uses MiniMax's Anthropic-compatible Messages API. |
-| MiniMax (China) | Cloud API key | `minimax-cn/<model>` | Uses MiniMax China's Anthropic-compatible Messages API. |
-| MiniMax Token Plan (China) | Cloud API key | `minimax-cn-coding-plan/<model>` | Uses MiniMax China's Anthropic-compatible Messages API. |
-| Ollama | Local server | `ollama/<local-model>` | Defaults to `http://127.0.0.1:11434`. |
-| LM Studio | Local server | `lmstudio/<local-model>` | Defaults to `http://127.0.0.1:1234/v1`. |
+| OpenAI | Create a key in [OpenAI API keys](https://platform.openai.com/api-keys). Fennara key/env: `OPENAI_API_KEY`. | `openai/<model>` | Uses OpenAI's official API. |
+| Anthropic | Create a key in [Claude Console API keys](https://console.anthropic.com/settings/keys). Fennara key/env: `ANTHROPIC_API_KEY`. | `anthropic/<model>` | Uses Anthropic's official Messages API. |
+| OpenRouter | Create a key in [OpenRouter Keys](https://openrouter.ai/settings/keys). Fennara key/env: `OPENROUTER_API_KEY`. | `openrouter/<provider>/<model>` | Use this when you want OpenRouter to route the request. See [OpenRouter Model Ids](#openrouter-model-ids). |
+| Ollama Cloud | Create a key in [Ollama API keys](https://ollama.com/settings/keys). Fennara key/env: `OLLAMA_API_KEY`. | `ollama-cloud/<model>` | Uses Ollama's hosted API, not the local Ollama server. |
+| DeepSeek | Create a key in [DeepSeek API keys](https://platform.deepseek.com/api_keys). Fennara key/env: `DEEPSEEK_API_KEY`. | `deepseek/<model>` | Uses DeepSeek's OpenAI-compatible API. |
+| Z.AI | Create a key in [Z.AI API keys](https://z.ai/manage-apikey/apikey-list). Fennara key/env: `ZHIPU_API_KEY`. | `zai/<model>` | Uses Z.AI's OpenAI-compatible API. |
+| Moonshot AI | Create a key in [Kimi Open Platform API keys](https://platform.kimi.ai/console/api-keys). Fennara key/env: `MOONSHOT_API_KEY`. | `moonshotai/<model>` | Uses Moonshot's OpenAI-compatible API. |
+| Moonshot AI (China) | Create a key in [Kimi China Open Platform API keys](https://platform.kimi.com/console/api-keys). Fennara key/env: `MOONSHOT_API_KEY`. | `moonshotai-cn/<model>` | Uses Moonshot China's OpenAI-compatible API. |
+| Kimi For Coding | Create a key in the [Kimi Code Console](https://www.kimi.com/code/console). Fennara key/env: `KIMI_API_KEY`. | `kimi-for-coding/<model>` | Uses Kimi's Anthropic-compatible Messages API. Requires Kimi Code access. |
+| MiniMax | Create a pay-as-you-go key from [MiniMax API Platform](https://platform.minimax.io/docs/api-reference/api-overview) **API Keys > Create new secret key**. Fennara key/env: `MINIMAX_API_KEY`. | `minimax/<model>` | Uses MiniMax's Anthropic-compatible Messages API at `minimax.io`. |
+| MiniMax Token Plan | Use the Subscription Key from [MiniMax API Platform](https://platform.minimax.io/docs/api-reference/api-overview) **Billing > Token Plan**. Fennara key/env: `MINIMAX_API_KEY`. | `minimax-coding-plan/<model>` | Token Plan Subscription Keys are separate from pay-as-you-go API keys. |
+| MiniMax (China) | Create a pay-as-you-go key from the [MiniMax China](https://platform.minimaxi.com/docs/api-reference/api-overview) API key page. Fennara key/env: `MINIMAX_API_KEY`. | `minimax-cn/<model>` | Uses MiniMax China's Anthropic-compatible Messages API at `minimaxi.com`. |
+| MiniMax Token Plan (China) | Use the Subscription Key from the [MiniMax China](https://platform.minimaxi.com/docs/api-reference/api-overview) Token Plan page. Fennara key/env: `MINIMAX_API_KEY`. | `minimax-cn-coding-plan/<model>` | China Token Plan Subscription Keys are separate from pay-as-you-go API keys. |
+| Ollama | Run a local Ollama server. No cloud API key is required. | `ollama/<local-model>` | Defaults to `http://127.0.0.1:11434`. |
+| LM Studio | Start LM Studio's local server. No key is required by default. | `lmstudio/<local-model>` | Defaults to `http://127.0.0.1:1234/v1`. If your LM Studio server requires auth, set `LMSTUDIO_API_KEY` in the daemon environment. |
 
-Cloud providers need your own API key. Local providers need the local server running with a model available.
+Cloud providers need your own API key or subscription key. Local providers need the local server running with a model available.
 
-Native provider prefixes take precedence. For example, `openai/gpt-...` uses the official OpenAI provider and `anthropic/claude-...` uses the official Anthropic provider. To use those vendors through OpenRouter, select the explicit `openrouter/openai/...` or `openrouter/anthropic/...` model id.
+Fennara can store keys from the provider picker in the dock. The key/env names above are the same names Fennara understands if you prefer environment variables. Stored keys live in the daemon's local app data, outside the Godot project.
+
+## OpenRouter Model Ids
+
+OpenRouter model ids often already contain a provider slug. In Fennara, prefer the explicit OpenRouter prefix:
+
+```text
+openrouter/google/gemini-...
+openrouter/anthropic/claude-...
+openrouter/openai/gpt-...
+```
+
+If you paste a raw OpenRouter slug such as `google/gemini-...`, Fennara still sends it to OpenRouter for compatibility. Native Fennara prefixes win, though: `openai/gpt-...` uses the official OpenAI provider, and `anthropic/claude-...` uses the official Anthropic provider. To use those vendors through OpenRouter, choose `openrouter/openai/...` or `openrouter/anthropic/...`.
 
 ## Where Settings Live
 

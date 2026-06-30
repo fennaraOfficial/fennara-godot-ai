@@ -74,16 +74,19 @@ that Godot session for chat storage scope, snapshots, tool execution, cancel,
 and revert. External MCP clients still route through the daemon's active target.
 Chat provider settings are global for now, while chats remain project-scoped.
 Cloud chat providers use locally stored API keys; local providers use base URLs
-stored by the daemon. The current built-in chat provider set is OpenRouter,
-OpenAI, Anthropic, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, local Ollama, and LM Studio. Ollama defaults to
+stored by the daemon. The current built-in chat provider set is OpenAI,
+Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For
+Coding, MiniMax, local Ollama, and LM Studio. Ollama defaults to
 `http://127.0.0.1:11434`; LM Studio defaults to `http://127.0.0.1:1234/v1`.
 The daemon chat runtime resolves selected models through a small provider catalog
-before making requests. Canonical model refs use `provider/model`, so
-`openrouter/google/example` resolves provider `openrouter` and model
-`google/example`; existing OpenRouter model ids such as `google/example` remain
-accepted as legacy selections. Native `openai/...` and `anthropic/...` refs use
-the official providers; use `openrouter/openai/...` or
-`openrouter/anthropic/...` for those vendors through OpenRouter. Providers share OpenAI-compatible or
+before making requests. Canonical model refs use `provider/model`.
+OpenRouter is the main exception users notice because OpenRouter model slugs
+often already contain a provider segment. Prefer
+`openrouter/google/example` in Fennara; if a user pastes a raw OpenRouter slug
+such as `google/example`, the daemon still routes it to OpenRouter for
+compatibility. Native `openai/...` and `anthropic/...` refs use the official
+providers; use `openrouter/openai/...` or `openrouter/anthropic/...` for those
+vendors through OpenRouter. Providers share OpenAI-compatible or
 Anthropic-compatible chat adapters where possible, with provider quirks isolated
 in provider modules and normalized stream/error events above the adapter
 boundary.
