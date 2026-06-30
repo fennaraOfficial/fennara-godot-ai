@@ -70,6 +70,10 @@ void debug_log(const godot::String &message) {
     }
 }
 
+godot::String hwnd_string(HWND hwnd) {
+    return godot::String::num_int64(reinterpret_cast<int64_t>(hwnd));
+}
+
 } // namespace
 
 class WindowsWebviewBackend : public NativeWebviewBackend {
@@ -208,7 +212,48 @@ public:
         if (!started || widget == nullptr) {
             return;
         }
+        if (!visible) {
+            set_focused(false);
+        }
         ShowWindow(reinterpret_cast<HWND>(widget), visible ? SW_SHOW : SW_HIDE);
+    }
+
+    void set_focused(bool next_focused) override {
+        if (!started || widget == nullptr) {
+            focused = false;
+            return;
+        }
+
+        HWND webview_hwnd = reinterpret_cast<HWND>(widget);
+        if (next_focused) {
+            HWND current = GetFocus();
+            if (focused && (current == webview_hwnd ||
+                            (current != nullptr && IsChild(webview_hwnd, current)))) {
+                return;
+            }
+            SetFocus(webview_hwnd);
+            focused = true;
+            debug_log("Web chat Windows focus requested widget=" + hwnd_string(webview_hwnd) +
+                      " before=" + hwnd_string(current) +
+                      " after=" + hwnd_string(GetFocus()));
+            return;
+        }
+
+        HWND focused_hwnd = GetFocus();
+        if (focused_hwnd == webview_hwnd ||
+            (focused_hwnd != nullptr && IsChild(webview_hwnd, focused_hwnd))) {
+            HWND parent_hwnd = reinterpret_cast<HWND>(parent_window);
+            if (parent_hwnd != nullptr) {
+                SetFocus(parent_hwnd);
+            }
+            debug_log("Web chat Windows focus released widget=" + hwnd_string(webview_hwnd) +
+                      " before=" + hwnd_string(focused_hwnd) +
+                      " after=" + hwnd_string(GetFocus()));
+        } else {
+            debug_log("Web chat Windows focus release skipped: current focus outside widget=" +
+                      hwnd_string(webview_hwnd) + " current=" + hwnd_string(focused_hwnd));
+        }
+        focused = false;
     }
 
     void stop() override {
@@ -217,6 +262,7 @@ public:
         }
 
         debug_log("Web chat destroying native Windows webview");
+        set_focused(false);
         if (webview != nullptr) {
             webview_destroy(static_cast<webview_t>(webview));
         }
@@ -226,6 +272,7 @@ public:
         parent_window = nullptr;
         current_url = "";
         started = false;
+        focused = false;
         current_window_id = -1;
         last_x = -1;
         last_y = -1;
@@ -243,6 +290,7 @@ private:
     void *parent_window = nullptr;
     godot::String current_url;
     bool started = false;
+    bool focused = false;
     int current_window_id = -1;
     int last_x = -1;
     int last_y = -1;

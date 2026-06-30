@@ -79,6 +79,16 @@ pub(crate) enum StreamEvent {
         arguments: String,
         raw: Value,
     },
+    ToolCallMalformed {
+        id: String,
+        name: String,
+        arguments: String,
+        message: String,
+        raw: Option<String>,
+    },
+    Status {
+        message: String,
+    },
     Usage(Usage),
     ProviderError(LlmError),
     Finish {

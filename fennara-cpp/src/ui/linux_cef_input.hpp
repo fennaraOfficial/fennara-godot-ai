@@ -23,6 +23,8 @@ struct KeyboardState {
     bool meta_down = false;
 };
 
+void clear_keyboard_state(KeyboardState &state);
+
 bool handle_input(const godot::Ref<godot::InputEvent> &event,
                   const fennara_cef_bridge_api *api,
                   fennara_cef_bridge_browser *browser,

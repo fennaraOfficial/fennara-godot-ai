@@ -33,7 +33,7 @@ You only need a chat provider in Fennara settings if you want to use the built-i
 
 Built-in chat can use:
 
-- cloud providers with your own API key, such as OpenRouter, Ollama Cloud, DeepSeek, or Z.AI
+- cloud providers with your own API key, such as OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, or MiniMax
 - local providers, such as Ollama or LM Studio
 
 Provider keys and local provider URLs are stored locally by the daemon outside the Godot project.
@@ -60,6 +60,11 @@ If you want to chat inside Godot's Fennara dock, open the dock settings and choo
 ollama/llama3.1:8b
 lmstudio/openai/gpt-oss-20b
 ```
+
+The built-in dock can also receive selected code from Godot's script editor.
+Select script text, open the script editor context menu, choose **Add to Chat**,
+then send your next chat message. The selected `res://` path, line range, and
+code are attached only to that built-in chat request.
 
 For provider setup details, see [Built-In Chat Providers](providers.md). For dock shortcuts, see [Built-In Chat Slash Commands](slash-commands.md).
 

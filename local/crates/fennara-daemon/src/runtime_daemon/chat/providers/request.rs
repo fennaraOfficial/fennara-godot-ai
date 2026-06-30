@@ -4,11 +4,6 @@ use super::error::LlmError;
 use super::resolver;
 use super::types::{ChatRequest, ProviderSettings, ResolvedModel};
 
-const SYSTEM_PROMPT: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../prompts/plugin_chat_system.md"
-));
-
 #[derive(Clone, Debug)]
 pub(crate) struct LlmRequest {
     pub(crate) model: ResolvedModel,
@@ -36,11 +31,12 @@ impl LlmRequest {
 }
 
 pub(crate) fn build_messages(
+    system_prompt: &str,
     history: &[Value],
     user_message: &str,
     user_images: &[super::super::images::ChatImage],
 ) -> Vec<Value> {
-    let mut messages = vec![json!({ "role": "system", "content": SYSTEM_PROMPT })];
+    let mut messages = vec![json!({ "role": "system", "content": system_prompt })];
     messages.extend(history.iter().cloned());
     messages.push(json!({
         "role": "user",

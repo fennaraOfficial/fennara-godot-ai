@@ -1,16 +1,23 @@
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::{
     ids::{new_id, now_ms},
-    images::{self, ImagePlaceholder},
-    schema::{ModelTrace, connection, model_trace_from_selection, to_store_error},
+    schema::{connection, model_trace_from_selection, to_store_error},
     settings::{self, DEFAULT_MODEL},
 };
 
+mod generations;
+mod replay;
+mod tool_calls;
+mod usage;
+
+use self::usage::{
+    latest_prompt_tokens_for_chat, record_usage_log, total_cost_for_chat, usage_cost,
+};
+
 const CHAT_LIST_LIMIT: i64 = 40;
-const REPLAY_MESSAGE_LIMIT: i64 = 40;
 const MAX_IMAGE_METADATA_MESSAGES_PER_CHAT: i64 = 12;
 
 #[derive(Clone, Debug, Serialize)]
@@ -294,24 +301,39 @@ pub(crate) fn insert_user_message(
     content: &str,
     metadata: Option<&Value>,
 ) -> Result<StoredMessage, String> {
-    let message = insert_message(chat_id, "user", "done", content, None, None, None)?;
-    if let Some(metadata) = metadata {
-        let conn = connection()?;
-        let metadata_json = serde_json::to_string(metadata).map_err(|error| error.to_string())?;
-        let now = now_ms();
-        conn.execute(
-            "UPDATE chat_messages SET metadata_json = ?2, updated_at_ms = ?3 WHERE id = ?1",
-            params![message.id, metadata_json, now],
-        )
+    let mut conn = connection()?;
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(to_store_error)?;
-        prune_old_image_metadata(&conn, chat_id)?;
-        return get_message(&conn, &message.id)?.ok_or_else(|| "Message not found.".to_string());
+    let now = now_ms();
+    let metadata_json = metadata
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let message = insert_message_in_tx(
+        &tx,
+        chat_id,
+        NewMessage {
+            role: "user",
+            status: "done",
+            content,
+            reasoning_content: None,
+            usage_json: None,
+            cost: None,
+            tool_call_id: None,
+            tool_name: None,
+            metadata_json: metadata_json.as_deref(),
+        },
+        now,
+    )?;
+    if metadata_json.is_some() {
+        prune_old_image_metadata(&tx, chat_id, now)?;
     }
+    tx.commit().map_err(to_store_error)?;
     Ok(message)
 }
 
-fn prune_old_image_metadata(conn: &Connection, chat_id: &str) -> Result<(), String> {
-    let now = now_ms();
+fn prune_old_image_metadata(conn: &Connection, chat_id: &str, now: i64) -> Result<(), String> {
     conn.execute(
         "UPDATE chat_messages
          SET metadata_json = NULL,
@@ -331,52 +353,18 @@ fn prune_old_image_metadata(conn: &Connection, chat_id: &str) -> Result<(), Stri
     Ok(())
 }
 
-pub(crate) fn insert_assistant_placeholder(chat_id: &str) -> Result<StoredMessage, String> {
-    insert_message(chat_id, "assistant", "in_progress", "", None, None, None)
-}
-
-pub(crate) fn start_generation(
+pub(crate) fn insert_assistant_placeholder_with_generation(
     chat_id: &str,
-    assistant_message_id: &str,
     model: &str,
     reasoning_effort: &str,
-) -> Result<StartedGeneration, String> {
-    let conn = connection()?;
-    if get_message(&conn, assistant_message_id)?.is_none() {
-        return Err("Assistant message not found.".to_string());
-    }
-    let now = now_ms();
-    let generation_id = new_id("gen");
-    let model_trace = model_trace_from_selection(model);
-    conn.execute(
-        "INSERT INTO chat_generations
-         (id, chat_id, assistant_message_id, provider_id, model_id, model_variant,
-          model_ref_json, reasoning_effort, status, started_at_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'running', ?9)",
-        params![
-            generation_id,
-            chat_id,
-            assistant_message_id,
-            model_trace.as_ref().map(|trace| trace.provider_id.as_str()),
-            model_trace.as_ref().map(|trace| trace.model_id.as_str()),
-            model_trace
-                .as_ref()
-                .and_then(|trace| trace.model_variant.as_deref()),
-            model_trace
-                .as_ref()
-                .map(|trace| trace.model_ref_json.as_str()),
-            reasoning_effort,
-            now
-        ],
+) -> Result<(StoredMessage, StartedGeneration), String> {
+    let mut conn = connection()?;
+    generations::insert_assistant_placeholder_with_generation_on_connection(
+        &mut conn,
+        chat_id,
+        model,
+        reasoning_effort,
     )
-    .map_err(to_store_error)?;
-    set_message_generation_trace(
-        &conn,
-        assistant_message_id,
-        Some(&generation_id),
-        model_trace.as_ref(),
-    )?;
-    Ok(StartedGeneration { id: generation_id })
 }
 
 pub(crate) fn finish_generation(
@@ -385,51 +373,7 @@ pub(crate) fn finish_generation(
     error: Option<&Value>,
 ) -> Result<(), String> {
     let conn = connection()?;
-    let now = now_ms();
-    let error_json = error
-        .map(serde_json::to_string)
-        .transpose()
-        .map_err(|error| error.to_string())?;
-    conn.execute(
-        "UPDATE chat_generations
-         SET status = ?2,
-             error_json = ?3,
-             finished_at_ms = ?4
-         WHERE id = ?1",
-        params![generation_id, status, error_json, now],
-    )
-    .map_err(to_store_error)?;
-    Ok(())
-}
-
-fn set_message_generation_trace(
-    conn: &Connection,
-    message_id: &str,
-    generation_id: Option<&str>,
-    model_trace: Option<&ModelTrace>,
-) -> Result<(), String> {
-    let now = now_ms();
-    conn.execute(
-        "UPDATE chat_messages
-         SET generation_id = COALESCE(?2, generation_id),
-             provider_id = COALESCE(?3, provider_id),
-             model_id = COALESCE(?4, model_id),
-             model_variant = COALESCE(?5, model_variant),
-             model_ref_json = COALESCE(?6, model_ref_json),
-             updated_at_ms = ?7
-         WHERE id = ?1",
-        params![
-            message_id,
-            generation_id,
-            model_trace.map(|trace| trace.provider_id.as_str()),
-            model_trace.map(|trace| trace.model_id.as_str()),
-            model_trace.and_then(|trace| trace.model_variant.as_deref()),
-            model_trace.map(|trace| trace.model_ref_json.as_str()),
-            now
-        ],
-    )
-    .map_err(to_store_error)?;
-    Ok(())
+    generations::finish_generation_on_connection(&conn, generation_id, status, error)
 }
 
 pub(crate) fn finish_assistant_message(
@@ -440,15 +384,73 @@ pub(crate) fn finish_assistant_message(
     fallback_model: &str,
     generation_id: Option<&str>,
 ) -> Result<StoredMessage, String> {
-    let conn = connection()?;
+    let mut conn = connection()?;
+    finish_assistant_message_on_connection(
+        &mut conn,
+        message_id,
+        None,
+        content,
+        reasoning_content,
+        usage,
+        fallback_model,
+        generation_id,
+    )
+}
+
+pub(crate) fn finish_assistant_message_with_tool_calls(
+    message_id: &str,
+    tool_calls: &Value,
+    content: &str,
+    reasoning_content: Option<&str>,
+    usage: Option<&Value>,
+    fallback_model: &str,
+    generation_id: Option<&str>,
+) -> Result<StoredMessage, String> {
+    let mut conn = connection()?;
+    finish_assistant_message_on_connection(
+        &mut conn,
+        message_id,
+        Some(tool_calls),
+        content,
+        reasoning_content,
+        usage,
+        fallback_model,
+        generation_id,
+    )
+}
+
+fn finish_assistant_message_on_connection(
+    conn: &mut Connection,
+    message_id: &str,
+    tool_calls: Option<&Value>,
+    content: &str,
+    reasoning_content: Option<&str>,
+    usage: Option<&Value>,
+    fallback_model: &str,
+    generation_id: Option<&str>,
+) -> Result<StoredMessage, String> {
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(to_store_error)?;
     let now = now_ms();
+    let tool_calls_json = tool_calls
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|error| error.to_string())?;
     let usage_json = usage
         .map(serde_json::to_string)
         .transpose()
         .map_err(|error| error.to_string())?;
     let cost = usage.and_then(usage_cost);
     let model_trace = model_trace_from_selection(fallback_model);
-    conn.execute(
+    if let Some(tool_calls_json) = tool_calls_json.as_deref() {
+        tx.execute(
+            "UPDATE chat_messages SET tool_calls_json = ?2, updated_at_ms = ?3 WHERE id = ?1",
+            params![message_id, tool_calls_json, now],
+        )
+        .map_err(to_store_error)?;
+    }
+    tx.execute(
         "UPDATE chat_messages
          SET status = 'done',
              content = ?2,
@@ -481,11 +483,10 @@ pub(crate) fn finish_assistant_message(
         ],
     )
     .map_err(to_store_error)?;
-    let message =
-        get_message(&conn, message_id)?.ok_or_else(|| "Message not found.".to_string())?;
+    let message = get_message(&tx, message_id)?.ok_or_else(|| "Message not found.".to_string())?;
     if let Some(usage) = usage {
         record_usage_log(
-            &conn,
+            &tx,
             &message.chat_id,
             &message.id,
             fallback_model,
@@ -495,7 +496,8 @@ pub(crate) fn finish_assistant_message(
             model_trace.as_ref(),
         )?;
     }
-    refresh_chat_rollups(&conn, &message.chat_id)?;
+    refresh_chat_rollups(&tx, &message.chat_id)?;
+    tx.commit().map_err(to_store_error)?;
     Ok(message)
 }
 
@@ -525,14 +527,29 @@ pub(crate) fn cancel_turn(
     assistant_message_id: &str,
     assistant_content: &str,
 ) -> Result<StoredMessage, String> {
-    let conn = connection()?;
-    let assistant = get_message(&conn, assistant_message_id)?
+    let mut conn = connection()?;
+    cancel_turn_on_connection(&mut conn, chat_id, assistant_message_id, assistant_content)
+}
+
+fn cancel_turn_on_connection(
+    conn: &mut Connection,
+    chat_id: &str,
+    assistant_message_id: &str,
+    assistant_content: &str,
+) -> Result<StoredMessage, String> {
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(to_store_error)?;
+    let assistant = get_message(&tx, assistant_message_id)?
         .ok_or_else(|| "Assistant message not found.".to_string())?;
-    let user_sequence: Option<i64> = conn
+    if assistant.chat_id != chat_id {
+        return Err("Assistant message not found for this chat.".to_string());
+    }
+    let next_user_sequence: Option<i64> = tx
         .query_row(
             "SELECT sequence FROM chat_messages
-             WHERE chat_id = ?1 AND role = 'user' AND sequence <= ?2
-             ORDER BY sequence DESC
+             WHERE chat_id = ?1 AND role = 'user' AND sequence > ?2
+             ORDER BY sequence ASC
              LIMIT 1",
             params![chat_id, assistant.sequence],
             |row| row.get(0),
@@ -540,16 +557,17 @@ pub(crate) fn cancel_turn(
         .optional()
         .map_err(to_store_error)?;
     let now = now_ms();
-    if let Some(user_sequence) = user_sequence {
-        conn.execute(
-            "UPDATE chat_messages
-             SET status = 'cancelled', updated_at_ms = ?3
-             WHERE chat_id = ?1 AND sequence >= ?2",
-            params![chat_id, user_sequence, now],
-        )
-        .map_err(to_store_error)?;
-    }
-    conn.execute(
+    tx.execute(
+        "UPDATE chat_messages
+         SET status = 'cancelled', updated_at_ms = ?4
+         WHERE chat_id = ?1
+           AND sequence >= ?2
+           AND (?3 IS NULL OR sequence < ?3)
+           AND role IN ('assistant', 'tool')",
+        params![chat_id, assistant.sequence, next_user_sequence, now],
+    )
+    .map_err(to_store_error)?;
+    tx.execute(
         "UPDATE chat_messages
          SET status = 'cancelled',
              content = ?2,
@@ -558,47 +576,26 @@ pub(crate) fn cancel_turn(
         params![assistant_message_id, assistant_content, now],
     )
     .map_err(to_store_error)?;
-    let message = get_message(&conn, assistant_message_id)?
+    tx.execute(
+        "UPDATE chat_tool_calls
+         SET status = 'cancelled', updated_at_ms = ?4
+         WHERE chat_id = ?1
+           AND assistant_message_id IN (
+             SELECT id
+             FROM chat_messages
+             WHERE chat_id = ?1
+               AND sequence >= ?2
+               AND (?3 IS NULL OR sequence < ?3)
+               AND role = 'assistant'
+           )",
+        params![chat_id, assistant.sequence, next_user_sequence, now],
+    )
+    .map_err(to_store_error)?;
+    let message = get_message(&tx, assistant_message_id)?
         .ok_or_else(|| "Assistant message not found.".to_string())?;
-    refresh_chat_rollups(&conn, chat_id)?;
+    refresh_chat_rollups(&tx, chat_id)?;
+    tx.commit().map_err(to_store_error)?;
     Ok(message)
-}
-
-pub(crate) fn set_assistant_tool_calls(
-    message_id: &str,
-    tool_calls: &Value,
-) -> Result<StoredMessage, String> {
-    let conn = connection()?;
-    let tool_calls_json = serde_json::to_string(tool_calls).map_err(|error| error.to_string())?;
-    let now = now_ms();
-    conn.execute(
-        "UPDATE chat_messages SET tool_calls_json = ?2, updated_at_ms = ?3 WHERE id = ?1",
-        params![message_id, tool_calls_json, now],
-    )
-    .map_err(to_store_error)?;
-    get_message(&conn, message_id)?.ok_or_else(|| "Message not found.".to_string())
-}
-
-pub(crate) fn insert_tool_message(
-    chat_id: &str,
-    tool_call_id: &str,
-    tool_name: &str,
-    status: &str,
-    content: &str,
-    metadata: &Value,
-) -> Result<StoredMessage, String> {
-    let message = insert_message(chat_id, "tool", status, content, None, None, None)?;
-    let conn = connection()?;
-    let metadata_json = serde_json::to_string(metadata).map_err(|error| error.to_string())?;
-    let now = now_ms();
-    conn.execute(
-        "UPDATE chat_messages
-         SET tool_call_id = ?2, tool_name = ?3, metadata_json = ?4, updated_at_ms = ?5
-         WHERE id = ?1",
-        params![message.id, tool_call_id, tool_name, metadata_json, now],
-    )
-    .map_err(to_store_error)?;
-    get_message(&conn, &message.id)?.ok_or_else(|| "Message not found.".to_string())
 }
 
 pub(crate) fn upsert_tool_call(
@@ -606,175 +603,54 @@ pub(crate) fn upsert_tool_call(
     assistant_message_id: &str,
     generation_id: Option<&str>,
     tool_call_id: &str,
+    provider_tool_call_id: Option<&str>,
     tool_name: &str,
     arguments: &Value,
     status: &str,
 ) -> Result<(), String> {
     let conn = connection()?;
-    let now = now_ms();
-    let args_json = serde_json::to_string(arguments).map_err(|error| error.to_string())?;
-    conn.execute(
-        "INSERT INTO chat_tool_calls
-         (id, chat_id, assistant_message_id, generation_id, tool_name, arguments_json, status, created_at_ms, updated_at_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
-         ON CONFLICT(id) DO UPDATE SET
-           generation_id = COALESCE(excluded.generation_id, chat_tool_calls.generation_id),
-           tool_name = excluded.tool_name,
-           arguments_json = excluded.arguments_json,
-           status = excluded.status,
-           updated_at_ms = excluded.updated_at_ms",
-        params![
-            tool_call_id,
-            chat_id,
-            assistant_message_id,
-            generation_id,
-            tool_name,
-            args_json,
-            status,
-            now
-        ],
+    tool_calls::upsert_tool_call_on_connection(
+        &conn,
+        chat_id,
+        assistant_message_id,
+        generation_id,
+        tool_call_id,
+        provider_tool_call_id,
+        tool_name,
+        arguments,
+        status,
     )
-    .map_err(to_store_error)?;
-    Ok(())
 }
 
-pub(crate) fn finish_tool_call(
+pub(crate) fn finish_tool_call_with_message(
+    chat_id: &str,
     tool_call_id: &str,
+    tool_name: &str,
     status: &str,
     raw_result: &Value,
     mcp_markdown: &str,
     plugin_markdown: &str,
     metadata: &Value,
     target_keys: &[String],
-) -> Result<(), String> {
-    let conn = connection()?;
-    let now = now_ms();
-    let raw_json = serde_json::to_string(raw_result).map_err(|error| error.to_string())?;
-    let metadata_json = serde_json::to_string(metadata).map_err(|error| error.to_string())?;
-    let target_keys_json = serde_json::to_string(target_keys).map_err(|error| error.to_string())?;
-    conn.execute(
-        "UPDATE chat_tool_calls
-         SET status = ?2,
-             raw_result_json = ?3,
-             mcp_markdown = ?4,
-             plugin_markdown = ?5,
-             metadata_json = ?6,
-             target_keys_json = ?7,
-             updated_at_ms = ?8
-         WHERE id = ?1",
-        params![
-            tool_call_id,
-            status,
-            raw_json,
-            mcp_markdown,
-            plugin_markdown,
-            metadata_json,
-            target_keys_json,
-            now
-        ],
+) -> Result<StoredMessage, String> {
+    let mut conn = connection()?;
+    tool_calls::finish_tool_call_with_message_on_connection(
+        &mut conn,
+        chat_id,
+        tool_call_id,
+        tool_name,
+        status,
+        raw_result,
+        mcp_markdown,
+        plugin_markdown,
+        metadata,
+        target_keys,
     )
-    .map_err(to_store_error)?;
-    Ok(())
 }
 
 pub(crate) fn replay_messages(chat_id: &str) -> Result<Vec<Value>, String> {
     let conn = connection()?;
-    let mut statement = conn
-        .prepare(
-            "SELECT
-               m.role,
-               CASE
-                 WHEN m.role = 'tool' THEN COALESCE(t.mcp_markdown, m.content)
-                 ELSE m.content
-               END AS content,
-               m.tool_call_id,
-               m.tool_name,
-               m.tool_calls_json,
-               m.metadata_json
-             FROM chat_messages m
-             LEFT JOIN chat_tool_calls t ON t.id = m.tool_call_id
-             WHERE m.chat_id = ?1
-               AND (m.status = 'done' OR (m.role = 'tool' AND m.status = 'failed'))
-               AND m.role IN ('user', 'assistant', 'tool')
-             ORDER BY m.sequence DESC
-             LIMIT ?2",
-        )
-        .map_err(to_store_error)?;
-    let mut rows = statement
-        .query(params![chat_id, REPLAY_MESSAGE_LIMIT])
-        .map_err(to_store_error)?;
-    let mut messages = Vec::new();
-
-    while let Some(row) = rows.next().map_err(to_store_error)? {
-        let role: String = row.get(0).map_err(to_store_error)?;
-        let content: String = row.get(1).map_err(to_store_error)?;
-        let tool_call_id: Option<String> = row.get(2).map_err(to_store_error)?;
-        let tool_name: Option<String> = row.get(3).map_err(to_store_error)?;
-        let tool_calls_json: Option<String> = row.get(4).map_err(to_store_error)?;
-        let metadata_json: Option<String> = row.get(5).map_err(to_store_error)?;
-        let image_placeholders = image_placeholders_from_metadata(metadata_json.as_deref());
-        let message_content = if role == "user" && !image_placeholders.is_empty() {
-            images::user_content_with_image_placeholders(&content, &image_placeholders)
-        } else {
-            json!(content)
-        };
-        let mut message = json!({ "role": role, "content": message_content });
-        if let Some(tool_call_id) = tool_call_id {
-            message["tool_call_id"] = json!(tool_call_id);
-        }
-        if let Some(tool_name) = tool_name {
-            message["tool_name"] = json!(tool_name);
-        }
-        if let Some(tool_calls_json) = tool_calls_json {
-            if let Ok(tool_calls) = serde_json::from_str::<Value>(&tool_calls_json) {
-                message["tool_calls"] = tool_calls;
-            }
-        }
-        messages.push(message);
-    }
-
-    messages.reverse();
-    Ok(messages)
-}
-
-fn image_placeholders_from_metadata(metadata_json: Option<&str>) -> Vec<ImagePlaceholder> {
-    let Some(metadata_json) = metadata_json else {
-        return Vec::new();
-    };
-    let Ok(metadata) = serde_json::from_str::<Value>(metadata_json) else {
-        return Vec::new();
-    };
-    let Some(images) = metadata.get("images") else {
-        return Vec::new();
-    };
-    images
-        .as_array()
-        .map(|images| {
-            images
-                .iter()
-                .filter_map(image_placeholder_from_value)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn image_placeholder_from_value(value: &Value) -> Option<ImagePlaceholder> {
-    let object = value.as_object()?;
-    let mime_type = object
-        .get("mime_type")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("image")
-        .to_string();
-    let name = object
-        .get("name")
-        .or_else(|| object.get("description"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| value.chars().take(120).collect::<String>());
-    Some(ImagePlaceholder { mime_type, name })
+    replay::replay_messages_from_conn(&conn, chat_id)
 }
 
 pub(crate) fn set_active_chat_id(scope: &ProjectScope, chat_id: &str) -> Result<(), String> {
@@ -816,46 +692,54 @@ pub(crate) fn active_chat_id(scope: &ProjectScope) -> Result<Option<String>, Str
         .filter(|id| !id.trim().is_empty()))
 }
 
-fn insert_message(
+pub(super) struct NewMessage<'a> {
+    pub(super) role: &'a str,
+    pub(super) status: &'a str,
+    pub(super) content: &'a str,
+    pub(super) reasoning_content: Option<&'a str>,
+    pub(super) usage_json: Option<&'a str>,
+    pub(super) cost: Option<f64>,
+    pub(super) tool_call_id: Option<&'a str>,
+    pub(super) tool_name: Option<&'a str>,
+    pub(super) metadata_json: Option<&'a str>,
+}
+
+pub(super) fn insert_message_in_tx(
+    conn: &Connection,
     chat_id: &str,
-    role: &str,
-    status: &str,
-    content: &str,
-    reasoning_content: Option<&str>,
-    usage: Option<&Value>,
-    cost: Option<f64>,
+    message: NewMessage<'_>,
+    now: i64,
 ) -> Result<StoredMessage, String> {
-    let conn = connection()?;
-    if get_chat(&conn, chat_id)?.is_none() {
+    if get_chat(conn, chat_id)?.is_none() {
         return Err("Chat not found.".to_string());
     }
-    let now = now_ms();
     let message_id = new_id("msg");
-    let sequence = next_sequence(&conn, chat_id)?;
-    let usage_json = usage
-        .map(serde_json::to_string)
-        .transpose()
-        .map_err(|error| error.to_string())?;
+    let sequence = next_sequence(conn, chat_id)?;
     conn.execute(
         "INSERT INTO chat_messages
-         (id, chat_id, role, status, content, reasoning_content, usage_json, cost, sequence, created_at_ms, updated_at_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
+         (id, chat_id, role, status, content, reasoning_content,
+          tool_call_id, tool_name, metadata_json, usage_json, cost,
+          sequence, created_at_ms, updated_at_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13)",
         params![
             message_id,
             chat_id,
-            role,
-            status,
-            content,
-            reasoning_content,
-            usage_json,
-            cost,
+            message.role,
+            message.status,
+            message.content,
+            message.reasoning_content,
+            message.tool_call_id,
+            message.tool_name,
+            message.metadata_json,
+            message.usage_json,
+            message.cost,
             sequence,
             now
         ],
     )
     .map_err(to_store_error)?;
-    refresh_chat_rollups(&conn, chat_id)?;
-    get_message(&conn, &message_id)?.ok_or_else(|| "Message not found.".to_string())
+    refresh_chat_rollups(conn, chat_id)?;
+    get_message(conn, &message_id)?.ok_or_else(|| "Message not found.".to_string())
 }
 
 fn next_sequence(conn: &Connection, chat_id: &str) -> Result<i64, String> {
@@ -897,7 +781,10 @@ fn get_chat_for_scope(
     .map_err(to_store_error)
 }
 
-fn get_message(conn: &Connection, message_id: &str) -> Result<Option<StoredMessage>, String> {
+pub(super) fn get_message(
+    conn: &Connection,
+    message_id: &str,
+) -> Result<Option<StoredMessage>, String> {
     conn.query_row(
         "SELECT id, chat_id, role, status, content, reasoning_content, tool_call_id, tool_name, tool_calls_json, metadata_json, usage_json, cost, sequence, created_at_ms, updated_at_ms
          FROM chat_messages
@@ -928,7 +815,7 @@ fn refresh_chat_rollups(conn: &Connection, chat_id: &str) -> Result<(), String> 
     let now = now_ms();
     let message_count: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM chat_messages WHERE chat_id = ?1 AND status = 'done'",
+            "SELECT COUNT(*) FROM chat_messages WHERE chat_id = ?1",
             [chat_id],
             |row| row.get(0),
         )
@@ -1000,203 +887,6 @@ fn message_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredMessage> 
     })
 }
 
-fn usage_cost(usage: &Value) -> Option<f64> {
-    usage
-        .get("cost")
-        .or_else(|| usage.get("total_cost"))
-        .and_then(Value::as_f64)
-}
-
-fn record_usage_log(
-    conn: &Connection,
-    chat_id: &str,
-    assistant_message_id: &str,
-    fallback_model: &str,
-    agent_type: &str,
-    usage: &Value,
-    generation_id: Option<&str>,
-    model_trace: Option<&ModelTrace>,
-) -> Result<(), String> {
-    let now = now_ms();
-    let model = usage_string(usage, "model").unwrap_or_else(|| fallback_model.to_string());
-    let usage_generation = usage_string(usage, "generation_id");
-    let usage_generation_id = generation_id.or(usage_generation.as_deref());
-    conn.execute(
-        "INSERT INTO chat_usage_logs
-         (id, chat_id, assistant_message_id, generation_id, model,
-          provider_id, model_id, model_variant, model_ref_json,
-          agent_type, prompt_tokens,
-          completion_tokens, total_tokens, reasoning_tokens, cached_tokens,
-          cache_write_tokens, cost, upstream_cost, provider_name, created_at_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
-         ON CONFLICT(assistant_message_id) WHERE assistant_message_id IS NOT NULL DO UPDATE SET
-           generation_id = COALESCE(excluded.generation_id, chat_usage_logs.generation_id),
-           model = excluded.model,
-           provider_id = COALESCE(excluded.provider_id, chat_usage_logs.provider_id),
-           model_id = COALESCE(excluded.model_id, chat_usage_logs.model_id),
-           model_variant = COALESCE(excluded.model_variant, chat_usage_logs.model_variant),
-           model_ref_json = COALESCE(excluded.model_ref_json, chat_usage_logs.model_ref_json),
-           agent_type = excluded.agent_type,
-           prompt_tokens = excluded.prompt_tokens,
-           completion_tokens = excluded.completion_tokens,
-           total_tokens = excluded.total_tokens,
-           reasoning_tokens = excluded.reasoning_tokens,
-           cached_tokens = excluded.cached_tokens,
-           cache_write_tokens = excluded.cache_write_tokens,
-           cost = excluded.cost,
-           upstream_cost = excluded.upstream_cost,
-           provider_name = excluded.provider_name",
-        params![
-            new_id("usage"),
-            chat_id,
-            assistant_message_id,
-            usage_generation_id,
-            model,
-            model_trace.map(|trace| trace.provider_id.as_str()),
-            model_trace.map(|trace| trace.model_id.as_str()),
-            model_trace.and_then(|trace| trace.model_variant.as_deref()),
-            model_trace.map(|trace| trace.model_ref_json.as_str()),
-            agent_type,
-            usage_i64_any(usage, &["prompt_tokens", "promptTokens", "input_tokens", "inputTokens"]),
-            usage_i64_any(usage, &["completion_tokens", "completionTokens", "output_tokens", "outputTokens"]),
-            usage_i64_any(usage, &["total_tokens", "totalTokens"]),
-            usage_i64_any(usage, &["reasoning_tokens", "reasoningTokens"]),
-            usage_i64_any(usage, &[
-                "cached_tokens",
-                "cachedTokens",
-                "cache_read_tokens",
-                "cacheReadTokens",
-                "cache_read_input_tokens",
-                "cacheReadInputTokens",
-                "cachedInputTokens"
-            ]),
-            usage_i64_any(usage, &[
-                "cache_write_tokens",
-                "cacheWriteTokens",
-                "cache_creation_input_tokens",
-                "cacheWriteInputTokens"
-            ]),
-            usage_cost(usage).unwrap_or(0.0),
-            usage_f64(usage, "upstream_cost", "upstreamCost"),
-            usage_string(usage, "provider_name"),
-            now
-        ],
-    )
-    .map_err(to_store_error)?;
-    Ok(())
-}
-
-fn total_cost_for_chat(conn: &Connection, chat_id: &str) -> Result<f64, String> {
-    let from_usage_logs: Option<f64> = conn
-        .query_row(
-            "SELECT SUM(cost) FROM chat_usage_logs WHERE chat_id = ?1",
-            [chat_id],
-            |row| row.get(0),
-        )
-        .map_err(to_store_error)?;
-    if let Some(cost) = from_usage_logs {
-        return Ok(cost);
-    }
-    let from_messages: Option<f64> = conn
-        .query_row(
-            "SELECT SUM(cost) FROM chat_messages WHERE chat_id = ?1",
-            [chat_id],
-            |row| row.get(0),
-        )
-        .map_err(to_store_error)?;
-    Ok(from_messages.unwrap_or(0.0))
-}
-
-fn latest_prompt_tokens_for_chat(conn: &Connection, chat_id: &str) -> Result<i64, String> {
-    let mut usage_statement = conn
-        .prepare(
-            "SELECT prompt_tokens, total_tokens
-             FROM chat_usage_logs
-             WHERE chat_id = ?1
-               AND agent_type != 'context_summary'
-             ORDER BY created_at_ms DESC",
-        )
-        .map_err(to_store_error)?;
-    let usage_rows = usage_statement
-        .query_map([chat_id], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
-        })
-        .map_err(to_store_error)?;
-    for row in usage_rows {
-        let (prompt_tokens, total_tokens) = row.map_err(to_store_error)?;
-        if prompt_tokens > 0 {
-            return Ok(prompt_tokens);
-        }
-        if total_tokens > 0 {
-            return Ok(total_tokens);
-        }
-    }
-
-    let mut statement = conn
-        .prepare(
-            "SELECT usage_json
-             FROM chat_messages
-             WHERE chat_id = ?1
-               AND role = 'assistant'
-               AND status = 'done'
-               AND usage_json IS NOT NULL
-               AND usage_json != ''
-             ORDER BY sequence DESC",
-        )
-        .map_err(to_store_error)?;
-    let rows = statement
-        .query_map([chat_id], |row| row.get::<_, String>(0))
-        .map_err(to_store_error)?;
-
-    for row in rows {
-        let usage_json = row.map_err(to_store_error)?;
-        let Ok(usage) = serde_json::from_str::<Value>(&usage_json) else {
-            continue;
-        };
-        if let Some(tokens) = usage_prompt_tokens(&usage) {
-            return Ok(tokens);
-        }
-    }
-    Ok(0)
-}
-
-fn usage_prompt_tokens(usage: &Value) -> Option<i64> {
-    usage
-        .get("prompt_tokens")
-        .or_else(|| usage.get("promptTokens"))
-        .and_then(Value::as_i64)
-        .filter(|tokens| *tokens > 0)
-        .or_else(|| {
-            usage
-                .get("total_tokens")
-                .or_else(|| usage.get("totalTokens"))
-                .and_then(Value::as_i64)
-                .filter(|tokens| *tokens > 0)
-        })
-}
-
-fn usage_i64_any(usage: &Value, keys: &[&str]) -> i64 {
-    keys.iter()
-        .find_map(|key| usage.get(*key).and_then(Value::as_i64))
-        .unwrap_or(0)
-}
-
-fn usage_f64(usage: &Value, snake_key: &str, camel_key: &str) -> Option<f64> {
-    usage
-        .get(snake_key)
-        .or_else(|| usage.get(camel_key))
-        .and_then(Value::as_f64)
-}
-
-fn usage_string(usage: &Value, key: &str) -> Option<String> {
-    usage
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-}
-
 fn chat_title(content: &str) -> String {
     let title = content
         .split_whitespace()
@@ -1221,38 +911,4 @@ fn normalize_project_path(path: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn old_image_metadata_replays_as_placeholders() {
-        let metadata = json!({
-            "images": [
-                {
-                    "base64": "a".repeat(320_000),
-                    "mime_type": "image/png",
-                    "name": "old.png",
-                    "size_bytes": 240000
-                }
-            ]
-        })
-        .to_string();
-
-        let placeholders = image_placeholders_from_metadata(Some(&metadata));
-
-        assert_eq!(
-            placeholders,
-            vec![ImagePlaceholder {
-                mime_type: "image/png".to_string(),
-                name: Some("old.png".to_string())
-            }]
-        );
-        let content = images::user_content_with_image_placeholders("see attached", &placeholders);
-        assert!(
-            content
-                .to_string()
-                .contains("[Attached image/png: old.png]")
-        );
-        assert!(!content.to_string().contains(&"a".repeat(256)));
-    }
-}
+mod tests;

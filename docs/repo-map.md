@@ -30,7 +30,11 @@ This is the quick map for contributors and coding agents working in this reposit
 | `local/crates/fennara-cli/` | `fennara` command: install, update, CLI self-update, doctor, webview prerequisite checks, C# support, MCP app setup, and generated project guidance. |
 | `local/crates/fennara-mcp/` | Local stdio MCP server and tool schema forwarding. |
 | `local/crates/fennara-daemon/` | Local daemon used for runtime sessions and Godot bridge work. |
-| `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/` | Built-in chat provider runtime primitives, catalog/resolution, context preflight hooks, normalized stream/error types, and OpenAI-compatible adapters for OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Ollama/local, and LM Studio. |
+| `local/crates/fennara-daemon/src/runtime_daemon/permissions.rs` | Built-in chat approval modes, tool-risk classification, permission decisions, and pending approval request types. |
+| `local/crates/fennara-daemon/src/runtime_daemon/chat/exec_command.rs` | Daemon-owned built-in chat `exec_command` implementation: shell detection, cwd validation, process spawn, timeout/tree-kill, output capture, and result formatting. |
+| `local/crates/fennara-daemon/src/runtime_daemon/chat/prompt.rs` | Built-in chat PromptBuilder and generated runtime environment context. |
+| `local/crates/fennara-daemon/src/runtime_daemon/chat/trace.rs` | Local-only built-in chat trace recorder, SQLite event rows, retention, and debug query helpers. |
+| `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/` | Built-in chat provider runtime primitives, catalog/resolution, context preflight hooks, normalized stream/error types, and OpenAI-compatible or Anthropic-compatible adapters for OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, Ollama/local, and LM Studio. |
 | `local/schemas/tools/` | MCP tool JSON schemas embedded into the local MCP server. |
 | `local/webview-runtimes/linux-cef.json` | Linux CEF runtime placeholder/generated manifest used for release manifest generation, doctor output, and legacy fallback. It records the shared app-data layout and archive metadata without placing CEF inside the addon zip. |
 | `local/Cargo.toml` | Rust workspace config. |

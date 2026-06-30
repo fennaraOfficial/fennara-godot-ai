@@ -6,6 +6,7 @@
 #include "fennara/ui/webview_host.hpp"
 
 #include <godot_cpp/classes/h_box_container.hpp>
+#include <godot_cpp/classes/input_event_key.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/margin_container.hpp>
 #include <godot_cpp/classes/object.hpp>
@@ -24,6 +25,8 @@ namespace {
 
 constexpr double STARTUP_GEOMETRY_DELAY_SECONDS = 0.25;
 constexpr int REQUIRED_STABLE_GEOMETRY_FRAMES = 2;
+
+FennaraDock *active_dock = nullptr;
 
 godot::Label *make_fallback_label(const godot::String &text) {
     godot::Label *label = memnew(godot::Label);
@@ -58,11 +61,16 @@ FennaraDock::FennaraDock() {
     set_clip_contents(true);
     set_focus_mode(godot::Control::FOCUS_ALL);
     webview_host = std::make_unique<WebviewHost>();
+    active_dock = this;
 }
 
 FennaraDock::~FennaraDock() {
+    _release_webview_keyboard_focus();
     if (webview_host) {
         webview_host->stop();
+    }
+    if (active_dock == this) {
+        active_dock = nullptr;
     }
 }
 
@@ -81,6 +89,7 @@ void FennaraDock::_ready() {
     _build_ui();
     startup_delay = STARTUP_GEOMETRY_DELAY_SECONDS;
     set_process(true);
+    set_process_input(true);
 }
 
 void FennaraDock::_process(double delta) {
@@ -94,6 +103,9 @@ void FennaraDock::_process(double delta) {
         }
     }
     _sync_webview_bounds();
+    if (webview_keyboard_focused && !has_focus()) {
+        _release_webview_keyboard_focus();
+    }
     if (webview_host) {
         webview_host->process(delta);
     }
@@ -110,11 +122,8 @@ void FennaraDock::_notification(int what) {
         case NOTIFICATION_THEME_CHANGED:
             _sync_webview_bounds();
             break;
-        case NOTIFICATION_FOCUS_ENTER:
-            webview_host->set_focused(true);
-            break;
         case NOTIFICATION_FOCUS_EXIT:
-            webview_host->set_focused(false);
+            _release_webview_keyboard_focus();
             break;
         case NOTIFICATION_MOUSE_EXIT:
         case NOTIFICATION_MOUSE_EXIT_SELF:
@@ -131,8 +140,8 @@ void FennaraDock::_sync_webview_bounds() {
     }
 
     if (!is_visible_in_tree()) {
+        _release_webview_keyboard_focus();
         webview_host->set_visible(false);
-        webview_host->set_focused(false);
         return;
     }
 
@@ -304,6 +313,39 @@ void FennaraDock::_refresh_status() {
     _try_start_webview();
 }
 
+void FennaraDock::_set_webview_keyboard_focus(bool focused) {
+    if (webview_keyboard_focused == focused && focused) {
+        return;
+    }
+    webview_keyboard_focused = focused;
+    if (webview_host && webview_host->is_started()) {
+        webview_host->set_focused(focused);
+    }
+}
+
+void FennaraDock::_release_webview_keyboard_focus() {
+    webview_keyboard_focused = false;
+    if (webview_host && webview_host->is_started()) {
+        webview_host->set_focused(false);
+    }
+}
+
+bool FennaraDock::_event_is_inside_webview_region(const godot::Ref<godot::InputEvent> &event) {
+    auto *button = godot::Object::cast_to<godot::InputEventMouseButton>(event.ptr());
+    if (button == nullptr || !button->is_pressed()) {
+        return false;
+    }
+    godot::Control *owner = webview_region ? webview_region : this;
+    godot::Rect2 rect(owner->get_global_position(), owner->get_size());
+    return rect.has_point(button->get_global_position());
+}
+
+void FennaraDock::release_active_webview_keyboard_focus() {
+    if (active_dock != nullptr) {
+        active_dock->_release_webview_keyboard_focus();
+    }
+}
+
 void FennaraDock::_on_mcp_target_state_changed(bool active) {
     (void)active;
     _refresh_status();
@@ -386,6 +428,7 @@ bool FennaraDock::_save_chat_surface(const godot::String &surface) const {
 }
 
 void FennaraDock::_show_browser_fallback(const godot::String &message) {
+    _release_webview_keyboard_focus();
     if (internal_webview_surface != nullptr) {
         internal_webview_surface->set_visible(false);
     }
@@ -435,13 +478,29 @@ void FennaraDock::_output_log(const godot::String &message) const {
     godot::UtilityFunctions::print(godot::String("[Fennara] ") + message);
 }
 
+void FennaraDock::_input(const godot::Ref<godot::InputEvent> &event) {
+    if (!webview_host || !webview_host->is_started()) {
+        return;
+    }
+    auto *button = godot::Object::cast_to<godot::InputEventMouseButton>(event.ptr());
+    if (button == nullptr || !button->is_pressed()) {
+        return;
+    }
+    if (!_event_is_inside_webview_region(event)) {
+        _release_webview_keyboard_focus();
+    }
+}
+
 void FennaraDock::_gui_input(const godot::Ref<godot::InputEvent> &event) {
     if (webview_host && webview_host->uses_internal_surface() && webview_host->is_started()) {
         if (auto *button = godot::Object::cast_to<godot::InputEventMouseButton>(event.ptr())) {
             if (button->is_pressed()) {
                 grab_focus();
-                webview_host->set_focused(true);
+                _set_webview_keyboard_focus(true);
             }
+        }
+        if (godot::Object::cast_to<godot::InputEventKey>(event.ptr()) != nullptr && !webview_keyboard_focused) {
+            return;
         }
         if (webview_host->handle_input(event)) {
             accept_event();

@@ -97,6 +97,15 @@ impl LlmError {
         }
     }
 
+    pub(crate) fn is_retryable(&self) -> bool {
+        match self {
+            Self::Network { retryable, .. } => *retryable,
+            Self::Timeout { .. } | Self::RateLimit { .. } => true,
+            Self::ProviderApi { retryable, .. } => *retryable,
+            _ => false,
+        }
+    }
+
     pub(crate) fn from_reqwest(provider: &str, message: &str, error: reqwest::Error) -> Self {
         if error.is_timeout() {
             return Self::Timeout {

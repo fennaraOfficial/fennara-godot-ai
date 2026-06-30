@@ -65,11 +65,20 @@ mod tests {
 
     fn request_for_model(model_id: &str) -> LlmRequest {
         let settings = ProviderSettings {
+            openai_api_key: None,
+            anthropic_api_key: None,
             openrouter_api_key: Some("test".to_string()),
             ollama_cloud_api_key: None,
             lmstudio_api_key: None,
             deepseek_api_key: None,
             zai_api_key: None,
+            moonshot_api_key: None,
+            moonshot_cn_api_key: None,
+            kimi_api_key: None,
+            minimax_api_key: None,
+            minimax_coding_plan_api_key: None,
+            minimax_cn_api_key: None,
+            minimax_cn_coding_plan_api_key: None,
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
             custom_models: Vec::new(),

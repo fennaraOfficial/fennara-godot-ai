@@ -1,5 +1,9 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::{collections::BTreeMap, env, fs, path::PathBuf};
+
+use crate::runtime_daemon::permissions::{
+    ApprovalMode, approval_mode_options, clean_approval_mode,
+};
 
 use super::auth;
 use super::providers::{self, ProviderId, PublicProvider};
@@ -25,6 +29,8 @@ pub(crate) struct ChatSettings {
     pub(crate) custom_models: Vec<String>,
     #[serde(default = "default_chat_surface")]
     pub(crate) chat_surface: String,
+    #[serde(default, deserialize_with = "deserialize_approval_mode")]
+    pub(crate) approval_mode: ApprovalMode,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -41,6 +47,8 @@ pub(crate) struct PublicChatSettings {
     pub(crate) text_model_suggestions: Vec<String>,
     pub(crate) custom_models: Vec<String>,
     pub(crate) chat_surface: String,
+    pub(crate) approval_mode: String,
+    pub(crate) approval_mode_options: Vec<serde_json::Value>,
 }
 
 impl Default for ChatSettings {
@@ -53,6 +61,7 @@ impl Default for ChatSettings {
             reasoning_effort: DEFAULT_REASONING_EFFORT.to_string(),
             custom_models: Vec::new(),
             chat_surface: DEFAULT_CHAT_SURFACE.to_string(),
+            approval_mode: ApprovalMode::Ask,
         }
     }
 }
@@ -75,6 +84,8 @@ impl ChatSettings {
             text_model_suggestions: suggestion_models(&self.custom_models, has_openrouter_key),
             custom_models: self.custom_models.clone(),
             chat_surface: clean_chat_surface(&self.chat_surface).to_string(),
+            approval_mode: self.approval_mode.as_str().to_string(),
+            approval_mode_options: approval_mode_options(),
         }
     }
 }
@@ -84,7 +95,7 @@ pub(crate) fn recommended_model_ids() -> Vec<&'static str> {
         DEFAULT_MODEL,
         "qwen/qwen3.7-plus",
         "moonshotai/kimi-k2.7-code",
-        "minimax/minimax-m3",
+        "minimax/MiniMax-M3",
         "openai/gpt-5.5",
         "anthropic/claude-opus-4.8",
         "deepseek/deepseek-v4-flash",
@@ -103,7 +114,19 @@ fn suggestion_models(custom_models: &[String], has_openrouter_key: bool) -> Vec<
         Vec::new()
     };
     for model in custom_models {
-        if !has_openrouter_key && !model.starts_with("ollama/") && !model.starts_with("lmstudio/") {
+        if !has_openrouter_key
+            && !model.starts_with("openai/")
+            && !model.starts_with("anthropic/")
+            && !model.starts_with("ollama/")
+            && !model.starts_with("lmstudio/")
+            && !model.starts_with("moonshotai/")
+            && !model.starts_with("moonshotai-cn/")
+            && !model.starts_with("kimi-for-coding/")
+            && !model.starts_with("minimax/")
+            && !model.starts_with("minimax-coding-plan/")
+            && !model.starts_with("minimax-cn/")
+            && !model.starts_with("minimax-cn-coding-plan/")
+        {
             continue;
         }
         if !models.iter().any(|existing| existing == model) {
@@ -123,6 +146,7 @@ pub(crate) struct SaveSettingsRequest {
     pub(crate) model: Option<String>,
     pub(crate) reasoning_effort: Option<String>,
     pub(crate) chat_surface: Option<String>,
+    pub(crate) approval_mode: Option<String>,
 }
 
 pub(crate) fn load_settings() -> ChatSettings {
@@ -148,6 +172,7 @@ pub(crate) fn load_settings() -> ChatSettings {
     );
     settings.custom_models = clean_model_list(&settings.custom_models);
     settings.chat_surface = clean_chat_surface(&settings.chat_surface).to_string();
+    settings.approval_mode = clean_approval_mode(settings.approval_mode.as_str());
     if legacy_openrouter_key.is_some() {
         auth::migrate_legacy_api_key(ProviderId::OPENROUTER, legacy_openrouter_key);
         let _ = write_settings_file(&settings);
@@ -205,6 +230,9 @@ pub(crate) fn save_settings(update: SaveSettingsRequest) -> Result<ChatSettings,
     }
     if let Some(chat_surface) = update.chat_surface {
         settings.chat_surface = clean_chat_surface(&chat_surface).to_string();
+    }
+    if let Some(approval_mode) = update.approval_mode {
+        settings.approval_mode = clean_approval_mode(&approval_mode);
     }
 
     write_settings_file(&settings)?;
@@ -277,10 +305,19 @@ pub(crate) fn clean_model(model: &str) -> Option<String> {
     }
     let clean = strip_nitro_variant(trimmed);
     if clean.starts_with("ollama/")
+        || clean.starts_with("openai/")
+        || clean.starts_with("anthropic/")
         || clean.starts_with("ollama-cloud/")
         || clean.starts_with("lmstudio/")
         || clean.starts_with("deepseek/")
         || clean.starts_with("zai/")
+        || clean.starts_with("moonshotai/")
+        || clean.starts_with("moonshotai-cn/")
+        || clean.starts_with("kimi-for-coding/")
+        || clean.starts_with("minimax/")
+        || clean.starts_with("minimax-coding-plan/")
+        || clean.starts_with("minimax-cn/")
+        || clean.starts_with("minimax-cn-coding-plan/")
     {
         return Some(clean.to_string());
     }
@@ -375,6 +412,17 @@ fn default_reasoning_effort() -> String {
 
 fn default_chat_surface() -> String {
     DEFAULT_CHAT_SURFACE.to_string()
+}
+
+fn deserialize_approval_mode<'de, D>(deserializer: D) -> Result<ApprovalMode, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    Ok(value
+        .as_deref()
+        .map(clean_approval_mode)
+        .unwrap_or(ApprovalMode::Ask))
 }
 
 fn default_ollama_base_url() -> String {

@@ -240,6 +240,13 @@ fennara_cef_bridge_mouse_event make_mouse_event(const godot::InputEventMouse *ev
 
 } // namespace
 
+void clear_keyboard_state(KeyboardState &state) {
+    state.shift_down = false;
+    state.ctrl_down = false;
+    state.alt_down = false;
+    state.meta_down = false;
+}
+
 bool handle_input(const godot::Ref<godot::InputEvent> &event,
                   const fennara_cef_bridge_api *api,
                   fennara_cef_bridge_browser *browser,

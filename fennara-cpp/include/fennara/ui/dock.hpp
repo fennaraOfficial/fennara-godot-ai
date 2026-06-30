@@ -35,6 +35,7 @@ private:
     double refresh_timer = 0.0;
     double startup_delay = 0.0;
     bool attempted_webview = false;
+    bool webview_keyboard_focused = false;
     int stable_geometry_frames = 0;
     godot::Vector2 last_region_position;
     godot::Vector2 last_region_size;
@@ -42,6 +43,9 @@ private:
     void _build_ui();
     void _try_start_webview();
     void _sync_webview_bounds();
+    void _set_webview_keyboard_focus(bool focused);
+    void _release_webview_keyboard_focus();
+    bool _event_is_inside_webview_region(const godot::Ref<godot::InputEvent> &event);
     void _refresh_status();
     void _on_mcp_target_state_changed(bool active);
     void _on_open_browser_pressed();
@@ -58,8 +62,11 @@ public:
     FennaraDock();
     ~FennaraDock();
 
+    static void release_active_webview_keyboard_focus();
+
     void set_local_bridge(FennaraLocalBridge *bridge);
     void _ready() override;
+    void _input(const godot::Ref<godot::InputEvent> &event) override;
     void _process(double delta) override;
     void _gui_input(const godot::Ref<godot::InputEvent> &event) override;
 };

@@ -4,6 +4,7 @@
 #include "fennara/local_bridge.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/update_notice.hpp"
+#include "fennara/ui/script_context_menu.hpp"
 
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/config_file.hpp>
@@ -39,6 +40,11 @@ void FennaraPlugin::_enter_tree() {
     local_bridge->set_name("FennaraLocalBridge");
     add_child(local_bridge);
     dock_instance->set_local_bridge(local_bridge);
+
+    script_context_menu_plugin.instantiate();
+    script_context_menu_plugin->set_local_bridge(local_bridge);
+    add_context_menu_plugin(godot::EditorContextMenuPlugin::CONTEXT_SLOT_SCRIPT_EDITOR_CODE,
+                            script_context_menu_plugin);
     update_notice::check_once();
 
     _ensure_runtime_helper_autoload();
@@ -236,6 +242,11 @@ void FennaraPlugin::_ensure_export_presets_exclude_fennara() {
 void FennaraPlugin::_exit_tree() {
     set_process(false);
     csharp_lsp::shutdown_warm_server();
+    if (script_context_menu_plugin.is_valid()) {
+        remove_context_menu_plugin(script_context_menu_plugin);
+        script_context_menu_plugin->set_local_bridge(nullptr);
+        script_context_menu_plugin.unref();
+    }
     if (local_bridge) {
         local_bridge->queue_free();
         local_bridge = nullptr;

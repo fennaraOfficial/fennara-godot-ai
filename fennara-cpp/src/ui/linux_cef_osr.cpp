@@ -396,6 +396,9 @@ bool LinuxCefOsrWebview::handle_input(const godot::Ref<godot::InputEvent> &event
 }
 
 void LinuxCefOsrWebview::set_focused(bool next_focused) {
+    if (!next_focused && cef != nullptr) {
+        input::clear_keyboard_state(cef->keyboard_state);
+    }
     if (!started || cef == nullptr || focused == next_focused) {
         return;
     }

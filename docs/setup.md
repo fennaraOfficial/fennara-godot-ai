@@ -117,8 +117,9 @@ open Godot editor gets its own writable CEF profile/cache/log directories under
 the Fennara app-data `cache/webview/profiles/cef/` and `logs/webview/cef/`
 roots, so multiple editors can keep embedded chat open at the same time.
 
-The built-in chat has its own provider settings. It can use OpenRouter, Ollama
-Cloud, DeepSeek, Z.AI, local Ollama, or LM Studio. These settings are separate
+The built-in chat has its own provider settings. It can use OpenAI, Anthropic,
+OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax,
+local Ollama, or LM Studio. These settings are separate
 from Claude Code, Codex, Cursor, Gemini, or any other external MCP app.
 Provider keys and local base URLs are stored locally outside the Godot project.
 
@@ -129,6 +130,11 @@ through the local daemon. Restart Godot after changing this display setting.
 
 Inside the dock, use `/provider` to connect or switch providers and `/model` to
 choose a model. See [Built-In Chat Providers](providers.md) and [Built-In Chat Slash Commands](slash-commands.md).
+
+To add focused code context to a built-in chat request, select code in Godot's
+script editor, open the script editor context menu, and choose **Add to Chat**.
+The selected script range is attached to the next chat message as removable code
+context.
 
 ## 3. Configure Your MCP App
 

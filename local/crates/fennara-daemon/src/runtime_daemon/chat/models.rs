@@ -79,10 +79,18 @@ pub(crate) struct ModelInfo {
     pub(crate) description: Option<String>,
 }
 
-pub(crate) async fn list_models(settings: &ChatSettings) -> ModelCatalog {
+pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) -> ModelCatalog {
     let recommended_ids = settings::recommended_model_ids();
     let custom_ids = settings.custom_models.clone();
     catalog_cache::spawn_refresh_if_stale();
+    let has_openai_key = auth::has_api_key(ProviderId::OPENAI)
+        || std::env::var("OPENAI_API_KEY")
+            .ok()
+            .is_some_and(|key| !key.trim().is_empty());
+    let has_anthropic_key = auth::has_api_key(ProviderId::ANTHROPIC)
+        || std::env::var("ANTHROPIC_API_KEY")
+            .ok()
+            .is_some_and(|key| !key.trim().is_empty());
     let has_saved_openrouter_key = auth::has_api_key(ProviderId::OPENROUTER)
         || std::env::var("OPENROUTER_API_KEY")
             .ok()
@@ -99,11 +107,52 @@ pub(crate) async fn list_models(settings: &ChatSettings) -> ModelCatalog {
         || std::env::var("DEEPSEEK_API_KEY")
             .ok()
             .is_some_and(|key| !key.trim().is_empty());
+    let has_moonshot_key = auth::has_api_key(ProviderId::MOONSHOTAI)
+        || std::env::var("MOONSHOT_API_KEY")
+            .ok()
+            .is_some_and(|key| !key.trim().is_empty());
+    let has_moonshot_cn_key = auth::has_api_key(ProviderId::MOONSHOTAI_CN)
+        || std::env::var("MOONSHOT_API_KEY")
+            .ok()
+            .is_some_and(|key| !key.trim().is_empty());
+    let has_kimi_key = auth::has_api_key(ProviderId::KIMI_FOR_CODING)
+        || std::env::var("KIMI_API_KEY")
+            .ok()
+            .is_some_and(|key| !key.trim().is_empty());
+    let has_minimax_key = auth::has_api_key(ProviderId::MINIMAX)
+        || std::env::var("MINIMAX_API_KEY")
+            .ok()
+            .is_some_and(|key| !key.trim().is_empty());
+    let has_minimax_coding_plan_key = auth::has_api_key(ProviderId::MINIMAX_CODING_PLAN)
+        || has_minimax_key
+        || std::env::var("MINIMAX_API_KEY")
+            .ok()
+            .is_some_and(|key| !key.trim().is_empty());
+    let has_minimax_cn_key = auth::has_api_key(ProviderId::MINIMAX_CN)
+        || std::env::var("MINIMAX_API_KEY")
+            .ok()
+            .is_some_and(|key| !key.trim().is_empty());
+    let has_minimax_cn_coding_plan_key = auth::has_api_key(ProviderId::MINIMAX_CN_CODING_PLAN)
+        || has_minimax_cn_key
+        || std::env::var("MINIMAX_API_KEY")
+            .ok()
+            .is_some_and(|key| !key.trim().is_empty());
     let cached_catalog = catalog_cache::load_disk().await;
     let catalog_status = catalog_status(&cached_catalog);
     let openrouter_error = cached_catalog.as_ref().err().cloned();
-    let needs_hosted_catalog =
-        has_saved_openrouter_key || has_ollama_cloud_key || has_deepseek_key || has_zai_key;
+    let needs_hosted_catalog = has_saved_openrouter_key
+        || has_openai_key
+        || has_anthropic_key
+        || has_ollama_cloud_key
+        || has_deepseek_key
+        || has_zai_key
+        || has_moonshot_key
+        || has_moonshot_cn_key
+        || has_kimi_key
+        || has_minimax_key
+        || has_minimax_coding_plan_key
+        || has_minimax_cn_key
+        || has_minimax_cn_coding_plan_key;
     let mut models = Vec::new();
     if has_saved_openrouter_key {
         if let Ok(cached_catalog) = &cached_catalog {
@@ -111,6 +160,28 @@ pub(crate) async fn list_models(settings: &ChatSettings) -> ModelCatalog {
                 &mut models,
                 &cached_catalog.catalog,
                 &recommended_ids,
+                &custom_ids,
+            );
+        }
+    }
+    if has_openai_key {
+        if let Ok(cached_catalog) = &cached_catalog {
+            append_hosted_catalog_models(
+                &mut models,
+                &cached_catalog.openai,
+                "OpenAI",
+                ProviderId::OPENAI,
+                &custom_ids,
+            );
+        }
+    }
+    if has_anthropic_key {
+        if let Ok(cached_catalog) = &cached_catalog {
+            append_hosted_catalog_models(
+                &mut models,
+                &cached_catalog.anthropic,
+                "Anthropic",
+                ProviderId::ANTHROPIC,
                 &custom_ids,
             );
         }
@@ -148,66 +219,161 @@ pub(crate) async fn list_models(settings: &ChatSettings) -> ModelCatalog {
             );
         }
     }
-
-    let ollama_result = tokio::time::timeout(
-        LOCAL_MODELS_TIMEOUT,
-        fetch_ollama_models(&settings.ollama_base_url),
-    )
-    .await
-    .unwrap_or_else(|_| Err("Ollama models request timed out.".to_string()));
-    let ollama_status = match ollama_result {
-        Ok(ollama_models) => {
-            append_ollama_models(&mut models, &ollama_models, &custom_ids);
-            OllamaStatus {
-                state: if ollama_models.is_empty() {
-                    "empty"
-                } else {
-                    "ready"
-                },
-                base_url: settings.ollama_base_url.clone(),
-                model_count: ollama_models.len(),
-                error: None,
-            }
+    if has_moonshot_key {
+        if let Ok(cached_catalog) = &cached_catalog {
+            append_hosted_catalog_models(
+                &mut models,
+                &cached_catalog.moonshot,
+                "Moonshot AI",
+                ProviderId::MOONSHOTAI,
+                &custom_ids,
+            );
         }
-        Err(error) => OllamaStatus {
-            state: "offline",
-            base_url: settings.ollama_base_url.clone(),
-            model_count: 0,
-            error: Some(error),
-        },
-    };
+    }
+    if has_moonshot_cn_key {
+        if let Ok(cached_catalog) = &cached_catalog {
+            append_hosted_catalog_models(
+                &mut models,
+                &cached_catalog.moonshot_cn,
+                "Moonshot AI (China)",
+                ProviderId::MOONSHOTAI_CN,
+                &custom_ids,
+            );
+        }
+    }
+    if has_kimi_key {
+        if let Ok(cached_catalog) = &cached_catalog {
+            append_hosted_catalog_models(
+                &mut models,
+                &cached_catalog.kimi_for_coding,
+                "Kimi For Coding",
+                ProviderId::KIMI_FOR_CODING,
+                &custom_ids,
+            );
+        }
+    }
+    if has_minimax_key {
+        if let Ok(cached_catalog) = &cached_catalog {
+            append_hosted_catalog_models(
+                &mut models,
+                &cached_catalog.minimax,
+                "MiniMax (minimax.io)",
+                ProviderId::MINIMAX,
+                &custom_ids,
+            );
+        }
+    }
+    if has_minimax_coding_plan_key {
+        if let Ok(cached_catalog) = &cached_catalog {
+            append_hosted_catalog_models(
+                &mut models,
+                &cached_catalog.minimax_coding_plan,
+                "MiniMax Token Plan (minimax.io)",
+                ProviderId::MINIMAX_CODING_PLAN,
+                &custom_ids,
+            );
+        }
+    }
+    if has_minimax_cn_key {
+        if let Ok(cached_catalog) = &cached_catalog {
+            append_hosted_catalog_models(
+                &mut models,
+                &cached_catalog.minimax_cn,
+                "MiniMax (minimaxi.com)",
+                ProviderId::MINIMAX_CN,
+                &custom_ids,
+            );
+        }
+    }
+    if has_minimax_cn_coding_plan_key {
+        if let Ok(cached_catalog) = &cached_catalog {
+            append_hosted_catalog_models(
+                &mut models,
+                &cached_catalog.minimax_cn_coding_plan,
+                "MiniMax Token Plan (minimaxi.com)",
+                ProviderId::MINIMAX_CN_CODING_PLAN,
+                &custom_ids,
+            );
+        }
+    }
 
     let lmstudio_base_url = settings.provider_base_url(
         ProviderId::LMSTUDIO,
         providers::lmstudio_v1_base_url("").as_str(),
     );
-    let lmstudio_result = tokio::time::timeout(
-        LOCAL_MODELS_TIMEOUT,
-        fetch_lmstudio_models(&lmstudio_base_url),
-    )
-    .await
-    .unwrap_or_else(|_| Err("LM Studio models request timed out.".to_string()));
-    let lmstudio_status = match lmstudio_result {
-        Ok(lmstudio_models) => {
-            let catalog = cached_catalog.as_ref().ok().map(|cached| &cached.lmstudio);
-            append_lmstudio_models(&mut models, &lmstudio_models, catalog, &custom_ids);
-            LocalProviderStatus {
-                state: if lmstudio_models.is_empty() {
-                    "empty"
-                } else {
-                    "ready"
-                },
-                base_url: lmstudio_base_url.clone(),
-                model_count: lmstudio_models.len(),
-                error: None,
+    let (ollama_status, lmstudio_status) = if refresh_local {
+        let ollama_result = tokio::time::timeout(
+            LOCAL_MODELS_TIMEOUT,
+            fetch_ollama_models(&settings.ollama_base_url),
+        )
+        .await
+        .unwrap_or_else(|_| Err("Ollama models request timed out.".to_string()));
+        let ollama_status = match ollama_result {
+            Ok(ollama_models) => {
+                append_ollama_models(&mut models, &ollama_models, &custom_ids);
+                OllamaStatus {
+                    state: if ollama_models.is_empty() {
+                        "empty"
+                    } else {
+                        "ready"
+                    },
+                    base_url: settings.ollama_base_url.clone(),
+                    model_count: ollama_models.len(),
+                    error: None,
+                }
             }
-        }
-        Err(error) => LocalProviderStatus {
-            state: "offline",
-            base_url: lmstudio_base_url.clone(),
-            model_count: 0,
-            error: Some(error),
-        },
+            Err(error) => OllamaStatus {
+                state: "offline",
+                base_url: settings.ollama_base_url.clone(),
+                model_count: 0,
+                error: Some(error),
+            },
+        };
+
+        let lmstudio_result = tokio::time::timeout(
+            LOCAL_MODELS_TIMEOUT,
+            fetch_lmstudio_models(&lmstudio_base_url),
+        )
+        .await
+        .unwrap_or_else(|_| Err("LM Studio models request timed out.".to_string()));
+        let lmstudio_status = match lmstudio_result {
+            Ok(lmstudio_models) => {
+                let catalog = cached_catalog.as_ref().ok().map(|cached| &cached.lmstudio);
+                append_lmstudio_models(&mut models, &lmstudio_models, catalog, &custom_ids);
+                LocalProviderStatus {
+                    state: if lmstudio_models.is_empty() {
+                        "empty"
+                    } else {
+                        "ready"
+                    },
+                    base_url: lmstudio_base_url.clone(),
+                    model_count: lmstudio_models.len(),
+                    error: None,
+                }
+            }
+            Err(error) => LocalProviderStatus {
+                state: "offline",
+                base_url: lmstudio_base_url.clone(),
+                model_count: 0,
+                error: Some(error),
+            },
+        };
+        (ollama_status, lmstudio_status)
+    } else {
+        (
+            OllamaStatus {
+                state: "unknown",
+                base_url: settings.ollama_base_url.clone(),
+                model_count: 0,
+                error: None,
+            },
+            LocalProviderStatus {
+                state: "unknown",
+                base_url: lmstudio_base_url.clone(),
+                model_count: 0,
+                error: None,
+            },
+        )
     };
 
     let mut local_provider_statuses = BTreeMap::new();
@@ -299,10 +465,19 @@ fn append_openrouter_catalog_models(
     }
     for id in custom_ids.iter().filter(|id| {
         !id.starts_with("ollama/")
+            && !id.starts_with("openai/")
+            && !id.starts_with("anthropic/")
             && !id.starts_with("ollama-cloud/")
             && !id.starts_with("lmstudio/")
             && !id.starts_with("deepseek/")
             && !id.starts_with("zai/")
+            && !id.starts_with("moonshotai/")
+            && !id.starts_with("moonshotai-cn/")
+            && !id.starts_with("kimi-for-coding/")
+            && !id.starts_with("minimax/")
+            && !id.starts_with("minimax-coding-plan/")
+            && !id.starts_with("minimax-cn/")
+            && !id.starts_with("minimax-cn-coding-plan/")
     }) {
         if models
             .iter()
@@ -771,9 +946,17 @@ fn fallback_provider(id: &str) -> String {
         .next()
         .unwrap_or("OpenRouter");
     match provider {
+        "openai" => "OpenAI".to_string(),
+        "anthropic" => "Anthropic".to_string(),
         "z-ai" => "Z.ai".to_string(),
         "x-ai" => "xAI".to_string(),
-        "moonshotai" => "MoonshotAI".to_string(),
+        "moonshotai" => "Moonshot AI".to_string(),
+        "moonshotai-cn" => "Moonshot AI (China)".to_string(),
+        "kimi-for-coding" => "Kimi For Coding".to_string(),
+        "minimax" => "MiniMax (minimax.io)".to_string(),
+        "minimax-coding-plan" => "MiniMax Token Plan (minimax.io)".to_string(),
+        "minimax-cn" => "MiniMax (minimaxi.com)".to_string(),
+        "minimax-cn-coding-plan" => "MiniMax Token Plan (minimaxi.com)".to_string(),
         other => {
             let mut chars = other.chars();
             match chars.next() {
@@ -787,6 +970,10 @@ fn fallback_provider(id: &str) -> String {
 fn fallback_provider_id(id: &str) -> &'static str {
     if id.starts_with("ollama/") {
         ProviderId::OLLAMA
+    } else if id.starts_with("openai/") {
+        ProviderId::OPENAI
+    } else if id.starts_with("anthropic/") {
+        ProviderId::ANTHROPIC
     } else if id.starts_with("ollama-cloud/") {
         ProviderId::OLLAMA_CLOUD
     } else if id.starts_with("lmstudio/") {
@@ -795,6 +982,20 @@ fn fallback_provider_id(id: &str) -> &'static str {
         ProviderId::DEEPSEEK
     } else if id.starts_with("zai/") {
         ProviderId::ZAI
+    } else if id.starts_with("moonshotai-cn/") {
+        ProviderId::MOONSHOTAI_CN
+    } else if id.starts_with("moonshotai/") {
+        ProviderId::MOONSHOTAI
+    } else if id.starts_with("kimi-for-coding/") {
+        ProviderId::KIMI_FOR_CODING
+    } else if id.starts_with("minimax-cn-coding-plan/") {
+        ProviderId::MINIMAX_CN_CODING_PLAN
+    } else if id.starts_with("minimax-coding-plan/") {
+        ProviderId::MINIMAX_CODING_PLAN
+    } else if id.starts_with("minimax-cn/") {
+        ProviderId::MINIMAX_CN
+    } else if id.starts_with("minimax/") {
+        ProviderId::MINIMAX
     } else {
         ProviderId::OPENROUTER
     }
@@ -828,4 +1029,86 @@ fn string_array_contains(value: Option<&Value>, needle: &str) -> bool {
     value
         .and_then(Value::as_array)
         .is_some_and(|items| items.iter().any(|item| item.as_str() == Some(needle)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::providers::models_dev::parse_moonshot_catalog;
+    use super::*;
+
+    #[test]
+    fn appends_moonshot_catalog_models_with_native_prefix() {
+        let raw = br#"{
+            "moonshotai": {
+                "id": "moonshotai",
+                "models": {
+                    "kimi-k2.7-code": {
+                        "id": "kimi-k2.7-code",
+                        "name": "Kimi K2.7 Code",
+                        "tool_call": true,
+                        "reasoning": false,
+                        "temperature": true,
+                        "limit": { "context": 262144, "output": 32768 },
+                        "modalities": { "input": ["text"], "output": ["text"] },
+                        "cost": { "input": 0.6, "output": 2.5 }
+                    }
+                }
+            }
+        }"#;
+        let catalog = parse_moonshot_catalog(raw).unwrap();
+        let mut models = Vec::new();
+        let custom_ids = Vec::new();
+
+        append_hosted_catalog_models(
+            &mut models,
+            &catalog,
+            "Moonshot AI",
+            ProviderId::MOONSHOTAI,
+            &custom_ids,
+        );
+
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "moonshotai/kimi-k2.7-code");
+        assert_eq!(models[0].provider_id, ProviderId::MOONSHOTAI);
+        assert_eq!(models[0].provider, "Moonshot AI");
+        assert_eq!(models[0].canonical_slug.as_deref(), Some("kimi-k2.7-code"));
+    }
+
+    #[test]
+    fn appends_minimax_catalog_models_with_native_prefix() {
+        let raw = br#"{
+            "minimax": {
+                "id": "minimax",
+                "models": {
+                    "MiniMax-M3": {
+                        "id": "MiniMax-M3",
+                        "name": "MiniMax-M3",
+                        "tool_call": true,
+                        "reasoning": false,
+                        "temperature": true,
+                        "limit": { "context": 1000000, "output": 128000 },
+                        "modalities": { "input": ["text", "image"], "output": ["text"] },
+                        "cost": { "input": 1.0, "output": 8.0 }
+                    }
+                }
+            }
+        }"#;
+        let catalog = super::super::providers::models_dev::parse_minimax_catalog(raw).unwrap();
+        let mut models = Vec::new();
+        let custom_ids = Vec::new();
+
+        append_hosted_catalog_models(
+            &mut models,
+            &catalog,
+            "MiniMax (minimax.io)",
+            ProviderId::MINIMAX,
+            &custom_ids,
+        );
+
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "minimax/MiniMax-M3");
+        assert_eq!(models[0].provider_id, ProviderId::MINIMAX);
+        assert_eq!(models[0].provider, "MiniMax (minimax.io)");
+        assert_eq!(models[0].canonical_slug.as_deref(), Some("MiniMax-M3"));
+    }
 }

@@ -2,13 +2,11 @@ use serde_json::{Value, json};
 
 use crate::runtime_daemon::{godot_bridge, state::AppState};
 
+use super::{exec_command, trace};
+
 const READ_FILE_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../schemas/tools/read_file.json"
-));
-const FILE_OPS_SCHEMA: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../schemas/tools/file_ops.json"
 ));
 const SCRIPT_DIAGNOSTICS_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -62,9 +60,12 @@ const RUNTIME_SCRIPT_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../schemas/tools/runtime_script.json"
 ));
+const EXEC_COMMAND_SCHEMA: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../schemas/tools/exec_command.json"
+));
 const ALLOWED_TOOL_NAMES: &[&str] = &[
     "read_file",
-    "file_ops",
     "script_diagnostics",
     "get_class_info",
     "get_scene_tree",
@@ -78,10 +79,10 @@ const ALLOWED_TOOL_NAMES: &[&str] = &[
     "save_custom_resource",
     "runtime_session",
     "runtime_script",
+    "exec_command",
 ];
 const TOOL_SCHEMAS: &[&str] = &[
     READ_FILE_SCHEMA,
-    FILE_OPS_SCHEMA,
     SCRIPT_DIAGNOSTICS_SCHEMA,
     GET_CLASS_INFO_SCHEMA,
     GET_SCENE_TREE_SCHEMA,
@@ -95,6 +96,7 @@ const TOOL_SCHEMAS: &[&str] = &[
     SAVE_CUSTOM_RESOURCE_SCHEMA,
     RUNTIME_SESSION_SCHEMA,
     RUNTIME_SCRIPT_SCHEMA,
+    EXEC_COMMAND_SCHEMA,
 ];
 
 #[derive(Clone, Debug)]
@@ -115,23 +117,43 @@ pub(crate) fn definitions() -> Vec<Value> {
         .collect()
 }
 
+pub(crate) fn allowed_tool_names() -> &'static [&'static str] {
+    ALLOWED_TOOL_NAMES
+}
+
 pub(crate) fn is_allowed_tool(name: &str) -> bool {
     ALLOWED_TOOL_NAMES.contains(&name)
 }
 
+fn is_daemon_local_tool(name: &str) -> bool {
+    name == "exec_command"
+}
+
 pub(crate) async fn execute(
     state: &AppState,
+    chat_id: &str,
     session_id: &str,
+    project_root: Option<&str>,
     name: &str,
     arguments: &Value,
+    recorder: Option<&trace::TraceRecorder>,
 ) -> ExecutedTool {
     if !is_allowed_tool(name) {
         return failed_tool(name, format!("Unsupported plugin chat tool: {name}"));
     }
 
-    let response =
-        godot_bridge::call_tool_value_for_session(state, Some(session_id), name, arguments.clone())
-            .await;
+    if is_daemon_local_tool(name) {
+        return exec_command::execute(state, chat_id, project_root, arguments).await;
+    }
+
+    let response = godot_bridge::call_tool_value_for_session_traced(
+        state,
+        Some(session_id),
+        name,
+        arguments.clone(),
+        recorder,
+    )
+    .await;
     let ok = response.get("ok").and_then(Value::as_bool).unwrap_or(false);
     let raw_result = response
         .get("raw_result")
@@ -140,6 +162,16 @@ pub(crate) async fn execute(
     let formatted = response.get("formatted_result").cloned().unwrap_or_else(
         || json!({ "content": response.get("result").cloned().unwrap_or(Value::Null) }),
     );
+    let format_span = recorder.map(|recorder| {
+        recorder.start_span(
+            "tool.result.format",
+            json!({
+                "tool_name": name,
+                "ok": ok,
+                "raw_result_bytes": trace::value_size(&raw_result)
+            }),
+        )
+    });
     let mut metadata = formatted
         .get("metadata")
         .cloned()
@@ -154,6 +186,19 @@ pub(crate) async fn execute(
     let plugin_markdown = plugin_markdown_for(name, &mcp_markdown, &metadata, &raw_result, ok);
     let target_keys = target_keys_from_metadata(&metadata);
     let model_followup_messages = model_followups_for(name, &raw_result);
+    if let Some(span) = format_span {
+        span.finish(
+            if ok { "ok" } else { "failed" },
+            json!({
+                "tool_name": name,
+                "metadata_bytes": trace::value_size(&metadata),
+                "mcp_markdown_bytes": mcp_markdown.len(),
+                "plugin_markdown_bytes": plugin_markdown.len(),
+                "target_key_count": target_keys.len(),
+                "model_followup_count": model_followup_messages.len()
+            }),
+        );
+    }
 
     ExecutedTool {
         ok,
@@ -174,16 +219,32 @@ fn strip_update_notice(markdown: &str) -> String {
         .unwrap_or_else(|| markdown.to_string())
 }
 
-fn failed_tool(name: &str, error: String) -> ExecutedTool {
-    let markdown = format!("Tool: {name}\nStatus: failed\nError: {error}");
+pub(crate) fn failed_tool(name: &str, error: String) -> ExecutedTool {
+    terminal_tool(name, "failed", error)
+}
+
+pub(crate) fn cancelled_tool(name: &str, error: String) -> ExecutedTool {
+    terminal_tool(name, "cancelled", error)
+}
+
+pub(crate) fn timed_out_tool(name: &str, error: String) -> ExecutedTool {
+    terminal_tool(name, "timed_out", error)
+}
+
+pub(crate) fn denied_tool(name: &str, error: String) -> ExecutedTool {
+    terminal_tool(name, "denied", error)
+}
+
+fn terminal_tool(name: &str, status: &'static str, error: String) -> ExecutedTool {
+    let markdown = format!("Tool: {name}\nStatus: {status}\nError: {error}");
     ExecutedTool {
         ok: false,
-        raw_result: json!({ "success": false, "error": error }),
+        raw_result: json!({ "success": false, "status": status, "error": error }),
         mcp_markdown: markdown.clone(),
         plugin_markdown: markdown,
         metadata: json!({
             "tool_name": name,
-            "status": "failed",
+            "status": status,
             "format": "markdown",
         }),
         target_keys: Vec::new(),
@@ -332,7 +393,7 @@ fn target_key(target: &Value) -> Option<String> {
     }
 }
 
-fn model_followups_for(name: &str, raw_result: &Value) -> Vec<Value> {
+pub(crate) fn model_followups_for(name: &str, raw_result: &Value) -> Vec<Value> {
     if name == "read_file" {
         return read_file_model_images(raw_result);
     }
@@ -522,5 +583,17 @@ fn normalize_res_path(path: &str) -> String {
         path.to_string()
     } else {
         format!("res://{}", path.trim_start_matches('/'))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exec_command_is_daemon_local_and_allowed() {
+        assert!(is_allowed_tool("exec_command"));
+        assert!(is_daemon_local_tool("exec_command"));
+        assert!(!is_daemon_local_tool("read_file"));
     }
 }

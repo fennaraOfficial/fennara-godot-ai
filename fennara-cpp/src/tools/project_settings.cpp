@@ -4,7 +4,9 @@
 #include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/input_event.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/input_event_joypad_button.hpp>
@@ -18,6 +20,7 @@ namespace fennara {
 namespace {
 
 constexpr int kFindSettingMaxResults = 100;
+constexpr int kRawValueMaxChars = 1200;
 
 void snapshot_project_settings_file() {
     auto *snap = FennaraSnapshotManager::get_active();
@@ -39,6 +42,52 @@ godot::String unquote_project_setting_part(const godot::String &value) {
         return stripped.substr(1, stripped.length() - 2);
     }
     return stripped;
+}
+
+int bracket_delta(const godot::String &value) {
+    int delta = 0;
+    bool in_string = false;
+    bool escaped = false;
+    for (int64_t i = 0; i < value.length(); i++) {
+        char32_t c = value[i];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (c == '\\') {
+            escaped = in_string;
+            continue;
+        }
+        if (c == '"') {
+            in_string = !in_string;
+            continue;
+        }
+        if (in_string) {
+            continue;
+        }
+        if (c == '{' || c == '[' || c == '(') {
+            delta++;
+        } else if (c == '}' || c == ']' || c == ')') {
+            delta--;
+        }
+    }
+    return delta;
+}
+
+godot::String compact_multiline(const godot::String &value) {
+    godot::String compact = value.strip_edges().replace("\r", "").replace("\n", " ");
+    while (compact.contains("  ")) {
+        compact = compact.replace("  ", " ");
+    }
+    return compact;
+}
+
+godot::String truncate_raw_value(const godot::String &value) {
+    godot::String compact = compact_multiline(value);
+    if (compact.length() <= kRawValueMaxChars) {
+        return compact;
+    }
+    return compact.substr(0, kRawValueMaxChars) + "... [truncated]";
 }
 
 } // namespace
@@ -174,6 +223,8 @@ godot::Dictionary FennaraProjectSettingsTool::_action_list(const godot::String &
     godot::Dictionary result;
 
     godot::PackedStringArray settings;
+    godot::Array setting_details;
+    godot::Dictionary values;
     const godot::String path = "res://project.godot";
     if (!godot::FileAccess::file_exists(path)) {
         result["success"] = false;
@@ -207,8 +258,19 @@ godot::Dictionary FennaraProjectSettingsTool::_action_list(const godot::String &
 
         godot::String key = unquote_project_setting_part(line.substr(0, equal_pos));
         godot::String setting = section + "/" + key;
+        godot::String raw_value = line.substr(equal_pos + 1).strip_edges();
+        int depth = bracket_delta(raw_value);
+        while (depth > 0 && i + 1 < lines.size()) {
+            i++;
+            godot::String continuation = godot::String(lines[i]).strip_edges();
+            raw_value += "\n" + continuation;
+            depth += bracket_delta(continuation);
+        }
         if (prefix.is_empty() || setting.begins_with(prefix)) {
             settings.push_back(setting);
+            godot::Dictionary detail = _setting_detail(setting, raw_value);
+            setting_details.push_back(detail);
+            values[setting] = detail.get("value_summary", "");
         }
     }
 
@@ -216,6 +278,8 @@ godot::Dictionary FennaraProjectSettingsTool::_action_list(const godot::String &
     result["action"] = "list";
     result["prefix"] = prefix;
     result["settings"] = settings;
+    result["setting_details"] = setting_details;
+    result["values"] = values;
     result["count"] = settings.size();
     result["source"] = "project.godot";
     return result;
@@ -266,6 +330,129 @@ godot::Dictionary FennaraProjectSettingsTool::_action_find_setting(
                                       " matching settings. Use a narrower prefix or query.";
     }
     return result;
+}
+
+godot::Dictionary FennaraProjectSettingsTool::_setting_detail(
+    const godot::String &setting, const godot::String &raw_value) {
+    auto *ps = godot::ProjectSettings::get_singleton();
+    godot::Variant value;
+    bool has_runtime_value = false;
+    if (ps && ps->has_setting(setting)) {
+        value = ps->get_setting(setting);
+        has_runtime_value = true;
+    }
+
+    godot::Dictionary detail;
+    detail["key"] = setting;
+    detail["raw_value"] = truncate_raw_value(raw_value);
+    detail["type"] = has_runtime_value
+                         ? godot::Variant::get_type_name(value.get_type())
+                         : godot::String("project_godot_text");
+    detail["value_summary"] = _setting_value_summary(setting, value, raw_value);
+
+    if (setting.begins_with("input/") && has_runtime_value) {
+        godot::Dictionary input_detail = _input_action_detail(setting, value, raw_value);
+        godot::Array keys = input_detail.keys();
+        for (int i = 0; i < keys.size(); i++) {
+            detail[keys[i]] = input_detail[keys[i]];
+        }
+    }
+    return detail;
+}
+
+godot::String FennaraProjectSettingsTool::_setting_value_summary(
+    const godot::String &setting, const godot::Variant &value, const godot::String &raw_value) {
+    if (setting.begins_with("input/")) {
+        return godot::String(_input_action_detail(setting, value, raw_value).get(
+            "value_summary", truncate_raw_value(raw_value)));
+    }
+    if (value.get_type() == godot::Variant::NIL) {
+        return truncate_raw_value(raw_value);
+    }
+    if (value.get_type() == godot::Variant::STRING ||
+        value.get_type() == godot::Variant::STRING_NAME ||
+        value.get_type() == godot::Variant::NODE_PATH) {
+        return godot::String(value);
+    }
+    godot::String summary = _json_summary(value);
+    if (summary.is_empty()) {
+        summary = godot::String(value);
+    }
+    return summary;
+}
+
+godot::Dictionary FennaraProjectSettingsTool::_input_action_detail(
+    const godot::String &setting, const godot::Variant &value, const godot::String &raw_value) {
+    godot::Dictionary detail;
+    detail["input_action"] = setting.substr(6);
+    if (value.get_type() != godot::Variant::DICTIONARY) {
+        detail["value_summary"] = truncate_raw_value(raw_value);
+        detail["event_count"] = 0;
+        detail["events"] = godot::Array();
+        return detail;
+    }
+
+    godot::Dictionary config = value;
+    double deadzone = static_cast<double>(config.get("deadzone", 0.5));
+    godot::Array events = config.get("events", godot::Array());
+    godot::Array event_details;
+    godot::PackedStringArray event_texts;
+    for (int i = 0; i < events.size(); i++) {
+        godot::Dictionary event_detail = _input_event_detail(events[i]);
+        event_details.push_back(event_detail);
+        godot::String text = event_detail.get("text", "");
+        if (!text.is_empty()) {
+            event_texts.push_back(text);
+        }
+    }
+
+    godot::String event_summary = event_texts.is_empty()
+                                      ? godot::String("[]")
+                                      : "[" + godot::String(", ").join(event_texts) + "]";
+    detail["deadzone"] = deadzone;
+    detail["event_count"] = events.size();
+    detail["events"] = event_details;
+    detail["value_summary"] = "deadzone=" + godot::String::num(deadzone, 2) +
+                              ", events=" + event_summary;
+    return detail;
+}
+
+godot::Dictionary FennaraProjectSettingsTool::_input_event_detail(const godot::Variant &event) {
+    godot::Dictionary detail;
+    godot::Ref<godot::InputEvent> input_event = event;
+    if (input_event.is_null()) {
+        detail["type"] = "unknown";
+        detail["text"] = godot::String(event);
+        return detail;
+    }
+
+    detail["type"] = input_event->get_class();
+    detail["text"] = input_event->as_text();
+    if (auto *key = godot::Object::cast_to<godot::InputEventKey>(input_event.ptr())) {
+        detail["keycode"] = static_cast<int64_t>(key->get_keycode());
+        detail["physical_keycode"] = static_cast<int64_t>(key->get_physical_keycode());
+        detail["unicode"] = static_cast<int64_t>(key->get_unicode());
+        detail["ctrl_pressed"] = key->is_ctrl_pressed();
+        detail["shift_pressed"] = key->is_shift_pressed();
+        detail["alt_pressed"] = key->is_alt_pressed();
+        detail["meta_pressed"] = key->is_meta_pressed();
+    } else if (auto *button = godot::Object::cast_to<godot::InputEventMouseButton>(input_event.ptr())) {
+        detail["button_index"] = static_cast<int64_t>(button->get_button_index());
+    } else if (auto *button = godot::Object::cast_to<godot::InputEventJoypadButton>(input_event.ptr())) {
+        detail["button_index"] = static_cast<int64_t>(button->get_button_index());
+    } else if (auto *motion = godot::Object::cast_to<godot::InputEventJoypadMotion>(input_event.ptr())) {
+        detail["axis"] = static_cast<int64_t>(motion->get_axis());
+        detail["axis_value"] = motion->get_axis_value();
+    }
+    return detail;
+}
+
+godot::String FennaraProjectSettingsTool::_json_summary(const godot::Variant &value) {
+    godot::String summary = godot::JSON::stringify(value);
+    if (summary == "null" && value.get_type() != godot::Variant::NIL) {
+        return godot::String(value);
+    }
+    return summary;
 }
 
 godot::Dictionary FennaraProjectSettingsTool::_set_input_action(const godot::String &action_name, const godot::Dictionary &config) {

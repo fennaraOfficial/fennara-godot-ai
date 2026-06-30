@@ -5,6 +5,7 @@
 
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
+#include <godot_cpp/variant/variant.hpp>
 
 namespace fennara::tool_results {
 
@@ -29,6 +30,31 @@ int append_budgeted_items(godot::PackedStringArray &lines,
     return shown;
 }
 
+int append_budgeted_setting_details(godot::PackedStringArray &lines,
+                                    const godot::Array &items,
+                                    int &remaining_tokens) {
+    int shown = 0;
+    for (int i = 0; i < items.size(); i++) {
+        if (godot::Variant(items[i]).get_type() != godot::Variant::DICTIONARY) {
+            continue;
+        }
+        godot::Dictionary detail = items[i];
+        godot::String line = "- " + godot::String(detail.get("key", ""));
+        godot::String value = godot::String(detail.get("value_summary", ""));
+        if (!value.is_empty()) {
+            line += " = " + value;
+        }
+        int tokens = estimate_tokens(line);
+        if (remaining_tokens - tokens < 0) {
+            continue;
+        }
+        lines.append(line);
+        remaining_tokens -= tokens;
+        shown++;
+    }
+    return shown;
+}
+
 } // namespace
 
 godot::Dictionary format_project_settings(const godot::Dictionary &raw_result) {
@@ -36,6 +62,7 @@ godot::Dictionary format_project_settings(const godot::Dictionary &raw_result) {
     godot::String status = raw_success ? "success" : "failed";
     godot::String action = raw_result.get("action", "");
     godot::Array settings = raw_result.get("settings", godot::Array());
+    godot::Array setting_details = raw_result.get("setting_details", godot::Array());
 
     godot::PackedStringArray lines;
     lines.append("Tool: project_settings");
@@ -91,7 +118,17 @@ godot::Dictionary format_project_settings(const godot::Dictionary &raw_result) {
 
     bool previewed = false;
     int shown_settings = 0;
-    if (!settings.is_empty()) {
+    int total_settings = setting_details.is_empty() ? settings.size() : setting_details.size();
+    if (!setting_details.is_empty()) {
+        lines.append("");
+        lines.append("## Settings");
+        shown_settings = append_budgeted_setting_details(lines, setting_details, remaining_tokens);
+        if (shown_settings < setting_details.size()) {
+            previewed = true;
+            lines.append("");
+            lines.append("Omitted: additional settings exceeded model-facing size limit.");
+        }
+    } else if (!settings.is_empty()) {
         lines.append("");
         lines.append("## Settings");
         shown_settings = append_budgeted_items(lines, settings, remaining_tokens);
@@ -113,11 +150,11 @@ godot::Dictionary format_project_settings(const godot::Dictionary &raw_result) {
     metadata["key"] = raw_result.get("key", "");
     metadata["prefix"] = raw_result.get("prefix", "");
     metadata["query"] = raw_result.get("query", "");
-    metadata["count"] = raw_result.get("count", settings.size());
-    metadata["total_count"] = raw_result.get("total_count", raw_result.get("count", settings.size()));
+    metadata["count"] = raw_result.get("count", total_settings);
+    metadata["total_count"] = raw_result.get("total_count", raw_result.get("count", total_settings));
     metadata["source"] = raw_result.get("source", "");
     metadata["shown_settings"] = shown_settings;
-    metadata["omitted_settings"] = settings.size() - shown_settings;
+    metadata["omitted_settings"] = total_settings - shown_settings;
     metadata["budget_tokens"] = kBudgetTokens;
     metadata["previewed"] = previewed;
     return make_envelope(godot::String("\n").join(lines), metadata, raw_success);

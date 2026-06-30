@@ -1,6 +1,10 @@
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
-use std::{fs, time::Duration};
+use std::{
+    fs,
+    sync::{Mutex, OnceLock},
+    time::Duration,
+};
 
 use super::settings;
 
@@ -12,7 +16,22 @@ pub(crate) struct ModelTrace {
     pub(crate) model_ref_json: String,
 }
 
+static SCHEMA_INIT_DONE: OnceLock<()> = OnceLock::new();
+static SCHEMA_INIT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
 pub(crate) fn connection() -> Result<Connection, String> {
+    let conn = open_connection(Duration::from_secs(5))?;
+    ensure_schema_initialized(&conn)?;
+    Ok(conn)
+}
+
+pub(crate) fn trace_connection() -> Result<Connection, String> {
+    let conn = open_connection(Duration::from_secs(2))?;
+    ensure_schema_initialized(&conn)?;
+    Ok(conn)
+}
+
+fn open_connection(timeout: Duration) -> Result<Connection, String> {
     let path = settings::app_dir().join("chat.sqlite");
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -20,16 +39,30 @@ pub(crate) fn connection() -> Result<Connection, String> {
     }
     let conn = Connection::open(&path)
         .map_err(|error| format!("failed to open {}: {error}", path.display()))?;
-    conn.busy_timeout(Duration::from_secs(5))
-        .map_err(to_store_error)?;
-    conn.pragma_update(None, "journal_mode", "WAL")
-        .map_err(to_store_error)?;
+    conn.busy_timeout(timeout).map_err(to_store_error)?;
     conn.pragma_update(None, "synchronous", "NORMAL")
         .map_err(to_store_error)?;
     conn.pragma_update(None, "foreign_keys", true)
         .map_err(to_store_error)?;
-    migrate(&conn)?;
     Ok(conn)
+}
+
+fn ensure_schema_initialized(conn: &Connection) -> Result<(), String> {
+    if SCHEMA_INIT_DONE.get().is_some() {
+        return Ok(());
+    }
+    let lock = SCHEMA_INIT_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock
+        .lock()
+        .map_err(|_| "chat database migration lock is poisoned".to_string())?;
+    if SCHEMA_INIT_DONE.get().is_some() {
+        return Ok(());
+    }
+    conn.pragma_update(None, "journal_mode", "WAL")
+        .map_err(to_store_error)?;
+    migrate(conn)?;
+    let _ = SCHEMA_INIT_DONE.set(());
+    Ok(())
 }
 
 fn migrate(conn: &Connection) -> Result<(), String> {
@@ -91,6 +124,7 @@ fn migrate(conn: &Connection) -> Result<(), String> {
         );
         CREATE TABLE IF NOT EXISTS chat_tool_calls (
           id TEXT PRIMARY KEY,
+          provider_tool_call_id TEXT,
           chat_id TEXT NOT NULL,
           assistant_message_id TEXT NOT NULL,
           generation_id TEXT,
@@ -159,6 +193,36 @@ fn migrate(conn: &Connection) -> Result<(), String> {
           ON chat_generations(chat_id, started_at_ms);
         CREATE INDEX IF NOT EXISTS idx_chat_generations_assistant_message
           ON chat_generations(assistant_message_id);
+        CREATE TABLE IF NOT EXISTS chat_trace_events (
+          id TEXT PRIMARY KEY,
+          seq INTEGER NOT NULL,
+          trace_id TEXT NOT NULL,
+          turn_id TEXT NOT NULL,
+          chat_id TEXT,
+          request_id TEXT,
+          generation_id TEXT,
+          assistant_message_id TEXT,
+          provider_attempt_id TEXT,
+          tool_call_id TEXT,
+          provisional_tool_id TEXT,
+          approval_id TEXT,
+          bridge_request_id TEXT,
+          godot_session_id TEXT,
+          name TEXT NOT NULL,
+          level TEXT NOT NULL DEFAULT 'info',
+          status TEXT,
+          ts_ms INTEGER NOT NULL,
+          duration_ms INTEGER,
+          data_json TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_trace_events_trace_seq
+          ON chat_trace_events(trace_id, seq);
+        CREATE INDEX IF NOT EXISTS idx_chat_trace_events_chat_time
+          ON chat_trace_events(chat_id, ts_ms);
+        CREATE INDEX IF NOT EXISTS idx_chat_trace_events_turn_seq
+          ON chat_trace_events(turn_id, seq);
+        CREATE INDEX IF NOT EXISTS idx_chat_trace_events_generation_seq
+          ON chat_trace_events(generation_id, seq);
         INSERT OR IGNORE INTO schema_migrations (version, name, applied_at_ms)
           VALUES (1, 'initial_chat_store', strftime('%s','now') * 1000);
         INSERT OR IGNORE INTO schema_migrations (version, name, applied_at_ms)
@@ -186,19 +250,49 @@ fn migrate(conn: &Connection) -> Result<(), String> {
     add_column_if_missing(conn, "chat_messages", "tool_name", "TEXT")?;
     add_column_if_missing(conn, "chat_messages", "tool_calls_json", "TEXT")?;
     add_column_if_missing(conn, "chat_messages", "metadata_json", "TEXT")?;
+    add_column_if_missing(conn, "chat_tool_calls", "provider_tool_call_id", "TEXT")?;
     add_column_if_missing(conn, "chat_tool_calls", "generation_id", "TEXT")?;
     add_column_if_missing(conn, "chat_usage_logs", "generation_id", "TEXT")?;
     add_model_trace_columns(conn, "chat_usage_logs")?;
     create_generation_trace_tables(conn)?;
-    backfill_chat_model_trace(conn)?;
-    backfill_tool_message_display_content(conn)?;
-    backfill_usage_logs(conn)?;
-    record_migration(conn, 5, "generation_traceability")?;
+    create_trace_tables(conn)?;
+    run_migration_once(conn, 5, "generation_traceability", |conn| {
+        backfill_chat_model_trace(conn)
+    })?;
+    run_migration_once(conn, 6, "local_chat_trace_events", |_| Ok(()))?;
+    run_migration_once(conn, 7, "chat_message_count_all_statuses", |conn| {
+        backfill_chat_message_counts(conn)
+    })?;
+    run_migration_once(conn, 8, "tool_message_display_content_backfill", |conn| {
+        backfill_tool_message_display_content(conn)
+    })?;
+    run_migration_once(conn, 9, "chat_usage_logs_backfill", |conn| {
+        backfill_usage_logs(conn)
+    })?;
+    run_immediate_migration_once(conn, 10, "chat_message_unique_sequence", |conn| {
+        repair_duplicate_chat_message_sequences(conn)?;
+        create_unique_chat_message_sequence_index(conn)
+    })?;
+    run_migration_once(conn, 11, "tool_call_provider_ids", |conn| {
+        backfill_provider_tool_call_ids(conn)
+    })?;
     Ok(())
 }
 
 pub(crate) fn to_store_error(error: rusqlite::Error) -> String {
-    error.to_string()
+    match &error {
+        rusqlite::Error::SqliteFailure(code, _)
+            if code.code == rusqlite::ErrorCode::DatabaseBusy =>
+        {
+            "Chat storage is busy. Please try again.".to_string()
+        }
+        rusqlite::Error::SqliteFailure(code, _)
+            if code.code == rusqlite::ErrorCode::DatabaseLocked =>
+        {
+            "Chat storage is busy. Please try again.".to_string()
+        }
+        _ => error.to_string(),
+    }
 }
 
 fn backfill_tool_message_display_content(conn: &Connection) -> Result<(), String> {
@@ -222,6 +316,25 @@ fn backfill_tool_message_display_content(conn: &Connection) -> Result<(), String
              )
          WHERE role = 'tool'
            AND tool_call_id IS NOT NULL",
+        [],
+    )
+    .map_err(to_store_error)?;
+    Ok(())
+}
+
+fn backfill_chat_message_counts(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "UPDATE chats
+         SET message_count = (
+           SELECT COUNT(*)
+           FROM chat_messages
+           WHERE chat_messages.chat_id = chats.id
+         )
+         WHERE message_count != (
+           SELECT COUNT(*)
+           FROM chat_messages
+           WHERE chat_messages.chat_id = chats.id
+         )",
         [],
     )
     .map_err(to_store_error)?;
@@ -289,6 +402,56 @@ fn create_generation_trace_tables(conn: &Connection) -> Result<(), String> {
     .map_err(to_store_error)
 }
 
+fn backfill_provider_tool_call_ids(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "UPDATE chat_tool_calls
+         SET provider_tool_call_id = id
+         WHERE provider_tool_call_id IS NULL
+            OR provider_tool_call_id = ''",
+        [],
+    )
+    .map_err(to_store_error)?;
+    Ok(())
+}
+
+pub(crate) fn create_trace_tables(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS chat_trace_events (
+          id TEXT PRIMARY KEY,
+          seq INTEGER NOT NULL,
+          trace_id TEXT NOT NULL,
+          turn_id TEXT NOT NULL,
+          chat_id TEXT,
+          request_id TEXT,
+          generation_id TEXT,
+          assistant_message_id TEXT,
+          provider_attempt_id TEXT,
+          tool_call_id TEXT,
+          provisional_tool_id TEXT,
+          approval_id TEXT,
+          bridge_request_id TEXT,
+          godot_session_id TEXT,
+          name TEXT NOT NULL,
+          level TEXT NOT NULL DEFAULT 'info',
+          status TEXT,
+          ts_ms INTEGER NOT NULL,
+          duration_ms INTEGER,
+          data_json TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_trace_events_trace_seq
+          ON chat_trace_events(trace_id, seq);
+        CREATE INDEX IF NOT EXISTS idx_chat_trace_events_chat_time
+          ON chat_trace_events(chat_id, ts_ms);
+        CREATE INDEX IF NOT EXISTS idx_chat_trace_events_turn_seq
+          ON chat_trace_events(turn_id, seq);
+        CREATE INDEX IF NOT EXISTS idx_chat_trace_events_generation_seq
+          ON chat_trace_events(generation_id, seq);
+        ",
+    )
+    .map_err(to_store_error)
+}
+
 fn record_migration(conn: &Connection, version: i64, name: &str) -> Result<(), String> {
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, name, applied_at_ms)
@@ -297,6 +460,100 @@ fn record_migration(conn: &Connection, version: i64, name: &str) -> Result<(), S
     )
     .map_err(to_store_error)?;
     Ok(())
+}
+
+fn migration_applied(conn: &Connection, version: i64) -> Result<bool, String> {
+    let applied: Option<i64> = conn
+        .query_row(
+            "SELECT 1 FROM schema_migrations WHERE version = ?1",
+            [version],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(to_store_error)?;
+    Ok(applied.is_some())
+}
+
+fn run_migration_once(
+    conn: &Connection,
+    version: i64,
+    name: &str,
+    apply: impl FnOnce(&Connection) -> Result<(), String>,
+) -> Result<(), String> {
+    if migration_applied(conn, version)? {
+        return Ok(());
+    }
+    apply(conn)?;
+    record_migration(conn, version, name)
+}
+
+fn run_immediate_migration_once(
+    conn: &Connection,
+    version: i64,
+    name: &str,
+    apply: impl FnOnce(&Connection) -> Result<(), String>,
+) -> Result<(), String> {
+    if migration_applied(conn, version)? {
+        return Ok(());
+    }
+    conn.execute_batch("BEGIN IMMEDIATE;")
+        .map_err(to_store_error)?;
+    let result = (|| {
+        if migration_applied(conn, version)? {
+            return Ok(());
+        }
+        apply(conn)?;
+        record_migration(conn, version, name)
+    })();
+    match result {
+        Ok(()) => conn.execute_batch("COMMIT;").map_err(to_store_error),
+        Err(error) => {
+            let _ = conn.execute_batch("ROLLBACK;");
+            Err(error)
+        }
+    }
+}
+
+fn repair_duplicate_chat_message_sequences(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "WITH duplicate_chats AS (
+           SELECT DISTINCT chat_id
+           FROM chat_messages
+           GROUP BY chat_id, sequence
+           HAVING COUNT(*) > 1
+         ),
+         renumbered AS (
+           SELECT
+             id,
+             ROW_NUMBER() OVER (
+               PARTITION BY chat_id
+               ORDER BY sequence ASC, created_at_ms ASC, id ASC
+             ) AS new_sequence
+           FROM chat_messages
+           WHERE chat_id IN (SELECT chat_id FROM duplicate_chats)
+         )
+         UPDATE chat_messages
+         SET sequence = (
+           SELECT new_sequence
+           FROM renumbered
+           WHERE renumbered.id = chat_messages.id
+         )
+         WHERE id IN (SELECT id FROM renumbered)",
+        [],
+    )
+    .map_err(to_store_error)?;
+    Ok(())
+}
+
+fn create_unique_chat_message_sequence_index(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "
+        DROP INDEX IF EXISTS idx_chat_messages_chat_sequence;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_messages_chat_sequence
+          ON chat_messages(chat_id, sequence);
+        ",
+    )
+    .map_err(to_store_error)
 }
 
 fn backfill_chat_model_trace(conn: &Connection) -> Result<(), String> {
@@ -462,6 +719,24 @@ pub(crate) fn model_trace_from_selection(model: &str) -> Option<ModelTrace> {
         ("deepseek", model_id.trim())
     } else if let Some(model_id) = model.strip_prefix("zai/") {
         ("zai", model_id.trim())
+    } else if let Some(model_id) = model.strip_prefix("openai/") {
+        ("openai", model_id.trim())
+    } else if let Some(model_id) = model.strip_prefix("anthropic/") {
+        ("anthropic", model_id.trim())
+    } else if let Some(model_id) = model.strip_prefix("moonshotai/") {
+        ("moonshotai", model_id.trim())
+    } else if let Some(model_id) = model.strip_prefix("moonshotai-cn/") {
+        ("moonshotai-cn", model_id.trim())
+    } else if let Some(model_id) = model.strip_prefix("kimi-for-coding/") {
+        ("kimi-for-coding", model_id.trim())
+    } else if let Some(model_id) = model.strip_prefix("minimax/") {
+        ("minimax", model_id.trim())
+    } else if let Some(model_id) = model.strip_prefix("minimax-coding-plan/") {
+        ("minimax-coding-plan", model_id.trim())
+    } else if let Some(model_id) = model.strip_prefix("minimax-cn/") {
+        ("minimax-cn", model_id.trim())
+    } else if let Some(model_id) = model.strip_prefix("minimax-cn-coding-plan/") {
+        ("minimax-cn-coding-plan", model_id.trim())
     } else if let Some(model_id) = model.strip_prefix("openrouter/") {
         ("openrouter", model_id.trim())
     } else if model.contains('/') {
@@ -525,6 +800,38 @@ mod tests {
         assert_eq!(zai.provider_id, "zai");
         assert_eq!(zai.model_id, "glm-5.2");
 
+        for (selection, provider_id, model_id) in [
+            ("openai/gpt-5.1", "openai", "gpt-5.1"),
+            (
+                "anthropic/claude-sonnet-4.5",
+                "anthropic",
+                "claude-sonnet-4.5",
+            ),
+            ("moonshotai/kimi-k2.7-code", "moonshotai", "kimi-k2.7-code"),
+            (
+                "moonshotai-cn/kimi-k2.7-code",
+                "moonshotai-cn",
+                "kimi-k2.7-code",
+            ),
+            ("kimi-for-coding/k2p7", "kimi-for-coding", "k2p7"),
+            ("minimax/MiniMax-M3", "minimax", "MiniMax-M3"),
+            (
+                "minimax-coding-plan/MiniMax-M3",
+                "minimax-coding-plan",
+                "MiniMax-M3",
+            ),
+            ("minimax-cn/MiniMax-M3", "minimax-cn", "MiniMax-M3"),
+            (
+                "minimax-cn-coding-plan/MiniMax-M3",
+                "minimax-cn-coding-plan",
+                "MiniMax-M3",
+            ),
+        ] {
+            let trace = model_trace_from_selection(selection).unwrap();
+            assert_eq!(trace.provider_id, provider_id, "{selection}");
+            assert_eq!(trace.model_id, model_id, "{selection}");
+        }
+
         let legacy = model_trace_from_selection("google/gemini").unwrap();
         assert_eq!(legacy.provider_id, "openrouter");
         assert_eq!(legacy.model_id, "google/gemini");
@@ -532,6 +839,260 @@ mod tests {
         assert!(model_trace_from_selection("").is_none());
         assert!(model_trace_from_selection("not-a-routable-model").is_none());
         assert!(model_trace_from_selection("ollama/").is_none());
+    }
+
+    #[test]
+    fn applied_backfill_migrations_are_not_rerun() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE schema_migrations (
+              version INTEGER PRIMARY KEY,
+              name TEXT NOT NULL,
+              applied_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE chats (
+              id TEXT PRIMARY KEY,
+              title TEXT NOT NULL DEFAULT 'New chat',
+              project_path TEXT,
+              project_name TEXT,
+              model TEXT NOT NULL,
+              reasoning_effort TEXT NOT NULL DEFAULT 'medium',
+              total_cost REAL NOT NULL DEFAULT 0,
+              latest_prompt_tokens INTEGER NOT NULL DEFAULT 0,
+              message_count INTEGER NOT NULL DEFAULT 0,
+              archived_at_ms INTEGER,
+              created_at_ms INTEGER NOT NULL,
+              updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE chat_messages (
+              id TEXT PRIMARY KEY,
+              chat_id TEXT NOT NULL,
+              role TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'done',
+              content TEXT NOT NULL DEFAULT '',
+              reasoning_content TEXT,
+              tool_call_id TEXT,
+              tool_name TEXT,
+              tool_calls_json TEXT,
+              metadata_json TEXT,
+              usage_json TEXT,
+              cost REAL,
+              sequence INTEGER NOT NULL,
+              created_at_ms INTEGER NOT NULL,
+              updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE chat_tool_calls (
+              id TEXT PRIMARY KEY,
+              chat_id TEXT NOT NULL,
+              assistant_message_id TEXT NOT NULL,
+              tool_name TEXT NOT NULL,
+              arguments_json TEXT NOT NULL DEFAULT '{}',
+              status TEXT NOT NULL DEFAULT 'pending',
+              raw_result_json TEXT,
+              mcp_markdown TEXT,
+              plugin_markdown TEXT,
+              metadata_json TEXT,
+              target_keys_json TEXT,
+              created_at_ms INTEGER NOT NULL,
+              updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE chat_usage_logs (
+              id TEXT PRIMARY KEY,
+              chat_id TEXT NOT NULL,
+              assistant_message_id TEXT,
+              run_id TEXT,
+              model TEXT NOT NULL,
+              agent_type TEXT NOT NULL DEFAULT 'chat',
+              prompt_tokens INTEGER NOT NULL DEFAULT 0,
+              completion_tokens INTEGER NOT NULL DEFAULT 0,
+              total_tokens INTEGER NOT NULL DEFAULT 0,
+              reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+              cached_tokens INTEGER NOT NULL DEFAULT 0,
+              cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+              cost REAL NOT NULL DEFAULT 0,
+              upstream_cost REAL,
+              provider_name TEXT,
+              created_at_ms INTEGER NOT NULL
+            );
+            INSERT INTO schema_migrations (version, name, applied_at_ms)
+              VALUES
+              (5, 'generation_traceability', 1),
+              (7, 'chat_message_count_all_statuses', 1),
+              (8, 'tool_message_display_content_backfill', 1),
+              (9, 'chat_usage_logs_backfill', 1);
+            INSERT INTO chats
+              (id, title, model, reasoning_effort, message_count, created_at_ms, updated_at_ms)
+              VALUES ('chat_1', 'Old', 'google/gemini', 'medium', 99, 1, 1);
+            INSERT INTO chat_messages
+              (id, chat_id, role, status, content, usage_json, cost, sequence, created_at_ms, updated_at_ms)
+              VALUES
+              ('msg_1', 'chat_1', 'user', 'done', 'hello', NULL, NULL, 1, 1, 1),
+              ('msg_2', 'chat_1', 'assistant', 'done', 'reply', '{\"prompt_tokens\":12,\"completion_tokens\":3,\"cost\":0.5}', 0.5, 2, 1, 1);
+            INSERT INTO chat_messages
+              (id, chat_id, role, status, content, tool_call_id, tool_name, sequence, created_at_ms, updated_at_ms)
+              VALUES
+              ('msg_3', 'chat_1', 'tool', 'done', 'old tool content', 'call_1', 'read_file', 3, 1, 1);
+            INSERT INTO chat_tool_calls
+              (id, chat_id, assistant_message_id, tool_name, arguments_json, status, plugin_markdown, created_at_ms, updated_at_ms)
+              VALUES
+              ('call_1', 'chat_1', 'msg_2', 'read_file', '{}', 'failed', 'new tool content', 1, 1);
+            ",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let tool: (String, String) = conn
+            .query_row(
+                "SELECT content, status FROM chat_messages WHERE id = 'msg_3'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(tool, ("old tool content".to_string(), "done".to_string()));
+
+        let usage_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM chat_usage_logs", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(usage_count, 0);
+
+        let message_count: i64 = conn
+            .query_row(
+                "SELECT message_count FROM chats WHERE id = 'chat_1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(message_count, 99);
+    }
+
+    #[test]
+    fn migration_repairs_duplicate_message_sequences_before_unique_index() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE schema_migrations (
+              version INTEGER PRIMARY KEY,
+              name TEXT NOT NULL,
+              applied_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE chats (
+              id TEXT PRIMARY KEY,
+              title TEXT NOT NULL DEFAULT 'New chat',
+              project_path TEXT,
+              project_name TEXT,
+              model TEXT NOT NULL,
+              reasoning_effort TEXT NOT NULL DEFAULT 'medium',
+              total_cost REAL NOT NULL DEFAULT 0,
+              latest_prompt_tokens INTEGER NOT NULL DEFAULT 0,
+              message_count INTEGER NOT NULL DEFAULT 0,
+              archived_at_ms INTEGER,
+              created_at_ms INTEGER NOT NULL,
+              updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE chat_messages (
+              id TEXT PRIMARY KEY,
+              chat_id TEXT NOT NULL,
+              role TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'done',
+              content TEXT NOT NULL DEFAULT '',
+              reasoning_content TEXT,
+              tool_call_id TEXT,
+              tool_name TEXT,
+              tool_calls_json TEXT,
+              metadata_json TEXT,
+              usage_json TEXT,
+              cost REAL,
+              sequence INTEGER NOT NULL,
+              created_at_ms INTEGER NOT NULL,
+              updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE chat_tool_calls (
+              id TEXT PRIMARY KEY,
+              chat_id TEXT NOT NULL,
+              assistant_message_id TEXT NOT NULL,
+              tool_name TEXT NOT NULL,
+              arguments_json TEXT NOT NULL DEFAULT '{}',
+              status TEXT NOT NULL DEFAULT 'pending',
+              raw_result_json TEXT,
+              mcp_markdown TEXT,
+              plugin_markdown TEXT,
+              metadata_json TEXT,
+              target_keys_json TEXT,
+              created_at_ms INTEGER NOT NULL,
+              updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE chat_usage_logs (
+              id TEXT PRIMARY KEY,
+              chat_id TEXT NOT NULL,
+              assistant_message_id TEXT,
+              run_id TEXT,
+              model TEXT NOT NULL,
+              agent_type TEXT NOT NULL DEFAULT 'chat',
+              prompt_tokens INTEGER NOT NULL DEFAULT 0,
+              completion_tokens INTEGER NOT NULL DEFAULT 0,
+              total_tokens INTEGER NOT NULL DEFAULT 0,
+              reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+              cached_tokens INTEGER NOT NULL DEFAULT 0,
+              cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+              cost REAL NOT NULL DEFAULT 0,
+              upstream_cost REAL,
+              provider_name TEXT,
+              created_at_ms INTEGER NOT NULL
+            );
+            INSERT INTO chats
+              (id, title, model, reasoning_effort, message_count, created_at_ms, updated_at_ms)
+              VALUES ('chat_1', 'Old', 'google/gemini', 'medium', 4, 1, 1);
+            INSERT INTO chat_messages
+              (id, chat_id, role, status, content, sequence, created_at_ms, updated_at_ms)
+              VALUES
+              ('msg_1', 'chat_1', 'user', 'done', 'first', 1, 10, 10),
+              ('msg_2', 'chat_1', 'assistant', 'done', 'tie one', 2, 20, 20),
+              ('msg_3', 'chat_1', 'tool', 'done', 'tie two', 2, 30, 30),
+              ('msg_4', 'chat_1', 'assistant', 'done', 'later', 5, 40, 40);
+            ",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let mut statement = conn
+            .prepare("SELECT id, sequence FROM chat_messages ORDER BY sequence ASC")
+            .unwrap();
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                ("msg_1".to_string(), 1),
+                ("msg_2".to_string(), 2),
+                ("msg_3".to_string(), 3),
+                ("msg_4".to_string(), 4),
+            ]
+        );
+
+        let duplicate = conn.execute(
+            "INSERT INTO chat_messages
+             (id, chat_id, role, status, content, sequence, created_at_ms, updated_at_ms)
+             VALUES ('msg_5', 'chat_1', 'user', 'done', 'duplicate', 4, 50, 50)",
+            [],
+        );
+        assert!(duplicate.is_err());
+
+        let migration_name: String = conn
+            .query_row(
+                "SELECT name FROM schema_migrations WHERE version = 10",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(migration_name, "chat_message_unique_sequence");
     }
 
     #[test]
@@ -614,6 +1175,13 @@ mod tests {
               ('chat_1', 'One', 'google/gemini', 'medium', 1, 1),
               ('chat_2', 'Two', 'ollama/llama3.2', 'medium', 1, 1),
               ('chat_3', 'Three', 'weird', 'medium', 1, 1);
+            UPDATE chats SET message_count = 2 WHERE id = 'chat_1';
+            INSERT INTO chat_messages
+              (id, chat_id, role, status, content, sequence, created_at_ms, updated_at_ms)
+              VALUES
+              ('msg_1', 'chat_1', 'user', 'done', 'hi', 1, 1, 1),
+              ('msg_2', 'chat_1', 'assistant', 'done', 'checking', 2, 1, 1),
+              ('msg_3', 'chat_1', 'tool', 'failed', 'failed tool result', 3, 1, 1);
             ",
         )
         .unwrap();
@@ -626,6 +1194,9 @@ mod tests {
         assert!(has_column(&conn, "chats", "provider_id"));
         assert!(has_column(&conn, "chat_messages", "model_ref_json"));
         assert!(has_column(&conn, "chat_usage_logs", "model_ref_json"));
+        assert!(has_column(&conn, "chat_trace_events", "trace_id"));
+        assert!(has_column(&conn, "chat_trace_events", "turn_id"));
+        assert!(has_column(&conn, "chat_trace_events", "data_json"));
 
         let generation_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM chat_generations", [], |row| {
@@ -669,5 +1240,26 @@ mod tests {
             )
             .unwrap();
         assert_eq!(weird_provider, None);
+
+        let message_count: i64 = conn
+            .query_row(
+                "SELECT message_count FROM chats WHERE id = 'chat_1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(message_count, 3);
+
+        let count_migration_name: String = conn
+            .query_row(
+                "SELECT name FROM schema_migrations WHERE version = 7",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count_migration_name,
+            "chat_message_count_all_statuses".to_string()
+        );
     }
 }

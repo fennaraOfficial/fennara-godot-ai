@@ -248,6 +248,20 @@ godot::String view_debug_string(WKWebView *view) {
            " window=" + ptr_string([view window]);
 }
 
+bool responder_belongs_to_view(NSResponder *responder, NSView *view) {
+    if (responder == nil || view == nil || ![responder isKindOfClass:[NSView class]]) {
+        return false;
+    }
+    NSView *responder_view = (NSView *)responder;
+    while (responder_view != nil) {
+        if (responder_view == view) {
+            return true;
+        }
+        responder_view = [responder_view superview];
+    }
+    return false;
+}
+
 struct Geometry {
     bool visible = false;
     double global_x = 0.0;
@@ -442,11 +456,19 @@ void resize_to(void *webview, void **parent_window, godot::Control *owner) {
                   "} visible=" + godot::String(geometry.visible ? "true" : "false"));
         if (!geometry.visible) {
             debug_log("macOS webview resize hiding: geometry not visible");
+            NSWindow *window = [view window];
+            if (window != nil && responder_belongs_to_view([window firstResponder], view)) {
+                [window makeFirstResponder:nil];
+            }
             [view setHidden:YES];
             return;
         }
         if (target_window == nil) {
             output_log("macOS webview resize hiding: target window nil");
+            NSWindow *window = [view window];
+            if (window != nil && responder_belongs_to_view([window firstResponder], view)) {
+                [window makeFirstResponder:nil];
+            }
             [view setHidden:YES];
             return;
         }
@@ -456,8 +478,15 @@ void resize_to(void *webview, void **parent_window, godot::Control *owner) {
             if (content == nil) {
                 output_log("macOS webview resize hiding: reparent content nil target=" +
                            ptr_string(target_window));
+                NSWindow *window = [view window];
+                if (window != nil && responder_belongs_to_view([window firstResponder], view)) {
+                    [window makeFirstResponder:nil];
+                }
                 [view setHidden:YES];
                 return;
+            }
+            if (current_window != nil && responder_belongs_to_view([current_window firstResponder], view)) {
+                [current_window makeFirstResponder:nil];
             }
             [view removeFromSuperview];
             [content addSubview:view];
@@ -489,7 +518,39 @@ void set_visible(void *webview, bool visible) {
         WKWebView *view = reinterpret_cast<WKWebView *>(webview);
         debug_log("macOS webview set_visible view=" + ptr_string(view) +
                   " visible=" + godot::String(visible ? "true" : "false"));
+        if (!visible) {
+            NSWindow *window = [view window];
+            if (window != nil && responder_belongs_to_view([window firstResponder], view)) {
+                [window makeFirstResponder:nil];
+            }
+        }
         [view setHidden:visible ? NO : YES];
+    });
+}
+
+void set_focused(void *webview, bool focused) {
+    if (webview == nullptr) {
+        return;
+    }
+
+    run_on_main_sync(^{
+        WKWebView *view = reinterpret_cast<WKWebView *>(webview);
+        NSWindow *window = [view window];
+        if (window == nil) {
+            debug_log("macOS webview focus skipped: window nil view=" + ptr_string(view));
+            return;
+        }
+
+        NSResponder *before = [window firstResponder];
+        if (focused) {
+            [window makeFirstResponder:view];
+        } else if (responder_belongs_to_view(before, view)) {
+            [window makeFirstResponder:nil];
+        }
+        debug_log("macOS webview focus " + godot::String(focused ? "requested" : "released") +
+                  " view=" + ptr_string(view) +
+                  " before=" + ptr_string(before) +
+                  " after=" + ptr_string([window firstResponder]));
     });
 }
 
@@ -505,6 +566,10 @@ void stop(void **webview, void **parent_window) {
     run_on_main_sync(^{
         WKWebView *view = reinterpret_cast<WKWebView *>(view_ptr);
         debug_log("macOS webview stop view=" + ptr_string(view));
+        NSWindow *window = [view window];
+        if (window != nil && responder_belongs_to_view([window firstResponder], view)) {
+            [window makeFirstResponder:nil];
+        }
         [view.configuration.userContentController removeScriptMessageHandlerForName:@"fennaraPasteboard"];
         [view setUIDelegate:nil];
         objc_setAssociatedObject(view, &kMacWebViewDelegateKey, nil,
@@ -556,6 +621,13 @@ public:
             return;
         }
         mac_webview::set_visible(webview, visible);
+    }
+
+    void set_focused(bool focused) override {
+        if (!started) {
+            return;
+        }
+        mac_webview::set_focused(webview, focused);
     }
 
     void stop() override {

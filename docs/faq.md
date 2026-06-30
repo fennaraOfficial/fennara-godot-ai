@@ -29,7 +29,7 @@ Only if you want to use a cloud provider in the built-in Fennara chat dock. Exte
 
 The built-in chat can also use local providers such as Ollama or LM Studio, which do not require a cloud API key.
 
-Supported built-in chat providers are OpenRouter, Ollama Cloud, DeepSeek, Z.AI, local Ollama, and LM Studio. See [Built-In Chat Providers](providers.md).
+Supported built-in chat providers are OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, local Ollama, and LM Studio. See [Built-In Chat Providers](providers.md).
 
 ## Why does the dock ask for a provider if I already ran `mcp-setup --claude`?
 
@@ -45,7 +45,7 @@ They are slash commands in the built-in Fennara chat dock. `/provider` opens the
 
 No. In the normal OSS path, the MCP client, daemon, and Godot addon run locally.
 The built-in chat sends model requests only to the provider you configure, such
-as OpenRouter, Ollama Cloud, DeepSeek, Z.AI, or a local Ollama/LM Studio server.
+as OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, or a local Ollama/LM Studio server.
 
 ## Which project receives MCP tool calls if multiple Godot editors are open?
 

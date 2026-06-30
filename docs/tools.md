@@ -18,7 +18,6 @@ source of truth for arguments, limits, and result fields.
 | --- | --- |
 | `fennara_status` | Check the active Godot project, daemon bridge, app-data paths, local runtime state, chat/webview support, and available MCP tools. |
 | `read_file` | Read project-scoped text files and selected images through Godot path normalization and project boundaries. |
-| `file_ops` | List, glob, search with bundled ripgrep, and perform scoped copy/move/delete/create-dir operations inside the project. |
 | `get_scene_tree` | Inspect real scene node structure, node types, scripts, and instanced subscenes before using node paths. |
 | `get_node_properties` | Read properties changed from defaults for up to 5 scene nodes, including recursive SubResource summaries. |
 | `get_class_info` | Look up real Godot class methods, properties, signals, enums, constants, inheritance, and docs before writing Godot API code. |
@@ -39,7 +38,7 @@ These are the tools exposed to external MCP clients through the local
 ## Built-In Chat Tool Use
 
 The in-editor Fennara chat uses the same local daemon and can call the same
-Godot-side tools, including `read_file` and `file_ops`.
+Godot-side tools, including `read_file`.
 
 It does not use the external MCP app's model account. Claude Code, Codex,
 Cursor, Gemini, and other MCP clients use their own model setup when they call
@@ -49,11 +48,58 @@ settings.
 The dock also has UI slash commands: `/provider` opens provider setup and
 `/model` opens model selection. These are not MCP tools.
 
+The built-in chat system prompt includes a compact runtime context from the
+connected Godot editor: current date, platform, project root/name, Godot
+version, Fennara plugin version, approval mode, available tools, and the Godot
+editor executable path when the bridge can report it. The prompt also advertises
+the built-in chat `exec_command` capability with the detected default shell and
+the active project root used as the default cwd.
+
+The built-in chat has two tool approval modes. `Ask for approval` allows
+read-only inspection tools immediately and pauses project mutation or runtime
+execution tools until the user approves or denies the specific tool call.
+`Full access` lets those mutating/execution tools run without prompting, while
+the existing hard tool safety blocks still apply. The `Approve for me` mode is
+not implemented.
+
+The built-in chat also has a daemon-owned `exec_command` tool. It does not route
+through the Godot bridge. Phase one runs one non-interactive shell command with
+captured stdout/stderr, timeout enforcement, output caps, and project-root cwd
+restriction. Omitted cwd defaults to the active project root, relative cwd values
+resolve under that root, and absolute cwd values outside the root are rejected.
+Shell commands use real filesystem paths; Godot tools continue to use `res://`
+and `user://`. This is approval and cwd restriction, not OS sandboxing. Phase one
+does not support PTY sessions, background `session_id`, `write_stdin`, custom
+environment variables, or shell-specific network controls.
+
 The difference is presentation, not tool identity. External MCP clients receive
 compact markdown tool results over MCP. The built-in chat may add UI-specific
 handling around the same raw results, such as showing image previews from
 `read_file`, collapsing large output, or attaching screenshots/image context to
 the model request.
+
+### Selected Script Context
+
+The built-in chat can attach a selected script range from the Godot editor:
+
+1. Open a script in Godot's script editor.
+2. Select the code you want the model to see.
+3. Open the script editor context menu on that selection.
+4. Choose **Add to Chat**.
+
+The selected range appears in the chat composer as a removable code context
+chip. Click the chip to preview the attached code, or remove it before sending.
+When you send the next message, Fennara includes the selected `res://` path,
+1-based line range, and selected text as project context for that model request.
+
+This is a built-in chat convenience, not an MCP tool. It requires the local
+daemon connection and only appears when the current script editor has non-empty
+selected text. Fennara accepts up to 8 code context snippets per message and
+caps each snippet at 64,000 characters.
+
+This approval flow is currently for the built-in chat tool loop. External MCP
+clients continue to use their own permission model when deciding whether to call
+Fennara MCP tools.
 
 External MCP clients should still prefer their own normal file tools for broad
 repository reading/search when Godot feedback is not needed.
@@ -91,13 +137,6 @@ Use Fennara MCP to run fennara_status and tell me which Godot project is connect
 Use this when Godot-side path normalization or image handling matters. It is
 project-scoped and accepts Godot-style paths such as `res://scripts/player.gd`.
 For broad source reading, use the MCP client's normal file reader.
-
-### `file_ops`
-
-Use this for project-scoped listing, globbing, bundled ripgrep search, and
-simple file operations when Godot path boundaries matter. Keep large repository
-navigation on the MCP client's normal search tools unless you specifically need
-Fennara's project-scoped behavior.
 
 ### `get_scene_tree`
 
@@ -244,6 +283,11 @@ Use this for Godot project settings, autoloads, display/window settings,
 rendering settings, physics settings, application metadata, addon configuration,
 and input actions. For input actions, use structured events instead of editing
 `project.godot` manually.
+
+`project_settings` with `action: "list"` returns settings saved in
+`project.godot` with compact values in the markdown result. Input actions include
+deadzone, event count, and readable event summaries, so agents can inspect
+controls without immediately falling back to raw `project.godot` reads.
 
 Example prompt:
 

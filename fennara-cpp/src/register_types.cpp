@@ -22,6 +22,7 @@
 
 #include "fennara/ui/dock.hpp"
 #include "fennara/ui/fennara_plugin.hpp"
+#include "fennara/ui/script_context_menu.hpp"
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/defs.hpp>
@@ -56,6 +57,7 @@ void initialize_fennara(godot::ModuleInitializationLevel p_level) {
     }
 
     if (p_level == godot::MODULE_INITIALIZATION_LEVEL_EDITOR) {
+        godot::ClassDB::register_class<fennara::FennaraScriptContextMenuPlugin>();
         godot::ClassDB::register_class<fennara::FennaraPlugin>();
         godot::EditorPlugins::add_by_type<fennara::FennaraPlugin>();
     }

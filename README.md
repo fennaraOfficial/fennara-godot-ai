@@ -9,7 +9,7 @@ It is built for Godot projects where file edits are not enough. Node paths, expo
 
 Fennara also includes an optional in-editor chat dock backed by the same local daemon. The chat can use project-aware tools, show the active MCP target, store provider settings locally, and attach image context when supported by the selected model.
 
-External MCP apps and the built-in chat are separate model paths. `fennara mcp-setup --claude` lets Claude use Fennara's Godot tools; it does not make the built-in dock use Claude or your Claude subscription. The dock uses the provider configured in Fennara chat settings, such as OpenRouter, Ollama Cloud, DeepSeek, Z.AI, local Ollama, or LM Studio. See [MCP Apps And Built-In Chat](docs/chat-vs-mcp.md) and [Built-In Chat Providers](docs/providers.md).
+External MCP apps and the built-in chat are separate model paths. `fennara mcp-setup --claude` lets Claude use Fennara's Godot tools; it does not make the built-in dock use Claude or your Claude subscription. The dock uses the provider configured in Fennara chat settings, such as OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, local Ollama, or LM Studio. See [MCP Apps And Built-In Chat](docs/chat-vs-mcp.md) and [Built-In Chat Providers](docs/providers.md).
 
 ## Requirements
 
@@ -160,11 +160,12 @@ The goal is not to replace an agent's normal file tools. Fennara gives the missi
 The Fennara dock includes a native web chat surface inside Godot. It talks to the local daemon, not a hosted Fennara backend.
 
 - Bring your own cloud provider key, or run a local provider such as Ollama or LM Studio.
-- Supported chat providers include OpenRouter, Ollama Cloud, DeepSeek, Z.AI, local Ollama, and LM Studio.
+- Supported chat providers include OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, local Ollama, and LM Studio.
 - Provider API keys and local base URL settings are saved locally by the daemon, outside the Godot project.
 - Chat display can stay embedded in Godot, or use the system browser next time if you enable **Open chat in my system browser next time** in Chat Settings.
 - Use `/provider` to connect or switch providers and `/model` to choose a model in the dock.
 - Chat history is stored locally and scoped to the current project.
+- Select code in Godot's script editor, open the script editor context menu, and choose **Add to Chat** to attach that exact script range to the next built-in chat message.
 - Image attachments can be pasted or selected from the composer and sent as model context when the selected provider model supports vision. Ollama image input is not enabled yet.
 - The dock shows whether the current project is the MCP target for external MCP clients.
 

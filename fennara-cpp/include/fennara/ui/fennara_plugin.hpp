@@ -6,6 +6,7 @@
 namespace fennara {
 
 class FennaraLocalBridge;
+class FennaraScriptContextMenuPlugin;
 
 class FennaraPlugin : public godot::EditorPlugin {
     GDCLASS(FennaraPlugin, godot::EditorPlugin)
@@ -16,6 +17,7 @@ protected:
 private:
     FennaraDock *dock_instance = nullptr;
     FennaraLocalBridge *local_bridge = nullptr;
+    godot::Ref<FennaraScriptContextMenuPlugin> script_context_menu_plugin;
     void _configure_editor_settings();
     void _ensure_export_presets_exclude_fennara();
     bool _is_export_preset_section(const godot::String &section) const;

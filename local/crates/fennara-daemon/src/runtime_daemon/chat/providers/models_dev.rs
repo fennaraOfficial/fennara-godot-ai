@@ -7,10 +7,19 @@ use super::types::{
 };
 
 pub(crate) const OPENROUTER_PROVIDER_ID: &str = ProviderId::OPENROUTER;
+pub(crate) const OPENAI_PROVIDER_ID: &str = ProviderId::OPENAI;
+pub(crate) const ANTHROPIC_PROVIDER_ID: &str = ProviderId::ANTHROPIC;
 pub(crate) const OLLAMA_CLOUD_PROVIDER_ID: &str = ProviderId::OLLAMA_CLOUD;
 pub(crate) const LMSTUDIO_PROVIDER_ID: &str = ProviderId::LMSTUDIO;
 pub(crate) const DEEPSEEK_PROVIDER_ID: &str = ProviderId::DEEPSEEK;
 pub(crate) const ZAI_PROVIDER_ID: &str = ProviderId::ZAI;
+pub(crate) const MOONSHOT_PROVIDER_ID: &str = ProviderId::MOONSHOTAI;
+pub(crate) const MOONSHOT_CN_PROVIDER_ID: &str = ProviderId::MOONSHOTAI_CN;
+pub(crate) const KIMI_FOR_CODING_PROVIDER_ID: &str = ProviderId::KIMI_FOR_CODING;
+pub(crate) const MINIMAX_PROVIDER_ID: &str = ProviderId::MINIMAX;
+pub(crate) const MINIMAX_CODING_PLAN_PROVIDER_ID: &str = ProviderId::MINIMAX_CODING_PLAN;
+pub(crate) const MINIMAX_CN_PROVIDER_ID: &str = ProviderId::MINIMAX_CN;
+pub(crate) const MINIMAX_CN_CODING_PLAN_PROVIDER_ID: &str = ProviderId::MINIMAX_CN_CODING_PLAN;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct OpenRouterCatalog {
@@ -156,6 +165,14 @@ pub(crate) fn parse_openrouter_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog
     parse_provider_catalog(bytes, OPENROUTER_PROVIDER_ID)
 }
 
+pub(crate) fn parse_openai_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
+    parse_provider_catalog(bytes, OPENAI_PROVIDER_ID)
+}
+
+pub(crate) fn parse_anthropic_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
+    parse_provider_catalog(bytes, ANTHROPIC_PROVIDER_ID)
+}
+
 pub(crate) fn parse_ollama_cloud_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
     parse_provider_catalog(bytes, OLLAMA_CLOUD_PROVIDER_ID)
 }
@@ -170,6 +187,36 @@ pub(crate) fn parse_deepseek_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, 
 
 pub(crate) fn parse_zai_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
     parse_provider_catalog(bytes, ZAI_PROVIDER_ID)
+}
+
+pub(crate) fn parse_moonshot_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
+    parse_provider_catalog(bytes, MOONSHOT_PROVIDER_ID)
+}
+
+pub(crate) fn parse_moonshot_cn_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
+    parse_provider_catalog(bytes, MOONSHOT_CN_PROVIDER_ID)
+}
+
+pub(crate) fn parse_kimi_for_coding_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
+    parse_provider_catalog(bytes, KIMI_FOR_CODING_PROVIDER_ID)
+}
+
+pub(crate) fn parse_minimax_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
+    parse_provider_catalog(bytes, MINIMAX_PROVIDER_ID)
+}
+
+pub(crate) fn parse_minimax_coding_plan_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
+    parse_provider_catalog(bytes, MINIMAX_CODING_PLAN_PROVIDER_ID)
+}
+
+pub(crate) fn parse_minimax_cn_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
+    parse_provider_catalog(bytes, MINIMAX_CN_PROVIDER_ID)
+}
+
+pub(crate) fn parse_minimax_cn_coding_plan_catalog(
+    bytes: &[u8],
+) -> Result<OpenRouterCatalog, String> {
+    parse_provider_catalog(bytes, MINIMAX_CN_CODING_PLAN_PROVIDER_ID)
 }
 
 pub(crate) fn parse_provider_catalog(
@@ -316,10 +363,19 @@ fn normalize_model(
 
 fn static_provider_id(provider_id: &str) -> &'static str {
     match provider_id {
+        ProviderId::OPENAI => ProviderId::OPENAI,
+        ProviderId::ANTHROPIC => ProviderId::ANTHROPIC,
         ProviderId::OLLAMA_CLOUD => ProviderId::OLLAMA_CLOUD,
         ProviderId::LMSTUDIO => ProviderId::LMSTUDIO,
         ProviderId::DEEPSEEK => ProviderId::DEEPSEEK,
         ProviderId::ZAI => ProviderId::ZAI,
+        ProviderId::MOONSHOTAI => ProviderId::MOONSHOTAI,
+        ProviderId::MOONSHOTAI_CN => ProviderId::MOONSHOTAI_CN,
+        ProviderId::KIMI_FOR_CODING => ProviderId::KIMI_FOR_CODING,
+        ProviderId::MINIMAX => ProviderId::MINIMAX,
+        ProviderId::MINIMAX_CODING_PLAN => ProviderId::MINIMAX_CODING_PLAN,
+        ProviderId::MINIMAX_CN => ProviderId::MINIMAX_CN,
+        ProviderId::MINIMAX_CN_CODING_PLAN => ProviderId::MINIMAX_CN_CODING_PLAN,
         _ => ProviderId::OPENROUTER,
     }
 }
@@ -327,9 +383,18 @@ fn static_provider_id(provider_id: &str) -> &'static str {
 fn adapter_model_id(provider_id: &str, id: &str) -> String {
     match provider_id {
         ProviderId::OLLAMA_CLOUD
+        | ProviderId::OPENAI
+        | ProviderId::ANTHROPIC
         | ProviderId::LMSTUDIO
         | ProviderId::DEEPSEEK
-        | ProviderId::ZAI => id.to_string(),
+        | ProviderId::ZAI
+        | ProviderId::MOONSHOTAI
+        | ProviderId::MOONSHOTAI_CN
+        | ProviderId::KIMI_FOR_CODING
+        | ProviderId::MINIMAX
+        | ProviderId::MINIMAX_CODING_PLAN
+        | ProviderId::MINIMAX_CN
+        | ProviderId::MINIMAX_CN_CODING_PLAN => id.to_string(),
         _ => openrouter::adapter_model_id(id),
     }
 }
@@ -542,6 +607,220 @@ mod tests {
         assert_eq!(model.id.as_str(), "deepseek-chat");
         assert_eq!(model.adapter_model_id, "deepseek-chat");
         assert!(model.capabilities.tools);
+    }
+
+    #[test]
+    fn parses_openai_and_anthropic_models_with_raw_adapter_ids_and_modalities() {
+        let raw = br#"{
+            "openai": {
+                "id": "openai",
+                "models": {
+                    "gpt-5.1": {
+                        "id": "gpt-5.1",
+                        "name": "GPT 5.1",
+                        "tool_call": true,
+                        "reasoning": true,
+                        "temperature": true,
+                        "limit": { "context": 400000, "output": 32768 },
+                        "modalities": { "input": ["text", "image"], "output": ["text"] },
+                        "cost": { "input": 1.25, "output": 10.0 }
+                    }
+                }
+            },
+            "anthropic": {
+                "id": "anthropic",
+                "models": {
+                    "claude-sonnet-4.5": {
+                        "id": "claude-sonnet-4.5",
+                        "name": "Claude Sonnet 4.5",
+                        "tool_call": true,
+                        "reasoning": false,
+                        "temperature": true,
+                        "limit": { "context": 200000, "output": 8192 },
+                        "modalities": { "input": ["text"], "output": ["text"] },
+                        "cost": { "input": 3.0, "output": 15.0 }
+                    }
+                }
+            }
+        }"#;
+
+        let openai = parse_openai_catalog(raw).unwrap();
+        let openai_model = &openai.models[0].definition;
+        assert_eq!(openai_model.provider.as_str(), ProviderId::OPENAI);
+        assert_eq!(openai_model.id.as_str(), "gpt-5.1");
+        assert_eq!(openai_model.adapter_model_id, "gpt-5.1");
+        assert!(
+            openai_model
+                .capabilities
+                .input
+                .iter()
+                .any(|value| value == "image")
+        );
+
+        let anthropic = parse_anthropic_catalog(raw).unwrap();
+        let anthropic_model = &anthropic.models[0].definition;
+        assert_eq!(anthropic_model.provider.as_str(), ProviderId::ANTHROPIC);
+        assert_eq!(anthropic_model.id.as_str(), "claude-sonnet-4.5");
+        assert_eq!(anthropic_model.adapter_model_id, "claude-sonnet-4.5");
+        assert!(
+            !anthropic_model
+                .capabilities
+                .input
+                .iter()
+                .any(|value| value == "image")
+        );
+    }
+
+    #[test]
+    fn parses_moonshot_models_with_raw_adapter_ids() {
+        let raw = br#"{
+            "moonshotai": {
+                "id": "moonshotai",
+                "models": {
+                    "kimi-k2.7-code": {
+                        "id": "kimi-k2.7-code",
+                        "name": "Kimi K2.7 Code",
+                        "tool_call": true,
+                        "reasoning": false,
+                        "temperature": true,
+                        "limit": { "context": 262144, "output": 32768 },
+                        "modalities": { "input": ["text"], "output": ["text"] },
+                        "cost": { "input": 0.6, "output": 2.5 }
+                    }
+                }
+            }
+        }"#;
+
+        let catalog = parse_moonshot_catalog(raw).unwrap();
+        let model = &catalog.models[0].definition;
+
+        assert_eq!(model.provider.as_str(), ProviderId::MOONSHOTAI);
+        assert_eq!(model.id.as_str(), "kimi-k2.7-code");
+        assert_eq!(model.adapter_model_id, "kimi-k2.7-code");
+        assert!(model.capabilities.tools);
+    }
+
+    #[test]
+    fn parses_kimi_for_coding_models_with_raw_adapter_ids() {
+        let raw = br#"{
+            "kimi-for-coding": {
+                "id": "kimi-for-coding",
+                "models": {
+                    "k2p7": {
+                        "id": "k2p7",
+                        "name": "Kimi K2.7 Code",
+                        "tool_call": true,
+                        "reasoning": false,
+                        "temperature": true,
+                        "limit": { "context": 262144, "output": 32768 },
+                        "modalities": { "input": ["text", "image"], "output": ["text"] },
+                        "cost": { "input": 1.0, "output": 3.0 }
+                    }
+                }
+            }
+        }"#;
+
+        let catalog = parse_kimi_for_coding_catalog(raw).unwrap();
+        let model = &catalog.models[0].definition;
+
+        assert_eq!(model.provider.as_str(), ProviderId::KIMI_FOR_CODING);
+        assert_eq!(model.id.as_str(), "k2p7");
+        assert_eq!(model.adapter_model_id, "k2p7");
+        assert!(model.capabilities.tools);
+    }
+
+    #[test]
+    fn parses_minimax_models_with_raw_adapter_ids() {
+        let raw = br#"{
+            "minimax": {
+                "id": "minimax",
+                "models": {
+                    "MiniMax-M3": {
+                        "id": "MiniMax-M3",
+                        "name": "MiniMax-M3",
+                        "tool_call": true,
+                        "reasoning": false,
+                        "temperature": true,
+                        "limit": { "context": 1000000, "output": 128000 },
+                        "modalities": { "input": ["text", "image"], "output": ["text"] },
+                        "cost": { "input": 1.0, "output": 8.0 }
+                    }
+                }
+            },
+            "minimax-coding-plan": {
+                "id": "minimax-coding-plan",
+                "models": {
+                    "MiniMax-M3": {
+                        "id": "MiniMax-M3",
+                        "name": "MiniMax-M3",
+                        "tool_call": true,
+                        "reasoning": false,
+                        "temperature": true,
+                        "limit": { "context": 1000000, "output": 128000 },
+                        "modalities": { "input": ["text", "image"], "output": ["text"] },
+                        "cost": { "input": 1.0, "output": 8.0 }
+                    }
+                }
+            },
+            "minimax-cn": {
+                "id": "minimax-cn",
+                "models": {
+                    "MiniMax-M3": {
+                        "id": "MiniMax-M3",
+                        "name": "MiniMax-M3",
+                        "tool_call": true,
+                        "reasoning": false,
+                        "temperature": true,
+                        "limit": { "context": 1000000, "output": 128000 },
+                        "modalities": { "input": ["text", "image"], "output": ["text"] },
+                        "cost": { "input": 1.0, "output": 8.0 }
+                    }
+                }
+            },
+            "minimax-cn-coding-plan": {
+                "id": "minimax-cn-coding-plan",
+                "models": {
+                    "MiniMax-M3": {
+                        "id": "MiniMax-M3",
+                        "name": "MiniMax-M3",
+                        "tool_call": true,
+                        "reasoning": false,
+                        "temperature": true,
+                        "limit": { "context": 1000000, "output": 128000 },
+                        "modalities": { "input": ["text", "image"], "output": ["text"] },
+                        "cost": { "input": 1.0, "output": 8.0 }
+                    }
+                }
+            }
+        }"#;
+
+        for (provider, catalog) in [
+            (ProviderId::MINIMAX, parse_minimax_catalog(raw).unwrap()),
+            (
+                ProviderId::MINIMAX_CODING_PLAN,
+                parse_minimax_coding_plan_catalog(raw).unwrap(),
+            ),
+            (
+                ProviderId::MINIMAX_CN,
+                parse_minimax_cn_catalog(raw).unwrap(),
+            ),
+            (
+                ProviderId::MINIMAX_CN_CODING_PLAN,
+                parse_minimax_cn_coding_plan_catalog(raw).unwrap(),
+            ),
+        ] {
+            let model = &catalog.models[0].definition;
+            assert_eq!(model.provider.as_str(), provider);
+            assert_eq!(model.id.as_str(), "MiniMax-M3");
+            assert_eq!(model.adapter_model_id, "MiniMax-M3");
+            assert!(
+                model
+                    .capabilities
+                    .input
+                    .iter()
+                    .any(|value| value == "image")
+            );
+        }
     }
 
     #[test]

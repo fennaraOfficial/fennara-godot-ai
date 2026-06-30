@@ -1,13 +1,13 @@
 {
   "name": "project_settings",
-  "description": "Read, write, remove, or inspect Godot project settings. Use 'list' to inspect settings actually saved/changed in this project's project.godot. Use 'find_setting' to discover available Godot ProjectSettings keys by prefix or query before get/set. For input actions, pass 'events' array instead of 'value' to build proper InputEvent objects.",
+  "description": "Read, write, remove, or inspect Godot project settings. Use 'list' to inspect settings actually saved/changed in this project's project.godot, including compact values and InputMap event summaries. Use 'find_setting' to discover available Godot ProjectSettings keys by prefix or query before get/set. For input actions, pass 'events' array instead of 'value' to build proper InputEvent objects.",
   "parameters": {
     "type": "object",
     "properties": {
       "action": {
         "type": "string",
         "enum": ["get", "set", "remove", "list", "find_setting"],
-        "description": "get: read an exact setting key. set: create/update an exact setting key. remove: remove an exact setting key. list: list settings actually saved in project.godot, optionally filtered by prefix. find_setting: search all Godot-known ProjectSettings keys by non-empty prefix/key or query."
+        "description": "get: read an exact setting key. set: create/update an exact setting key. remove: remove an exact setting key. list: list settings actually saved in project.godot with compact values, optionally filtered by prefix. find_setting: search all Godot-known ProjectSettings keys by non-empty prefix/key or query."
       },
       "key": {
         "type": "string",

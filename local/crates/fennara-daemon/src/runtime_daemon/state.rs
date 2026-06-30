@@ -9,7 +9,11 @@ use std::{
         atomic::{AtomicBool, AtomicU64},
     },
 };
+use tokio::sync::broadcast;
 use tokio::sync::{Mutex, RwLock, mpsc, oneshot};
+
+use super::chat::context::ChatContextSnippet;
+use super::permissions::PendingToolApproval;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
@@ -19,8 +23,11 @@ pub(crate) struct AppState {
     pub(crate) active_session_id: Arc<RwLock<Option<String>>>,
     pub(crate) active_project_explicit: Arc<RwLock<bool>>,
     pub(crate) godot_senders: Arc<RwLock<HashMap<String, mpsc::UnboundedSender<Message>>>>,
+    pub(crate) chat_context_sender: broadcast::Sender<ChatContextSnippet>,
     pub(crate) pending_tool_calls: Arc<RwLock<HashMap<String, PendingToolCall>>>,
+    pub(crate) pending_tool_approvals: Arc<RwLock<HashMap<String, PendingToolApproval>>>,
     pub(crate) cancelled_chats: Arc<RwLock<HashSet<String>>>,
+    pub(crate) active_chat_turns: Arc<RwLock<HashSet<String>>>,
     pub(crate) revertable_chats: Arc<RwLock<HashSet<String>>>,
     pub(crate) runtime_sessions: Arc<Mutex<HashMap<String, RuntimeSession>>>,
     pub(crate) shutdown_sender: Arc<Mutex<Option<oneshot::Sender<()>>>>,
@@ -29,6 +36,7 @@ pub(crate) struct AppState {
 
 impl AppState {
     pub(crate) fn new(shutdown_tx: oneshot::Sender<()>) -> Self {
+        let (chat_context_sender, _) = broadcast::channel(64);
         Self {
             connection_counter: Arc::new(AtomicU64::new(0)),
             request_counter: Arc::new(AtomicU64::new(0)),
@@ -36,8 +44,11 @@ impl AppState {
             active_session_id: Arc::new(RwLock::new(None)),
             active_project_explicit: Arc::new(RwLock::new(false)),
             godot_senders: Arc::new(RwLock::new(HashMap::new())),
+            chat_context_sender,
             pending_tool_calls: Arc::new(RwLock::new(HashMap::new())),
+            pending_tool_approvals: Arc::new(RwLock::new(HashMap::new())),
             cancelled_chats: Arc::new(RwLock::new(HashSet::new())),
+            active_chat_turns: Arc::new(RwLock::new(HashSet::new())),
             revertable_chats: Arc::new(RwLock::new(HashSet::new())),
             runtime_sessions: Arc::new(Mutex::new(HashMap::new())),
             shutdown_sender: Arc::new(Mutex::new(Some(shutdown_tx))),
@@ -62,8 +73,10 @@ pub(crate) struct GodotProjectStatus {
     pub(crate) session_id: String,
     pub(crate) project_name: Option<String>,
     pub(crate) project_path: Option<String>,
+    pub(crate) godot_executable_path: Option<String>,
     pub(crate) godot_version: Option<String>,
     pub(crate) plugin_version: Option<String>,
+    pub(crate) rendering_context: Option<Value>,
     #[serde(skip_serializing)]
     pub(crate) chat_token: Option<String>,
     pub(crate) tools: Vec<String>,

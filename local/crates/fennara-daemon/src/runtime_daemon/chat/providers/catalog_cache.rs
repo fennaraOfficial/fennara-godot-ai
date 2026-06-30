@@ -6,8 +6,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 
 use super::models_dev::{
-    OpenRouterCatalog, parse_deepseek_catalog, parse_lmstudio_catalog, parse_ollama_cloud_catalog,
-    parse_openrouter_catalog, parse_zai_catalog,
+    OpenRouterCatalog, parse_anthropic_catalog, parse_deepseek_catalog,
+    parse_kimi_for_coding_catalog, parse_lmstudio_catalog, parse_minimax_catalog,
+    parse_minimax_cn_catalog, parse_minimax_cn_coding_plan_catalog,
+    parse_minimax_coding_plan_catalog, parse_moonshot_catalog, parse_moonshot_cn_catalog,
+    parse_ollama_cloud_catalog, parse_openai_catalog, parse_openrouter_catalog, parse_zai_catalog,
 };
 use crate::runtime_daemon::chat::settings;
 
@@ -25,10 +28,19 @@ static MEMORY_CACHE: OnceLock<RwLock<Option<CachedOpenRouterCatalog>>> = OnceLoc
 #[derive(Clone, Debug)]
 pub(crate) struct CachedOpenRouterCatalog {
     pub(crate) catalog: OpenRouterCatalog,
+    pub(crate) openai: OpenRouterCatalog,
+    pub(crate) anthropic: OpenRouterCatalog,
     pub(crate) ollama_cloud: OpenRouterCatalog,
     pub(crate) lmstudio: OpenRouterCatalog,
     pub(crate) deepseek: OpenRouterCatalog,
     pub(crate) zai: OpenRouterCatalog,
+    pub(crate) moonshot: OpenRouterCatalog,
+    pub(crate) moonshot_cn: OpenRouterCatalog,
+    pub(crate) kimi_for_coding: OpenRouterCatalog,
+    pub(crate) minimax: OpenRouterCatalog,
+    pub(crate) minimax_coding_plan: OpenRouterCatalog,
+    pub(crate) minimax_cn: OpenRouterCatalog,
+    pub(crate) minimax_cn_coding_plan: OpenRouterCatalog,
     pub(crate) meta: CatalogMeta,
     pub(crate) stale: bool,
 }
@@ -45,6 +57,10 @@ pub(crate) struct CatalogMeta {
     pub(crate) fetched_at_ms: u128,
     pub(crate) openrouter_model_count: usize,
     #[serde(default)]
+    pub(crate) openai_model_count: usize,
+    #[serde(default)]
+    pub(crate) anthropic_model_count: usize,
+    #[serde(default)]
     pub(crate) ollama_cloud_model_count: usize,
     #[serde(default)]
     pub(crate) lmstudio_model_count: usize,
@@ -52,12 +68,106 @@ pub(crate) struct CatalogMeta {
     pub(crate) deepseek_model_count: usize,
     #[serde(default)]
     pub(crate) zai_model_count: usize,
+    #[serde(default)]
+    pub(crate) moonshot_model_count: usize,
+    #[serde(default)]
+    pub(crate) moonshot_cn_model_count: usize,
+    #[serde(default)]
+    pub(crate) kimi_for_coding_model_count: usize,
+    #[serde(default)]
+    pub(crate) minimax_model_count: usize,
+    #[serde(default)]
+    pub(crate) minimax_coding_plan_model_count: usize,
+    #[serde(default)]
+    pub(crate) minimax_cn_model_count: usize,
+    #[serde(default)]
+    pub(crate) minimax_cn_coding_plan_model_count: usize,
 }
 
 impl CatalogMeta {
     pub(crate) fn age_ms(&self) -> Option<u128> {
         now_ms().checked_sub(self.fetched_at_ms)
     }
+
+    fn from_catalogs(source_url: String, fetched_at_ms: u128, catalogs: &ParsedCatalogs) -> Self {
+        Self {
+            source_url,
+            fetched_at_ms,
+            openrouter_model_count: catalogs.catalog.models.len(),
+            openai_model_count: catalogs.openai.models.len(),
+            anthropic_model_count: catalogs.anthropic.models.len(),
+            ollama_cloud_model_count: catalogs.ollama_cloud.models.len(),
+            lmstudio_model_count: catalogs.lmstudio.models.len(),
+            deepseek_model_count: catalogs.deepseek.models.len(),
+            zai_model_count: catalogs.zai.models.len(),
+            moonshot_model_count: catalogs.moonshot.models.len(),
+            moonshot_cn_model_count: catalogs.moonshot_cn.models.len(),
+            kimi_for_coding_model_count: catalogs.kimi_for_coding.models.len(),
+            minimax_model_count: catalogs.minimax.models.len(),
+            minimax_coding_plan_model_count: catalogs.minimax_coding_plan.models.len(),
+            minimax_cn_model_count: catalogs.minimax_cn.models.len(),
+            minimax_cn_coding_plan_model_count: catalogs.minimax_cn_coding_plan.models.len(),
+        }
+    }
+}
+
+struct ParsedCatalogs {
+    catalog: OpenRouterCatalog,
+    openai: OpenRouterCatalog,
+    anthropic: OpenRouterCatalog,
+    ollama_cloud: OpenRouterCatalog,
+    lmstudio: OpenRouterCatalog,
+    deepseek: OpenRouterCatalog,
+    zai: OpenRouterCatalog,
+    moonshot: OpenRouterCatalog,
+    moonshot_cn: OpenRouterCatalog,
+    kimi_for_coding: OpenRouterCatalog,
+    minimax: OpenRouterCatalog,
+    minimax_coding_plan: OpenRouterCatalog,
+    minimax_cn: OpenRouterCatalog,
+    minimax_cn_coding_plan: OpenRouterCatalog,
+}
+
+impl ParsedCatalogs {
+    fn into_cached(self, meta: CatalogMeta, stale: bool) -> CachedOpenRouterCatalog {
+        CachedOpenRouterCatalog {
+            catalog: self.catalog,
+            openai: self.openai,
+            anthropic: self.anthropic,
+            ollama_cloud: self.ollama_cloud,
+            lmstudio: self.lmstudio,
+            deepseek: self.deepseek,
+            zai: self.zai,
+            moonshot: self.moonshot,
+            moonshot_cn: self.moonshot_cn,
+            kimi_for_coding: self.kimi_for_coding,
+            minimax: self.minimax,
+            minimax_coding_plan: self.minimax_coding_plan,
+            minimax_cn: self.minimax_cn,
+            minimax_cn_coding_plan: self.minimax_cn_coding_plan,
+            meta,
+            stale,
+        }
+    }
+}
+
+fn parse_all_catalogs(bytes: &[u8]) -> Result<ParsedCatalogs, String> {
+    Ok(ParsedCatalogs {
+        catalog: parse_openrouter_catalog(bytes)?,
+        openai: parse_openai_catalog(bytes)?,
+        anthropic: parse_anthropic_catalog(bytes)?,
+        ollama_cloud: parse_ollama_cloud_catalog(bytes)?,
+        lmstudio: parse_lmstudio_catalog(bytes)?,
+        deepseek: parse_deepseek_catalog(bytes)?,
+        zai: parse_zai_catalog(bytes)?,
+        moonshot: parse_moonshot_catalog(bytes)?,
+        moonshot_cn: parse_moonshot_cn_catalog(bytes)?,
+        kimi_for_coding: parse_kimi_for_coding_catalog(bytes)?,
+        minimax: parse_minimax_catalog(bytes)?,
+        minimax_coding_plan: parse_minimax_coding_plan_catalog(bytes)?,
+        minimax_cn: parse_minimax_cn_catalog(bytes)?,
+        minimax_cn_coding_plan: parse_minimax_cn_coding_plan_catalog(bytes)?,
+    })
 }
 
 pub(crate) fn default_paths() -> CatalogPaths {
@@ -107,58 +217,24 @@ async fn load_disk_from(paths: &CatalogPaths) -> Result<CachedOpenRouterCatalog,
         let bytes = tokio::fs::read(&source)
             .await
             .map_err(|error| format!("Failed to read {}: {error}", source.display()))?;
-        let catalog = parse_openrouter_catalog(&bytes)?;
-        let ollama_cloud = parse_ollama_cloud_catalog(&bytes).unwrap_or_default();
-        let lmstudio = parse_lmstudio_catalog(&bytes).unwrap_or_default();
-        let deepseek = parse_deepseek_catalog(&bytes).unwrap_or_default();
-        let zai = parse_zai_catalog(&bytes).unwrap_or_default();
-        let meta = CatalogMeta {
-            source_url: source.display().to_string(),
-            fetched_at_ms: now_ms(),
-            openrouter_model_count: catalog.models.len(),
-            ollama_cloud_model_count: ollama_cloud.models.len(),
-            lmstudio_model_count: lmstudio.models.len(),
-            deepseek_model_count: deepseek.models.len(),
-            zai_model_count: zai.models.len(),
-        };
-        return Ok(CachedOpenRouterCatalog {
-            catalog,
-            ollama_cloud,
-            lmstudio,
-            deepseek,
-            zai,
-            meta,
-            stale: false,
-        });
+        let catalogs = parse_all_catalogs(&bytes)?;
+        let meta = CatalogMeta::from_catalogs(source.display().to_string(), now_ms(), &catalogs);
+        return Ok(catalogs.into_cached(meta, false));
     }
 
     let bytes = tokio::fs::read(&paths.cache_file)
         .await
         .map_err(|error| format!("Failed to read {}: {error}", paths.cache_file.display()))?;
-    let catalog = parse_openrouter_catalog(&bytes)?;
-    let ollama_cloud = parse_ollama_cloud_catalog(&bytes).unwrap_or_default();
-    let lmstudio = parse_lmstudio_catalog(&bytes).unwrap_or_default();
-    let deepseek = parse_deepseek_catalog(&bytes).unwrap_or_default();
-    let zai = parse_zai_catalog(&bytes).unwrap_or_default();
-    let meta = read_meta(paths).await.unwrap_or_else(|| CatalogMeta {
-        source_url: source_url(),
-        fetched_at_ms: file_modified_ms(&paths.cache_file).unwrap_or_default(),
-        openrouter_model_count: catalog.models.len(),
-        ollama_cloud_model_count: ollama_cloud.models.len(),
-        lmstudio_model_count: lmstudio.models.len(),
-        deepseek_model_count: deepseek.models.len(),
-        zai_model_count: zai.models.len(),
+    let catalogs = parse_all_catalogs(&bytes)?;
+    let meta = read_meta(paths).await.unwrap_or_else(|| {
+        CatalogMeta::from_catalogs(
+            source_url(),
+            file_modified_ms(&paths.cache_file).unwrap_or_default(),
+            &catalogs,
+        )
     });
     let stale = !is_fresh(&meta, now_ms(), DEFAULT_TTL);
-    Ok(CachedOpenRouterCatalog {
-        catalog,
-        ollama_cloud,
-        lmstudio,
-        deepseek,
-        zai,
-        meta,
-        stale,
-    })
+    Ok(catalogs.into_cached(meta, stale))
 }
 
 fn load_disk_blocking_from(paths: &CatalogPaths) -> Result<CachedOpenRouterCatalog, String> {
@@ -166,60 +242,26 @@ fn load_disk_blocking_from(paths: &CatalogPaths) -> Result<CachedOpenRouterCatal
         let source = PathBuf::from(path);
         let bytes = std::fs::read(&source)
             .map_err(|error| format!("Failed to read {}: {error}", source.display()))?;
-        let catalog = parse_openrouter_catalog(&bytes)?;
-        let ollama_cloud = parse_ollama_cloud_catalog(&bytes).unwrap_or_default();
-        let lmstudio = parse_lmstudio_catalog(&bytes).unwrap_or_default();
-        let deepseek = parse_deepseek_catalog(&bytes).unwrap_or_default();
-        let zai = parse_zai_catalog(&bytes).unwrap_or_default();
-        let meta = CatalogMeta {
-            source_url: source.display().to_string(),
-            fetched_at_ms: now_ms(),
-            openrouter_model_count: catalog.models.len(),
-            ollama_cloud_model_count: ollama_cloud.models.len(),
-            lmstudio_model_count: lmstudio.models.len(),
-            deepseek_model_count: deepseek.models.len(),
-            zai_model_count: zai.models.len(),
-        };
-        return Ok(CachedOpenRouterCatalog {
-            catalog,
-            ollama_cloud,
-            lmstudio,
-            deepseek,
-            zai,
-            meta,
-            stale: false,
-        });
+        let catalogs = parse_all_catalogs(&bytes)?;
+        let meta = CatalogMeta::from_catalogs(source.display().to_string(), now_ms(), &catalogs);
+        return Ok(catalogs.into_cached(meta, false));
     }
 
     let bytes = std::fs::read(&paths.cache_file)
         .map_err(|error| format!("Failed to read {}: {error}", paths.cache_file.display()))?;
-    let catalog = parse_openrouter_catalog(&bytes)?;
-    let ollama_cloud = parse_ollama_cloud_catalog(&bytes).unwrap_or_default();
-    let lmstudio = parse_lmstudio_catalog(&bytes).unwrap_or_default();
-    let deepseek = parse_deepseek_catalog(&bytes).unwrap_or_default();
-    let zai = parse_zai_catalog(&bytes).unwrap_or_default();
+    let catalogs = parse_all_catalogs(&bytes)?;
     let meta = std::fs::read(&paths.meta_file)
         .ok()
         .and_then(|bytes| serde_json::from_slice::<CatalogMeta>(&bytes).ok())
-        .unwrap_or_else(|| CatalogMeta {
-            source_url: source_url(),
-            fetched_at_ms: file_modified_ms(&paths.cache_file).unwrap_or_default(),
-            openrouter_model_count: catalog.models.len(),
-            ollama_cloud_model_count: ollama_cloud.models.len(),
-            lmstudio_model_count: lmstudio.models.len(),
-            deepseek_model_count: deepseek.models.len(),
-            zai_model_count: zai.models.len(),
+        .unwrap_or_else(|| {
+            CatalogMeta::from_catalogs(
+                source_url(),
+                file_modified_ms(&paths.cache_file).unwrap_or_default(),
+                &catalogs,
+            )
         });
     let stale = !is_fresh(&meta, now_ms(), DEFAULT_TTL);
-    Ok(CachedOpenRouterCatalog {
-        catalog,
-        ollama_cloud,
-        lmstudio,
-        deepseek,
-        zai,
-        meta,
-        stale,
-    })
+    Ok(catalogs.into_cached(meta, stale))
 }
 
 fn memory_cache() -> Option<CachedOpenRouterCatalog> {
@@ -256,30 +298,10 @@ async fn refresh_with_paths(
 
     let source_url = source_url();
     let bytes = fetch_snapshot(&source_url).await?;
-    let catalog = parse_openrouter_catalog(&bytes)?;
-    let ollama_cloud = parse_ollama_cloud_catalog(&bytes).unwrap_or_default();
-    let lmstudio = parse_lmstudio_catalog(&bytes).unwrap_or_default();
-    let deepseek = parse_deepseek_catalog(&bytes).unwrap_or_default();
-    let zai = parse_zai_catalog(&bytes).unwrap_or_default();
-    let meta = CatalogMeta {
-        source_url,
-        fetched_at_ms: now_ms(),
-        openrouter_model_count: catalog.models.len(),
-        ollama_cloud_model_count: ollama_cloud.models.len(),
-        lmstudio_model_count: lmstudio.models.len(),
-        deepseek_model_count: deepseek.models.len(),
-        zai_model_count: zai.models.len(),
-    };
+    let catalogs = parse_all_catalogs(&bytes)?;
+    let meta = CatalogMeta::from_catalogs(source_url, now_ms(), &catalogs);
     write_validated_snapshot(&paths, &bytes, &meta).await?;
-    Ok(CachedOpenRouterCatalog {
-        catalog,
-        ollama_cloud,
-        lmstudio,
-        deepseek,
-        zai,
-        meta,
-        stale: false,
-    })
+    Ok(catalogs.into_cached(meta, false))
 }
 
 async fn fetch_snapshot(source_url: &str) -> Result<Vec<u8>, String> {
@@ -319,7 +341,7 @@ async fn write_validated_snapshot(
     bytes: &[u8],
     meta: &CatalogMeta,
 ) -> Result<(), String> {
-    parse_openrouter_catalog(bytes)?;
+    parse_all_catalogs(bytes)?;
     if let Some(parent) = paths.cache_file.parent() {
         tokio::fs::create_dir_all(parent)
             .await
@@ -419,9 +441,28 @@ mod tests {
                         "modalities": { "input": ["text"], "output": ["text"] }
                     }
                 }
-            }
+            },
+            "openai": { "id": "openai", "models": {} },
+            "anthropic": { "id": "anthropic", "models": {} },
+            "ollama-cloud": { "id": "ollama-cloud", "models": {} },
+            "lmstudio": { "id": "lmstudio", "models": {} },
+            "deepseek": { "id": "deepseek", "models": {} },
+            "zai": { "id": "zai", "models": {} },
+            "moonshotai": { "id": "moonshotai", "models": {} },
+            "moonshotai-cn": { "id": "moonshotai-cn", "models": {} },
+            "kimi-for-coding": { "id": "kimi-for-coding", "models": {} },
+            "minimax": { "id": "minimax", "models": {} },
+            "minimax-coding-plan": { "id": "minimax-coding-plan", "models": {} },
+            "minimax-cn": { "id": "minimax-cn", "models": {} },
+            "minimax-cn-coding-plan": { "id": "minimax-cn-coding-plan", "models": {} }
         }"#
         .to_vec()
+    }
+
+    fn fixture_with_bad_side_provider() -> Vec<u8> {
+        let mut value: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
+        value["anthropic"]["id"] = serde_json::json!("not-anthropic");
+        serde_json::to_vec(&value).unwrap()
     }
 
     fn test_paths(name: &str) -> CatalogPaths {
@@ -443,10 +484,19 @@ mod tests {
             source_url: DEFAULT_MODELS_DEV_URL.to_string(),
             fetched_at_ms: 1,
             openrouter_model_count: 1,
+            openai_model_count: 0,
+            anthropic_model_count: 0,
             ollama_cloud_model_count: 0,
             lmstudio_model_count: 0,
             deepseek_model_count: 0,
             zai_model_count: 0,
+            moonshot_model_count: 0,
+            moonshot_cn_model_count: 0,
+            kimi_for_coding_model_count: 0,
+            minimax_model_count: 0,
+            minimax_coding_plan_model_count: 0,
+            minimax_cn_model_count: 0,
+            minimax_cn_coding_plan_model_count: 0,
         };
         write_validated_snapshot(&paths, &fixture(), &meta)
             .await
@@ -465,10 +515,19 @@ mod tests {
             source_url: DEFAULT_MODELS_DEV_URL.to_string(),
             fetched_at_ms: now_ms(),
             openrouter_model_count: 1,
+            openai_model_count: 0,
+            anthropic_model_count: 0,
             ollama_cloud_model_count: 0,
             lmstudio_model_count: 0,
             deepseek_model_count: 0,
             zai_model_count: 0,
+            moonshot_model_count: 0,
+            moonshot_cn_model_count: 0,
+            kimi_for_coding_model_count: 0,
+            minimax_model_count: 0,
+            minimax_coding_plan_model_count: 0,
+            minimax_cn_model_count: 0,
+            minimax_cn_coding_plan_model_count: 0,
         };
         write_validated_snapshot(&paths, &fixture(), &meta)
             .await
@@ -476,6 +535,40 @@ mod tests {
         let before = tokio::fs::read_to_string(&paths.cache_file).await.unwrap();
 
         let result = write_validated_snapshot(&paths, b"{ not-json", &meta).await;
+        let after = tokio::fs::read_to_string(&paths.cache_file).await.unwrap();
+
+        assert!(result.is_err());
+        assert_eq!(before, after);
+    }
+
+    #[tokio::test]
+    async fn malformed_side_provider_does_not_overwrite_cache() {
+        let paths = test_paths("invalid-side-provider");
+        let meta = CatalogMeta {
+            source_url: DEFAULT_MODELS_DEV_URL.to_string(),
+            fetched_at_ms: now_ms(),
+            openrouter_model_count: 1,
+            openai_model_count: 0,
+            anthropic_model_count: 0,
+            ollama_cloud_model_count: 0,
+            lmstudio_model_count: 0,
+            deepseek_model_count: 0,
+            zai_model_count: 0,
+            moonshot_model_count: 0,
+            moonshot_cn_model_count: 0,
+            kimi_for_coding_model_count: 0,
+            minimax_model_count: 0,
+            minimax_coding_plan_model_count: 0,
+            minimax_cn_model_count: 0,
+            minimax_cn_coding_plan_model_count: 0,
+        };
+        write_validated_snapshot(&paths, &fixture(), &meta)
+            .await
+            .unwrap();
+        let before = tokio::fs::read_to_string(&paths.cache_file).await.unwrap();
+
+        let result =
+            write_validated_snapshot(&paths, &fixture_with_bad_side_provider(), &meta).await;
         let after = tokio::fs::read_to_string(&paths.cache_file).await.unwrap();
 
         assert!(result.is_err());

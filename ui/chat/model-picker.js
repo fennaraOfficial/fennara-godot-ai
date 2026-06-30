@@ -12,8 +12,6 @@
     const providerFromModel = options.providerFromModel || defaultProviderFromModel;
     const getOllamaModels = options.getOllamaModels;
     const openProviderPicker = options.openProviderPicker;
-    const openOpenRouterKeyPrompt = options.openOpenRouterKeyPrompt;
-    const openProviderKeyPrompt = options.openProviderKeyPrompt || openOpenRouterKeyPrompt;
     const onSelect = options.onSelect;
     const onEscapeClose = options.onEscapeClose;
     const onRequestModels = options.onRequestModels;
@@ -150,9 +148,9 @@
         return;
       }
       if (provider && providerRequiresApiKey(provider) && !isProviderConnected(provider) && !rankedModels.length) {
-        renderEmpty(`${providerLabel(provider)} not connected.`, {
+        renderEmpty("Provider not connected.", {
           label: "Add API key",
-          onClick: () => openProviderKeyPrompt?.(provider),
+          onClick: openProviderPicker,
         });
         return;
       }
