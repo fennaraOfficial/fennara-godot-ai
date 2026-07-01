@@ -7,7 +7,7 @@ tools for broad code navigation. Fennara is for the parts that need Godot
 itself: scenes, resources, diagnostics, runtime output, screenshots, editor
 state, and Godot-aware project settings.
 
-When installed into a project, Fennara writes `.fennara/ai/guidelines.md` and a
+When installed into a project, Fennara writes `addons/fennara/ai/guidelines.md` and a
 generated Fennara block in `AGENTS.md`. Agents should read that project guidance
 before doing Godot-specific work. The live MCP tool schemas remain the exact
 source of truth for arguments, limits, and result fields.
@@ -136,7 +136,9 @@ Use Fennara MCP to run fennara_status and tell me which Godot project is connect
 
 Use this when Godot-side path normalization or image handling matters. It is
 project-scoped and accepts Godot-style paths such as `res://scripts/player.gd`.
-For broad source reading, use the MCP client's normal file reader.
+For broad source reading, use the MCP client's normal file reader. Fennara's
+own addon remains protected, except `res://addons/fennara/ai/guidelines.md` is
+readable so agents can follow the generated project guidance.
 
 ### `get_scene_tree`
 
@@ -312,12 +314,18 @@ The diagnostic sources are language-specific:
   `fennara install --csharp`, with C# project support checked by the addon.
 - `.gdshader`: Godot shader parser diagnostics.
 
-For requested `.gd` and `.cs` files, Fennara also loads and instantiates project
-`.tscn` scenes in memory with Godot logging captured. Script-related scene-load
-errors are attached back to the matching script with `source="scene_load"` and
-`scene_path`, so agents can see which scene triggered the script error. This is
-a diagnostic pass only; it does not open the editor UI, run gameplay, or
-validate arbitrary scene/resource state.
+For targeted `.gd` and `.cs` files, Fennara also loads and instantiates project
+`.tscn` scenes in memory on the Godot main thread with Godot logging captured.
+Script-related scene-load errors are attached back to the matching script with
+`source="scene_load"` and `scene_path`, so agents can see which scene triggered
+the script error. This is a diagnostic pass only; it does not open the editor UI,
+run gameplay, or validate arbitrary scene/resource state.
+
+For `scan_project: true`, Fennara skips scene instantiation and reports that
+scene-load diagnostics were skipped. That project-wide mode can miss errors that
+only occur when scripts are attached to or loaded through scenes, such as missing
+unique-node references, invalid `NodePath` wiring, broken exported scene/resource
+assignments, or script initialization side effects.
 
 Example prompt:
 
@@ -331,15 +339,23 @@ Use this after scene edits or when checking scene/resource integrity. It accepts
 1 to 10 scene paths.
 
 Structural checks include missing scripts/resources, script extends mismatch,
-unset exported variables, invalid NodePath properties, invalid script
-`$Node`/`get_node()` references, duplicate sibling names, and cyclic scene
-dependencies.
+invalid NodePath properties, invalid script `$Node`/`get_node()` references,
+duplicate sibling names, cyclic scene dependencies, and unset exported
+Resource/Object variables.
+
+Unset exported Resource/Object variables are split by signal strength.
+Declaration-only unset exports are reported as structural notes because they may
+be optional or assigned at runtime. Unset exports referenced elsewhere in the
+script are structural warnings to verify/null-guard or assign; they are not
+automatic proof that a placeholder resource should be created.
 
 For scenes with zero structural errors, Fennara also runs each scene headlessly
 for exactly 3 seconds through the local daemon using up to 3 memory-throttled
-workers. The result includes compact runtime output inline and points to the
-full result JSON and raw runtime logs. It does not open scenes in the editor or
-scrape the editor Output panel.
+workers. The result includes runtime status, crash/error/warning flags, compact
+runtime output inline, and paths to the full result JSON and raw runtime logs.
+Fennara intentionally stops the process after the validation window, so a
+non-zero exit code from that stop is not by itself a scene failure. It does not
+open scenes in the editor or scrape the editor Output panel.
 
 Example prompt:
 
@@ -381,8 +397,10 @@ before starting a new one.
 
 Start returns a `session_id` and a `runtime_session.log` path. Treat that log as
 the source of truth for startup output, raw Godot stdout/stderr, runtime errors,
-`FENNARA_SCRIPT_*` markers, `ctx.log(...)` messages, captures, and completion
-events.
+`FENNARA_SCRIPT_*` markers, `ctx.log(...)` messages, captures, close/stop
+events, and completion events. `runtime_session.status` and
+`runtime_session.stop` are process receipts; a stopped process or non-zero exit
+code after intentional cleanup is not by itself proof that the scene failed.
 
 Example prompt:
 
@@ -403,6 +421,10 @@ Runtime scripts can finish while the scene stays open. Use follow-up
 `runtime_script` calls for incremental observe/experiment/verify loops, then
 close the scene with `runtime_session.stop` or a final script that calls
 `ctx.close_scene()`.
+
+Treat `runtime_script` results as receipts for one probe. They are not full
+scene-health verdicts or gameplay-success proof; use runtime findings and
+`runtime_session.log` to verify errors, close events, and observed state.
 
 Await yielding helpers such as `ctx.wait(...)`, `ctx.capture(...)`,
 `ctx.tap_action(...)`, `ctx.action(...)`, `ctx.action_sequence(...)`,
