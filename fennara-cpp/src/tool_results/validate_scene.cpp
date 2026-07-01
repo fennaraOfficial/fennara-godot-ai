@@ -180,6 +180,42 @@ bool is_runtime_issue_continuation(const godot::String &line) {
            line.begins_with("              [");
 }
 
+godot::String bool_text(bool value) {
+    return value ? "yes" : "no";
+}
+
+godot::String runtime_status_label(const godot::Dictionary &runtime) {
+    godot::String status = runtime.get("status", "");
+    if (status == "stopped_after_run_seconds") {
+        return "stopped after 3s validation window";
+    }
+    if (status == "cancelled") {
+        return "cancelled";
+    }
+    if (status == "timeout") {
+        return "timed out";
+    }
+    if (status == "crashed") {
+        return "crashed";
+    }
+    if (status == "failed") {
+        return "failed";
+    }
+    if (status.is_empty() && (bool)runtime.get("killed", false)) {
+        return "stopped by Fennara";
+    }
+    return status.is_empty() ? godot::String("unknown") : status.replace("_", " ");
+}
+
+godot::String exit_code_note(const godot::Dictionary &runtime) {
+    godot::String status = runtime.get("status", "");
+    if (status == "stopped_after_run_seconds" ||
+        (bool)runtime.get("killed", false)) {
+        return " (process was stopped by Fennara after the validation window; this is not by itself a failure)";
+    }
+    return "";
+}
+
 godot::String block_text(const godot::PackedStringArray &block) {
     return godot::String("\n").join(block);
 }
@@ -437,9 +473,17 @@ godot::Dictionary format_validate_scene(const godot::Dictionary &raw_result) {
             lines.append("### 3s headless runtime check");
             if (runtime_var.get_type() == godot::Variant::DICTIONARY) {
                 godot::Dictionary runtime = runtime_var;
+                lines.append("Runtime status: " + runtime_status_label(runtime));
+                lines.append("Crash detected: " +
+                             bool_text((bool)runtime.get("crashed", false)));
+                lines.append("Runtime errors detected: " +
+                             bool_text((bool)runtime.get("has_error", false)));
+                lines.append("Runtime warnings detected: " +
+                             bool_text((bool)runtime.get("has_warning", false)));
                 lines.append("Process exit code: " +
                              godot::String::num_int64(static_cast<int>(
-                                 runtime.get("exit_code", 0))));
+                                 runtime.get("exit_code", 0))) +
+                             exit_code_note(runtime));
                 lines.append("Observed duration: " +
                              godot::String::num(static_cast<double>(
                                  runtime.get("duration_seconds", 0.0)), 3) +

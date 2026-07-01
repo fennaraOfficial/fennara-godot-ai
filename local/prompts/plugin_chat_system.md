@@ -78,7 +78,7 @@ Runtime sessions and playtesting:
 - If another runtime session is already running, do not start a second one. Call `runtime_session.status` to inspect it or `runtime_session.stop` to close it.
 - If a session starts, reuse the returned `session_id` for multiple `runtime_script` probes.
 - Close the scene with `runtime_session.stop` or a final `runtime_script` that calls `ctx.close_scene()`.
-- Treat `runtime_session.log` as the source of truth for scene startup output, raw Godot output, runtime errors, `FENNARA_SCRIPT_*` markers, `ctx.log(...)` messages, captures, and completion/failure events. Inspect/search the log after `runtime_session.start`, after every `runtime_script`, and when checking status if the result exposes a readable log path.
+- Treat `runtime_session.log` as the source of truth for scene startup output, raw Godot output, runtime errors, `FENNARA_SCRIPT_*` markers, `ctx.log(...)` messages, captures, close/stop events, and completion/failure events. `runtime_session.status`/`stop` are process receipts; a stopped process or non-zero exit code after intentional cleanup is not by itself proof that the scene failed. Inspect/search the log after `runtime_session.start`, after every `runtime_script`, and when checking status if the result exposes a readable log path.
 
 Runtime scripts:
 - Use `runtime_script` only after `runtime_session.start` or `runtime_session.status` provides an active `session_id`.
@@ -87,7 +87,7 @@ Runtime scripts:
 - Do not copy `run_scene_edit_script` templates into `runtime_script`. `run_scene_edit_script` uses `@tool`; `runtime_script` must not.
 - Runtime scripts may finish without calling `ctx.close_scene()`; that is normal for incremental probes.
 - Call `ctx.close_scene()` only in the final runtime script when intentionally ending the runtime session.
-- Treat a completed runtime_script as a dispatch/completion receipt, not proof that the scene had no runtime errors.
+- Treat a completed runtime_script as a dispatch/completion receipt, not proof that the scene had no runtime errors or that a gameplay goal succeeded.
 - Keep runtime scripts short and bounded. Use explicit local types. Use `ctx.log(...)` only for compact milestones, sampled state, final summaries, and capture labels.
 - Do not log every frame, loop iteration, action press/release, mouse move, or full node dump. In loops, accumulate counters, ranges, a few samples, and goal status, then emit one concise summary.
 - For unknown gameplay mechanics, do not assume common genres, objectives, movement semantics, or success conditions. Treat all gameplay semantics as project-local until observed.

@@ -345,9 +345,11 @@ dependencies.
 
 For scenes with zero structural errors, Fennara also runs each scene headlessly
 for exactly 3 seconds through the local daemon using up to 3 memory-throttled
-workers. The result includes compact runtime output inline and points to the
-full result JSON and raw runtime logs. It does not open scenes in the editor or
-scrape the editor Output panel.
+workers. The result includes runtime status, crash/error/warning flags, compact
+runtime output inline, and paths to the full result JSON and raw runtime logs.
+Fennara intentionally stops the process after the validation window, so a
+non-zero exit code from that stop is not by itself a scene failure. It does not
+open scenes in the editor or scrape the editor Output panel.
 
 Example prompt:
 
@@ -389,8 +391,10 @@ before starting a new one.
 
 Start returns a `session_id` and a `runtime_session.log` path. Treat that log as
 the source of truth for startup output, raw Godot stdout/stderr, runtime errors,
-`FENNARA_SCRIPT_*` markers, `ctx.log(...)` messages, captures, and completion
-events.
+`FENNARA_SCRIPT_*` markers, `ctx.log(...)` messages, captures, close/stop
+events, and completion events. `runtime_session.status` and
+`runtime_session.stop` are process receipts; a stopped process or non-zero exit
+code after intentional cleanup is not by itself proof that the scene failed.
 
 Example prompt:
 
@@ -411,6 +415,10 @@ Runtime scripts can finish while the scene stays open. Use follow-up
 `runtime_script` calls for incremental observe/experiment/verify loops, then
 close the scene with `runtime_session.stop` or a final script that calls
 `ctx.close_scene()`.
+
+Treat `runtime_script` results as receipts for one probe. They are not full
+scene-health verdicts or gameplay-success proof; use runtime findings and
+`runtime_session.log` to verify errors, close events, and observed state.
 
 Await yielding helpers such as `ctx.wait(...)`, `ctx.capture(...)`,
 `ctx.tap_action(...)`, `ctx.action(...)`, `ctx.action_sequence(...)`,

@@ -88,14 +88,24 @@ godot::Dictionary format_runtime_script(const godot::Dictionary &raw_result) {
         }
     }
     if (script_result.has("scene_closed")) {
+        bool scene_closed = (bool)script_result.get("scene_closed", false);
         lines.append(
             godot::String("Scene closed: ") +
-            ((bool)script_result.get("scene_closed", false) ? "true" : "false"));
+            (scene_closed ? "true" : "false"));
+        if (scene_closed) {
+            lines.append(
+                "Scene close was requested by the runtime script; use runtime_session.status if you need to confirm the process state.");
+        }
     }
     if (script_result.has("session_active")) {
+        bool session_active = (bool)script_result.get("session_active", false);
         lines.append(
             godot::String("Session active: ") +
-            ((bool)script_result.get("session_active", false) ? "true" : "false"));
+            (session_active ? "true" : "false"));
+        if (session_active) {
+            lines.append(
+                "Runtime script completed and the scene remains open for follow-up probes.");
+        }
     }
     if (!visible_captures_dir.is_empty()) {
         lines.append("Captures dir: " + visible_captures_dir);
@@ -131,7 +141,7 @@ godot::Dictionary format_runtime_script(const godot::Dictionary &raw_result) {
     }
     if (!log_path.is_empty()) {
         lines.append(
-            "Read the session log for script logs, runtime errors, and follow-up state.");
+            "This result is a script receipt, not a full scene-health verdict. Read the session log for script logs, runtime errors, and follow-up state.");
     }
 
     godot::Dictionary metadata =

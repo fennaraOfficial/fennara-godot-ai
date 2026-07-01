@@ -35,7 +35,28 @@ godot::String normalize_path_for_model(const godot::String &path) {
 }
 
 godot::String status_value(const godot::Dictionary &raw_result) {
-    return godot::String(raw_result.get("status", "unknown"));
+    godot::String status = raw_result.get("status", "");
+    if (!status.is_empty()) {
+        return status;
+    }
+    if (raw_result.has("running")) {
+        return (bool)raw_result.get("running", false) ? "running" : "exited";
+    }
+    return "unknown";
+}
+
+godot::String bool_text(bool value) {
+    return value ? "yes" : "no";
+}
+
+godot::String exit_code_note(const godot::String &status) {
+    if (status == "stopped") {
+        return " (expected when `runtime_session.stop` terminates a managed scene; inspect runtime issues/logs to judge failure)";
+    }
+    if (status == "exited") {
+        return " (the scene process has exited; inspect runtime issues/logs to judge failure)";
+    }
+    return "";
 }
 
 void append_if_present(godot::PackedStringArray &lines,
@@ -73,7 +94,18 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
     append_if_present(lines, "Captures dir", raw_result, "captures_dir");
     if (!godot::String(raw_result.get("log_path", "")).is_empty()) {
         lines.append(
-            "Session log is the source of truth for runtime progress, debugger issues, script logs, and captures.");
+            "Session log is the source of truth for runtime progress, debugger issues, script logs, captures, and whether the scene actually failed.");
+    }
+
+    if (raw_result.has("running")) {
+        lines.append(
+            godot::String("Session process running: ") +
+            bool_text((bool)raw_result.get("running", false)));
+    }
+    godot::Variant exit_code = raw_result.get("exit_code", godot::Variant());
+    if (exit_code.get_type() != godot::Variant::NIL) {
+        lines.append("Process exit code: " + godot::String(exit_code) +
+                     exit_code_note(status));
     }
 
     if (raw_result.has("script_running")) {
@@ -287,6 +319,16 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
         lines.append("");
         lines.append(
             "Stop this session with `runtime_session` action `stop` as soon as runtime work is complete.");
+    }
+    if (status == "running") {
+        lines.append("");
+        lines.append(
+            "This is a live-session status receipt. Use runtime_script probes and the session log to verify behavior; the status line alone is not proof the scene is healthy.");
+    }
+    if (status == "stopped" || status == "exited") {
+        lines.append("");
+        lines.append(
+            "This is a process/session receipt. A non-zero exit code after an intentional stop is not by itself a validation failure; use debugger issues and the session log as the health signal.");
     }
     if (status == "started_with_errors") {
         lines.append("");
