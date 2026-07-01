@@ -27,9 +27,159 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  linux-cef-runtime:
+    name: prepare Linux CEF runtime
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux CEF packaging dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential bzip2 binutils
+
+      - name: Prepare Linux CEF SDK
+        id: linux_cef_sdk
+        run: |
+          node scripts/prepare-linux-cef-sdk.mjs \
+            --out-dir "${RUNNER_TEMP}/fennara-cef-sdk" \
+            --download-dir "${RUNNER_TEMP}/fennara-cef-download"
+
+      - name: Build Linux CEF runtime preview asset
+        shell: bash
+        env:
+          LINUX_CEF_RUNTIME_URL: ${{ inputs.linux_cef_runtime_url }}
+          LINUX_CEF_RUNTIME_NAME: ${{ inputs.linux_cef_runtime_name }}
+          LINUX_CEF_RUNTIME_SHA256: ${{ inputs.linux_cef_runtime_sha256 }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p .package-preview/cef-download .package-preview/cef-source dist/linux-cef-runtime-preview dist/generated-linux-cef-manifest
+
+          download_url="${LINUX_CEF_RUNTIME_URL}"
+          download_name=""
+          cef_version=""
+
+          if [[ -z "${download_url}" ]]; then
+            cef_version="139.0.28+g55ab8a8+chromium-139.0.7258.139"
+            node scripts/prepare-linux-cef-runtime.mjs \
+              --cef-root "${{ steps.linux_cef_sdk.outputs.cef_root }}" \
+              --version "${cef_version}" \
+              --out-dir dist/linux-cef-runtime-preview \
+              --write-manifest dist/generated-linux-cef-manifest/linux-cef.json
+            exit 0
+          else
+            url_path="${download_url%%\?*}"
+            download_name="$(basename "${url_path}")"
+            download_name="${download_name//%2B/+}"
+            download_name="${download_name//%2b/+}"
+          fi
+
+          if [[ -z "${download_name}" || "${download_name}" == "." || "${download_name}" == "/" || "${download_name}" == *"/"* || "${download_name}" == *"\\"* ]]; then
+            echo "::error::linux_cef_runtime_url must end with a file name when provided."
+            exit 1
+          fi
+
+          download_path=".package-preview/cef-download/${download_name}"
+          curl --location --fail --show-error --retry 3 --output "${download_path}" "${download_url}"
+
+          if [[ -n "${LINUX_CEF_RUNTIME_SHA256}" ]]; then
+            actual_sha256="$(sha256sum "${download_path}" | awk '{print $1}')"
+            if [[ "${actual_sha256,,}" != "${LINUX_CEF_RUNTIME_SHA256,,}" ]]; then
+              echo "::error::Linux CEF download sha256 mismatch: expected ${LINUX_CEF_RUNTIME_SHA256}, got ${actual_sha256}."
+              exit 1
+            fi
+          fi
+
+          if [[ "${download_name}" =~ ^fennara-webview-cef-linux-x64-(.+)\.zip$ ]]; then
+            asset_name="${LINUX_CEF_RUNTIME_NAME:-${download_name}}"
+            if [[ ! "${asset_name}" =~ ^fennara-webview-cef-linux-x64-(.+)\.zip$ ]]; then
+              echo "::error::linux_cef_runtime_name must match fennara-webview-cef-linux-x64-<version>.zip."
+              exit 1
+            fi
+            cef_version="${BASH_REMATCH[1]}"
+            cp "${download_path}" "dist/linux-cef-runtime-preview/${asset_name}"
+            asset_sha256="$(sha256sum "dist/linux-cef-runtime-preview/${asset_name}" | awk '{print $1}')"
+            node - "${asset_name}" "${asset_sha256}" "${cef_version}" <<'NODE'
+          const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
+          const path = require("node:path");
+
+          const [assetName, sha256, version] = process.argv.slice(2);
+          const manifest = JSON.parse(readFileSync("local/webview-runtimes/linux-cef.json", "utf8"));
+          manifest.version = version;
+          manifest.enabled = true;
+          manifest.archive = {
+            ...(manifest.archive ?? {}),
+            format: "zip",
+            name: assetName,
+            url: null,
+            sha256,
+          };
+          mkdirSync("dist/generated-linux-cef-manifest", { recursive: true });
+          writeFileSync(
+            path.join("dist", "generated-linux-cef-manifest", "linux-cef.json"),
+            `${JSON.stringify(manifest, null, 2)}\n`,
+          );
+          NODE
+            echo "Uploaded prebuilt Linux CEF runtime preview asset: ${asset_name}"
+            exit 0
+          fi
+
+          if [[ ! "${download_name}" =~ ^cef_binary_(.+)_linux64(_minimal)?\.tar\.bz2$ ]]; then
+            echo "::error::Linux CEF input must be an official cef_binary_<version>_linux64[_minimal].tar.bz2 or fennara-webview-cef-linux-x64-<version>.zip."
+            exit 1
+          fi
+
+          if [[ -z "${cef_version}" ]]; then
+            cef_version="${BASH_REMATCH[1]}"
+          fi
+
+          tar -xjf "${download_path}" -C .package-preview/cef-source
+          cef_root="$(find .package-preview/cef-source -maxdepth 1 -type d \( -name 'cef_binary_*_linux64' -o -name 'cef_binary_*_linux64_minimal' \) | head -n 1)"
+          if [[ -z "${cef_root}" ]]; then
+            echo "::error::Could not find extracted cef_binary_*_linux64 or cef_binary_*_linux64_minimal directory."
+            exit 1
+          fi
+
+          node scripts/prepare-linux-cef-runtime.mjs \
+            --cef-root "${cef_root}" \
+            --version "${cef_version}" \
+            --out-dir dist/linux-cef-runtime-preview \
+            --write-manifest dist/generated-linux-cef-manifest/linux-cef.json
+
+      - name: Validate generated Linux CEF runtime asset
+        run: |
+          cp dist/generated-linux-cef-manifest/linux-cef.json local/webview-runtimes/linux-cef.json
+          node scripts/check-linux-cef-runtime-release.mjs --assets-dir dist/linux-cef-runtime-preview
+
+      - name: Upload generated Linux CEF manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennara-generated-linux-cef-manifest
+          path: dist/generated-linux-cef-manifest/linux-cef.json
+          if-no-files-found: error
+
+      - name: Upload Linux CEF runtime preview asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennara-release-linux-cef-runtime
+          path: dist/linux-cef-runtime-preview/*.zip
+          if-no-files-found: error
+
   package:
     name: package ${{ matrix.platform }} ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
+    needs: linux-cef-runtime
 
     strategy:
       fail-fast: false
@@ -55,6 +205,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Check version sync
+        run: node scripts/check-version.mjs
+
+      - name: Download generated Linux CEF manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: fennara-generated-linux-cef-manifest
+          path: generated-linux-cef-manifest
+
+      - name: Use generated Linux CEF manifest
+        shell: bash
+        run: cp generated-linux-cef-manifest/linux-cef.json local/webview-runtimes/linux-cef.json
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -161,97 +324,11 @@ jobs:
       - name: Assemble preview archives
         run: node scripts/package-preview.mjs --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
 
-      - name: Upload preview archives
+      - name: Upload release-shaped preview archives
         uses: actions/upload-artifact@v4
         with:
-          name: fennara-package-preview-${{ matrix.platform }}-${{ matrix.arch }}
+          name: fennara-release-${{ matrix.platform }}-${{ matrix.arch }}
           path: dist/*.zip
-          if-no-files-found: error
-
-      - name: Build Linux CEF runtime preview asset
-        if: matrix.platform == 'linux'
-        shell: bash
-        env:
-          LINUX_CEF_RUNTIME_URL: ${{ inputs.linux_cef_runtime_url }}
-          LINUX_CEF_RUNTIME_NAME: ${{ inputs.linux_cef_runtime_name }}
-          LINUX_CEF_RUNTIME_SHA256: ${{ inputs.linux_cef_runtime_sha256 }}
-        run: |
-          set -euo pipefail
-
-          mkdir -p .package-preview/cef-download .package-preview/cef-source dist/linux-cef-runtime-preview
-
-          download_url="${LINUX_CEF_RUNTIME_URL}"
-          download_name=""
-          cef_version=""
-
-          if [[ -z "${download_url}" ]]; then
-            cef_version="139.0.28+g55ab8a8+chromium-139.0.7258.139"
-            node scripts/prepare-linux-cef-runtime.mjs \
-              --cef-root "${{ steps.linux_cef_sdk.outputs.cef_root }}" \
-              --version "${cef_version}" \
-              --out-dir dist/linux-cef-runtime-preview
-            exit 0
-          else
-            url_path="${download_url%%\?*}"
-            download_name="$(basename "${url_path}")"
-            download_name="${download_name//%2B/+}"
-            download_name="${download_name//%2b/+}"
-          fi
-
-          if [[ -z "${download_name}" || "${download_name}" == "." || "${download_name}" == "/" || "${download_name}" == *"/"* || "${download_name}" == *"\\"* ]]; then
-            echo "::error::linux_cef_runtime_url must end with a file name when provided."
-            exit 1
-          fi
-
-          download_path=".package-preview/cef-download/${download_name}"
-          curl --location --fail --show-error --retry 3 --output "${download_path}" "${download_url}"
-
-          if [[ -n "${LINUX_CEF_RUNTIME_SHA256}" ]]; then
-            actual_sha256="$(sha256sum "${download_path}" | awk '{print $1}')"
-            if [[ "${actual_sha256,,}" != "${LINUX_CEF_RUNTIME_SHA256,,}" ]]; then
-              echo "::error::Linux CEF download sha256 mismatch: expected ${LINUX_CEF_RUNTIME_SHA256}, got ${actual_sha256}."
-              exit 1
-            fi
-          fi
-
-          if [[ "${download_name}" =~ ^fennara-webview-cef-linux-x64-.+\.zip$ ]]; then
-            asset_name="${LINUX_CEF_RUNTIME_NAME:-${download_name}}"
-            if [[ "${asset_name}" != "${download_name}" && ! "${asset_name}" =~ ^fennara-webview-cef-linux-x64-.+\.zip$ ]]; then
-              echo "::error::linux_cef_runtime_name must match fennara-webview-cef-linux-x64-<version>.zip."
-              exit 1
-            fi
-            cp "${download_path}" "dist/linux-cef-runtime-preview/${asset_name}"
-            echo "Uploaded prebuilt Linux CEF runtime preview asset: ${asset_name}"
-            exit 0
-          fi
-
-          if [[ ! "${download_name}" =~ ^cef_binary_(.+)_linux64(_minimal)?\.tar\.bz2$ ]]; then
-            echo "::error::Linux CEF input must be an official cef_binary_<version>_linux64[_minimal].tar.bz2 or fennara-webview-cef-linux-x64-<version>.zip."
-            exit 1
-          fi
-
-          if [[ -z "${cef_version}" ]]; then
-            cef_version="${BASH_REMATCH[1]}"
-          fi
-
-          tar -xjf "${download_path}" -C .package-preview/cef-source
-          cef_root="$(find .package-preview/cef-source -maxdepth 1 -type d \( -name 'cef_binary_*_linux64' -o -name 'cef_binary_*_linux64_minimal' \) | head -n 1)"
-          if [[ -z "${cef_root}" ]]; then
-            echo "::error::Could not find extracted cef_binary_*_linux64 or cef_binary_*_linux64_minimal directory."
-            exit 1
-          fi
-
-          node scripts/prepare-linux-cef-runtime.mjs \
-            --cef-root "${cef_root}" \
-            --version "${cef_version}" \
-            --out-dir dist/linux-cef-runtime-preview
-
-      - name: Upload Linux CEF runtime preview asset
-        if: matrix.platform == 'linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: fennara-package-preview-linux-cef-runtime
-          path: dist/linux-cef-runtime-preview/*.zip
           if-no-files-found: error
 
       - name: Upload addon part
@@ -293,6 +370,83 @@ jobs:
       - name: Upload all-platform addon archive
         uses: actions/upload-artifact@v4
         with:
-          name: fennara-package-preview-addon
+          name: fennara-release-addon
           path: dist/fennara-addon-*.zip
+          if-no-files-found: error
+
+  release-preview:
+    name: assemble release-shaped preview
+    runs-on: ubuntu-latest
+    needs: [linux-cef-runtime, package, addon]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download release-shaped preview archives
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: fennara-release-*
+          merge-multiple: true
+
+      - name: Download generated Linux CEF manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: fennara-generated-linux-cef-manifest
+          path: generated-linux-cef-manifest
+
+      - name: Rename manifest-managed release packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(tr -d '[:space:]' < VERSION)"
+          shopt -s nullglob
+
+          renamed_local_count=0
+          for asset in release-assets/fennara-local-*-v"${version}".zip; do
+            renamed="${asset/release-assets\/fennara-local-/release-assets\/fennara-release-local-}"
+            mv "${asset}" "${renamed}"
+            renamed_local_count=$((renamed_local_count + 1))
+          done
+          if [[ "${renamed_local_count}" -eq 0 ]]; then
+            echo "::error::No release-assets/fennara-local-*-v${version}.zip files found."
+            exit 1
+          fi
+
+          if [[ -f "release-assets/fennara-addon-v${version}.zip" ]]; then
+            mv "release-assets/fennara-addon-v${version}.zip" \
+              "release-assets/fennara-release-addon-v${version}.zip"
+          else
+            echo "::error::Missing release-assets/fennara-addon-v${version}.zip"
+            exit 1
+          fi
+
+      - name: Validate Linux CEF runtime release asset
+        run: |
+          cp generated-linux-cef-manifest/linux-cef.json local/webview-runtimes/linux-cef.json
+          node scripts/check-linux-cef-runtime-release.mjs --assets-dir release-assets
+
+      - name: Write release preview manifest
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          node scripts/write-release-manifest.mjs \
+            --assets-dir release-assets \
+            --linux-cef-manifest generated-linux-cef-manifest/linux-cef.json \
+            --minimum-cli-version 0.3.2 \
+            --out "release-assets/fennara-release-manifest-v${version}.json"
+
+      - name: Upload release-shaped preview assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennara-package-preview-release-assets
+          path: |
+            release-assets/*.zip
+            release-assets/fennara-release-manifest-v*.json
           if-no-files-found: error

@@ -58,9 +58,24 @@ GitHub:
 Actions > Package Preview > Run workflow
 ```
 
-The workflow builds Windows, Linux, and macOS packages and uploads temporary artifacts. It does not create tags or GitHub releases.
+The workflow builds Windows, Linux, and macOS packages and uploads temporary
+artifacts. It does not create tags, GitHub Releases, or `latest`.
 
-Preview artifacts are useful for checking zip contents before publishing.
+Package Preview mirrors the non-publishing parts of Release closely enough to
+exercise release packaging before merge:
+
+- builds the Linux CEF runtime zip
+- writes the generated Linux CEF runtime manifest
+- feeds that generated manifest into platform package builds
+- assembles the all-platform addon archive
+- renames local/addon packages to the manifest-managed release asset names
+- validates the Linux CEF runtime asset against the generated manifest
+- writes `fennara-release-manifest-v<version>.json`
+- uploads one `fennara-package-preview-release-assets` artifact containing the
+  release-shaped zips and manifest
+
+Preview artifacts are useful for checking zip contents and manifest shape before
+publishing. They are Actions artifacts, not public release assets.
 
 ## 3. Run Release
 
@@ -95,8 +110,9 @@ generated manifest and that its SHA-256 matches. It also writes
 hash, and uploads that manifest with the release.
 
 Pull request workflows do not publish releases. The Package Preview workflow
-creates test artifacts for Linux CEF so maintainers can smoke-test embedded chat
-before merging, but Package Preview is not the user-facing release channel.
+creates release-shaped test artifacts, including the manifest and Linux CEF
+runtime payload, so maintainers can smoke-test packaging before merging. Package
+Preview is not the user-facing release channel.
 
 ## Release Assets
 
@@ -189,9 +205,9 @@ webview/cef/linux-x64/<cef-version>/
 ```
 
 Do not place `libcef.so`, CEF helper executables, CEF resources, or locale packs
-inside `fennara-addon-*`. Package Preview may build a separate CEF artifact for
-testing, but release publishing owns the generated runtime asset and manifest
-checksum.
+inside `fennara-addon-*`. Package Preview builds a separate CEF artifact for
+testing and writes the same kind of generated runtime manifest used by Release,
+but release publishing remains the only user-facing source of release assets.
 
 Linux GDExtension builds also need the official CEF SDK wrapper source, but not
 the CEF runtime files in the addon. CI runs:
