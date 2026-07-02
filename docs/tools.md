@@ -23,7 +23,6 @@ source of truth for arguments, limits, and result fields.
 | `get_class_info` | Look up real Godot class methods, properties, signals, enums, constants, inheritance, and docs before writing Godot API code. |
 | `write_or_update_file` | Create, rewrite, or exact-replace project files. `.gd`, `.cs`, and `.gdshader` edits automatically run diagnostics. |
 | `run_scene_edit_script` | Run one editor-time Godot worker script against exactly one scene/resource graph and save through Godot serialization. |
-| `save_custom_resource` | Create `.tres` resources, including resources backed by custom Resource scripts. |
 | `project_settings` | Read or change `project.godot` settings, autoloads, and input actions through structured operations. |
 | `script_diagnostics` | Check `.gd`, `.cs`, and `.gdshader` files using Godot diagnostics, Godot scene-load checks, and `csharp-ls` for C#. |
 | `validate_scene` | Validate scene structure and, when structural checks pass, run a brief headless startup pass. |
@@ -174,6 +173,8 @@ Use get_node_properties for the Player node in res://scenes/player.tscn before e
 Use this before `run_scene_edit_script` when touching Godot nodes/resources. It
 helps avoid invented method names, wrong properties, wrong enum usage, and wrong
 constructor assumptions by returning the real Godot API surface for a class.
+For GDExtension/native addon classes, Fennara skips official Godot XML docs
+lookup and returns runtime ClassDB/property information instead.
 
 For built-in Godot classes, Fennara reads official XML docs from the GitHub
 branch matching the connected editor's major/minor version, with an explicit
@@ -228,6 +229,22 @@ text editing. The tool runs one editor-time worker script against exactly one
 target scene. It gives the script an instantiated scene object graph, not a full
 running gameplay scene.
 
+Because the worker is a real editor-side `@tool` script, it can also inspect a
+wide range of Godot/editor/project state when normal inspection tools are not
+enough: ClassDB runtime behavior, native addon/GDExtension classes,
+ResourceLoader/ResourceSaver flows, standalone `.tres` resources, and targeted
+project resource checks. Keep these probes small and bounded.
+
+Use `get_class_info` first when you only need class API docs, methods,
+properties, inheritance, enums, or signals. Use `run_scene_edit_script` when
+you need to execute real editor-side Godot code that static class info cannot
+answer.
+
+If the script does not actually need the target scene, pass a small safe
+existing scene as context. Do not call `ctx.mark_modified()` or scene-mutating
+helpers unless you intentionally want to save that scene. In this mode
+`modified=false` and `scene_saved=false` are expected.
+
 Good uses:
 
 - add, rename, remove, or reparent nodes
@@ -237,6 +254,8 @@ Good uses:
 - edit Control layout, cameras, collision shapes, materials, AnimationPlayer
   setup, signals, and groups
 - inspect scene-owned resources and log a concise summary
+- inspect addon/runtime-only class behavior that `get_class_info` cannot answer
+- create or update standalone `.tres` resources through `ResourceSaver.save`
 
 Before using it, inspect relevant classes with `get_class_info`.
 
@@ -273,18 +292,6 @@ Example prompt:
 
 ```text
 Use get_class_info first, then run_scene_edit_script to add a named HealthBar node to res://scenes/player.tscn.
-```
-
-### `save_custom_resource`
-
-Use this to create `.tres` files through Godot's resource system. For custom
-resource scripts, pass the full script path such as `res://data/UpgradeData.gd`,
-not only the class name.
-
-Example prompt:
-
-```text
-Use save_custom_resource to create res://data/upgrades/double_income.tres from res://data/UpgradeData.gd.
 ```
 
 ### `project_settings`

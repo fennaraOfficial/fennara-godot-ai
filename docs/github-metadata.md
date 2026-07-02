@@ -4,7 +4,7 @@ Use these values for the repository About panel.
 
 ## Description
 
-Godot MCP workflow for AI agents using Fennara: diagnostics, scene validation, runtime feedback, screenshots, generated guidance, and patch-and-rerun loops.
+Godot AI tools for editor-aware agents: scene inspection, diagnostics, screenshots, runtime validation, built-in chat, and MCP.
 
 ## Website
 

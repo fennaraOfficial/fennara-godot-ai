@@ -1,14 +1,16 @@
 # Setup
 
-This guide walks through a normal Fennara setup from a clean machine to a connected MCP app.
+This guide walks through a normal Fennara setup from a clean machine to a Godot project connected through an external MCP app, the built-in chat dock, or both.
 
 ## Requirements
 
 - Godot 4.5+ project
-- An MCP client that can run local stdio MCP servers
+- An MCP client that can run local stdio MCP servers, only if you want external AI app integration
 - Windows, macOS, or Linux
 - For C# projects: .NET SDK installed and available as `dotnet`
 - Optional for built-in chat: a configured chat provider, such as a cloud API key or a local Ollama/LM Studio server
+- Optional for embedded Windows chat: Microsoft Edge WebView2 Runtime
+- Windows troubleshooting only: Microsoft Visual C++ Redistributable 2015-2022 x64 if the Fennara CLI/runtime fails to start with missing `VCRUNTIME` / `MSVCP` DLLs or exit code `-1073741515`
 
 ## 1. Install The Fennara CLI
 
@@ -221,6 +223,27 @@ Windows: %LOCALAPPDATA%\Fennara\bin
 macOS: ~/Library/Application Support/Fennara/bin
 Linux: ~/.local/share/fennara/bin
 ```
+
+### Windows CLI Fails Before It Starts
+
+If `fennara`, `fennara-mcp`, or `fennara-daemon` fails before printing normal
+output with a missing `VCRUNTIME` / `MSVCP` DLL error, exit code
+`-1073741515`, or `0xc0000135`, install the Microsoft Visual C++ Redistributable
+2015-2022 x64:
+
+```text
+https://aka.ms/vs/17/release/vc_redist.x64.exe
+```
+
+This is not a hard requirement for every Windows user. It only means that
+machine is missing the Microsoft runtime DLLs used by the current Fennara
+Windows binaries. The installer and self-update path already print clearer
+messages for the known `-1073741515` case, but the docs call it out here for
+manual troubleshooting.
+
+Long term, Fennara should either ship Windows binaries in a way that avoids
+this footgun or detect the missing runtime earlier and point directly at the
+fix.
 
 ### Release Requires A Newer CLI
 

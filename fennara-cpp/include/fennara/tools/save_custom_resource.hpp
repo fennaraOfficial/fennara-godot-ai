@@ -6,6 +6,9 @@
 
 namespace fennara {
 
+// Legacy tool kept for backward compatibility with older clients.
+// Do not advertise for new model/tool selection; prefer run_scene_edit_script
+// with Godot ResourceLoader/ResourceSaver APIs for resource workflows.
 class FennaraSaveCustomResourceTool : public godot::RefCounted {
     GDCLASS(FennaraSaveCustomResourceTool, godot::RefCounted)
 

@@ -14,6 +14,10 @@
 
 namespace fennara {
 
+// Legacy implementation kept for backward compatibility with older clients.
+// New agents should use run_scene_edit_script and Godot's ResourceSaver APIs
+// directly so resource workflows stay programmable and game-agnostic.
+
 void FennaraSaveCustomResourceTool::_bind_methods() {
     godot::ClassDB::bind_static_method(
         "FennaraSaveCustomResourceTool", godot::D_METHOD("execute", "args"),

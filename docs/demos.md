@@ -1,16 +1,16 @@
 # Demos
 
-These videos show Fennara used with Godot projects and MCP workflows.
+These videos show Fennara used with Godot projects, external AI apps, and the Godot editor feedback loop.
 
 ## Featured Videos
 
 | Video | Notes |
 | --- | --- |
-| [![This Godot Plugin Revolutionizes AI Game Development Forever Fennara + Claude Fable 5](https://i.ytimg.com/vi/pijlHyiOnz4/hqdefault.jpg)](https://www.youtube.com/watch?v=pijlHyiOnz4)<br>[This Godot Plugin Revolutionizes AI Game Development Forever Fennara + Claude Fable 5](https://www.youtube.com/watch?v=pijlHyiOnz4) | External walkthrough using Fennara with Godot and Claude. |
+| [![Godot MCPs Ranked: The Best AI Tool for Godot](https://i.ytimg.com/vi/2vSYP7GyA5U/hqdefault.jpg)](https://www.youtube.com/watch?v=2vSYP7GyA5U)<br>[Godot MCPs Ranked: The Best AI Tool for Godot](https://www.youtube.com/watch?v=2vSYP7GyA5U) | Comparing Fennara with other Godot MCP workflows. |
+| [![This Godot Plugin Revolutionizes AI Game Development Forever Fennara + Claude Fable 5](https://i.ytimg.com/vi/pijlHyiOnz4/hqdefault.jpg)](https://www.youtube.com/watch?v=pijlHyiOnz4&t=22s)<br>[This Godot Plugin Revolutionizes AI Game Development Forever Fennara + Claude Fable 5](https://www.youtube.com/watch?v=pijlHyiOnz4&t=22s) | External walkthrough using Fennara with Godot and Claude. |
 | [![This Godot Plugin Transforms AI Game Development Forever (Fennara)](https://i.ytimg.com/vi/wKln8248y2M/hqdefault.jpg)](https://www.youtube.com/watch?v=wKln8248y2M)<br>[This Godot Plugin Transforms AI Game Development Forever (Fennara)](https://www.youtube.com/watch?v=wKln8248y2M) | External walkthrough focused on the Fennara workflow. |
 | [![I Gave Codex an AI Game Image and It Built This in Godot](https://i.ytimg.com/vi/ztbH6zBhxMc/hqdefault.jpg)](https://www.youtube.com/watch?v=ztbH6zBhxMc)<br>[I Gave Codex an AI Game Image and It Built This in Godot](https://www.youtube.com/watch?v=ztbH6zBhxMc) | Fennara turns a game concept image into a playable Godot project. |
 | [![Fennara MCP Builds a Katamari-Style Godot Game](https://i.ytimg.com/vi/8y2Ub8pgNSs/hqdefault.jpg)](https://www.youtube.com/watch?v=8y2Ub8pgNSs)<br>[Fennara MCP Builds a Katamari-Style Godot Game](https://www.youtube.com/watch?v=8y2Ub8pgNSs) | A saved Godot demo project built with Fennara. |
-| [![Godot MCPs Ranked: The Best AI Tool for Godot](https://i.ytimg.com/vi/2vSYP7GyA5U/hqdefault.jpg)](https://www.youtube.com/watch?v=2vSYP7GyA5U)<br>[Godot MCPs Ranked: The Best AI Tool for Godot](https://www.youtube.com/watch?v=2vSYP7GyA5U) | Comparison video about Godot MCP workflows. |
 
 ## More From The Fennara Channel
 

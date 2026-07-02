@@ -140,7 +140,6 @@ godot::Dictionary _fennara_status_result() {
     local_tools.append("write_or_update_file");
     local_tools.append("run_scene_edit_script");
     local_tools.append("get_scene_tree");
-    local_tools.append("save_custom_resource");
     local_tools.append("script_diagnostics");
     local_tools.append("screenshot_scene");
     local_tools.append("get_node_properties");

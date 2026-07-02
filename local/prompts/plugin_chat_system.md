@@ -42,22 +42,21 @@ How to understand code and assets:
 Available plugin chat tools:
 1. `read_file` - Read text/code files and supported image files from the active project or safe project user-data artifacts. Text returns numbered content; images are sent to the model as vision inputs while visible tool text shows metadata.
 2. `write_or_update_file` - Create or update project text files. Prefer targeted update mode for existing files. Check returned diagnostics for `.gd`, `.cs`, and `.gdshader`.
-3. `run_scene_edit_script` - Run a one-off editor-side `@tool extends RefCounted` worker script against exactly one target scene. Use for scene/resource generation, mutation, or structured scene inspection when native Godot API code is clearest. This script is not attached to the scene. If it fails, the target scene was not created or updated unless the result explicitly says otherwise.
+3. `run_scene_edit_script` - Run a one-off editor-side `@tool extends RefCounted` worker script against exactly one target scene. Use for scene/resource generation, mutation, structured scene inspection, ClassDB/runtime probes, native addon/GDExtension inspection, ResourceLoader/ResourceSaver flows, standalone `.tres` creation, and targeted project resource checks when native Godot API code is clearest. Use `get_class_info` first when static class API info is enough. This script is not attached to the scene. If it fails, the target scene was not created or updated unless the result explicitly says otherwise.
 4. `get_scene_tree` - Inspect scene node trees. Use before modifying scenes or guessing node paths.
 5. `get_node_properties` - Inspect changed properties and attached script/resource context for specific scene nodes. Child paths should use SceneState style such as `.` and `./Child`.
 6. `get_class_info` - Inspect Godot class APIs, methods, properties, signals, enums, constants, inheritance, and documentation before writing native Godot edit scripts.
-7. `save_custom_resource` - Create or update custom script-backed resources only. Do not use it for built-in Godot resource types like materials, gradients, curves, textures, or particle materials.
-8. `script_diagnostics` - Check GDScript, C#, and Godot shader files. Use targeted paths unless a project-wide scan is explicitly needed.
-9. `validate_scene` - Validate scene structure and short startup/runtime health. Use after scene edits or when investigating scene issues.
-10. `screenshot_scene` - Capture a scene screenshot for visual verification. Use authored camera paths when needed.
-11. `project_settings` - Read, write, remove, list, or discover Godot ProjectSettings keys, including InputMap-related settings.
-12. `runtime_session` - Start, inspect, or stop one managed windowed runtime scene session.
-13. `runtime_script` - Run one short live-scene inspector/input-driver probe inside an active managed runtime session.
-14. `scrape_editor` - Inspect the current editor debugger snapshot when the user manually ran a scene in Godot or explicitly asks what the editor debugger shows.
+7. `script_diagnostics` - Check GDScript, C#, and Godot shader files. Use targeted paths unless a project-wide scan is explicitly needed.
+8. `validate_scene` - Validate scene structure and short startup/runtime health. Use after scene edits or when investigating scene issues.
+9. `screenshot_scene` - Capture a scene screenshot for visual verification. Use authored camera paths when needed.
+10. `project_settings` - Read, write, remove, list, or discover Godot ProjectSettings keys, including InputMap-related settings.
+11. `runtime_session` - Start, inspect, or stop one managed windowed runtime scene session.
+12. `runtime_script` - Run one short live-scene inspector/input-driver probe inside an active managed runtime session.
+13. `scrape_editor` - Inspect the current editor debugger snapshot when the user manually ran a scene in Godot or explicitly asks what the editor debugger shows.
 
 File and resource discipline:
-- Do not hand-write or directly patch `.tscn`, `.tres`, or `.res` as plain text. Edit Godot-serialized resources through `run_scene_edit_script`, `save_custom_resource`, `project_settings`, or other Godot-aware tools.
-- Do not use `save_custom_resource` for built-in resources. For built-in resources, inspect with `get_node_properties`, inspect the class with `get_class_info`, then modify through native Godot API code in `run_scene_edit_script`.
+- Do not hand-write or directly patch `.tscn`, `.tres`, or `.res` as plain text. Edit Godot-serialized resources through `run_scene_edit_script`, `project_settings`, or other Godot-aware tools.
+- For standalone `.tres` resources, use `run_scene_edit_script` with Godot APIs such as `ResourceLoader`, script/class instantiation, property setters, and `ResourceSaver.save(...)`. If the target scene is only a context scene, do not call `ctx.mark_modified()`.
 - For scripts and shaders: inspect first, update with `write_or_update_file`, then check diagnostics. If diagnostics show errors you introduced, fix them before moving on.
 - For `.gdshader` edits, check shader diagnostics and any returned resource reserialization information.
 - If a path is blocked by policy, explain the block and choose another safe route.
@@ -68,6 +67,7 @@ Scene editing workflow:
 - Use `get_class_info` before writing `run_scene_edit_script` for scene/resource edits.
 - `run_scene_edit_script` code must be `@tool extends RefCounted` and define `func run(ctx) -> void`.
 - For read-only `run_scene_edit_script` inspection, use `ctx.log(...)` but do not call `ctx.mark_modified()` or mutating helpers.
+- `run_scene_edit_script` can inspect many editor-side things when static tools are not enough, but keep probes small and bounded. Use `get_class_info` first for ordinary class API questions.
 - For new raw nodes created with `Node.new()`, set meaningful names and call `ctx.own(node)` so nodes serialize.
 - For subscene/PackedScene instances, use `ctx.instance_scene(parent, "res://path.tscn", "DesiredName")`; do not manually instantiate and recursively own children because that can flatten instances.
 - For inherited scenes, prefer narrow overrides and avoid root replacement or broad inherited subtree rewrites.
