@@ -3,6 +3,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::{
+    context_compaction::{self, ContextSummaryChunk, InsertContextSummary, SummaryCandidate},
     ids::{new_id, now_ms},
     schema::{connection, model_trace_from_selection, to_store_error},
     settings::{self, DEFAULT_MODEL},
@@ -651,6 +652,58 @@ pub(crate) fn finish_tool_call_with_message(
 pub(crate) fn replay_messages(chat_id: &str) -> Result<Vec<Value>, String> {
     let conn = connection()?;
     replay::replay_messages_from_conn(&conn, chat_id)
+}
+
+pub(crate) fn replay_messages_with_summary_budget(
+    chat_id: &str,
+    summary_replay_budget_tokens: usize,
+) -> Result<Vec<Value>, String> {
+    let conn = connection()?;
+    replay::replay_messages_with_summary_budget_from_conn(
+        &conn,
+        chat_id,
+        Some(summary_replay_budget_tokens),
+    )
+}
+
+pub(crate) fn context_summary_candidate(
+    chat_id: &str,
+    tail_budget_tokens: usize,
+) -> Result<Option<SummaryCandidate>, String> {
+    let conn = connection()?;
+    let groups = replay::raw_summary_groups_from_conn(&conn, chat_id)?;
+    let summaries = context_compaction::load_context_summaries_from_conn(&conn, chat_id)?;
+    Ok(context_compaction::select_next_summary_candidate(
+        &groups,
+        &summaries,
+        tail_budget_tokens,
+    ))
+}
+
+pub(crate) fn insert_context_summary(
+    chat_id: &str,
+    generation_id: &str,
+    summary_markdown: &str,
+    candidate: &SummaryCandidate,
+    model: &str,
+    reasoning_effort: &str,
+    usage: Option<&Value>,
+    metadata: &Value,
+) -> Result<ContextSummaryChunk, String> {
+    let mut conn = connection()?;
+    context_compaction::insert_context_summary_on_connection(
+        &mut conn,
+        InsertContextSummary {
+            chat_id,
+            generation_id,
+            summary_markdown,
+            candidate,
+            model,
+            reasoning_effort,
+            usage,
+            metadata,
+        },
+    )
 }
 
 pub(crate) fn set_active_chat_id(scope: &ProjectScope, chat_id: &str) -> Result<(), String> {

@@ -1,13 +1,14 @@
 use axum::extract::ws::Message;
 use futures_util::Sink;
 use serde_json::{Value, json};
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
+use tokio::sync::Mutex;
 
 use crate::runtime_daemon::{godot_bridge, state::AppState};
 
 use super::super::{
-    BoundChatProject, ClientRequest, context, images, prompt, providers, send_chat_list,
-    send_chat_updated, send_error, send_json, settings, store, trace,
+    BoundChatProject, ClientRequest, context, context_compaction, ids, images, prompt, providers,
+    send_chat_list, send_chat_updated, send_error, send_json, settings, store, tools, trace,
 };
 use super::{
     CHAT_ALREADY_RUNNING_MESSAGE, cost, is_chat_cancelled,
@@ -128,8 +129,32 @@ where
     }
     state.cancelled_chats.write().await.remove(&chat_id);
     *active_chat_id = Some(chat_id.clone());
+    let active_project = state
+        .projects
+        .read()
+        .await
+        .get(&bound_project.session_id)
+        .cloned();
+    let prompt_context = prompt::PromptRuntimeContext::from_turn(
+        settings.approval_mode,
+        scope,
+        active_project.as_ref(),
+    );
+    let mut provider_settings = providers::settings_from_chat(&settings);
+    if let Err(error) =
+        providers::hydrate_selected_local_model_limits(&mut provider_settings, &model).await
+    {
+        trace.warn(
+            "context.local_model_limits_unavailable",
+            "skipped",
+            json!({ "model": model.as_str(), "message": error }),
+        );
+    }
+    let summary_budgets =
+        summary_budgets_for_model(&provider_settings, &model, &reasoning_effort, &trace);
+
     let replay_span = trace.start_span("prompt.replay", json!({ "chat_id": chat_id.as_str() }));
-    let replay_messages = match store::replay_messages(&chat_id) {
+    let mut replay_messages = match replay_messages_for_budget(&chat_id, summary_budgets) {
         Ok(messages) => {
             replay_span.finish("ok", json!({ "message_count": messages.len() }));
             messages
@@ -144,17 +169,6 @@ where
             return send_error(sender, request_id, "chat_replay_failed", &error).await;
         }
     };
-    let active_project = state
-        .projects
-        .read()
-        .await
-        .get(&bound_project.session_id)
-        .cloned();
-    let prompt_context = prompt::PromptRuntimeContext::from_turn(
-        settings.approval_mode,
-        scope,
-        active_project.as_ref(),
-    );
     let prompt_span = trace.start_span(
         "prompt.build",
         json!({
@@ -169,6 +183,79 @@ where
         &user_images,
         &prompt_context,
     );
+    if let Some(budgets) = summary_budgets {
+        let estimated = estimate_provider_input_tokens(
+            &provider_settings,
+            &model,
+            &reasoning_effort,
+            &provider_messages,
+        );
+        if let Some(estimated) = estimated {
+            if (estimated as usize) > budgets.summary_trigger_tokens {
+                let summary_span = trace.start_span(
+                    "context.summary",
+                    json!({
+                        "chat_id": chat_id.as_str(),
+                        "estimated_input_tokens": estimated,
+                        "summary_trigger_tokens": budgets.summary_trigger_tokens,
+                        "tail_budget_tokens": budgets.tail_budget_tokens,
+                        "summary_replay_budget_tokens": budgets.summary_replay_budget_tokens
+                    }),
+                );
+                match try_create_context_summary(
+                    provider_settings.clone(),
+                    &model,
+                    &reasoning_effort,
+                    &chat_id,
+                    budgets,
+                    estimated,
+                )
+                .await
+                {
+                    Ok(Some(summary)) => {
+                        summary_span.finish(
+                            "ok",
+                            json!({
+                                "summary_id": summary.id,
+                                "covered_start_sequence": summary.covered_start_sequence,
+                                "covered_end_sequence": summary.covered_end_sequence,
+                                "source_message_count": summary.source_message_count
+                            }),
+                        );
+                        replay_messages = match replay_messages_for_budget(&chat_id, Some(budgets))
+                        {
+                            Ok(messages) => messages,
+                            Err(error) => {
+                                trace.warn(
+                                    "context.summary.replay_reload_failed",
+                                    "failed",
+                                    json!({ "message": error.as_str() }),
+                                );
+                                replay_messages
+                            }
+                        };
+                        provider_messages = build_provider_messages(
+                            &replay_messages,
+                            &model_message,
+                            &user_images,
+                            &prompt_context,
+                        );
+                    }
+                    Ok(None) => {
+                        summary_span.finish("skipped", json!({ "reason": "no_candidate" }));
+                    }
+                    Err(error) => {
+                        summary_span.fail(json!({ "message": error.as_str() }));
+                        trace.warn(
+                            "context.summary.failed",
+                            "failed",
+                            json!({ "message": error.as_str() }),
+                        );
+                    }
+                }
+            }
+        }
+    }
     prompt_span.finish(
         "ok",
         json!({
@@ -325,7 +412,6 @@ where
 
     let mut current_assistant = assistant_message;
     let mut current_generation = assistant_generation;
-    let provider_settings = providers::settings_from_chat(&settings);
 
     let (final_usage, final_text, stored_assistant) = loop {
         let streamed = stream_one_assistant(
@@ -831,6 +917,157 @@ fn provider_for_model(model: &str) -> &str {
     model.split('/').next().unwrap_or("chat").trim()
 }
 
+fn summary_budgets_for_model(
+    provider_settings: &providers::ProviderSettings,
+    model: &str,
+    reasoning_effort: &str,
+    trace: &trace::TraceRecorder,
+) -> Option<context_compaction::SummaryBudgets> {
+    match providers::model_context_estimate(provider_settings, model, reasoning_effort) {
+        Ok(estimate) => estimate.usable_input_tokens.map(|usable| {
+            context_compaction::SummaryBudgets::from_model_context(
+                usable,
+                estimate.raw_context_tokens,
+            )
+        }),
+        Err(error) => {
+            trace.warn(
+                "context.summary.budget_unavailable",
+                "skipped",
+                json!({ "error_code": error.code(), "message": error.user_message() }),
+            );
+            None
+        }
+    }
+}
+
+fn replay_messages_for_budget(
+    chat_id: &str,
+    budgets: Option<context_compaction::SummaryBudgets>,
+) -> Result<Vec<Value>, String> {
+    if let Some(budgets) = budgets {
+        store::replay_messages_with_summary_budget(chat_id, budgets.summary_replay_budget_tokens)
+    } else {
+        store::replay_messages(chat_id)
+    }
+}
+
+fn estimate_provider_input_tokens(
+    provider_settings: &providers::ProviderSettings,
+    model: &str,
+    reasoning_effort: &str,
+    provider_messages: &[Value],
+) -> Option<u32> {
+    providers::estimate_chat_context(
+        provider_settings,
+        &providers::ChatRequest {
+            model: model.to_string(),
+            reasoning_effort: reasoning_effort.to_string(),
+            messages: provider_messages.to_vec(),
+            tools: tools::definitions(),
+            max_output_tokens: None,
+        },
+    )
+    .ok()
+    .map(|estimate| estimate.estimated_input_tokens)
+}
+
+async fn try_create_context_summary(
+    provider_settings: providers::ProviderSettings,
+    model: &str,
+    reasoning_effort: &str,
+    chat_id: &str,
+    budgets: context_compaction::SummaryBudgets,
+    trigger_estimated_tokens: u32,
+) -> Result<Option<context_compaction::ContextSummaryChunk>, String> {
+    let Some(candidate) = store::context_summary_candidate(chat_id, budgets.tail_budget_tokens)?
+    else {
+        return Ok(None);
+    };
+    let summary_messages = context_compaction::build_summary_messages(&candidate);
+    let generation_id = ids::new_id("ctxgen");
+    let prompt_estimate = providers::estimate_chat_context(
+        &provider_settings,
+        &providers::ChatRequest {
+            model: model.to_string(),
+            reasoning_effort: reasoning_effort.to_string(),
+            messages: summary_messages.clone(),
+            tools: Vec::new(),
+            max_output_tokens: Some(context_compaction::summary_output_max_tokens()),
+        },
+    )
+    .ok()
+    .map(|estimate| estimate.estimated_input_tokens)
+    .unwrap_or(0);
+    let usage_slot = Arc::new(Mutex::new(None::<Value>));
+    let usage_for_stream = Arc::clone(&usage_slot);
+    let completion = providers::stream_chat(
+        &provider_settings,
+        &providers::ChatRequest {
+            model: model.to_string(),
+            reasoning_effort: reasoning_effort.to_string(),
+            messages: summary_messages,
+            tools: Vec::new(),
+            max_output_tokens: Some(context_compaction::summary_output_max_tokens()),
+        },
+        None,
+        move |item| {
+            let usage_for_stream = Arc::clone(&usage_for_stream);
+            async move {
+                if let providers::StreamItem::Usage(usage) = item {
+                    *usage_for_stream.lock().await = Some(usage);
+                }
+                Ok(true)
+            }
+        },
+    )
+    .await
+    .map_err(|error| error.user_message())?;
+
+    if !is_clean_context_summary_finish_reason(&completion.finish_reason) {
+        return Err(format!(
+            "Summary model did not complete cleanly: {:?}",
+            completion.finish_reason
+        ));
+    }
+    let summary_markdown = completion.content.trim();
+    if summary_markdown.is_empty() {
+        return Err("Summary model returned an empty summary.".to_string());
+    }
+    let usage = usage_slot.lock().await.clone();
+    let completion_estimate = summary_markdown.len().max(1).div_ceil(4);
+    let metadata = json!({
+        "trigger_estimated_tokens": trigger_estimated_tokens,
+        "provider_usable_input_tokens": budgets.provider_usable_input_tokens,
+        "raw_context_tokens": budgets.raw_context_tokens,
+        "compaction_working_budget": budgets.compaction_working_budget,
+        "summary_trigger_tokens": budgets.summary_trigger_tokens,
+        "tail_budget_tokens": budgets.tail_budget_tokens,
+        "summary_replay_budget_tokens": budgets.summary_replay_budget_tokens,
+        "summary_prompt_tokens": prompt_estimate,
+        "completion_tokens": completion_estimate,
+        "total_tokens": prompt_estimate.saturating_add(completion_estimate as u32),
+        "source_message_count": candidate.source_message_count,
+        "summary_output_max_tokens": context_compaction::summary_output_max_tokens()
+    });
+
+    store::insert_context_summary(
+        chat_id,
+        &generation_id,
+        summary_markdown,
+        &candidate,
+        model,
+        reasoning_effort,
+        usage.as_ref(),
+        &metadata,
+    )
+    .map(Some)
+}
+
+fn is_clean_context_summary_finish_reason(reason: &providers::FinishReason) -> bool {
+    matches!(reason, providers::FinishReason::Stop)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -904,5 +1141,27 @@ mod tests {
 
         assert_eq!(tool_calls[0]["id"], "call_internal");
         assert!(tool_calls[0].get("provider_tool_call_id").is_none());
+    }
+
+    #[test]
+    fn context_summary_finish_reason_must_be_clean_stop() {
+        assert!(is_clean_context_summary_finish_reason(
+            &providers::FinishReason::Stop
+        ));
+        assert!(!is_clean_context_summary_finish_reason(
+            &providers::FinishReason::Length
+        ));
+        assert!(!is_clean_context_summary_finish_reason(
+            &providers::FinishReason::ContentFilter
+        ));
+        assert!(!is_clean_context_summary_finish_reason(
+            &providers::FinishReason::ToolCalls
+        ));
+        assert!(!is_clean_context_summary_finish_reason(
+            &providers::FinishReason::Cancelled
+        ));
+        assert!(!is_clean_context_summary_finish_reason(
+            &providers::FinishReason::Unknown("weird".to_string())
+        ));
     }
 }

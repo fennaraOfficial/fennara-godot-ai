@@ -27,6 +27,8 @@ pub(crate) struct ChatSettings {
     pub(crate) reasoning_effort: String,
     #[serde(default)]
     pub(crate) custom_models: Vec<String>,
+    #[serde(default)]
+    pub(crate) local_model_context_lengths: BTreeMap<String, u32>,
     #[serde(default = "default_chat_surface")]
     pub(crate) chat_surface: String,
     #[serde(default, deserialize_with = "deserialize_approval_mode")]
@@ -46,6 +48,7 @@ pub(crate) struct PublicChatSettings {
     pub(crate) reasoning_effort_options: Vec<&'static str>,
     pub(crate) text_model_suggestions: Vec<String>,
     pub(crate) custom_models: Vec<String>,
+    pub(crate) local_model_context_lengths: BTreeMap<String, u32>,
     pub(crate) chat_surface: String,
     pub(crate) approval_mode: String,
     pub(crate) approval_mode_options: Vec<serde_json::Value>,
@@ -60,6 +63,7 @@ impl Default for ChatSettings {
             model: DEFAULT_MODEL.to_string(),
             reasoning_effort: DEFAULT_REASONING_EFFORT.to_string(),
             custom_models: Vec::new(),
+            local_model_context_lengths: BTreeMap::new(),
             chat_surface: DEFAULT_CHAT_SURFACE.to_string(),
             approval_mode: ApprovalMode::Ask,
         }
@@ -83,6 +87,7 @@ impl ChatSettings {
             reasoning_effort_options: vec!["low", DEFAULT_REASONING_EFFORT, "high"],
             text_model_suggestions: suggestion_models(&self.custom_models, has_openrouter_key),
             custom_models: self.custom_models.clone(),
+            local_model_context_lengths: self.local_model_context_lengths.clone(),
             chat_surface: clean_chat_surface(&self.chat_surface).to_string(),
             approval_mode: self.approval_mode.as_str().to_string(),
             approval_mode_options: approval_mode_options(),
@@ -145,6 +150,7 @@ pub(crate) struct SaveSettingsRequest {
     pub(crate) provider_base_urls: Option<BTreeMap<String, String>>,
     pub(crate) model: Option<String>,
     pub(crate) reasoning_effort: Option<String>,
+    pub(crate) local_model_context_lengths: Option<BTreeMap<String, u32>>,
     pub(crate) chat_surface: Option<String>,
     pub(crate) approval_mode: Option<String>,
 }
@@ -171,6 +177,8 @@ pub(crate) fn load_settings() -> ChatSettings {
         settings.ollama_base_url.clone(),
     );
     settings.custom_models = clean_model_list(&settings.custom_models);
+    settings.local_model_context_lengths =
+        clean_local_model_context_lengths(&settings.local_model_context_lengths);
     settings.chat_surface = clean_chat_surface(&settings.chat_surface).to_string();
     settings.approval_mode = clean_approval_mode(settings.approval_mode.as_str());
     if legacy_openrouter_key.is_some() {
@@ -227,6 +235,9 @@ pub(crate) fn save_settings(update: SaveSettingsRequest) -> Result<ChatSettings,
     }
     if let Some(reasoning_effort) = update.reasoning_effort {
         settings.reasoning_effort = clean_reasoning_effort(&reasoning_effort).to_string();
+    }
+    if let Some(context_lengths) = update.local_model_context_lengths {
+        settings.local_model_context_lengths = clean_local_model_context_lengths(&context_lengths);
     }
     if let Some(chat_surface) = update.chat_surface {
         settings.chat_surface = clean_chat_surface(&chat_surface).to_string();
@@ -293,6 +304,24 @@ fn clean_model_list(models: &[String]) -> Vec<String> {
         }
         if !clean.iter().any(|existing| existing == &model) {
             clean.push(model);
+        }
+    }
+    clean
+}
+
+fn clean_local_model_context_lengths(
+    context_lengths: &BTreeMap<String, u32>,
+) -> BTreeMap<String, u32> {
+    let mut clean = BTreeMap::new();
+    for (model, context_length) in context_lengths {
+        if *context_length == 0 {
+            continue;
+        }
+        let Some(model) = clean_model(model) else {
+            continue;
+        };
+        if model.starts_with("ollama/") || model.starts_with("lmstudio/") {
+            clean.insert(model, *context_length);
         }
     }
     clean

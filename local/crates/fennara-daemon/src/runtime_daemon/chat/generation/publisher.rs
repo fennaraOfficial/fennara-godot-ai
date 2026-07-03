@@ -63,6 +63,7 @@ where
                 reasoning_effort: reasoning_effort_for_task,
                 messages: messages_for_task,
                 tools: tools_for_task,
+                max_output_tokens: None,
             },
             Some(trace_for_task),
             |item| {

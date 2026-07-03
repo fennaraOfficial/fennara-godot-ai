@@ -225,6 +225,20 @@ pub(crate) struct Limits {
     pub(crate) output_tokens: Option<u32>,
 }
 
+impl Limits {
+    pub(crate) fn merge_defined(&mut self, patch: &Self) {
+        if patch.context_tokens.is_some() {
+            self.context_tokens = patch.context_tokens;
+        }
+        if patch.input_tokens.is_some() {
+            self.input_tokens = patch.input_tokens;
+        }
+        if patch.output_tokens.is_some() {
+            self.output_tokens = patch.output_tokens;
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) struct ProviderDefinition {
     pub(crate) id: ProviderId,
@@ -276,6 +290,7 @@ pub(crate) struct ProviderSettings {
     pub(crate) ollama_base_url: String,
     pub(crate) lmstudio_base_url: String,
     pub(crate) custom_models: Vec<String>,
+    pub(crate) local_model_limits: BTreeMap<String, Limits>,
 }
 
 #[derive(Clone, Debug)]
@@ -284,6 +299,7 @@ pub(crate) struct ChatRequest {
     pub(crate) reasoning_effort: String,
     pub(crate) messages: Vec<Value>,
     pub(crate) tools: Vec<Value>,
+    pub(crate) max_output_tokens: Option<u32>,
 }
 
 #[derive(Clone, Debug)]

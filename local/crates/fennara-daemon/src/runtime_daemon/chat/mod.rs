@@ -18,6 +18,7 @@ use crate::runtime_daemon::godot_bridge;
 mod assets;
 mod auth;
 pub(crate) mod context;
+mod context_compaction;
 mod exec_command;
 mod generation;
 mod ids;
@@ -59,6 +60,7 @@ struct ClientRequest {
     ollama_base_url: Option<String>,
     provider_base_urls: Option<BTreeMap<String, String>>,
     approval_mode: Option<String>,
+    local_model_context_lengths: Option<BTreeMap<String, u32>>,
     approval_id: Option<String>,
     decision: Option<String>,
     force: Option<bool>,
@@ -390,6 +392,7 @@ where
                 provider_base_urls: request.provider_base_urls,
                 model: request.model,
                 reasoning_effort: request.reasoning_effort,
+                local_model_context_lengths: request.local_model_context_lengths,
                 chat_surface: request.chat_surface,
                 approval_mode: request.approval_mode,
             };

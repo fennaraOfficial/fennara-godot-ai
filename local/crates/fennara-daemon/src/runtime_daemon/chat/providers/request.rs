@@ -22,6 +22,9 @@ impl LlmRequest {
         } else {
             model.request.generation.reasoning_effort = None;
         }
+        if request.max_output_tokens.is_some() {
+            model.request.generation.max_output_tokens = request.max_output_tokens;
+        }
         Ok(Self {
             model,
             messages: request.messages.clone(),

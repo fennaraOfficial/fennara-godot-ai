@@ -12,7 +12,7 @@ use super::ollama_cloud;
 use super::openai;
 use super::openrouter;
 use super::types::{
-    ModelDefinition, ModelId, ModelRef, ProviderDefinition, ProviderId, ProviderSettings,
+    Limits, ModelDefinition, ModelId, ModelRef, ProviderDefinition, ProviderId, ProviderSettings,
     ResolvedModel,
 };
 use super::zai;
@@ -22,6 +22,7 @@ use crate::runtime_daemon::chat::settings;
 pub(crate) struct Catalog {
     providers: BTreeMap<ProviderId, ProviderDefinition>,
     models: BTreeMap<(ProviderId, ModelId), ModelDefinition>,
+    local_model_limits: BTreeMap<String, Limits>,
     default_model: Option<ModelRef>,
 }
 
@@ -103,6 +104,7 @@ impl Catalog {
         hosted_minimax_cn_coding_plan: Option<&OpenRouterCatalog>,
     ) -> Self {
         let mut catalog = Self::default();
+        catalog.local_model_limits = settings.local_model_limits.clone();
         catalog.insert_provider(openai::provider_definition(
             settings.openai_api_key.as_deref(),
         ));
@@ -238,11 +240,14 @@ impl Catalog {
             });
         }
 
-        let model = self
+        let mut model = self
             .models
             .get(&(model_ref.provider.clone(), model_ref.model.clone()))
             .cloned()
             .unwrap_or_else(|| dynamic_model(&model_ref.provider, &model_ref.model));
+        if let Some(limits) = self.local_model_limits.get(&model_ref.canonical()) {
+            model.limits.merge_defined(limits);
+        }
         if !model.enabled {
             return Err(super::error::LlmError::ModelNotFound {
                 provider: provider.id.to_string(),
@@ -404,6 +409,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
             custom_models: Vec::new(),
+            local_model_limits: BTreeMap::new(),
         })
     }
 
@@ -424,6 +430,70 @@ mod tests {
 
         assert_eq!(model_ref.provider.as_str(), "openrouter");
         assert_eq!(model_ref.model.as_str(), "google/gemini-3.5-flash");
+    }
+
+    #[test]
+    fn local_model_limits_apply_to_dynamic_models() {
+        let mut local_model_limits = BTreeMap::new();
+        local_model_limits.insert(
+            "ollama/llama3.1:8b".to_string(),
+            Limits {
+                context_tokens: Some(8192),
+                input_tokens: None,
+                output_tokens: None,
+            },
+        );
+        local_model_limits.insert(
+            "lmstudio/google/gemma-4-26b-a4b".to_string(),
+            Limits {
+                context_tokens: Some(4096),
+                input_tokens: None,
+                output_tokens: None,
+            },
+        );
+        let catalog = Catalog::from_settings(&ProviderSettings {
+            openai_api_key: None,
+            anthropic_api_key: None,
+            openrouter_api_key: None,
+            ollama_cloud_api_key: None,
+            lmstudio_api_key: None,
+            deepseek_api_key: None,
+            zai_api_key: None,
+            moonshot_api_key: None,
+            moonshot_cn_api_key: None,
+            kimi_api_key: None,
+            minimax_api_key: None,
+            minimax_coding_plan_api_key: None,
+            minimax_cn_api_key: None,
+            minimax_cn_coding_plan_api_key: None,
+            ollama_base_url: "http://127.0.0.1:11434".to_string(),
+            lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
+            custom_models: Vec::new(),
+            local_model_limits,
+        });
+
+        let ollama_ref = model_ref_from_selection("ollama/llama3.1:8b", &catalog).unwrap();
+        let lmstudio_ref =
+            model_ref_from_selection("lmstudio/google/gemma-4-26b-a4b", &catalog).unwrap();
+
+        assert_eq!(
+            catalog
+                .resolve(&ollama_ref)
+                .unwrap()
+                .model
+                .limits
+                .context_tokens,
+            Some(8192)
+        );
+        assert_eq!(
+            catalog
+                .resolve(&lmstudio_ref)
+                .unwrap()
+                .model
+                .limits
+                .context_tokens,
+            Some(4096)
+        );
     }
 
     #[test]

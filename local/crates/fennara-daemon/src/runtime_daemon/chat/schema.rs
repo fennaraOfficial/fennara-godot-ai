@@ -276,6 +276,9 @@ fn migrate(conn: &Connection) -> Result<(), String> {
     run_migration_once(conn, 11, "tool_call_provider_ids", |conn| {
         backfill_provider_tool_call_ids(conn)
     })?;
+    run_migration_once(conn, 12, "chat_context_summaries", |conn| {
+        create_context_summary_tables(conn)
+    })?;
     Ok(())
 }
 
@@ -397,6 +400,43 @@ fn create_generation_trace_tables(conn: &Connection) -> Result<(), String> {
           ON chat_generations(chat_id, started_at_ms);
         CREATE INDEX IF NOT EXISTS idx_chat_generations_assistant_message
           ON chat_generations(assistant_message_id);
+        ",
+    )
+    .map_err(to_store_error)
+}
+
+fn create_context_summary_tables(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS chat_context_summaries (
+          id TEXT PRIMARY KEY,
+          chat_id TEXT NOT NULL,
+          generation_id TEXT,
+          summary_markdown TEXT NOT NULL,
+          covered_start_message_id TEXT,
+          covered_start_sequence INTEGER NOT NULL,
+          covered_end_message_id TEXT NOT NULL,
+          covered_end_sequence INTEGER NOT NULL,
+          tail_start_message_id TEXT,
+          tail_start_sequence INTEGER,
+          source_message_count INTEGER NOT NULL DEFAULT 0,
+          model TEXT,
+          reasoning_effort TEXT,
+          provider_id TEXT,
+          model_id TEXT,
+          model_variant TEXT,
+          model_ref_json TEXT,
+          metadata_json TEXT,
+          created_at_ms INTEGER NOT NULL,
+          FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+          FOREIGN KEY (covered_start_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL,
+          FOREIGN KEY (covered_end_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+          FOREIGN KEY (tail_start_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_context_summaries_chat_coverage
+          ON chat_context_summaries(chat_id, covered_start_sequence, covered_end_sequence);
+        CREATE INDEX IF NOT EXISTS idx_chat_context_summaries_chat_created
+          ON chat_context_summaries(chat_id, created_at_ms);
         ",
     )
     .map_err(to_store_error)
@@ -778,6 +818,17 @@ mod tests {
         rows.map(|row| row.unwrap()).any(|name| name == column)
     }
 
+    fn has_index(conn: &Connection, index: &str) -> bool {
+        conn.query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?1",
+            [index],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .unwrap()
+        .is_some()
+    }
+
     #[test]
     fn model_trace_parses_legacy_and_explicit_models() {
         let ollama = model_trace_from_selection("ollama/llama3.2").unwrap();
@@ -839,6 +890,34 @@ mod tests {
         assert!(model_trace_from_selection("").is_none());
         assert!(model_trace_from_selection("not-a-routable-model").is_none());
         assert!(model_trace_from_selection("ollama/").is_none());
+    }
+
+    #[test]
+    fn migration_adds_context_summary_artifact_table() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        migrate(&conn).unwrap();
+
+        assert!(has_column(
+            &conn,
+            "chat_context_summaries",
+            "summary_markdown"
+        ));
+        assert!(has_column(
+            &conn,
+            "chat_context_summaries",
+            "covered_start_sequence"
+        ));
+        assert!(has_index(&conn, "idx_chat_context_summaries_chat_coverage"));
+        assert!(has_index(&conn, "idx_chat_context_summaries_chat_created"));
+        let migration_name: String = conn
+            .query_row(
+                "SELECT name FROM schema_migrations WHERE version = 12",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(migration_name, "chat_context_summaries");
     }
 
     #[test]
