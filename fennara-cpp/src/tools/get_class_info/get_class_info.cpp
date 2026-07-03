@@ -1,5 +1,6 @@
 #include "fennara/tools/get_class_info/get_class_info.hpp"
 #include "fennara/logger.hpp"
+#include "fennara/tools/get_class_info/docs_branch.hpp"
 #include "fennara/tools/get_class_info/internal.hpp"
 
 #include <godot_cpp/classes/class_db_singleton.hpp>
@@ -10,7 +11,6 @@ namespace fennara {
 namespace {
 
 constexpr int kMaxBatchClasses = 3;
-constexpr const char *kDefaultDocsBranch = "master";
 
 int count_text_lines(const godot::String &text) {
     if (text.is_empty()) {
@@ -25,6 +25,28 @@ int count_text_lines(const godot::String &text) {
     return lines;
 }
 
+godot::String api_type_to_string(godot::ClassDBSingleton::APIType api_type) {
+    switch (api_type) {
+    case godot::ClassDBSingleton::API_CORE:
+        return "core";
+    case godot::ClassDBSingleton::API_EDITOR:
+        return "editor";
+    case godot::ClassDBSingleton::API_EXTENSION:
+        return "extension";
+    case godot::ClassDBSingleton::API_EDITOR_EXTENSION:
+        return "editor_extension";
+    case godot::ClassDBSingleton::API_NONE:
+        return "none";
+    default:
+        return "unknown";
+    }
+}
+
+bool is_extension_api_type(godot::ClassDBSingleton::APIType api_type) {
+    return api_type == godot::ClassDBSingleton::API_EXTENSION ||
+           api_type == godot::ClassDBSingleton::API_EDITOR_EXTENSION;
+}
+
 } // namespace
 
 void FennaraGetClassInfoTool::_bind_methods() {
@@ -36,10 +58,11 @@ void FennaraGetClassInfoTool::_bind_methods() {
 
 godot::Dictionary FennaraGetClassInfoTool::execute(
     const godot::Dictionary &args) {
-    godot::String branch =
-        godot::String(args.get("branch", kDefaultDocsBranch)).strip_edges();
+    godot::String branch = godot::String(
+        args.get("branch", get_class_info::docs_branch_for_running_godot()))
+        .strip_edges();
     if (branch.is_empty()) {
-        branch = kDefaultDocsBranch;
+        branch = get_class_info::fallback_docs_branch();
     }
 
     auto execute_single_class = [&](const godot::String &raw_class_name) {
@@ -65,19 +88,42 @@ godot::Dictionary FennaraGetClassInfoTool::execute(
             return result;
         }
 
+        godot::ClassDBSingleton::APIType api_type =
+            cdb->class_get_api_type(class_name);
+        const godot::String api_type_label = api_type_to_string(api_type);
+
         godot::Array properties = get_class_info::collect_runtime_properties(class_name);
         godot::PackedStringArray inherits_chain = get_class_info::collect_inherits_chain(class_name);
         godot::PackedStringArray inherited_by = get_class_info::collect_inherited_by(class_name);
-        get_class_info::ClassDocumentation docs =
-            get_class_info::collect_docs_for_class_info(class_name, branch, inherits_chain);
+        get_class_info::ClassDocumentation docs;
+        godot::String docs_lookup = "enabled";
+        if (is_extension_api_type(api_type)) {
+            docs.class_name = class_name;
+            docs.branch = branch;
+            docs.fetch_message =
+                "Official Godot XML docs lookup skipped because this class is "
+                "reported by ClassDB as a GDExtension/native addon class.";
+            docs_lookup = "skipped_extension_class";
+        } else {
+            docs = get_class_info::collect_docs_for_class_info(
+                class_name, branch, inherits_chain);
+            if (docs.found && !docs.branch.is_empty() && docs.branch != branch) {
+                docs_lookup = godot::String("fallback_") + docs.branch;
+            }
+        }
 
         godot::String text = get_class_info::render_docs_text(docs);
         text += get_class_info::render_runtime_hierarchy_text(inherits_chain, inherited_by);
         text += get_class_info::render_runtime_properties_text(properties, docs);
+        const godot::String docs_branch =
+            docs.branch.is_empty() ? branch : docs.branch;
 
         result["status"] = "success";
         result["class_name"] = class_name;
-        result["branch"] = branch;
+        result["branch"] = docs_branch;
+        result["requested_branch"] = branch;
+        result["api_type"] = api_type_label;
+        result["official_docs_lookup"] = docs_lookup;
         result["local_only"] = true;
         result["inherits"] = inherits_chain.size() > 0 ? godot::String(inherits_chain[0]) : godot::String();
         result["property_count"] = properties.size();

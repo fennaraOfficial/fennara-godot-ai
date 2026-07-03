@@ -107,6 +107,26 @@ async fn warm_cached_doc(
     branch: &str,
     class_name: &str,
 ) -> Result<(), String> {
+    match warm_cached_doc_for_branch(client, branch, class_name).await {
+        Ok(()) => Ok(()),
+        Err(err) if branch != DOCS_BRANCH => {
+            warm_cached_doc_for_branch(client, DOCS_BRANCH, class_name)
+                .await
+                .map_err(|fallback_err| {
+                    format!(
+                        "branch {branch} failed: {err}; fallback branch {DOCS_BRANCH} failed: {fallback_err}"
+                    )
+                })
+        }
+        Err(err) => Err(err),
+    }
+}
+
+async fn warm_cached_doc_for_branch(
+    client: &reqwest::Client,
+    branch: &str,
+    class_name: &str,
+) -> Result<(), String> {
     let cache_path = cache_file_path(branch, class_name)?;
     if cache_path.is_file() && cache_file_is_fresh(&cache_path) {
         return Ok(());

@@ -196,6 +196,13 @@ godot::String render_docs_text(const ClassDocumentation &docs) {
     }
     out += "\n";
 
+    if (!docs.module_notice.is_empty()) {
+        out += docs.module_notice + godot::String("\n");
+    }
+    if (!docs.fetch_message.is_empty()) {
+        out += "\n" + docs.fetch_message + godot::String("\n");
+    }
+
     if (!docs.brief_description.is_empty()) {
         out += "\n" + docs.brief_description + "\n";
     }
@@ -310,6 +317,51 @@ godot::String render_runtime_hierarchy_text(const godot::PackedStringArray &inhe
 
 godot::String render_runtime_properties_text(const godot::Array &properties,
                                              const ClassDocumentation &docs) {
+    if (!docs.found) {
+        godot::String out = "\n# RUNTIME PROPERTIES: " + docs.class_name +
+                            " (" + godot::String::num_int64(properties.size()) +
+                            ")\n";
+        for (int i = 0; i < properties.size(); i++) {
+            godot::Dictionary prop = properties[i];
+            godot::String name = prop.get("name", "");
+            if (name.is_empty()) {
+                continue;
+            }
+
+            godot::String line = "- " + name + ": " +
+                                 godot::String(prop.get("type", ""));
+            std::vector<godot::String> hints;
+            if (prop.has("default")) {
+                hints.push_back("default: " +
+                                format_variant_like_python(prop["default"]));
+            }
+            if (prop.has("hint")) {
+                hints.push_back("hint: " + godot::String(prop["hint"]));
+            }
+            if (prop.has("hint_string")) {
+                hints.push_back("hint_string: " +
+                                godot::String(prop["hint_string"]));
+            }
+            if (prop.has("class_name")) {
+                hints.push_back("class_name: " +
+                                godot::String(prop["class_name"]));
+            }
+            if (!hints.empty()) {
+                line += "  [";
+                for (size_t j = 0; j < hints.size(); j++) {
+                    if (j > 0) {
+                        line += ", ";
+                    }
+                    line += hints[j];
+                }
+                line += "]";
+            }
+
+            out += line + "\n";
+        }
+        return out;
+    }
+
     int shared_count = 0;
     for (int i = 0; i < properties.size(); i++) {
         godot::Dictionary prop = properties[i];

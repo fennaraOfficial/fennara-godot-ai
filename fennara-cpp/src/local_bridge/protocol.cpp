@@ -2,6 +2,7 @@
 
 #include "fennara/lsp/csharp_support.hpp"
 #include "fennara/logger.hpp"
+#include "fennara/tools/get_class_info/docs_branch.hpp"
 
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/crypto.hpp>
@@ -231,7 +232,7 @@ void FennaraLocalBridge::_maybe_send_get_class_info_warmup() {
 
     godot::Dictionary payload;
     payload["type"] = "warm_get_class_info_docs";
-    payload["branch"] = "master";
+    payload["branch"] = get_class_info::docs_branch_for_running_godot();
 
     godot::Array class_names;
     class_names.append("Object");

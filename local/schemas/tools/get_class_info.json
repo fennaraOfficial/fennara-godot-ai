@@ -3,6 +3,8 @@
   "description_lines": [
     "Inspect one or more Godot classes and return the API surface you should read before using `run_scene_edit_script`.",
     "This tool returns documented properties, methods, signals, enums/constants, tutorials, the runtime parent chain, and direct children (`inherited_by`).",
+    "Official Godot XML docs are looked up from the GitHub branch matching the connected editor's major.minor version, with an explicit `master` fallback if that version branch or class XML is unavailable.",
+    "For GDExtension/native addon classes (`ClassDB.API_EXTENSION` or `ClassDB.API_EDITOR_EXTENSION`), Fennara skips official Godot XML docs lookup and returns runtime ClassDB/property information instead.",
     "For resource classes, it also includes inherited properties from resource parents up through `Resource`, with only the inspector-style `Resource` base fields (`resource_local_to_scene`, `resource_path`, `resource_name`). For node classes, properties stay direct-only.",
     "Before using `run_scene_edit_script` for scene or resource edits, you must use `get_class_info` first so you know the available API, which properties belong to the target class, and what parent/child classes exist.",
     "Pass `class_names` for all lookups, including a single class. Hard limit: batched calls may include at most 3 classes. Split larger requests into multiple calls."
