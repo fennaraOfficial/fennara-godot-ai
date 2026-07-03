@@ -172,6 +172,9 @@ fennara mcp-setup --help
 
 Restart the MCP app after running `mcp-setup`.
 
+If your app is not listed, or if `mcp-setup` cannot find that app's config file,
+see [MCP Setup](mcp-setup.md) for manual JSON/TOML config examples.
+
 `mcp-setup` only connects that external app to Fennara's MCP tools. For example,
 `fennara mcp-setup --claude` lets Claude call Fennara tools, but it does not make
 the built-in Fennara dock use Claude or your Claude subscription. The dock uses
