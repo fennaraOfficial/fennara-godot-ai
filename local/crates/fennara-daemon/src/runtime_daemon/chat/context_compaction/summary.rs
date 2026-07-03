@@ -5,6 +5,7 @@ use super::{
 
 pub(crate) const SUMMARY_OUTPUT_MAX_TOKENS: u32 = 4_096;
 const UNKNOWN_CONTEXT_FALLBACK_TOKENS: u32 = 64_000;
+const UNKNOWN_LOCAL_CONTEXT_FALLBACK_TOKENS: u32 = 8_192;
 const LARGE_CONTEXT_THRESHOLD: usize = 400_000;
 const LARGE_CONTEXT_WORKING_BUDGET: usize = 450_000;
 const LARGE_CONTEXT_TAIL_BUDGET_MAX: usize = 100_000;
@@ -63,8 +64,19 @@ impl SummaryBudgets {
         )
     }
 
+    pub(crate) fn for_unknown_local_context() -> Self {
+        Self::from_model_context(
+            UNKNOWN_LOCAL_CONTEXT_FALLBACK_TOKENS,
+            Some(UNKNOWN_LOCAL_CONTEXT_FALLBACK_TOKENS),
+        )
+    }
+
     pub(crate) fn unknown_context_fallback_tokens() -> u32 {
         UNKNOWN_CONTEXT_FALLBACK_TOKENS
+    }
+
+    pub(crate) fn unknown_local_context_fallback_tokens() -> u32 {
+        UNKNOWN_LOCAL_CONTEXT_FALLBACK_TOKENS
     }
 
     pub(crate) fn summary_output_max_tokens(self) -> u32 {
@@ -448,6 +460,10 @@ mod tests {
 
         let local_16k = SummaryBudgets::from_model_context(14_384, Some(16_384));
         assert_eq!(local_16k.summary_output_max_tokens(), 1_024);
+
+        let unknown_local = SummaryBudgets::for_unknown_local_context();
+        assert_eq!(unknown_local.provider_usable_input_tokens, 8_192);
+        assert_eq!(unknown_local.summary_output_max_tokens(), 512);
 
         let mid = SummaryBudgets::from_model_context(62_000, Some(64_000));
         assert_eq!(mid.summary_output_max_tokens(), 2_048);

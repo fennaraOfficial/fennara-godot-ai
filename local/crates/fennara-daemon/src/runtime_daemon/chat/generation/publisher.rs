@@ -101,9 +101,11 @@ where
                 let Some(item) = item else {
                     continue;
                 };
+                if stream_item_has_assistant_output(&item) {
+                    emitted_output = true;
+                }
                 match item {
                     StreamItem::Text { content, done } => {
-                        emitted_output = true;
                         send_json(
                             sender,
                             json!({
@@ -124,7 +126,6 @@ where
                         if clean_content.is_empty() {
                             continue;
                         }
-                        emitted_output = true;
                         reasoning_content = Some(clean_content.to_string());
                         send_json(
                             sender,
@@ -142,7 +143,6 @@ where
                         .await?;
                     }
                     StreamItem::FunctionCall { id, name, arguments, done } => {
-                        emitted_output = true;
                         let was_new = !provisional_tools.contains_key(&id);
                         let entry = provisional_tools.entry(id.clone()).or_insert_with(|| ProvisionalTool {
                             name: String::new(),
@@ -200,7 +200,6 @@ where
                         .await?;
                     }
                     StreamItem::FunctionCallError { id, name, arguments, message } => {
-                        emitted_output = true;
                         provisional_tools.insert(
                             id.clone(),
                             ProvisionalTool {
@@ -239,7 +238,6 @@ where
                         .await?;
                     }
                     StreamItem::Status { message } => {
-                        emitted_output = true;
                         send_json(
                             sender,
                             json!({
@@ -330,6 +328,16 @@ where
                 emitted_output,
             }))
         }
+    }
+}
+
+fn stream_item_has_assistant_output(item: &StreamItem) -> bool {
+    match item {
+        StreamItem::Text { .. }
+        | StreamItem::FunctionCall { .. }
+        | StreamItem::FunctionCallError { .. } => true,
+        StreamItem::Reasoning { content, .. } => !content.trim().is_empty(),
+        StreamItem::Status { .. } | StreamItem::Usage(_) => false,
     }
 }
 
@@ -526,5 +534,35 @@ mod tests {
     fn final_tool_call_helpers_ignore_missing_or_blank_ids() {
         assert_eq!(tool_call_id(&json!({ "id": "  " })), None);
         assert_eq!(tool_call_id(&json!({})), None);
+    }
+
+    #[test]
+    fn status_and_usage_items_do_not_count_as_assistant_output() {
+        assert!(!stream_item_has_assistant_output(&StreamItem::Status {
+            message: "Retrying request...".to_string(),
+        }));
+        assert!(!stream_item_has_assistant_output(&StreamItem::Usage(
+            json!({ "prompt_tokens": 1 }),
+        )));
+        assert!(!stream_item_has_assistant_output(&StreamItem::Reasoning {
+            content: "  ".to_string(),
+            done: false,
+        }));
+        assert!(stream_item_has_assistant_output(&StreamItem::Reasoning {
+            content: "thinking".to_string(),
+            done: false,
+        }));
+        assert!(stream_item_has_assistant_output(&StreamItem::Text {
+            content: "hello".to_string(),
+            done: false,
+        }));
+        assert!(stream_item_has_assistant_output(
+            &StreamItem::FunctionCall {
+                id: "call_1".to_string(),
+                name: "read_file".to_string(),
+                arguments: "{}".to_string(),
+                done: true,
+            }
+        ));
     }
 }

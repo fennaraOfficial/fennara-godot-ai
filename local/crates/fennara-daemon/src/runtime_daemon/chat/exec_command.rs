@@ -10,7 +10,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::runtime_daemon::state::AppState;
+use crate::runtime_daemon::{
+    state::AppState,
+    util::{fennara_app_dir, sanitize_path_component, unix_millis},
+};
 
 use super::tools::ExecutedTool;
 
@@ -118,6 +121,17 @@ struct CancellationCheck {
     chat_id: Option<String>,
 }
 
+struct ExecLogContext {
+    session_id: String,
+    tool_call_id: String,
+}
+
+struct ExecArtifactPaths {
+    artifact_dir: PathBuf,
+    raw_log_path: PathBuf,
+    result_path: PathBuf,
+}
+
 impl CancellationCheck {
     #[cfg(test)]
     fn none() -> Self {
@@ -145,13 +159,24 @@ impl CancellationCheck {
 pub(crate) async fn execute(
     state: &AppState,
     chat_id: &str,
+    session_id: &str,
+    tool_call_id: &str,
     project_root: Option<&str>,
     arguments: &Value,
 ) -> ExecutedTool {
+    let log_context = ExecLogContext {
+        session_id: session_id.to_string(),
+        tool_call_id: tool_call_id.to_string(),
+    };
     let request = match serde_json::from_value::<ExecCommandRequest>(arguments.clone()) {
         Ok(request) => request,
         Err(error) => {
-            return failed_exec_tool("validation_failed", format!("Invalid arguments: {error}"));
+            return failed_exec_tool(
+                "validation_failed",
+                format!("Invalid arguments: {error}"),
+                arguments,
+                Some(&log_context),
+            );
         }
     };
 
@@ -163,8 +188,10 @@ pub(crate) async fn execute(
     )
     .await
     {
-        Ok((resolved, output)) => completed_exec_tool(resolved, output),
-        Err(error) => failed_exec_tool(error.status, error.message),
+        Ok((resolved, output)) => {
+            completed_exec_tool(resolved, output, arguments, Some(&log_context))
+        }
+        Err(error) => failed_exec_tool(error.status, error.message, arguments, Some(&log_context)),
     }
 }
 
@@ -702,10 +729,16 @@ impl ExecCommandError {
     }
 }
 
-fn completed_exec_tool(resolved: ResolvedRequest, output: ProcessOutput) -> ExecutedTool {
+fn completed_exec_tool(
+    resolved: ResolvedRequest,
+    output: ProcessOutput,
+    input: &Value,
+    log_context: Option<&ExecLogContext>,
+) -> ExecutedTool {
     let status = output.status.as_str();
     let duration_ms = output.duration.as_millis() as u64;
-    let raw_result = json!({
+    let raw_result = attach_exec_artifacts(
+        json!({
         "success": status == "completed",
         "status": status,
         "command": resolved.command,
@@ -732,17 +765,23 @@ fn completed_exec_tool(resolved: ResolvedRequest, output: ProcessOutput) -> Exec
             "os_sandbox": false,
             "cwd_policy": "project_cwd_restricted"
         }
-    });
+        }),
+        input,
+        log_context,
+    );
     let markdown = markdown_for_exec_result(&raw_result);
     ExecutedTool {
         ok: status == "completed",
-        raw_result,
+        raw_result: raw_result.clone(),
         mcp_markdown: markdown.clone(),
         plugin_markdown: markdown,
         metadata: json!({
             "tool_name": "exec_command",
             "status": status,
             "format": "markdown",
+            "artifact_dir": raw_result.get("artifact_dir").cloned().unwrap_or(Value::Null),
+            "raw_log_path": raw_result.get("raw_log_path").cloned().unwrap_or(Value::Null),
+            "result_path": raw_result.get("result_path").cloned().unwrap_or(Value::Null),
             "targets": [{
                 "command": resolved.command,
                 "cwd": resolved.cwd.to_string_lossy(),
@@ -754,24 +793,174 @@ fn completed_exec_tool(resolved: ResolvedRequest, output: ProcessOutput) -> Exec
     }
 }
 
-fn failed_exec_tool(status: &'static str, error: String) -> ExecutedTool {
-    let markdown = format!("Tool: exec_command\nStatus: {status}\nError: {error}");
-    ExecutedTool {
-        ok: false,
-        raw_result: json!({
+fn failed_exec_tool(
+    status: &'static str,
+    error: String,
+    input: &Value,
+    log_context: Option<&ExecLogContext>,
+) -> ExecutedTool {
+    let raw_result = attach_exec_artifacts(
+        json!({
             "success": false,
             "status": status,
             "error": error,
         }),
+        input,
+        log_context,
+    );
+    let markdown = markdown_for_exec_result(&raw_result);
+    ExecutedTool {
+        ok: false,
+        raw_result: raw_result.clone(),
         mcp_markdown: markdown.clone(),
         plugin_markdown: markdown,
         metadata: json!({
             "tool_name": "exec_command",
             "status": status,
             "format": "markdown",
+            "artifact_dir": raw_result.get("artifact_dir").cloned().unwrap_or(Value::Null),
+            "raw_log_path": raw_result.get("raw_log_path").cloned().unwrap_or(Value::Null),
+            "result_path": raw_result.get("result_path").cloned().unwrap_or(Value::Null),
         }),
         target_keys: Vec::new(),
         model_followup_messages: Vec::new(),
+    }
+}
+
+fn attach_exec_artifacts(
+    raw_result: Value,
+    input: &Value,
+    log_context: Option<&ExecLogContext>,
+) -> Value {
+    let Some(log_context) = log_context else {
+        return raw_result;
+    };
+    let Ok(root) = fennara_app_dir() else {
+        return raw_result;
+    };
+    let paths = exec_artifact_paths_in(&root, log_context);
+    attach_exec_artifacts_at(raw_result, input, log_context, &paths).unwrap_or_else(|raw| raw)
+}
+
+fn attach_exec_artifacts_at(
+    raw_result: Value,
+    input: &Value,
+    log_context: &ExecLogContext,
+    paths: &ExecArtifactPaths,
+) -> Result<Value, Value> {
+    let mut with_paths = raw_result.clone();
+    with_paths["artifact_dir"] = json!(paths.artifact_dir.to_string_lossy().into_owned());
+    with_paths["raw_log_path"] = json!(paths.raw_log_path.to_string_lossy().into_owned());
+    with_paths["result_path"] = json!(paths.result_path.to_string_lossy().into_owned());
+
+    if let Some(parent) = paths.raw_log_path.parent() {
+        fs::create_dir_all(parent).map_err(|_| raw_result.clone())?;
+    }
+    fs::write(&paths.raw_log_path, exec_log_text(&with_paths)).map_err(|_| raw_result.clone())?;
+    let status = with_paths
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("completed")
+        .to_string();
+    let ok = with_paths
+        .get("success")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let duration_ms = with_paths
+        .get("duration_ms")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    let artifact_path = paths.artifact_dir.to_string_lossy().into_owned();
+    let raw_log_path = paths.raw_log_path.to_string_lossy().into_owned();
+    let result_path = paths.result_path.to_string_lossy().into_owned();
+    let result_file = json!({
+        "request_id": log_context.tool_call_id,
+        "tool": "exec_command",
+        "tool_type": "exec_command",
+        "status": status,
+        "ok": ok,
+        "input": input,
+        "result": with_paths.clone(),
+        "artifact_path": artifact_path,
+        "raw_log_path": raw_log_path,
+        "result_path": result_path,
+        "completed_at_ms": unix_millis(),
+        "duration_ms": duration_ms,
+    });
+    let serialized = serde_json::to_string_pretty(&result_file).map_err(|_| raw_result.clone())?;
+    fs::write(&paths.result_path, format!("{serialized}\n")).map_err(|_| raw_result.clone())?;
+    Ok(with_paths)
+}
+
+fn exec_artifact_paths_in(root: &Path, log_context: &ExecLogContext) -> ExecArtifactPaths {
+    let artifact_dir = root
+        .join("tool_logs")
+        .join(safe_log_segment(&log_context.session_id))
+        .join("results")
+        .join(format!(
+            "{}_exec_command",
+            safe_log_segment(&log_context.tool_call_id)
+        ));
+    ExecArtifactPaths {
+        raw_log_path: artifact_dir.join("exec_command.log"),
+        result_path: artifact_dir.join("result.json"),
+        artifact_dir,
+    }
+}
+
+fn safe_log_segment(value: &str) -> String {
+    let sanitized = sanitize_path_component(value);
+    if sanitized.trim().is_empty() {
+        "unknown".to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn exec_log_text(result: &Value) -> String {
+    let mut lines = vec![
+        "Tool: exec_command".to_string(),
+        format!("Status: {}", string_field(result, "status")),
+    ];
+    push_log_field(&mut lines, result, "Command", "command");
+    push_log_field(&mut lines, result, "Cwd", "cwd");
+    if let Some(shell) = result.get("shell") {
+        let kind = shell
+            .get("kind")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        let path = shell.get("path").and_then(Value::as_str).unwrap_or("");
+        lines.push(format!("Shell: {kind} ({path})"));
+    }
+    push_log_field(&mut lines, result, "Exit code", "exit_code");
+    push_log_field(&mut lines, result, "Duration ms", "duration_ms");
+    push_log_field(&mut lines, result, "Timed out", "timed_out");
+    push_log_field(&mut lines, result, "Error", "error");
+    lines.push(String::new());
+    lines.push("Stdout:".to_string());
+    lines.push(string_field(result, "stdout"));
+    lines.push(String::new());
+    lines.push("Stderr:".to_string());
+    lines.push(string_field(result, "stderr"));
+    lines.push(String::new());
+    lines.join("\n")
+}
+
+fn push_log_field(lines: &mut Vec<String>, result: &Value, label: &str, key: &str) {
+    if let Some(value) = result.get(key) {
+        lines.push(format!("{label}: {}", display_value(value)));
+    }
+}
+
+fn string_field(result: &Value, key: &str) -> String {
+    result.get(key).map(display_value).unwrap_or_default()
+}
+
+fn display_value(value: &Value) -> String {
+    if let Some(text) = value.as_str() {
+        text.to_string()
+    } else {
+        value.to_string()
     }
 }
 
@@ -780,6 +969,15 @@ fn markdown_for_exec_result(result: &Value) -> String {
         .get("status")
         .and_then(Value::as_str)
         .unwrap_or("completed");
+    if let Some(error) = result.get("error").and_then(Value::as_str) {
+        let raw_log_path = result
+            .get("raw_log_path")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("\nRaw log path: {value}"))
+            .unwrap_or_default();
+        return format!("Tool: exec_command\nStatus: {status}\nError: {error}{raw_log_path}");
+    }
     let command = result.get("command").and_then(Value::as_str).unwrap_or("");
     let cwd = result.get("cwd").and_then(Value::as_str).unwrap_or("");
     let shell = result
@@ -804,10 +1002,16 @@ fn markdown_for_exec_result(result: &Value) -> String {
         .get("timed_out")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let raw_log_path = result
+        .get("raw_log_path")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(|value| format!("\nRaw log path: {value}"))
+        .unwrap_or_default();
     let stdout = result.get("stdout").and_then(Value::as_str).unwrap_or("");
     let stderr = result.get("stderr").and_then(Value::as_str).unwrap_or("");
     format!(
-        "Tool: exec_command\nStatus: {status}\nCommand: {command}\nCwd: {cwd}\nShell: {shell} ({shell_path})\nExit code: {exit_code}\nDuration: {duration_ms} ms\nTimed out: {timed_out}\n\nStdout:\n```text\n{stdout}\n```\n\nStderr:\n```text\n{stderr}\n```"
+        "Tool: exec_command\nStatus: {status}\nCommand: {command}\nCwd: {cwd}\nShell: {shell} ({shell_path})\nExit code: {exit_code}\nDuration: {duration_ms} ms\nTimed out: {timed_out}{raw_log_path}\n\nStdout:\n```text\n{stdout}\n```\n\nStderr:\n```text\n{stderr}\n```"
     )
 }
 
@@ -1058,6 +1262,56 @@ mod tests {
         assert!(output.truncated);
         assert!(output.text.starts_with("xxxxxxxx"));
         assert!(output.text.contains("truncated"));
+    }
+
+    #[test]
+    fn writes_exec_artifact_log_and_result_envelope() {
+        let root = test_dir("artifact-log");
+        let context = ExecLogContext {
+            session_id: "session:one".to_string(),
+            tool_call_id: "call/1".to_string(),
+        };
+        let paths = exec_artifact_paths_in(&root, &context);
+        let input = json!({ "command": "echo ok" });
+        let raw_result = json!({
+            "success": true,
+            "status": "completed",
+            "command": "echo ok",
+            "cwd": root.to_string_lossy(),
+            "shell": { "kind": "powershell", "path": "pwsh" },
+            "exit_code": 0,
+            "stdout": "ok\n",
+            "stderr": "",
+            "duration_ms": 12,
+            "timed_out": false
+        });
+
+        let with_paths = attach_exec_artifacts_at(raw_result, &input, &context, &paths).unwrap();
+
+        assert_eq!(
+            with_paths["raw_log_path"],
+            paths.raw_log_path.to_string_lossy().into_owned()
+        );
+        assert!(paths.raw_log_path.is_file());
+        assert!(paths.result_path.is_file());
+        assert!(paths.artifact_dir.ends_with(Path::new(
+            "tool_logs/session_one/results/call_1_exec_command"
+        )));
+
+        let log = fs::read_to_string(&paths.raw_log_path).unwrap();
+        assert!(log.contains("Tool: exec_command"));
+        assert!(log.contains("Command: echo ok"));
+        assert!(log.contains("Stdout:\nok"));
+
+        let result_file: Value =
+            serde_json::from_str(&fs::read_to_string(&paths.result_path).unwrap()).unwrap();
+        assert_eq!(result_file["request_id"], "call/1");
+        assert_eq!(result_file["tool"], "exec_command");
+        assert_eq!(result_file["input"], input);
+        assert_eq!(
+            result_file["result"]["raw_log_path"],
+            paths.raw_log_path.to_string_lossy().into_owned()
+        );
     }
 
     fn test_dir(name: &str) -> PathBuf {

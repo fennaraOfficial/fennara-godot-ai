@@ -1064,14 +1064,25 @@ fn summary_budgets_for_model(
                     estimate.raw_context_tokens,
                 ))
             } else {
+                let local_unknown_context = is_unknown_local_context_model(model);
+                let fallback_context_tokens = if local_unknown_context {
+                    context_compaction::SummaryBudgets::unknown_local_context_fallback_tokens()
+                } else {
+                    context_compaction::SummaryBudgets::unknown_context_fallback_tokens()
+                };
                 trace.warn(
                     "context.summary.unknown_model_limit",
                     "fallback",
                     json!({
-                        "fallback_context_tokens": context_compaction::SummaryBudgets::unknown_context_fallback_tokens()
+                        "fallback_context_tokens": fallback_context_tokens,
+                        "local_unknown_context": local_unknown_context
                     }),
                 );
-                Some(context_compaction::SummaryBudgets::for_unknown_context())
+                Some(if local_unknown_context {
+                    context_compaction::SummaryBudgets::for_unknown_local_context()
+                } else {
+                    context_compaction::SummaryBudgets::for_unknown_context()
+                })
             }
         }
         Err(error) => {
@@ -1083,6 +1094,10 @@ fn summary_budgets_for_model(
             None
         }
     }
+}
+
+fn is_unknown_local_context_model(model: &str) -> bool {
+    matches!(provider_for_model(model), "ollama" | "local" | "lmstudio")
 }
 
 fn bounded_replay_after_summary_failure(

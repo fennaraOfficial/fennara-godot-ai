@@ -146,64 +146,502 @@ fn append_argument_target(labels: &mut Vec<String>, arguments: &Value, key: &str
 
 fn placeholder_details(result: ToolResultRef<'_>, estimated_tokens: usize) -> Vec<String> {
     let original_chars = result.content_markdown().chars().count();
-    let original_bytes = result.content_markdown().len();
-    let mut details = vec![
-        format!("Status: {}", result.status()),
-        format!("Omitted estimated tokens: {estimated_tokens}"),
-        format!("Omitted chars: {original_chars}"),
-        format!("Omitted bytes: {original_bytes}"),
-    ];
-
     let raw = result.raw_result().unwrap_or(Value::Null);
     let metadata = result.metadata().unwrap_or(Value::Null);
     let arguments = result.arguments().unwrap_or(Value::Null);
-    for &key in generic_identity_detail_keys() {
-        push_detail_field(&mut details, key, &raw, &metadata, &arguments);
+    let mut details = vec![
+        format!(
+            "status={}",
+            tool_facing_status(result.status(), &raw, &metadata)
+        ),
+        format!(
+            "omitted~{}tok/{}ch",
+            compact_count(estimated_tokens),
+            compact_count(original_chars)
+        ),
+    ];
+
+    match result.tool_name().unwrap_or_default() {
+        "read_file" | "get_scene_tree" | "get_node_properties" | "get_class_info" => {}
+        "write_or_update_file" => {
+            push_field(&mut details, "mode", &["mode"], &raw, &metadata, &arguments);
+            push_field(
+                &mut details,
+                "created",
+                &["created"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "repl",
+                &["replacements_made"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_diagnostic_counts(&mut details, &raw, &metadata, &arguments);
+        }
+        "script_diagnostics" => {
+            push_field(
+                &mut details,
+                "scan_project",
+                &["scan_project"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_diagnostic_counts(&mut details, &raw, &metadata, &arguments);
+        }
+        "validate_scene" => {
+            push_issue_counts(&mut details, &raw, &metadata, &arguments);
+            push_field(
+                &mut details,
+                "runtime_log",
+                &["runtime_compacted_log_path", "raw_log_path", "log_path"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_artifact_fields(&mut details, &raw, &metadata, &arguments);
+        }
+        "screenshot_scene" => {
+            push_field(
+                &mut details,
+                "img",
+                &["image_path", "screenshot_path"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "dir",
+                &["screenshot_dir"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "images",
+                &["image_count"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+        }
+        "runtime_session" => {
+            push_field(
+                &mut details,
+                "action",
+                &["action"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "session",
+                &["session_id"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "scene",
+                &["scene_path"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "log",
+                &["log_path", "raw_log_path"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "issues",
+                &["runtime_issue_count"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "debugger_errors",
+                &["runtime_debugger_error_count"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "launch_errors",
+                &["launch_error_count"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "msbuild_log",
+                &["msbuild_log_path"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+        }
+        "runtime_script" => {
+            push_field(
+                &mut details,
+                "session",
+                &["session_id"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "script",
+                &["script_path"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "log",
+                &["log_path", "raw_log_path"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_diagnostic_counts(&mut details, &raw, &metadata, &arguments);
+            push_issue_counts(&mut details, &raw, &metadata, &arguments);
+            push_array_count(
+                &mut details,
+                "captures",
+                &["captures"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+        }
+        "run_scene_edit_script" => {
+            push_field(
+                &mut details,
+                "modified",
+                &["modified"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "saved",
+                &["scene_saved"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_diagnostic_counts(&mut details, &raw, &metadata, &arguments);
+            push_issue_counts(&mut details, &raw, &metadata, &arguments);
+            push_field(
+                &mut details,
+                "logs",
+                &["log_count"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+        }
+        "project_settings" => {
+            push_field(
+                &mut details,
+                "action",
+                &["action"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(&mut details, "key", &["key"], &raw, &metadata, &arguments);
+            push_field(
+                &mut details,
+                "prefix",
+                &["prefix"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "query",
+                &["query"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "count",
+                &["count", "total_count"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+        }
+        "scrape_editor" => {
+            push_field(
+                &mut details,
+                "target",
+                &["target"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "source",
+                &["source"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "tree",
+                &["tree_path"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "errors",
+                &["error_count"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+        }
+        "exec_command" => {
+            push_field(&mut details, "cwd", &["cwd"], &raw, &metadata, &arguments);
+            push_field(
+                &mut details,
+                "exit",
+                &["exit_code"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "timeout",
+                &["timed_out"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "log",
+                &["log_path", "raw_log_path"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "ms",
+                &["duration_ms"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+        }
+        _ => push_generic_fields(&mut details, &raw, &metadata, &arguments),
     }
 
+    push_field(
+        &mut details,
+        "error",
+        &["error", "block_reason"],
+        &raw,
+        &metadata,
+        &arguments,
+    );
     dedupe_preserve_order(details)
 }
 
-fn generic_identity_detail_keys() -> &'static [&'static str] {
-    &[
-        "command",
-        "cwd",
-        "exit_code",
-        "timed_out",
-        "duration_ms",
-        "result_path",
-        "artifact_path",
-        "artifact_dir",
-        "raw_log_path",
-        "log_path",
-        "error",
-        "block_reason",
-        "output_path",
-        "screenshot_path",
-        "image_path",
-        "file_path",
-        "path",
-    ]
+fn tool_facing_status<'a>(fallback: &'a str, raw: &'a Value, metadata: &'a Value) -> &'a str {
+    metadata
+        .get("status")
+        .or_else(|| raw.get("status"))
+        .and_then(Value::as_str)
+        .filter(|status| !status.trim().is_empty())
+        .unwrap_or(fallback)
 }
 
-fn push_detail_field(
+fn push_diagnostic_counts(
     details: &mut Vec<String>,
-    key: &str,
     raw: &Value,
     metadata: &Value,
     arguments: &Value,
 ) {
-    let value = raw
-        .get(key)
-        .or_else(|| metadata.get(key))
-        .or_else(|| arguments.get(key));
-    let Some(value) = value else {
+    push_field(
+        details,
+        "errors",
+        &["total_errors", "error_count"],
+        raw,
+        metadata,
+        arguments,
+    );
+    push_field(
+        details,
+        "warnings",
+        &["total_warnings", "warning_count"],
+        raw,
+        metadata,
+        arguments,
+    );
+    push_field(
+        details,
+        "diagnostics",
+        &["diagnostic_count"],
+        raw,
+        metadata,
+        arguments,
+    );
+    push_field(
+        details,
+        "omitted_diag",
+        &["omitted_diagnostics"],
+        raw,
+        metadata,
+        arguments,
+    );
+}
+
+fn push_issue_counts(details: &mut Vec<String>, raw: &Value, metadata: &Value, arguments: &Value) {
+    push_field(
+        details,
+        "runtime_errors",
+        &["runtime_error_count", "runtime_debugger_error_count"],
+        raw,
+        metadata,
+        arguments,
+    );
+    push_field(
+        details,
+        "runtime_warnings",
+        &["runtime_warning_count"],
+        raw,
+        metadata,
+        arguments,
+    );
+}
+
+fn push_artifact_fields(
+    details: &mut Vec<String>,
+    raw: &Value,
+    metadata: &Value,
+    arguments: &Value,
+) {
+    push_field(
+        details,
+        "result",
+        &["result_path", "result_json_path"],
+        raw,
+        metadata,
+        arguments,
+    );
+    push_field(
+        details,
+        "artifact",
+        &["artifact_path", "artifact_dir"],
+        raw,
+        metadata,
+        arguments,
+    );
+}
+
+fn push_generic_fields(
+    details: &mut Vec<String>,
+    raw: &Value,
+    metadata: &Value,
+    arguments: &Value,
+) {
+    for (label, keys) in [
+        ("cmd", &["command"][..]),
+        ("cwd", &["cwd"][..]),
+        ("exit", &["exit_code"][..]),
+        ("timeout", &["timed_out"][..]),
+        ("ms", &["duration_ms"][..]),
+        (
+            "path",
+            &["file_path", "path", "resource_path", "script_path"][..],
+        ),
+        ("log", &["log_path", "raw_log_path"][..]),
+        ("artifact", &["artifact_path", "artifact_dir"][..]),
+        ("result", &["result_path"][..]),
+        ("out", &["output_path", "screenshot_path", "image_path"][..]),
+    ] {
+        push_field(details, label, keys, raw, metadata, arguments);
+    }
+}
+
+fn push_array_count(
+    details: &mut Vec<String>,
+    label: &str,
+    keys: &[&str],
+    raw: &Value,
+    metadata: &Value,
+    arguments: &Value,
+) {
+    let Some(value) = first_value(keys, raw, metadata, arguments) else {
         return;
     };
-    if is_empty_value(value) {
+    let Some(values) = value.as_array() else {
         return;
+    };
+    if !values.is_empty() {
+        details.push(format!("{label}={}", values.len()));
     }
-    details.push(format!("{}: {}", label_for_key(key), short_value(value)));
+}
+
+fn push_field(
+    details: &mut Vec<String>,
+    label: &str,
+    keys: &[&str],
+    raw: &Value,
+    metadata: &Value,
+    arguments: &Value,
+) {
+    let Some(value) = first_value(keys, raw, metadata, arguments) else {
+        return;
+    };
+    details.push(format!("{label}={}", short_value(value)));
+}
+
+fn first_value<'a>(
+    keys: &[&str],
+    raw: &'a Value,
+    metadata: &'a Value,
+    arguments: &'a Value,
+) -> Option<&'a Value> {
+    keys.iter().find_map(|key| {
+        raw.get(*key)
+            .or_else(|| metadata.get(*key))
+            .or_else(|| arguments.get(*key))
+            .filter(|value| !is_empty_value(value))
+    })
 }
 
 fn target_keys() -> &'static [&'static str] {
@@ -241,14 +679,24 @@ fn is_empty_value(value: &Value) -> bool {
 
 fn short_value(value: &Value) -> String {
     let raw = if let Some(text) = value.as_str() {
-        text.to_string()
+        text.replace(['\r', '\n'], " ")
     } else {
         serde_json::to_string(value).unwrap_or_default()
     };
-    if raw.chars().count() > 180 {
-        raw.chars().take(177).collect::<String>() + "..."
+    if raw.chars().count() > 96 {
+        raw.chars().take(93).collect::<String>() + "..."
     } else {
         raw
+    }
+}
+
+fn compact_count(value: usize) -> String {
+    if value >= 1_000_000 {
+        format!("{}m", (value + 500_000) / 1_000_000)
+    } else if value >= 1_000 {
+        format!("{}k", (value + 500) / 1_000)
+    } else {
+        value.to_string()
     }
 }
 
@@ -337,7 +785,7 @@ mod tests {
     }
 
     #[test]
-    fn pressure_placeholder_keeps_normal_identity_details() {
+    fn pressure_placeholder_keeps_compact_tool_specific_details() {
         let groups = vec![ReplayGroup::new(vec![ReplayRow {
             id: "msg_exec".to_string(),
             sequence: 1,
@@ -380,12 +828,25 @@ mod tests {
                 .targets
                 .contains(&"command: cargo test".to_string())
         );
-        assert!(placeholder.details.contains(&"Status: done".to_string()));
-        assert!(placeholder.details.contains(&"exit code: 0".to_string()));
-        assert!(placeholder.details.contains(
-            &"raw log path: user://.fennara/tool_logs/session/results/tool_1_exec_command/result.json"
-                .to_string()
-        ));
+        assert!(
+            placeholder
+                .details
+                .contains(&"status=completed".to_string())
+        );
+        assert!(placeholder.details.contains(&"exit=0".to_string()));
+        assert!(placeholder.details.contains(&"cwd=C:/repo".to_string()));
+        assert!(
+            placeholder.details.contains(
+                &"log=user://.fennara/tool_logs/session/results/tool_1_exec_command/result.json"
+                    .to_string()
+            )
+        );
+        assert!(
+            placeholder
+                .details
+                .iter()
+                .all(|detail| !detail.contains("40000"))
+        );
     }
 
     #[test]

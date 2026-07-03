@@ -1074,9 +1074,9 @@ fn insert_replay_tool_turn(
             assistant_id,
             tool_name,
             json!({ "path": path }).to_string(),
-            json!({ "status": "done", "path": path }).to_string(),
+            json!({ "status": "success", "path": path }).to_string(),
             mcp_markdown,
-            json!({ "targets": [{ "path": path }] }).to_string(),
+            json!({ "status": "success", "targets": [{ "path": path }] }).to_string(),
             json!([path]).to_string()
         ],
     )
@@ -1154,20 +1154,18 @@ fn replay_pressure_prunes_old_tool_results_after_default_token_window() {
         .unwrap();
 
     let old_a_content = old_tool_a["content"].as_str().unwrap();
-    assert!(old_a_content.contains("[tool result omitted from model context]"));
-    assert!(old_a_content.contains("Tool: read_file"));
-    assert!(old_a_content.contains("Tool call id: call_old_a"));
-    assert!(old_a_content.contains("Target: res://old_a.gd"));
-    assert!(old_a_content.contains("Omitted estimated tokens:"));
-    assert!(old_a_content.contains("Omitted chars: 120000"));
-    assert!(old_a_content.contains("Omitted bytes: 120000"));
-    assert!(old_a_content.contains("newest 40000 estimated tokens"));
-    assert!(old_a_content.contains("The original stored tool result was not modified."));
+    assert!(old_a_content.contains("[old tool result omitted: read_file"));
+    assert!(old_a_content.contains("target=res://old_a.gd"));
+    assert!(old_a_content.contains("status=success"));
+    assert!(old_a_content.contains("omitted~"));
+    assert!(old_a_content.contains("exact in Fennara history"));
+    assert!(!old_a_content.contains("Tool call id"));
+    assert!(!old_a_content.contains("newest 40000 estimated tokens"));
     assert!(!old_a_content.contains("rerun the tool"));
     assert!(!old_a_content.contains("old A exact marker"));
 
     let old_b_content = old_tool_b["content"].as_str().unwrap();
-    assert!(old_b_content.contains("[tool result omitted from model context]"));
+    assert!(old_b_content.contains("[old tool result omitted: read_file"));
     assert!(!old_b_content.contains("old B exact marker"));
     assert_eq!(newest_old_tool["content"], newest_old);
 
@@ -1265,7 +1263,7 @@ fn replay_pressure_keeps_latest_two_user_turn_tool_results_exact() {
         old_tool["content"]
             .as_str()
             .unwrap()
-            .contains("[tool result omitted from model context]")
+            .contains("[old tool result omitted:")
     );
     assert_eq!(tail_tool["content"], protected_tail);
 }
