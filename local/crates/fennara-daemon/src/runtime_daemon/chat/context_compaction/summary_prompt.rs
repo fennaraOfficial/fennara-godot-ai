@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 
 use super::{
-    summary::{SUMMARY_OUTPUT_MAX_TOKENS, SummaryCandidate},
+    summary::SummaryCandidate,
     types::{ReplayGroup, ReplayRow, parse_json},
 };
 
@@ -9,20 +9,22 @@ pub(crate) const TOOL_OUTPUT_MAX_CHARS: usize = 2_000;
 const JSON_FIELD_MAX_CHARS: usize = 2_000;
 
 pub(crate) fn build_summary_messages(candidate: &SummaryCandidate) -> Vec<Value> {
+    let user_content = match candidate.previous_summary_markdown.as_deref() {
+        Some(previous_summary) => format!(
+            "<previous-summary>\n{}\n</previous-summary>\n\n<history-to-summarize>\n{}\n</history-to-summarize>",
+            previous_summary.trim(),
+            render_history_to_summarize(&candidate.groups)
+        ),
+        None => format!(
+            "<history-to-summarize>\n{}\n</history-to-summarize>",
+            render_history_to_summarize(&candidate.groups)
+        ),
+    };
+
     vec![
         json!({ "role": "system", "content": SUMMARY_SYSTEM_PROMPT }),
-        json!({
-            "role": "user",
-            "content": format!(
-                "<history-to-summarize>\n{}\n</history-to-summarize>",
-                render_history_to_summarize(&candidate.groups)
-            )
-        }),
+        json!({ "role": "user", "content": user_content }),
     ]
-}
-
-pub(crate) fn summary_output_max_tokens() -> u32 {
-    SUMMARY_OUTPUT_MAX_TOKENS
 }
 
 pub(crate) fn render_history_to_summarize(groups: &[ReplayGroup]) -> String {
@@ -187,7 +189,11 @@ fn compact_json(raw: &str) -> String {
 
 const SUMMARY_SYSTEM_PROMPT: &str = r#"You are Fennara's context checkpoint summarization assistant for coding and Godot editor sessions.
 
-Summarize only the conversation history provided in <history-to-summarize>. This summary will be used by another LLM to continue the same task later.
+Create one current conversation checkpoint. This summary will be used by another LLM to continue the same task later.
+
+If the prompt includes a <previous-summary> block, treat it as the existing checkpoint. Preserve still-true details from it, remove stale or contradicted details, and merge in the new conversation history from <history-to-summarize>.
+
+If there is no <previous-summary> block, summarize only the conversation history provided in <history-to-summarize>.
 
 The newest turns may be kept verbatim outside your summary, so focus on older context that still matters. Do not summarize retained exact tail content unless it is explicitly included in <history-to-summarize>.
 
@@ -350,5 +356,41 @@ mod tests {
         );
         assert!(!rendered.contains(assistant_tail));
         assert!(!rendered.contains(argument_tail));
+    }
+
+    #[test]
+    fn summary_prompt_includes_previous_summary_when_present() {
+        let candidate = SummaryCandidate {
+            groups: vec![ReplayGroup::new(vec![ReplayRow {
+                id: "msg_2".to_string(),
+                sequence: 2,
+                role: "user".to_string(),
+                status: "done".to_string(),
+                content: "new fact".to_string(),
+                tool_call_id: None,
+                tool_name: None,
+                tool_calls_json: None,
+                metadata_json: None,
+                raw_result_json: None,
+                arguments_json: None,
+                target_keys_json: None,
+                tool_status: None,
+            }])],
+            previous_summary_markdown: Some("old fact".to_string()),
+            covered_start_message_id: "msg_1".to_string(),
+            covered_start_sequence: 1,
+            covered_end_message_id: "msg_2".to_string(),
+            covered_end_sequence: 2,
+            tail_start_message_id: None,
+            tail_start_sequence: None,
+            source_message_count: 2,
+        };
+
+        let messages = build_summary_messages(&candidate);
+        let content = messages[1]["content"].as_str().unwrap();
+
+        assert!(content.contains("<previous-summary>"));
+        assert!(content.contains("old fact"));
+        assert!(content.contains("new fact"));
     }
 }

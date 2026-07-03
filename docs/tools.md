@@ -173,8 +173,6 @@ Use get_node_properties for the Player node in res://scenes/player.tscn before e
 Use this before `run_scene_edit_script` when touching Godot nodes/resources. It
 helps avoid invented method names, wrong properties, wrong enum usage, and wrong
 constructor assumptions by returning the real Godot API surface for a class.
-For GDExtension/native addon classes, Fennara skips official Godot XML docs
-lookup and returns runtime ClassDB/property information instead.
 
 For built-in Godot classes, Fennara reads official XML docs from the GitHub
 branch matching the connected editor's major/minor version, with an explicit

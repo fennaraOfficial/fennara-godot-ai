@@ -4,10 +4,11 @@ use super::{
 };
 
 pub(crate) const SUMMARY_OUTPUT_MAX_TOKENS: u32 = 4_096;
+const UNKNOWN_CONTEXT_FALLBACK_TOKENS: u32 = 64_000;
 const LARGE_CONTEXT_THRESHOLD: usize = 400_000;
 const LARGE_CONTEXT_WORKING_BUDGET: usize = 450_000;
 const LARGE_CONTEXT_TAIL_BUDGET_MAX: usize = 100_000;
-const SUMMARY_REPLAY_BUDGET_MIN: usize = 4_000;
+const SUMMARY_REPLAY_BUDGET_MIN: usize = 512;
 pub(crate) const SUMMARY_REPLAY_BUDGET_MAX: usize = 64_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -54,11 +55,32 @@ impl SummaryBudgets {
             summary_replay_budget_tokens,
         }
     }
+
+    pub(crate) fn for_unknown_context() -> Self {
+        Self::from_model_context(
+            UNKNOWN_CONTEXT_FALLBACK_TOKENS,
+            Some(UNKNOWN_CONTEXT_FALLBACK_TOKENS),
+        )
+    }
+
+    pub(crate) fn unknown_context_fallback_tokens() -> u32 {
+        UNKNOWN_CONTEXT_FALLBACK_TOKENS
+    }
+
+    pub(crate) fn summary_output_max_tokens(self) -> u32 {
+        match self.raw_context_tokens {
+            0..=8_192 => 512,
+            8_193..=16_384 => 1_024,
+            16_385..=65_536 => 2_048,
+            _ => SUMMARY_OUTPUT_MAX_TOKENS,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct SummaryCandidate {
     pub(crate) groups: Vec<ReplayGroup>,
+    pub(crate) previous_summary_markdown: Option<String>,
     pub(crate) covered_start_message_id: String,
     pub(crate) covered_start_sequence: i64,
     pub(crate) covered_end_message_id: String,
@@ -108,19 +130,27 @@ pub(crate) fn select_next_summary_candidate(
     let first = first_row(selected_groups.first()?)?;
     let last = last_row(selected_groups.last()?)?;
     let tail_start_row = groups.get(tail_start).and_then(first_row);
-    let source_message_count = selected_groups
-        .iter()
-        .map(|group| group.rows.len() as i64)
-        .sum();
-    let covered_start_message_id = first.id.clone();
-    let covered_start_sequence = first.sequence;
+    let previous_summary_markdown =
+        (!clean_chain.is_empty()).then(|| render_previous_summary_markdown(&clean_chain));
+    let covered_start_sequence = clean_chain
+        .first()
+        .map(|summary| summary.covered_start_sequence)
+        .unwrap_or(first.sequence);
+    let covered_start_message_id = clean_chain
+        .first()
+        .and_then(|summary| summary.covered_start_message_id.clone())
+        .or_else(|| row_id_for_sequence(groups, covered_start_sequence))
+        .unwrap_or_else(|| first.id.clone());
     let covered_end_message_id = last.id.clone();
     let covered_end_sequence = last.sequence;
+    let source_message_count =
+        count_rows_in_range(groups, covered_start_sequence, covered_end_sequence);
     let tail_start_message_id = tail_start_row.map(|row| row.id.clone());
     let tail_start_sequence = tail_start_row.map(|row| row.sequence);
 
     Some(SummaryCandidate {
         groups: selected_groups,
+        previous_summary_markdown,
         covered_start_message_id,
         covered_start_sequence,
         covered_end_message_id,
@@ -147,24 +177,58 @@ pub(crate) fn clean_summary_chain<'a>(
         )
     });
 
+    let incremental = clean_incremental_summary_chain(groups, &sorted, first_sequence);
+    let cumulative = best_cumulative_summary(groups, &sorted, first_sequence);
+    if let Some(cumulative) = cumulative {
+        let incremental_end = incremental
+            .last()
+            .map(|summary| summary.covered_end_sequence)
+            .unwrap_or(i64::MIN);
+        if cumulative.covered_end_sequence >= incremental_end {
+            return vec![cumulative];
+        }
+    }
+
+    incremental
+}
+
+fn clean_incremental_summary_chain<'a>(
+    groups: &[ReplayGroup],
+    sorted: &[&'a ContextSummaryChunk],
+    first_sequence: i64,
+) -> Vec<&'a ContextSummaryChunk> {
     let mut clean = Vec::new();
     let mut expected_start = first_sequence;
-    for summary in sorted {
+    for summary in sorted.iter().copied() {
         if summary.covered_start_sequence != expected_start {
             break;
         }
-        if summary.covered_end_sequence < summary.covered_start_sequence {
-            break;
-        }
-        if starts_inside_group(groups, summary.covered_start_sequence)
-            || ends_inside_group(groups, summary.covered_end_sequence)
-        {
+        if !has_valid_summary_boundary(groups, summary) {
             break;
         }
         expected_start = summary.covered_end_sequence.saturating_add(1);
         clean.push(summary);
     }
     clean
+}
+
+fn best_cumulative_summary<'a>(
+    groups: &[ReplayGroup],
+    sorted: &[&'a ContextSummaryChunk],
+    first_sequence: i64,
+) -> Option<&'a ContextSummaryChunk> {
+    sorted
+        .iter()
+        .copied()
+        .filter(|summary| summary.covered_start_sequence == first_sequence)
+        .filter(|summary| has_valid_summary_boundary(groups, summary))
+        .max_by_key(|summary| (summary.covered_end_sequence, summary.created_at_ms))
+}
+
+fn has_valid_summary_boundary(groups: &[ReplayGroup], summary: &ContextSummaryChunk) -> bool {
+    summary.covered_end_sequence >= summary.covered_start_sequence
+        && !starts_inside_group(groups, summary.covered_start_sequence)
+        && !ends_inside_group(groups, summary.covered_end_sequence)
 }
 
 pub(crate) fn select_summary_chunks_for_replay<'a>(
@@ -186,6 +250,25 @@ pub(crate) fn select_summary_chunks_for_replay<'a>(
         }
     }
     selected.reverse();
+    selected
+}
+
+pub(crate) fn apply_exact_tail_replay(
+    groups: Vec<ReplayGroup>,
+    tail_budget_tokens: usize,
+) -> Vec<ReplayGroup> {
+    if groups.is_empty() {
+        return groups;
+    }
+
+    let tail_start = exact_tail_start_index(&groups, tail_budget_tokens);
+    let mut selected = groups
+        .iter()
+        .take(tail_start)
+        .filter(|group| is_synthetic_context_summary_group(group))
+        .cloned()
+        .collect::<Vec<_>>();
+    selected.extend(groups.into_iter().skip(tail_start));
     selected
 }
 
@@ -229,6 +312,43 @@ fn estimate_row_tokens(row: &ReplayRow) -> usize {
         tokens = tokens.saturating_add(estimate_text_tokens(tool_calls_json));
     }
     tokens.max(1)
+}
+
+fn count_rows_in_range(groups: &[ReplayGroup], start_sequence: i64, end_sequence: i64) -> i64 {
+    groups
+        .iter()
+        .flat_map(|group| group.rows.iter())
+        .filter(|row| start_sequence <= row.sequence && row.sequence <= end_sequence)
+        .count() as i64
+}
+
+fn row_id_for_sequence(groups: &[ReplayGroup], sequence: i64) -> Option<String> {
+    groups
+        .iter()
+        .flat_map(|group| group.rows.iter())
+        .find(|row| row.sequence == sequence)
+        .map(|row| row.id.clone())
+}
+
+fn render_previous_summary_markdown(chunks: &[&ContextSummaryChunk]) -> String {
+    if chunks.len() == 1 {
+        return chunks[0].summary_markdown.trim().to_string();
+    }
+
+    let mut lines = vec!["# Previous Conversation Summary".to_string()];
+    for chunk in chunks {
+        lines.push(String::new());
+        lines.push(format!(
+            "## Messages {}-{}",
+            chunk.covered_start_sequence, chunk.covered_end_sequence
+        ));
+        lines.push(chunk.summary_markdown.trim().to_string());
+    }
+    lines.join("\n")
+}
+
+fn is_synthetic_context_summary_group(group: &ReplayGroup) -> bool {
+    !group.rows.is_empty() && group.rows.iter().all(|row| row.sequence <= 0)
 }
 
 fn first_row(group: &ReplayGroup) -> Option<&ReplayRow> {
@@ -319,17 +439,32 @@ mod tests {
 
     #[test]
     fn budget_examples_match_design_shape() {
+        let tiny = SummaryBudgets::from_model_context(2_096, Some(4_096));
+        assert_eq!(tiny.compaction_working_budget, 2_096);
+        assert_eq!(tiny.summary_trigger_tokens, 1_886);
+        assert_eq!(tiny.tail_budget_tokens, 524);
+        assert_eq!(tiny.summary_replay_budget_tokens, 512);
+        assert_eq!(tiny.summary_output_max_tokens(), 512);
+
+        let local_16k = SummaryBudgets::from_model_context(14_384, Some(16_384));
+        assert_eq!(local_16k.summary_output_max_tokens(), 1_024);
+
+        let mid = SummaryBudgets::from_model_context(62_000, Some(64_000));
+        assert_eq!(mid.summary_output_max_tokens(), 2_048);
+
         let small = SummaryBudgets::from_model_context(126_000, Some(128_000));
         assert_eq!(small.compaction_working_budget, 126_000);
         assert_eq!(small.summary_trigger_tokens, 113_400);
         assert_eq!(small.tail_budget_tokens, 31_500);
         assert_eq!(small.summary_replay_budget_tokens, 18_900);
+        assert_eq!(small.summary_output_max_tokens(), 4_096);
 
         let huge = SummaryBudgets::from_model_context(998_000, Some(1_000_000));
         assert_eq!(huge.compaction_working_budget, 450_000);
         assert_eq!(huge.summary_trigger_tokens, 400_000);
         assert_eq!(huge.tail_budget_tokens, 100_000);
         assert_eq!(huge.summary_replay_budget_tokens, 64_000);
+        assert_eq!(huge.summary_output_max_tokens(), 4_096);
     }
 
     #[test]
@@ -344,9 +479,18 @@ mod tests {
 
         let candidate = select_next_summary_candidate(&groups, &summaries, 125).unwrap();
 
-        assert_eq!(candidate.covered_start_sequence, 3);
+        assert_eq!(candidate.covered_start_sequence, 1);
         assert_eq!(candidate.covered_end_sequence, 3);
         assert_eq!(candidate.tail_start_sequence, Some(4));
+        assert_eq!(candidate.source_message_count, 3);
+        assert_eq!(candidate.groups[0].rows[0].sequence, 3);
+        assert!(
+            candidate
+                .previous_summary_markdown
+                .as_deref()
+                .unwrap()
+                .contains("summary 1-2")
+        );
     }
 
     #[test]
@@ -391,5 +535,38 @@ mod tests {
         let clean = clean_summary_chain(&groups, &summaries);
 
         assert_eq!(clean, vec![&summaries[0]]);
+    }
+
+    #[test]
+    fn clean_summary_chain_prefers_latest_cumulative_checkpoint() {
+        let groups = vec![group(1, "one"), group(2, "two"), group(3, "three")];
+        let first = summary(1, 1);
+        let second = ContextSummaryChunk {
+            summary_markdown: "summary 1-2".to_string(),
+            created_at_ms: 2,
+            ..summary(1, 2)
+        };
+        let summaries = vec![first, second];
+
+        let clean = clean_summary_chain(&groups, &summaries);
+
+        assert_eq!(clean, vec![&summaries[1]]);
+    }
+
+    #[test]
+    fn exact_tail_replay_preserves_synthetic_summary_prefix() {
+        let groups = vec![
+            ReplayGroup::new(vec![ReplayRow {
+                sequence: 0,
+                ..row("synthetic", 0, "assistant", "summary")
+            }]),
+            group(1, "old"),
+            group(2, &"tail ".repeat(100)),
+        ];
+
+        let replay = apply_exact_tail_replay(groups, 20);
+
+        assert_eq!(replay[0].rows[0].sequence, 0);
+        assert_eq!(replay[1].rows[0].sequence, 2);
     }
 }

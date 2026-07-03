@@ -9,7 +9,16 @@ pub(crate) fn apply_summary_replay(
     summary_replay_budget_tokens: usize,
 ) -> Vec<ReplayGroup> {
     let clean_chain = clean_summary_chain(&groups, summaries);
+    let Some(first_clean_summary) = clean_chain.first() else {
+        return groups;
+    };
     let selected = select_summary_chunks_for_replay(&clean_chain, summary_replay_budget_tokens);
+    let Some(first_selected_summary) = selected.first() else {
+        return groups;
+    };
+    if first_selected_summary.covered_start_sequence != first_clean_summary.covered_start_sequence {
+        return groups;
+    }
     let Some(latest_summary) = selected.last() else {
         return groups;
     };
@@ -156,5 +165,20 @@ mod tests {
 
         assert_eq!(replay.len(), groups.len());
         assert_eq!(replay[0].rows[0].sequence, 1);
+    }
+
+    #[test]
+    fn tight_budget_does_not_drop_history_covered_only_by_omitted_legacy_summary() {
+        let groups = vec![group(1), group(2), group(3), group(4), group(5)];
+        let summaries = vec![
+            summary(1, 2, &"old ".repeat(100)),
+            summary(3, 4, &"new ".repeat(100)),
+        ];
+
+        let replay = apply_summary_replay(groups.clone(), &summaries, 10);
+
+        assert_eq!(replay.len(), groups.len());
+        assert_eq!(replay[0].rows[0].sequence, 1);
+        assert_eq!(replay[4].rows[0].sequence, 5);
     }
 }

@@ -691,7 +691,7 @@ fn replay_summary_injects_synthetic_summary_then_exact_tail() {
 }
 
 #[test]
-fn replay_summary_budget_drops_oldest_summary_chunks_only_in_replay() {
+fn replay_summary_budget_keeps_exact_history_when_legacy_chunks_do_not_fit() {
     let conn = Connection::open_in_memory().unwrap();
     create_tool_persistence_schema(&conn);
     conn.execute_batch(
@@ -726,17 +726,62 @@ fn replay_summary_budget_drops_oldest_summary_chunks_only_in_replay() {
 
     let replay =
         replay::replay_messages_with_summary_budget_from_conn(&conn, "chat_1", Some(5)).unwrap();
-    let summary = replay[1]["content"].as_str().unwrap();
 
-    assert!(!summary.contains("old summary text"));
-    assert!(summary.contains("new summary text"));
-    assert_eq!(replay[2]["content"], "tail");
+    assert_eq!(replay.len(), 5);
+    assert_eq!(replay[0]["content"], "one");
+    assert_eq!(replay[1]["content"], "two");
+    assert_eq!(replay[2]["content"], "three");
+    assert_eq!(replay[3]["content"], "four");
+    assert_eq!(replay[4]["content"], "tail");
     let stored_summary_count: i64 = conn
         .query_row("SELECT COUNT(*) FROM chat_context_summaries", [], |row| {
             row.get(0)
         })
         .unwrap();
     assert_eq!(stored_summary_count, 2);
+}
+
+#[test]
+fn replay_summary_budget_can_use_latest_cumulative_summary_by_itself() {
+    let conn = Connection::open_in_memory().unwrap();
+    create_tool_persistence_schema(&conn);
+    conn.execute_batch(
+        "
+        INSERT INTO chats
+          (id, title, model, reasoning_effort, created_at_ms, updated_at_ms)
+          VALUES ('chat_1', 'Chat', 'openrouter/z-ai/glm-5.2', 'medium', 1, 1);
+        INSERT INTO chat_messages
+          (id, chat_id, role, status, content, sequence, created_at_ms, updated_at_ms)
+          VALUES
+          ('msg_1', 'chat_1', 'user', 'done', 'one', 1, 1, 1),
+          ('msg_2', 'chat_1', 'assistant', 'done', 'two', 2, 1, 1),
+          ('msg_3', 'chat_1', 'user', 'done', 'three', 3, 1, 1),
+          ('msg_4', 'chat_1', 'assistant', 'done', 'four', 4, 1, 1),
+          ('msg_5', 'chat_1', 'user', 'done', 'tail', 5, 1, 1);
+        INSERT INTO chat_context_summaries
+          (id, chat_id, generation_id, summary_markdown,
+           covered_start_message_id, covered_start_sequence,
+           covered_end_message_id, covered_end_sequence,
+           tail_start_message_id, tail_start_sequence,
+           source_message_count, model, reasoning_effort, created_at_ms)
+          VALUES
+          ('sum_1', 'chat_1', 'ctxgen_1', 'old summary text',
+           'msg_1', 1, 'msg_2', 2, 'msg_3', 3, 2,
+           'openrouter/z-ai/glm-5.2', 'medium', 1),
+          ('sum_2', 'chat_1', 'ctxgen_2', 'updated cumulative summary text',
+           'msg_1', 1, 'msg_4', 4, 'msg_5', 5, 4,
+           'openrouter/z-ai/glm-5.2', 'medium', 2);
+        ",
+    )
+    .unwrap();
+
+    let replay =
+        replay::replay_messages_with_summary_budget_from_conn(&conn, "chat_1", Some(5)).unwrap();
+    let summary = replay[1]["content"].as_str().unwrap();
+
+    assert_eq!(replay.len(), 3);
+    assert!(summary.contains("updated cumulative summary text"));
+    assert_eq!(replay[2]["content"], "tail");
 }
 
 #[test]

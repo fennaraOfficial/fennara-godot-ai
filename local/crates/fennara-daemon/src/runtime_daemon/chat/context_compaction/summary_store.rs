@@ -142,6 +142,20 @@ fn validate_summary_insert(
         return Err("Cannot summarize an empty chat.".to_string());
     }
 
+    let max_existing_end: Option<i64> = conn
+        .query_row(
+            "SELECT MAX(covered_end_sequence)
+             FROM chat_context_summaries
+             WHERE chat_id = ?1",
+            [chat_id],
+            |row| row.get(0),
+        )
+        .map_err(to_store_error)?;
+    let supersedes_existing_summary = Some(candidate.covered_start_sequence) == first_sequence
+        && max_existing_end
+            .map(|end| candidate.covered_end_sequence > end)
+            .unwrap_or(false);
+
     let overlap_count: i64 = conn
         .query_row(
             "SELECT COUNT(*)
@@ -157,7 +171,7 @@ fn validate_summary_insert(
             |row| row.get(0),
         )
         .map_err(to_store_error)?;
-    if overlap_count > 0 {
+    if overlap_count > 0 && !supersedes_existing_summary {
         return Err("Context summary coverage overlaps an existing summary.".to_string());
     }
 
@@ -429,6 +443,7 @@ mod tests {
         .unwrap();
         let candidate = SummaryCandidate {
             groups: Vec::new(),
+            previous_summary_markdown: None,
             covered_start_message_id: "msg_1".to_string(),
             covered_start_sequence: 1,
             covered_end_message_id: "msg_1".to_string(),
@@ -463,5 +478,35 @@ mod tests {
             )
             .unwrap();
         assert_eq!(usage, ("context_summary".to_string(), 10));
+
+        let cumulative_candidate = SummaryCandidate {
+            groups: Vec::new(),
+            previous_summary_markdown: Some("summary".to_string()),
+            covered_start_message_id: "msg_1".to_string(),
+            covered_start_sequence: 1,
+            covered_end_message_id: "msg_2".to_string(),
+            covered_end_sequence: 2,
+            tail_start_message_id: None,
+            tail_start_sequence: None,
+            source_message_count: 2,
+        };
+
+        let cumulative = insert_context_summary_on_connection(
+            &mut conn,
+            InsertContextSummary {
+                chat_id: "chat_1",
+                generation_id: "ctxgen_2",
+                summary_markdown: "updated summary",
+                candidate: &cumulative_candidate,
+                model: "openrouter/z-ai/glm-5.2",
+                reasoning_effort: "medium",
+                usage: None,
+                metadata: &json!({}),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(cumulative.covered_start_sequence, 1);
+        assert_eq!(cumulative.covered_end_sequence, 2);
     }
 }

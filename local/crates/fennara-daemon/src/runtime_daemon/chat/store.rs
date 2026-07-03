@@ -666,6 +666,20 @@ pub(crate) fn replay_messages_with_summary_budget(
     )
 }
 
+pub(crate) fn replay_messages_with_summary_and_exact_tail_budget(
+    chat_id: &str,
+    summary_replay_budget_tokens: usize,
+    exact_tail_budget_tokens: usize,
+) -> Result<Vec<Value>, String> {
+    let conn = connection()?;
+    replay::replay_messages_with_summary_and_exact_tail_budget_from_conn(
+        &conn,
+        chat_id,
+        summary_replay_budget_tokens,
+        exact_tail_budget_tokens,
+    )
+}
+
 pub(crate) fn context_summary_candidate(
     chat_id: &str,
     tail_budget_tokens: usize,

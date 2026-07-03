@@ -243,6 +243,17 @@ where
                     }
                     Ok(None) => {
                         summary_span.finish("skipped", json!({ "reason": "no_candidate" }));
+                        if let Some(messages) =
+                            bounded_replay_after_summary_failure(&chat_id, budgets, &trace)
+                        {
+                            replay_messages = messages;
+                            provider_messages = build_provider_messages(
+                                &replay_messages,
+                                &model_message,
+                                &user_images,
+                                &prompt_context,
+                            );
+                        }
                     }
                     Err(error) => {
                         summary_span.fail(json!({ "message": error.as_str() }));
@@ -251,6 +262,17 @@ where
                             "failed",
                             json!({ "message": error.as_str() }),
                         );
+                        if let Some(messages) =
+                            bounded_replay_after_summary_failure(&chat_id, budgets, &trace)
+                        {
+                            replay_messages = messages;
+                            provider_messages = build_provider_messages(
+                                &replay_messages,
+                                &model_message,
+                                &user_images,
+                                &prompt_context,
+                            );
+                        }
                     }
                 }
             }
@@ -924,17 +946,62 @@ fn summary_budgets_for_model(
     trace: &trace::TraceRecorder,
 ) -> Option<context_compaction::SummaryBudgets> {
     match providers::model_context_estimate(provider_settings, model, reasoning_effort) {
-        Ok(estimate) => estimate.usable_input_tokens.map(|usable| {
-            context_compaction::SummaryBudgets::from_model_context(
-                usable,
-                estimate.raw_context_tokens,
-            )
-        }),
+        Ok(estimate) => {
+            if let Some(usable) = estimate.usable_input_tokens {
+                Some(context_compaction::SummaryBudgets::from_model_context(
+                    usable,
+                    estimate.raw_context_tokens,
+                ))
+            } else {
+                trace.warn(
+                    "context.summary.unknown_model_limit",
+                    "fallback",
+                    json!({
+                        "fallback_context_tokens": context_compaction::SummaryBudgets::unknown_context_fallback_tokens()
+                    }),
+                );
+                Some(context_compaction::SummaryBudgets::for_unknown_context())
+            }
+        }
         Err(error) => {
             trace.warn(
                 "context.summary.budget_unavailable",
                 "skipped",
                 json!({ "error_code": error.code(), "message": error.user_message() }),
+            );
+            None
+        }
+    }
+}
+
+fn bounded_replay_after_summary_failure(
+    chat_id: &str,
+    budgets: context_compaction::SummaryBudgets,
+    trace: &trace::TraceRecorder,
+) -> Option<Vec<Value>> {
+    let fallback_span = trace.start_span(
+        "context.summary.fallback_replay",
+        json!({
+            "chat_id": chat_id,
+            "tail_budget_tokens": budgets.tail_budget_tokens,
+            "summary_replay_budget_tokens": budgets.summary_replay_budget_tokens
+        }),
+    );
+    match store::replay_messages_with_summary_and_exact_tail_budget(
+        chat_id,
+        budgets.summary_replay_budget_tokens,
+        budgets.tail_budget_tokens,
+    ) {
+        Ok(messages) => {
+            fallback_span.finish("ok", json!({ "message_count": messages.len() }));
+            Some(messages)
+        }
+        Err(error) => {
+            fallback_span.fail(json!({ "message": error.as_str() }));
+            trace.warn(
+                "context.summary.fallback_replay_failed",
+                "failed",
+                json!({ "message": error.as_str() }),
             );
             None
         }
@@ -985,6 +1052,7 @@ async fn try_create_context_summary(
         return Ok(None);
     };
     let summary_messages = context_compaction::build_summary_messages(&candidate);
+    let summary_output_max_tokens = budgets.summary_output_max_tokens();
     let generation_id = ids::new_id("ctxgen");
     let prompt_estimate = providers::estimate_chat_context(
         &provider_settings,
@@ -993,7 +1061,7 @@ async fn try_create_context_summary(
             reasoning_effort: reasoning_effort.to_string(),
             messages: summary_messages.clone(),
             tools: Vec::new(),
-            max_output_tokens: Some(context_compaction::summary_output_max_tokens()),
+            max_output_tokens: Some(summary_output_max_tokens),
         },
     )
     .ok()
@@ -1008,7 +1076,7 @@ async fn try_create_context_summary(
             reasoning_effort: reasoning_effort.to_string(),
             messages: summary_messages,
             tools: Vec::new(),
-            max_output_tokens: Some(context_compaction::summary_output_max_tokens()),
+            max_output_tokens: Some(summary_output_max_tokens),
         },
         None,
         move |item| {
@@ -1048,7 +1116,7 @@ async fn try_create_context_summary(
         "completion_tokens": completion_estimate,
         "total_tokens": prompt_estimate.saturating_add(completion_estimate as u32),
         "source_message_count": candidate.source_message_count,
-        "summary_output_max_tokens": context_compaction::summary_output_max_tokens()
+        "summary_output_max_tokens": summary_output_max_tokens
     });
 
     store::insert_context_summary(

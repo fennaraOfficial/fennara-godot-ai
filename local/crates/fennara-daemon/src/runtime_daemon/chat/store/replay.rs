@@ -28,6 +28,29 @@ pub(super) fn replay_messages_with_summary_budget_from_conn(
     chat_id: &str,
     summary_replay_budget_tokens: Option<usize>,
 ) -> Result<Vec<Value>, String> {
+    replay_messages_with_budgets_from_conn(conn, chat_id, summary_replay_budget_tokens, None)
+}
+
+pub(super) fn replay_messages_with_summary_and_exact_tail_budget_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    summary_replay_budget_tokens: usize,
+    exact_tail_budget_tokens: usize,
+) -> Result<Vec<Value>, String> {
+    replay_messages_with_budgets_from_conn(
+        conn,
+        chat_id,
+        Some(summary_replay_budget_tokens),
+        Some(exact_tail_budget_tokens),
+    )
+}
+
+fn replay_messages_with_budgets_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    summary_replay_budget_tokens: Option<usize>,
+    exact_tail_budget_tokens: Option<usize>,
+) -> Result<Vec<Value>, String> {
     let mut replay_groups = replay_groups_from_conn(conn, chat_id)?;
     if let Some(summary_replay_budget_tokens) = summary_replay_budget_tokens {
         let summaries = context_compaction::load_context_summaries_from_conn(conn, chat_id)?;
@@ -36,6 +59,10 @@ pub(super) fn replay_messages_with_summary_budget_from_conn(
             &summaries,
             summary_replay_budget_tokens,
         );
+    }
+    if let Some(exact_tail_budget_tokens) = exact_tail_budget_tokens {
+        replay_groups =
+            context_compaction::apply_exact_tail_replay(replay_groups, exact_tail_budget_tokens);
     }
     let replay_plan = context_compaction::plan_replay(replay_groups);
     Ok(render_replay_plan(replay_plan))
