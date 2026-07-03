@@ -21,6 +21,11 @@ pub(super) struct StreamedAssistant {
     pub(super) reasoning_content: Option<String>,
 }
 
+pub(super) struct AssistantStreamError {
+    pub(super) error: LlmError,
+    pub(super) emitted_output: bool,
+}
+
 #[derive(Clone, Debug)]
 struct ProvisionalTool {
     name: String,
@@ -40,7 +45,7 @@ pub(super) async fn stream_one_assistant<S>(
     state: &AppState,
     chat_id: &str,
     trace: trace::TraceRecorder,
-) -> Result<Result<StreamedAssistant, LlmError>, S::Error>
+) -> Result<Result<StreamedAssistant, AssistantStreamError>, S::Error>
 where
     S: Sink<Message> + Unpin,
     S::Error: std::fmt::Debug,
@@ -88,6 +93,7 @@ where
     let mut usage: Option<Value> = None;
     let mut reasoning_content: Option<String> = None;
     let mut provisional_tools: HashMap<String, ProvisionalTool> = HashMap::new();
+    let mut emitted_output = false;
     let mut done_rx = done_rx;
     let completion = loop {
         tokio::select! {
@@ -97,6 +103,7 @@ where
                 };
                 match item {
                     StreamItem::Text { content, done } => {
+                        emitted_output = true;
                         send_json(
                             sender,
                             json!({
@@ -117,6 +124,7 @@ where
                         if clean_content.is_empty() {
                             continue;
                         }
+                        emitted_output = true;
                         reasoning_content = Some(clean_content.to_string());
                         send_json(
                             sender,
@@ -134,6 +142,7 @@ where
                         .await?;
                     }
                     StreamItem::FunctionCall { id, name, arguments, done } => {
+                        emitted_output = true;
                         let was_new = !provisional_tools.contains_key(&id);
                         let entry = provisional_tools.entry(id.clone()).or_insert_with(|| ProvisionalTool {
                             name: String::new(),
@@ -191,6 +200,7 @@ where
                         .await?;
                     }
                     StreamItem::FunctionCallError { id, name, arguments, message } => {
+                        emitted_output = true;
                         provisional_tools.insert(
                             id.clone(),
                             ProvisionalTool {
@@ -229,6 +239,7 @@ where
                         .await?;
                     }
                     StreamItem::Status { message } => {
+                        emitted_output = true;
                         send_json(
                             sender,
                             json!({
@@ -314,7 +325,10 @@ where
                 "Provider stream ended before this tool call finalized.",
             )
             .await?;
-            Ok(Err(error))
+            Ok(Err(AssistantStreamError {
+                error,
+                emitted_output,
+            }))
         }
     }
 }

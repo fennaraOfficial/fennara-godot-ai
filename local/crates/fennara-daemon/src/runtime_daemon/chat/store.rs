@@ -680,6 +680,22 @@ pub(crate) fn replay_messages_with_summary_and_exact_tail_budget(
     )
 }
 
+pub(crate) fn replay_messages_with_summary_and_exact_tail_budget_before_sequence(
+    chat_id: &str,
+    summary_replay_budget_tokens: usize,
+    exact_tail_budget_tokens: usize,
+    before_sequence: i64,
+) -> Result<Vec<Value>, String> {
+    let conn = connection()?;
+    replay::replay_messages_with_summary_and_exact_tail_budget_before_sequence_from_conn(
+        &conn,
+        chat_id,
+        summary_replay_budget_tokens,
+        exact_tail_budget_tokens,
+        before_sequence,
+    )
+}
+
 pub(crate) fn context_summary_candidate(
     chat_id: &str,
     tail_budget_tokens: usize,
@@ -687,6 +703,23 @@ pub(crate) fn context_summary_candidate(
     let conn = connection()?;
     let groups = replay::raw_summary_groups_from_conn(&conn, chat_id)?;
     let summaries = context_compaction::load_context_summaries_from_conn(&conn, chat_id)?;
+    Ok(context_compaction::select_next_summary_candidate(
+        &groups,
+        &summaries,
+        tail_budget_tokens,
+    ))
+}
+
+pub(crate) fn context_summary_candidate_before_sequence(
+    chat_id: &str,
+    tail_budget_tokens: usize,
+    before_sequence: i64,
+) -> Result<Option<SummaryCandidate>, String> {
+    let conn = connection()?;
+    let groups =
+        replay::raw_summary_groups_before_sequence_from_conn(&conn, chat_id, before_sequence)?;
+    let mut summaries = context_compaction::load_context_summaries_from_conn(&conn, chat_id)?;
+    summaries.retain(|summary| summary.covered_end_sequence < before_sequence);
     Ok(context_compaction::select_next_summary_candidate(
         &groups,
         &summaries,

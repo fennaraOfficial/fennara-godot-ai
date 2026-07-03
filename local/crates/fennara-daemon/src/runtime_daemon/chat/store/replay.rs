@@ -51,9 +51,45 @@ fn replay_messages_with_budgets_from_conn(
     summary_replay_budget_tokens: Option<usize>,
     exact_tail_budget_tokens: Option<usize>,
 ) -> Result<Vec<Value>, String> {
-    let mut replay_groups = replay_groups_from_conn(conn, chat_id)?;
+    replay_messages_with_budgets_before_sequence_from_conn(
+        conn,
+        chat_id,
+        summary_replay_budget_tokens,
+        exact_tail_budget_tokens,
+        None,
+    )
+}
+
+pub(super) fn replay_messages_with_summary_and_exact_tail_budget_before_sequence_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    summary_replay_budget_tokens: usize,
+    exact_tail_budget_tokens: usize,
+    before_sequence: i64,
+) -> Result<Vec<Value>, String> {
+    replay_messages_with_budgets_before_sequence_from_conn(
+        conn,
+        chat_id,
+        Some(summary_replay_budget_tokens),
+        Some(exact_tail_budget_tokens),
+        Some(before_sequence),
+    )
+}
+
+fn replay_messages_with_budgets_before_sequence_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    summary_replay_budget_tokens: Option<usize>,
+    exact_tail_budget_tokens: Option<usize>,
+    before_sequence: Option<i64>,
+) -> Result<Vec<Value>, String> {
+    let mut replay_groups =
+        replay_groups_before_sequence_from_conn(conn, chat_id, before_sequence)?;
     if let Some(summary_replay_budget_tokens) = summary_replay_budget_tokens {
-        let summaries = context_compaction::load_context_summaries_from_conn(conn, chat_id)?;
+        let mut summaries = context_compaction::load_context_summaries_from_conn(conn, chat_id)?;
+        if let Some(before_sequence) = before_sequence {
+            summaries.retain(|summary| summary.covered_end_sequence < before_sequence);
+        }
         replay_groups = context_compaction::apply_summary_replay(
             replay_groups,
             &summaries,
@@ -72,7 +108,15 @@ pub(super) fn replay_groups_from_conn(
     conn: &Connection,
     chat_id: &str,
 ) -> Result<Vec<ReplayGroup>, String> {
-    let replay_rows = replay_rows_from_conn(conn, chat_id)?;
+    replay_groups_before_sequence_from_conn(conn, chat_id, None)
+}
+
+fn replay_groups_before_sequence_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    before_sequence: Option<i64>,
+) -> Result<Vec<ReplayGroup>, String> {
+    let replay_rows = replay_rows_from_conn(conn, chat_id, before_sequence)?;
     Ok(context_compaction::sanitize_replay_groups(&replay_rows))
 }
 
@@ -80,14 +124,35 @@ pub(super) fn raw_summary_groups_from_conn(
     conn: &Connection,
     chat_id: &str,
 ) -> Result<Vec<ReplayGroup>, String> {
-    let summary_rows = summary_rows_from_conn(conn, chat_id)?;
+    raw_summary_groups_before_sequence_optional_from_conn(conn, chat_id, None)
+}
+
+pub(super) fn raw_summary_groups_before_sequence_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    before_sequence: i64,
+) -> Result<Vec<ReplayGroup>, String> {
+    raw_summary_groups_before_sequence_optional_from_conn(conn, chat_id, Some(before_sequence))
+}
+
+fn raw_summary_groups_before_sequence_optional_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    before_sequence: Option<i64>,
+) -> Result<Vec<ReplayGroup>, String> {
+    let summary_rows = summary_rows_from_conn(conn, chat_id, before_sequence)?;
     Ok(context_compaction::group_raw_summary_rows(&summary_rows))
 }
 
-fn replay_rows_from_conn(conn: &Connection, chat_id: &str) -> Result<Vec<ReplayRow>, String> {
+fn replay_rows_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    before_sequence: Option<i64>,
+) -> Result<Vec<ReplayRow>, String> {
     query_replay_rows(
         conn,
         chat_id,
+        before_sequence,
         "SELECT
                id,
                sequence,
@@ -127,6 +192,7 @@ fn replay_rows_from_conn(conn: &Connection, chat_id: &str) -> Result<Vec<ReplayR
                LEFT JOIN chat_tool_calls t ON t.id = m.tool_call_id
                LEFT JOIN chat_messages a ON a.id = t.assistant_message_id
                WHERE m.chat_id = ?1
+                 AND (?2 IS NULL OR m.sequence < ?2)
                  AND (
                    m.status = 'done'
                    OR (
@@ -142,10 +208,15 @@ fn replay_rows_from_conn(conn: &Connection, chat_id: &str) -> Result<Vec<ReplayR
     )
 }
 
-fn summary_rows_from_conn(conn: &Connection, chat_id: &str) -> Result<Vec<ReplayRow>, String> {
+fn summary_rows_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    before_sequence: Option<i64>,
+) -> Result<Vec<ReplayRow>, String> {
     query_replay_rows(
         conn,
         chat_id,
+        before_sequence,
         "SELECT
            m.id,
            m.sequence,
@@ -169,6 +240,7 @@ fn summary_rows_from_conn(conn: &Connection, chat_id: &str) -> Result<Vec<Replay
          FROM chat_messages m
          LEFT JOIN chat_tool_calls t ON t.id = m.tool_call_id
          WHERE m.chat_id = ?1
+           AND (?2 IS NULL OR m.sequence < ?2)
            AND m.role IN ('user', 'assistant', 'tool')
          ORDER BY m.sequence ASC",
     )
@@ -177,10 +249,13 @@ fn summary_rows_from_conn(conn: &Connection, chat_id: &str) -> Result<Vec<Replay
 fn query_replay_rows(
     conn: &Connection,
     chat_id: &str,
+    before_sequence: Option<i64>,
     sql: &str,
 ) -> Result<Vec<ReplayRow>, String> {
     let mut statement = conn.prepare(sql).map_err(to_store_error)?;
-    let mut rows = statement.query(params![chat_id]).map_err(to_store_error)?;
+    let mut rows = statement
+        .query(params![chat_id, before_sequence])
+        .map_err(to_store_error)?;
     let mut replay_rows = Vec::new();
 
     while let Some(row) = rows.next().map_err(to_store_error)? {

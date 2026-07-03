@@ -12,7 +12,7 @@ use super::super::{
 };
 use super::{
     CHAT_ALREADY_RUNNING_MESSAGE, cost, is_chat_cancelled,
-    publisher::stream_one_assistant,
+    publisher::{AssistantStreamError, stream_one_assistant},
     request::build_provider_messages,
     tool_loop::{self, ToolLoopResult},
     try_begin_chat_turn,
@@ -209,6 +209,7 @@ where
                     &chat_id,
                     budgets,
                     estimated,
+                    None,
                 )
                 .await
                 {
@@ -434,6 +435,8 @@ where
 
     let mut current_assistant = assistant_message;
     let mut current_generation = assistant_generation;
+    let mut overflow_retry_used = false;
+    let mut overflow_recovery_retry_sent = false;
 
     let (final_usage, final_text, stored_assistant) = loop {
         let streamed = stream_one_assistant(
@@ -452,11 +455,119 @@ where
 
         let streamed = match streamed {
             Ok(Ok(streamed)) => streamed,
-            Ok(Err(error)) => {
-                let error_text = format!("Request failed: {}", error.user_message());
+            Ok(Err(stream_error)) => {
+                if should_retry_context_overflow(&stream_error, overflow_retry_used) {
+                    overflow_retry_used = true;
+                    let recovery_span = trace.start_span(
+                        "context.overflow_recovery",
+                        json!({
+                            "chat_id": chat_id.as_str(),
+                            "before_sequence": user_message.sequence
+                        }),
+                    );
+                    if let Some(budgets) = summary_budgets {
+                        let retry_estimated_tokens = estimate_provider_input_tokens(
+                            &provider_settings,
+                            &model,
+                            &reasoning_effort,
+                            &provider_messages,
+                        )
+                        .unwrap_or(0);
+                        match try_create_context_summary(
+                            provider_settings.clone(),
+                            &model,
+                            &reasoning_effort,
+                            &chat_id,
+                            budgets,
+                            retry_estimated_tokens,
+                            Some(user_message.sequence),
+                        )
+                        .await
+                        {
+                            Ok(Some(summary)) => {
+                                trace.event_status(
+                                    "context.overflow_recovery.summary",
+                                    "ok",
+                                    json!({
+                                        "summary_id": summary.id,
+                                        "covered_start_sequence": summary.covered_start_sequence,
+                                        "covered_end_sequence": summary.covered_end_sequence
+                                    }),
+                                );
+                            }
+                            Ok(None) => {
+                                trace.event_status(
+                                    "context.overflow_recovery.summary",
+                                    "skipped",
+                                    json!({ "reason": "no_candidate" }),
+                                );
+                            }
+                            Err(error) => {
+                                trace.event_status(
+                                    "context.overflow_recovery.summary",
+                                    "failed",
+                                    json!({ "message": error.as_str() }),
+                                );
+                            }
+                        }
+                        if let Some(messages) = bounded_replay_after_summary_failure_before_sequence(
+                            &chat_id,
+                            budgets,
+                            user_message.sequence,
+                            &trace,
+                        ) {
+                            replay_messages = messages;
+                            provider_messages = build_provider_messages(
+                                &replay_messages,
+                                &model_message,
+                                &user_images,
+                                &prompt_context,
+                            );
+                            recovery_span.finish(
+                                "retrying",
+                                json!({ "replay_message_count": replay_messages.len() }),
+                            );
+                            overflow_recovery_retry_sent = true;
+                            continue;
+                        }
+                    } else {
+                        trace.event_status(
+                            "context.overflow_recovery.summary",
+                            "skipped",
+                            json!({ "reason": "budget_unavailable" }),
+                        );
+                    }
+                    recovery_span.finish("unavailable", json!({}));
+                }
+                let error = stream_error.error;
+                let user_error_message =
+                    generation_failure_user_message(&error, overflow_recovery_retry_sent);
+                if error.code() == "context_overflow" {
+                    trace.warn(
+                        "context.overflow_recovery.exhausted",
+                        "failed",
+                        json!({
+                            "recovery_retry_sent": overflow_recovery_retry_sent,
+                            "model": model.as_str(),
+                            "estimated_input_tokens": estimate_provider_input_tokens(
+                                &provider_settings,
+                                &model,
+                                &reasoning_effort,
+                                &provider_messages,
+                            ),
+                            "provider_usable_input_tokens": summary_budgets
+                                .map(|budgets| budgets.provider_usable_input_tokens),
+                            "tail_budget_tokens": summary_budgets
+                                .map(|budgets| budgets.tail_budget_tokens),
+                            "summary_replay_budget_tokens": summary_budgets
+                                .map(|budgets| budgets.summary_replay_budget_tokens),
+                        }),
+                    );
+                }
+                let error_text = format!("Request failed: {user_error_message}");
                 let error_json = json!({
                     "code": error.code(),
-                    "message": error.user_message()
+                    "message": user_error_message.as_str()
                 });
                 let _ =
                     store::finish_generation(&current_generation.id, "failed", Some(&error_json));
@@ -490,7 +601,7 @@ where
                 )
                 .await?;
                 send_chat_updated(sender, request_id.clone(), &chat_id).await?;
-                return send_error(sender, request_id, error.code(), &error.user_message()).await;
+                return send_error(sender, request_id, error.code(), &user_error_message).await;
             }
             Err(error) => return Err(error),
         };
@@ -979,19 +1090,53 @@ fn bounded_replay_after_summary_failure(
     budgets: context_compaction::SummaryBudgets,
     trace: &trace::TraceRecorder,
 ) -> Option<Vec<Value>> {
+    bounded_replay_after_summary_failure_before_sequence_optional(chat_id, budgets, None, trace)
+}
+
+fn bounded_replay_after_summary_failure_before_sequence(
+    chat_id: &str,
+    budgets: context_compaction::SummaryBudgets,
+    before_sequence: i64,
+    trace: &trace::TraceRecorder,
+) -> Option<Vec<Value>> {
+    bounded_replay_after_summary_failure_before_sequence_optional(
+        chat_id,
+        budgets,
+        Some(before_sequence),
+        trace,
+    )
+}
+
+fn bounded_replay_after_summary_failure_before_sequence_optional(
+    chat_id: &str,
+    budgets: context_compaction::SummaryBudgets,
+    before_sequence: Option<i64>,
+    trace: &trace::TraceRecorder,
+) -> Option<Vec<Value>> {
     let fallback_span = trace.start_span(
         "context.summary.fallback_replay",
         json!({
             "chat_id": chat_id,
+            "before_sequence": before_sequence,
             "tail_budget_tokens": budgets.tail_budget_tokens,
             "summary_replay_budget_tokens": budgets.summary_replay_budget_tokens
         }),
     );
-    match store::replay_messages_with_summary_and_exact_tail_budget(
-        chat_id,
-        budgets.summary_replay_budget_tokens,
-        budgets.tail_budget_tokens,
-    ) {
+    let replay = if let Some(before_sequence) = before_sequence {
+        store::replay_messages_with_summary_and_exact_tail_budget_before_sequence(
+            chat_id,
+            budgets.summary_replay_budget_tokens,
+            budgets.tail_budget_tokens,
+            before_sequence,
+        )
+    } else {
+        store::replay_messages_with_summary_and_exact_tail_budget(
+            chat_id,
+            budgets.summary_replay_budget_tokens,
+            budgets.tail_budget_tokens,
+        )
+    };
+    match replay {
         Ok(messages) => {
             fallback_span.finish("ok", json!({ "message_count": messages.len() }));
             Some(messages)
@@ -1006,6 +1151,25 @@ fn bounded_replay_after_summary_failure(
             None
         }
     }
+}
+
+fn should_retry_context_overflow(error: &AssistantStreamError, retry_used: bool) -> bool {
+    !retry_used && !error.emitted_output && error.error.code() == "context_overflow"
+}
+
+fn generation_failure_user_message(
+    error: &providers::LlmError,
+    overflow_recovery_retry_sent: bool,
+) -> String {
+    if error.code() != "context_overflow" || !overflow_recovery_retry_sent {
+        return error.user_message();
+    }
+
+    format!(
+        "{}\n\nProvider detail: {}",
+        "The recent conversation is still larger than the selected model's context window after Fennara summarized older history and retried. Use a model with a larger context length, reduce the current message/context snippets/images, or split/clear the recent output.",
+        error.user_message()
+    )
 }
 
 fn replay_messages_for_budget(
@@ -1046,9 +1210,18 @@ async fn try_create_context_summary(
     chat_id: &str,
     budgets: context_compaction::SummaryBudgets,
     trigger_estimated_tokens: u32,
+    before_sequence: Option<i64>,
 ) -> Result<Option<context_compaction::ContextSummaryChunk>, String> {
-    let Some(candidate) = store::context_summary_candidate(chat_id, budgets.tail_budget_tokens)?
-    else {
+    let candidate = if let Some(before_sequence) = before_sequence {
+        store::context_summary_candidate_before_sequence(
+            chat_id,
+            budgets.tail_budget_tokens,
+            before_sequence,
+        )?
+    } else {
+        store::context_summary_candidate(chat_id, budgets.tail_budget_tokens)?
+    };
+    let Some(candidate) = candidate else {
         return Ok(None);
     };
     let summary_messages = context_compaction::build_summary_messages(&candidate);
@@ -1067,6 +1240,14 @@ async fn try_create_context_summary(
     .ok()
     .map(|estimate| estimate.estimated_input_tokens)
     .unwrap_or(0);
+    let available_prompt_tokens = budgets
+        .provider_usable_input_tokens
+        .saturating_sub(summary_output_max_tokens as usize);
+    if (prompt_estimate as usize) > available_prompt_tokens {
+        return Err(format!(
+            "Summary prompt is estimated at {prompt_estimate} input tokens, which exceeds the summary prompt budget of {available_prompt_tokens} tokens."
+        ));
+    }
     let usage_slot = Arc::new(Mutex::new(None::<Value>));
     let usage_for_stream = Arc::clone(&usage_slot);
     let completion = providers::stream_chat(
@@ -1231,5 +1412,31 @@ mod tests {
         assert!(!is_clean_context_summary_finish_reason(
             &providers::FinishReason::Unknown("weird".to_string())
         ));
+    }
+
+    #[test]
+    fn context_overflow_after_recovery_gets_specific_user_message() {
+        let error = providers::LlmError::ContextOverflow {
+            provider: "local".to_string(),
+            message: "estimated 100 input tokens, usable 80".to_string(),
+        };
+
+        let message = generation_failure_user_message(&error, true);
+
+        assert!(message.contains("after Fennara summarized older history and retried"));
+        assert!(message.contains("current message/context snippets/images"));
+        assert!(message.contains("Provider detail: estimated 100 input tokens, usable 80"));
+    }
+
+    #[test]
+    fn context_overflow_without_recovery_keeps_provider_message() {
+        let error = providers::LlmError::ContextOverflow {
+            provider: "local".to_string(),
+            message: "estimated 100 input tokens, usable 80".to_string(),
+        };
+
+        let message = generation_failure_user_message(&error, false);
+
+        assert_eq!(message, "estimated 100 input tokens, usable 80");
     }
 }
