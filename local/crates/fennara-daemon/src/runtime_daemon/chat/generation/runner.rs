@@ -1,17 +1,18 @@
 use axum::extract::ws::Message;
 use futures_util::Sink;
 use serde_json::{Value, json};
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
+use tokio::sync::Mutex;
 
 use crate::runtime_daemon::{godot_bridge, state::AppState};
 
 use super::super::{
-    BoundChatProject, ClientRequest, context, images, prompt, providers, send_chat_list,
-    send_chat_updated, send_error, send_json, settings, store, trace,
+    BoundChatProject, ClientRequest, context, context_compaction, ids, images, prompt, providers,
+    send_chat_list, send_chat_updated, send_error, send_json, settings, store, tools, trace,
 };
 use super::{
     CHAT_ALREADY_RUNNING_MESSAGE, cost, is_chat_cancelled,
-    publisher::stream_one_assistant,
+    publisher::{AssistantStreamError, stream_one_assistant},
     request::build_provider_messages,
     tool_loop::{self, ToolLoopResult},
     try_begin_chat_turn,
@@ -128,8 +129,32 @@ where
     }
     state.cancelled_chats.write().await.remove(&chat_id);
     *active_chat_id = Some(chat_id.clone());
+    let active_project = state
+        .projects
+        .read()
+        .await
+        .get(&bound_project.session_id)
+        .cloned();
+    let prompt_context = prompt::PromptRuntimeContext::from_turn(
+        settings.approval_mode,
+        scope,
+        active_project.as_ref(),
+    );
+    let mut provider_settings = providers::settings_from_chat(&settings);
+    if let Err(error) =
+        providers::hydrate_selected_local_model_limits(&mut provider_settings, &model).await
+    {
+        trace.warn(
+            "context.local_model_limits_unavailable",
+            "skipped",
+            json!({ "model": model.as_str(), "message": error }),
+        );
+    }
+    let summary_budgets =
+        summary_budgets_for_model(&provider_settings, &model, &reasoning_effort, &trace);
+
     let replay_span = trace.start_span("prompt.replay", json!({ "chat_id": chat_id.as_str() }));
-    let replay_messages = match store::replay_messages(&chat_id) {
+    let mut replay_messages = match replay_messages_for_budget(&chat_id, summary_budgets) {
         Ok(messages) => {
             replay_span.finish("ok", json!({ "message_count": messages.len() }));
             messages
@@ -144,17 +169,6 @@ where
             return send_error(sender, request_id, "chat_replay_failed", &error).await;
         }
     };
-    let active_project = state
-        .projects
-        .read()
-        .await
-        .get(&bound_project.session_id)
-        .cloned();
-    let prompt_context = prompt::PromptRuntimeContext::from_turn(
-        settings.approval_mode,
-        scope,
-        active_project.as_ref(),
-    );
     let prompt_span = trace.start_span(
         "prompt.build",
         json!({
@@ -169,6 +183,125 @@ where
         &user_images,
         &prompt_context,
     );
+    if let Some(budgets) = summary_budgets {
+        let estimated = estimate_provider_input_tokens(
+            &provider_settings,
+            &model,
+            &reasoning_effort,
+            &provider_messages,
+        );
+        if let Some(estimated) = estimated {
+            if (estimated as usize) > budgets.summary_trigger_tokens {
+                let summary_span = trace.start_span(
+                    "context.summary",
+                    json!({
+                        "chat_id": chat_id.as_str(),
+                        "estimated_input_tokens": estimated,
+                        "summary_trigger_tokens": budgets.summary_trigger_tokens,
+                        "tail_budget_tokens": budgets.tail_budget_tokens,
+                        "summary_replay_budget_tokens": budgets.summary_replay_budget_tokens
+                    }),
+                );
+                send_context_compaction_status(sender, request_id.clone(), &chat_id, "running")
+                    .await?;
+                match try_create_context_summary(
+                    provider_settings.clone(),
+                    &model,
+                    &reasoning_effort,
+                    &chat_id,
+                    budgets,
+                    estimated,
+                    None,
+                )
+                .await
+                {
+                    Ok(Some(summary)) => {
+                        summary_span.finish(
+                            "ok",
+                            json!({
+                                "summary_id": summary.id,
+                                "covered_start_sequence": summary.covered_start_sequence,
+                                "covered_end_sequence": summary.covered_end_sequence,
+                                "source_message_count": summary.source_message_count
+                            }),
+                        );
+                        send_context_compaction_status(
+                            sender,
+                            request_id.clone(),
+                            &chat_id,
+                            "done",
+                        )
+                        .await?;
+                        replay_messages = match replay_messages_for_budget(&chat_id, Some(budgets))
+                        {
+                            Ok(messages) => messages,
+                            Err(error) => {
+                                trace.warn(
+                                    "context.summary.replay_reload_failed",
+                                    "failed",
+                                    json!({ "message": error.as_str() }),
+                                );
+                                replay_messages
+                            }
+                        };
+                        provider_messages = build_provider_messages(
+                            &replay_messages,
+                            &model_message,
+                            &user_images,
+                            &prompt_context,
+                        );
+                    }
+                    Ok(None) => {
+                        summary_span.finish("skipped", json!({ "reason": "no_candidate" }));
+                        send_context_compaction_status(
+                            sender,
+                            request_id.clone(),
+                            &chat_id,
+                            "skipped",
+                        )
+                        .await?;
+                        if let Some(messages) =
+                            bounded_replay_after_summary_failure(&chat_id, budgets, &trace)
+                        {
+                            replay_messages = messages;
+                            provider_messages = build_provider_messages(
+                                &replay_messages,
+                                &model_message,
+                                &user_images,
+                                &prompt_context,
+                            );
+                        }
+                    }
+                    Err(error) => {
+                        summary_span.fail(json!({ "message": error.as_str() }));
+                        trace.warn(
+                            "context.summary.failed",
+                            "failed",
+                            json!({ "message": error.as_str() }),
+                        );
+                        send_context_compaction_status(
+                            sender,
+                            request_id.clone(),
+                            &chat_id,
+                            "failed",
+                        )
+                        .await?;
+                        if let Some(messages) =
+                            bounded_replay_after_summary_failure(&chat_id, budgets, &trace)
+                        {
+                            replay_messages = messages;
+                            provider_messages = build_provider_messages(
+                                &replay_messages,
+                                &model_message,
+                                &user_images,
+                                &prompt_context,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
     prompt_span.finish(
         "ok",
         json!({
@@ -325,7 +458,8 @@ where
 
     let mut current_assistant = assistant_message;
     let mut current_generation = assistant_generation;
-    let provider_settings = providers::settings_from_chat(&settings);
+    let mut overflow_retry_used = false;
+    let mut overflow_recovery_retry_sent = false;
 
     let (final_usage, final_text, stored_assistant) = loop {
         let streamed = stream_one_assistant(
@@ -344,11 +478,147 @@ where
 
         let streamed = match streamed {
             Ok(Ok(streamed)) => streamed,
-            Ok(Err(error)) => {
-                let error_text = format!("Request failed: {}", error.user_message());
+            Ok(Err(stream_error)) => {
+                if should_retry_context_overflow(&stream_error, overflow_retry_used) {
+                    overflow_retry_used = true;
+                    let recovery_span = trace.start_span(
+                        "context.overflow_recovery",
+                        json!({
+                            "chat_id": chat_id.as_str(),
+                            "before_sequence": user_message.sequence
+                        }),
+                    );
+                    if let Some(budgets) = summary_budgets {
+                        let retry_estimated_tokens = estimate_provider_input_tokens(
+                            &provider_settings,
+                            &model,
+                            &reasoning_effort,
+                            &provider_messages,
+                        )
+                        .unwrap_or(0);
+                        send_context_compaction_status(
+                            sender,
+                            request_id.clone(),
+                            &chat_id,
+                            "running",
+                        )
+                        .await?;
+                        match try_create_context_summary(
+                            provider_settings.clone(),
+                            &model,
+                            &reasoning_effort,
+                            &chat_id,
+                            budgets,
+                            retry_estimated_tokens,
+                            Some(user_message.sequence),
+                        )
+                        .await
+                        {
+                            Ok(Some(summary)) => {
+                                trace.event_status(
+                                    "context.overflow_recovery.summary",
+                                    "ok",
+                                    json!({
+                                        "summary_id": summary.id,
+                                        "covered_start_sequence": summary.covered_start_sequence,
+                                        "covered_end_sequence": summary.covered_end_sequence
+                                    }),
+                                );
+                                send_context_compaction_status(
+                                    sender,
+                                    request_id.clone(),
+                                    &chat_id,
+                                    "done",
+                                )
+                                .await?;
+                            }
+                            Ok(None) => {
+                                trace.event_status(
+                                    "context.overflow_recovery.summary",
+                                    "skipped",
+                                    json!({ "reason": "no_candidate" }),
+                                );
+                                send_context_compaction_status(
+                                    sender,
+                                    request_id.clone(),
+                                    &chat_id,
+                                    "skipped",
+                                )
+                                .await?;
+                            }
+                            Err(error) => {
+                                trace.event_status(
+                                    "context.overflow_recovery.summary",
+                                    "failed",
+                                    json!({ "message": error.as_str() }),
+                                );
+                                send_context_compaction_status(
+                                    sender,
+                                    request_id.clone(),
+                                    &chat_id,
+                                    "failed",
+                                )
+                                .await?;
+                            }
+                        }
+                        if let Some(messages) = bounded_replay_after_summary_failure_before_sequence(
+                            &chat_id,
+                            budgets,
+                            user_message.sequence,
+                            &trace,
+                        ) {
+                            replay_messages = messages;
+                            provider_messages = build_provider_messages(
+                                &replay_messages,
+                                &model_message,
+                                &user_images,
+                                &prompt_context,
+                            );
+                            recovery_span.finish(
+                                "retrying",
+                                json!({ "replay_message_count": replay_messages.len() }),
+                            );
+                            overflow_recovery_retry_sent = true;
+                            continue;
+                        }
+                    } else {
+                        trace.event_status(
+                            "context.overflow_recovery.summary",
+                            "skipped",
+                            json!({ "reason": "budget_unavailable" }),
+                        );
+                    }
+                    recovery_span.finish("unavailable", json!({}));
+                }
+                let error = stream_error.error;
+                let user_error_message =
+                    generation_failure_user_message(&error, overflow_recovery_retry_sent);
+                if error.code() == "context_overflow" {
+                    trace.warn(
+                        "context.overflow_recovery.exhausted",
+                        "failed",
+                        json!({
+                            "recovery_retry_sent": overflow_recovery_retry_sent,
+                            "model": model.as_str(),
+                            "estimated_input_tokens": estimate_provider_input_tokens(
+                                &provider_settings,
+                                &model,
+                                &reasoning_effort,
+                                &provider_messages,
+                            ),
+                            "provider_usable_input_tokens": summary_budgets
+                                .map(|budgets| budgets.provider_usable_input_tokens),
+                            "tail_budget_tokens": summary_budgets
+                                .map(|budgets| budgets.tail_budget_tokens),
+                            "summary_replay_budget_tokens": summary_budgets
+                                .map(|budgets| budgets.summary_replay_budget_tokens),
+                        }),
+                    );
+                }
+                let error_text = format!("Request failed: {user_error_message}");
                 let error_json = json!({
                     "code": error.code(),
-                    "message": error.user_message()
+                    "message": user_error_message.as_str()
                 });
                 let _ =
                     store::finish_generation(&current_generation.id, "failed", Some(&error_json));
@@ -382,7 +652,7 @@ where
                 )
                 .await?;
                 send_chat_updated(sender, request_id.clone(), &chat_id).await?;
-                return send_error(sender, request_id, error.code(), &error.user_message()).await;
+                return send_error(sender, request_id, error.code(), &user_error_message).await;
             }
             Err(error) => return Err(error),
         };
@@ -831,6 +1101,310 @@ fn provider_for_model(model: &str) -> &str {
     model.split('/').next().unwrap_or("chat").trim()
 }
 
+fn summary_budgets_for_model(
+    provider_settings: &providers::ProviderSettings,
+    model: &str,
+    reasoning_effort: &str,
+    trace: &trace::TraceRecorder,
+) -> Option<context_compaction::SummaryBudgets> {
+    match providers::model_context_estimate(provider_settings, model, reasoning_effort) {
+        Ok(estimate) => {
+            if let Some(usable) = estimate.usable_input_tokens {
+                Some(context_compaction::SummaryBudgets::from_model_context(
+                    usable,
+                    estimate.raw_context_tokens,
+                ))
+            } else {
+                let local_unknown_context = is_unknown_local_context_model(model);
+                let fallback_context_tokens = if local_unknown_context {
+                    context_compaction::SummaryBudgets::unknown_local_context_fallback_tokens()
+                } else {
+                    context_compaction::SummaryBudgets::unknown_context_fallback_tokens()
+                };
+                trace.warn(
+                    "context.summary.unknown_model_limit",
+                    "fallback",
+                    json!({
+                        "fallback_context_tokens": fallback_context_tokens,
+                        "local_unknown_context": local_unknown_context
+                    }),
+                );
+                Some(if local_unknown_context {
+                    context_compaction::SummaryBudgets::for_unknown_local_context()
+                } else {
+                    context_compaction::SummaryBudgets::for_unknown_context()
+                })
+            }
+        }
+        Err(error) => {
+            trace.warn(
+                "context.summary.budget_unavailable",
+                "skipped",
+                json!({ "error_code": error.code(), "message": error.user_message() }),
+            );
+            None
+        }
+    }
+}
+
+fn is_unknown_local_context_model(model: &str) -> bool {
+    matches!(provider_for_model(model), "ollama" | "local" | "lmstudio")
+}
+
+fn bounded_replay_after_summary_failure(
+    chat_id: &str,
+    budgets: context_compaction::SummaryBudgets,
+    trace: &trace::TraceRecorder,
+) -> Option<Vec<Value>> {
+    bounded_replay_after_summary_failure_before_sequence_optional(chat_id, budgets, None, trace)
+}
+
+fn bounded_replay_after_summary_failure_before_sequence(
+    chat_id: &str,
+    budgets: context_compaction::SummaryBudgets,
+    before_sequence: i64,
+    trace: &trace::TraceRecorder,
+) -> Option<Vec<Value>> {
+    bounded_replay_after_summary_failure_before_sequence_optional(
+        chat_id,
+        budgets,
+        Some(before_sequence),
+        trace,
+    )
+}
+
+fn bounded_replay_after_summary_failure_before_sequence_optional(
+    chat_id: &str,
+    budgets: context_compaction::SummaryBudgets,
+    before_sequence: Option<i64>,
+    trace: &trace::TraceRecorder,
+) -> Option<Vec<Value>> {
+    let fallback_span = trace.start_span(
+        "context.summary.fallback_replay",
+        json!({
+            "chat_id": chat_id,
+            "before_sequence": before_sequence,
+            "tail_budget_tokens": budgets.tail_budget_tokens,
+            "summary_replay_budget_tokens": budgets.summary_replay_budget_tokens
+        }),
+    );
+    let replay = if let Some(before_sequence) = before_sequence {
+        store::replay_messages_with_summary_and_exact_tail_budget_before_sequence(
+            chat_id,
+            budgets.summary_replay_budget_tokens,
+            budgets.tail_budget_tokens,
+            before_sequence,
+        )
+    } else {
+        store::replay_messages_with_summary_and_exact_tail_budget(
+            chat_id,
+            budgets.summary_replay_budget_tokens,
+            budgets.tail_budget_tokens,
+        )
+    };
+    match replay {
+        Ok(messages) => {
+            fallback_span.finish("ok", json!({ "message_count": messages.len() }));
+            Some(messages)
+        }
+        Err(error) => {
+            fallback_span.fail(json!({ "message": error.as_str() }));
+            trace.warn(
+                "context.summary.fallback_replay_failed",
+                "failed",
+                json!({ "message": error.as_str() }),
+            );
+            None
+        }
+    }
+}
+
+fn should_retry_context_overflow(error: &AssistantStreamError, retry_used: bool) -> bool {
+    !retry_used && !error.emitted_output && error.error.code() == "context_overflow"
+}
+
+fn generation_failure_user_message(
+    error: &providers::LlmError,
+    overflow_recovery_retry_sent: bool,
+) -> String {
+    if error.code() != "context_overflow" || !overflow_recovery_retry_sent {
+        return error.user_message();
+    }
+
+    format!(
+        "{}\n\nProvider detail: {}",
+        "The recent conversation is still larger than the selected model's context window after Fennara summarized older history and retried. Use a model with a larger context length, reduce the current message/context snippets/images, or split/clear the recent output.",
+        error.user_message()
+    )
+}
+
+fn replay_messages_for_budget(
+    chat_id: &str,
+    budgets: Option<context_compaction::SummaryBudgets>,
+) -> Result<Vec<Value>, String> {
+    if let Some(budgets) = budgets {
+        store::replay_messages_with_summary_budget(chat_id, budgets.summary_replay_budget_tokens)
+    } else {
+        store::replay_messages(chat_id)
+    }
+}
+
+fn estimate_provider_input_tokens(
+    provider_settings: &providers::ProviderSettings,
+    model: &str,
+    reasoning_effort: &str,
+    provider_messages: &[Value],
+) -> Option<u32> {
+    providers::estimate_chat_context(
+        provider_settings,
+        &providers::ChatRequest {
+            model: model.to_string(),
+            reasoning_effort: reasoning_effort.to_string(),
+            messages: provider_messages.to_vec(),
+            tools: tools::definitions(),
+            max_output_tokens: None,
+        },
+    )
+    .ok()
+    .map(|estimate| estimate.estimated_input_tokens)
+}
+
+async fn send_context_compaction_status<S>(
+    sender: &mut S,
+    request_id: Option<String>,
+    chat_id: &str,
+    status: &str,
+) -> Result<(), S::Error>
+where
+    S: Sink<Message> + Unpin,
+    S::Error: std::fmt::Debug,
+{
+    send_json(
+        sender,
+        json!({
+            "type": "chat_context_compaction",
+            "request_id": request_id,
+            "chat_id": chat_id,
+            "status": status
+        }),
+    )
+    .await
+}
+
+async fn try_create_context_summary(
+    provider_settings: providers::ProviderSettings,
+    model: &str,
+    reasoning_effort: &str,
+    chat_id: &str,
+    budgets: context_compaction::SummaryBudgets,
+    trigger_estimated_tokens: u32,
+    before_sequence: Option<i64>,
+) -> Result<Option<context_compaction::ContextSummaryChunk>, String> {
+    let candidate = if let Some(before_sequence) = before_sequence {
+        store::context_summary_candidate_before_sequence(
+            chat_id,
+            budgets.tail_budget_tokens,
+            before_sequence,
+        )?
+    } else {
+        store::context_summary_candidate(chat_id, budgets.tail_budget_tokens)?
+    };
+    let Some(candidate) = candidate else {
+        return Ok(None);
+    };
+    let summary_messages = context_compaction::build_summary_messages(&candidate);
+    let summary_output_max_tokens = budgets.summary_output_max_tokens();
+    let generation_id = ids::new_id("ctxgen");
+    let prompt_estimate = providers::estimate_chat_context(
+        &provider_settings,
+        &providers::ChatRequest {
+            model: model.to_string(),
+            reasoning_effort: reasoning_effort.to_string(),
+            messages: summary_messages.clone(),
+            tools: Vec::new(),
+            max_output_tokens: Some(summary_output_max_tokens),
+        },
+    )
+    .ok()
+    .map(|estimate| estimate.estimated_input_tokens)
+    .unwrap_or(0);
+    let available_prompt_tokens = budgets
+        .provider_usable_input_tokens
+        .saturating_sub(summary_output_max_tokens as usize);
+    if (prompt_estimate as usize) > available_prompt_tokens {
+        return Err(format!(
+            "Summary prompt is estimated at {prompt_estimate} input tokens, which exceeds the summary prompt budget of {available_prompt_tokens} tokens."
+        ));
+    }
+    let usage_slot = Arc::new(Mutex::new(None::<Value>));
+    let usage_for_stream = Arc::clone(&usage_slot);
+    let completion = providers::stream_chat(
+        &provider_settings,
+        &providers::ChatRequest {
+            model: model.to_string(),
+            reasoning_effort: reasoning_effort.to_string(),
+            messages: summary_messages,
+            tools: Vec::new(),
+            max_output_tokens: Some(summary_output_max_tokens),
+        },
+        None,
+        move |item| {
+            let usage_for_stream = Arc::clone(&usage_for_stream);
+            async move {
+                if let providers::StreamItem::Usage(usage) = item {
+                    *usage_for_stream.lock().await = Some(usage);
+                }
+                Ok(true)
+            }
+        },
+    )
+    .await
+    .map_err(|error| error.user_message())?;
+
+    if !is_clean_context_summary_finish_reason(&completion.finish_reason) {
+        return Err(format!(
+            "Summary model did not complete cleanly: {:?}",
+            completion.finish_reason
+        ));
+    }
+    let summary_markdown = completion.content.trim();
+    if summary_markdown.is_empty() {
+        return Err("Summary model returned an empty summary.".to_string());
+    }
+    let usage = usage_slot.lock().await.clone();
+    let completion_estimate = summary_markdown.len().max(1).div_ceil(4);
+    let metadata = json!({
+        "trigger_estimated_tokens": trigger_estimated_tokens,
+        "provider_usable_input_tokens": budgets.provider_usable_input_tokens,
+        "raw_context_tokens": budgets.raw_context_tokens,
+        "compaction_working_budget": budgets.compaction_working_budget,
+        "summary_trigger_tokens": budgets.summary_trigger_tokens,
+        "tail_budget_tokens": budgets.tail_budget_tokens,
+        "summary_replay_budget_tokens": budgets.summary_replay_budget_tokens,
+        "summary_prompt_tokens": prompt_estimate,
+        "completion_tokens": completion_estimate,
+        "total_tokens": prompt_estimate.saturating_add(completion_estimate as u32),
+        "source_message_count": candidate.source_message_count,
+        "summary_output_max_tokens": summary_output_max_tokens
+    });
+
+    store::insert_context_summary(
+        chat_id,
+        &generation_id,
+        summary_markdown,
+        &candidate,
+        model,
+        reasoning_effort,
+        usage.as_ref(),
+        &metadata,
+    )
+    .map(Some)
+}
+
+fn is_clean_context_summary_finish_reason(reason: &providers::FinishReason) -> bool {
+    matches!(reason, providers::FinishReason::Stop)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -904,5 +1478,53 @@ mod tests {
 
         assert_eq!(tool_calls[0]["id"], "call_internal");
         assert!(tool_calls[0].get("provider_tool_call_id").is_none());
+    }
+
+    #[test]
+    fn context_summary_finish_reason_must_be_clean_stop() {
+        assert!(is_clean_context_summary_finish_reason(
+            &providers::FinishReason::Stop
+        ));
+        assert!(!is_clean_context_summary_finish_reason(
+            &providers::FinishReason::Length
+        ));
+        assert!(!is_clean_context_summary_finish_reason(
+            &providers::FinishReason::ContentFilter
+        ));
+        assert!(!is_clean_context_summary_finish_reason(
+            &providers::FinishReason::ToolCalls
+        ));
+        assert!(!is_clean_context_summary_finish_reason(
+            &providers::FinishReason::Cancelled
+        ));
+        assert!(!is_clean_context_summary_finish_reason(
+            &providers::FinishReason::Unknown("weird".to_string())
+        ));
+    }
+
+    #[test]
+    fn context_overflow_after_recovery_gets_specific_user_message() {
+        let error = providers::LlmError::ContextOverflow {
+            provider: "local".to_string(),
+            message: "estimated 100 input tokens, usable 80".to_string(),
+        };
+
+        let message = generation_failure_user_message(&error, true);
+
+        assert!(message.contains("after Fennara summarized older history and retried"));
+        assert!(message.contains("current message/context snippets/images"));
+        assert!(message.contains("Provider detail: estimated 100 input tokens, usable 80"));
+    }
+
+    #[test]
+    fn context_overflow_without_recovery_keeps_provider_message() {
+        let error = providers::LlmError::ContextOverflow {
+            provider: "local".to_string(),
+            message: "estimated 100 input tokens, usable 80".to_string(),
+        };
+
+        let message = generation_failure_user_message(&error, false);
+
+        assert_eq!(message, "estimated 100 input tokens, usable 80");
     }
 }

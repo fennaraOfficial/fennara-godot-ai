@@ -127,6 +127,7 @@ pub(crate) async fn execute(
     state: &AppState,
     chat_id: &str,
     session_id: &str,
+    tool_call_id: &str,
     project_root: Option<&str>,
     name: &str,
     arguments: &Value,
@@ -137,7 +138,15 @@ pub(crate) async fn execute(
     }
 
     if is_daemon_local_tool(name) {
-        return exec_command::execute(state, chat_id, project_root, arguments).await;
+        return exec_command::execute(
+            state,
+            chat_id,
+            session_id,
+            tool_call_id,
+            project_root,
+            arguments,
+        )
+        .await;
     }
 
     let response = godot_bridge::call_tool_value_for_session_traced(

@@ -22,10 +22,11 @@ mod types;
 pub(crate) mod usage;
 mod zai;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use serde::Serialize;
+use serde_json::{Value, json};
 
 use super::settings::ChatSettings;
 use super::{auth, trace::TraceRecorder};
@@ -92,6 +93,7 @@ pub(crate) fn settings_from_chat(settings: &ChatSettings) -> ProviderSettings {
         lmstudio_base_url: settings
             .provider_base_url(types::ProviderId::LMSTUDIO, lmstudio::DEFAULT_BASE_URL),
         custom_models: settings.custom_models.clone(),
+        local_model_limits: local_model_limits_from_settings(&settings.local_model_context_lengths),
     }
 }
 
@@ -407,6 +409,42 @@ where
     Ok(completion)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ChatContextEstimate {
+    pub(crate) estimated_input_tokens: u32,
+    pub(crate) usable_input_tokens: Option<u32>,
+    pub(crate) raw_context_tokens: Option<u32>,
+}
+
+pub(crate) fn estimate_chat_context(
+    settings: &ProviderSettings,
+    request: &ChatRequest,
+) -> Result<ChatContextEstimate, LlmError> {
+    let llm_request = LlmRequest::from_chat(settings, request)?;
+    Ok(ChatContextEstimate {
+        estimated_input_tokens: context::estimate_request_tokens(&llm_request),
+        usable_input_tokens: context::request_usable_input_tokens(&llm_request),
+        raw_context_tokens: llm_request.model.model.limits.context_tokens,
+    })
+}
+
+pub(crate) fn model_context_estimate(
+    settings: &ProviderSettings,
+    model: &str,
+    reasoning_effort: &str,
+) -> Result<ChatContextEstimate, LlmError> {
+    estimate_chat_context(
+        settings,
+        &ChatRequest {
+            model: model.to_string(),
+            reasoning_effort: reasoning_effort.to_string(),
+            messages: vec![json!({ "role": "user", "content": "" })],
+            tools: Vec::new(),
+            max_output_tokens: None,
+        },
+    )
+}
+
 #[derive(Default)]
 struct StreamAccumulator {
     text: String,
@@ -562,12 +600,147 @@ pub(crate) fn lmstudio_model_id(model: &str) -> Option<&str> {
     lmstudio::model_id(model)
 }
 
-pub(crate) fn ollama_api_base_url(base_url: &str) -> String {
-    ollama::api_base_url(base_url)
+pub(crate) async fn hydrate_selected_local_model_limits(
+    settings: &mut ProviderSettings,
+    model: &str,
+) -> Result<(), String> {
+    match selected_local_provider(model) {
+        Some(types::ProviderId::OLLAMA) | Some(types::ProviderId::LOCAL) => {
+            hydrate_ollama_model_limits(settings).await
+        }
+        Some(types::ProviderId::LMSTUDIO) => hydrate_lmstudio_model_limits(settings).await,
+        _ => Ok(()),
+    }
+}
+
+pub(crate) async fn fetch_ollama_models(base_url: &str) -> Result<Vec<Value>, String> {
+    ollama::fetch_models(base_url).await
+}
+
+pub(crate) async fn fetch_lmstudio_models(
+    base_url: &str,
+    api_key: Option<&str>,
+) -> Result<Vec<Value>, String> {
+    lmstudio::fetch_models(base_url, api_key).await
+}
+
+pub(crate) fn ollama_context_tokens(model: &Value) -> Option<u32> {
+    ollama::context_tokens_from_model(model)
+}
+
+pub(crate) fn lmstudio_context_tokens(model: &Value, model_id: &str) -> Option<u32> {
+    lmstudio::context_tokens_from_model(model, model_id)
 }
 
 pub(crate) fn lmstudio_v1_base_url(base_url: &str) -> String {
     lmstudio::v1_base_url(base_url)
+}
+
+fn selected_local_provider(model: &str) -> Option<&'static str> {
+    let clean = model.trim();
+    if clean.strip_prefix("ollama/").is_some() {
+        Some(types::ProviderId::OLLAMA)
+    } else if clean.strip_prefix("local/").is_some() {
+        Some(types::ProviderId::LOCAL)
+    } else if clean.strip_prefix("lmstudio/").is_some() {
+        Some(types::ProviderId::LMSTUDIO)
+    } else {
+        None
+    }
+}
+
+async fn hydrate_ollama_model_limits(settings: &mut ProviderSettings) -> Result<(), String> {
+    let models = ollama::fetch_models(&settings.ollama_base_url).await?;
+    for model in &models {
+        let Some(model_id) = ollama::model_name(model) else {
+            continue;
+        };
+        let Some(context_tokens) = ollama::context_tokens_from_model(model) else {
+            continue;
+        };
+        insert_local_context_limit(
+            &mut settings.local_model_limits,
+            types::ProviderId::OLLAMA,
+            model_id,
+            context_tokens,
+        );
+        insert_local_context_limit(
+            &mut settings.local_model_limits,
+            types::ProviderId::LOCAL,
+            model_id,
+            context_tokens,
+        );
+    }
+    Ok(())
+}
+
+async fn hydrate_lmstudio_model_limits(settings: &mut ProviderSettings) -> Result<(), String> {
+    let models = lmstudio::fetch_models(
+        &settings.lmstudio_base_url,
+        settings.lmstudio_api_key.as_deref(),
+    )
+    .await?;
+    for model in &models {
+        let Some(model_id) = lmstudio::model_key(model) else {
+            continue;
+        };
+        let Some(context_tokens) = lmstudio::context_tokens_from_model(model, model_id) else {
+            continue;
+        };
+        insert_local_context_limit(
+            &mut settings.local_model_limits,
+            types::ProviderId::LMSTUDIO,
+            model_id,
+            context_tokens,
+        );
+    }
+    Ok(())
+}
+
+fn insert_local_context_limit(
+    limits: &mut BTreeMap<String, types::Limits>,
+    provider_id: &str,
+    model_id: &str,
+    context_tokens: u32,
+) {
+    let mut model_limits = types::Limits::default();
+    model_limits.context_tokens = Some(context_tokens);
+    insert_limit_alias(limits, provider_id, model_id, &model_limits);
+    if let Some(stripped) = model_id.strip_suffix(":latest") {
+        insert_limit_alias(limits, provider_id, stripped, &model_limits);
+    } else if !model_id.contains(':') {
+        insert_limit_alias(
+            limits,
+            provider_id,
+            &format!("{model_id}:latest"),
+            &model_limits,
+        );
+    }
+}
+
+fn insert_limit_alias(
+    limits: &mut BTreeMap<String, types::Limits>,
+    provider_id: &str,
+    model_id: &str,
+    model_limits: &types::Limits,
+) {
+    limits.insert(format!("{provider_id}/{model_id}"), model_limits.clone());
+}
+
+fn local_model_limits_from_settings(
+    context_lengths: &BTreeMap<String, u32>,
+) -> BTreeMap<String, types::Limits> {
+    let mut limits = BTreeMap::new();
+    for (model, context_tokens) in context_lengths {
+        let Some((provider_id, model_id)) = model.split_once('/') else {
+            continue;
+        };
+        if provider_id != types::ProviderId::OLLAMA && provider_id != types::ProviderId::LMSTUDIO {
+            continue;
+        }
+        insert_local_context_limit(&mut limits, provider_id, model_id, *context_tokens);
+    }
+    limits
 }
 
 pub(crate) fn pricing_for_model(
@@ -620,6 +793,7 @@ pub(crate) fn parse_model_ref(model: &str) -> Result<String, LlmError> {
         ollama_base_url: super::settings::DEFAULT_OLLAMA_BASE_URL.to_string(),
         lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
         custom_models: Vec::new(),
+        local_model_limits: BTreeMap::new(),
     });
     catalog::model_ref_from_selection(model, &catalog).map(|model_ref| model_ref.canonical())
 }
@@ -686,6 +860,37 @@ mod tests {
             selected_provider_for_model("kimi-for-coding/k2p7"),
             types::ProviderId::KIMI_FOR_CODING
         );
+    }
+
+    #[test]
+    fn local_context_overrides_seed_provider_limits() {
+        let overrides = BTreeMap::from([
+            ("ollama/gemma4".to_string(), 8192),
+            ("lmstudio/google/gemma-4-26b-a4b".to_string(), 4096),
+            ("openrouter/google/gemini-3.5-flash".to_string(), 1234),
+        ]);
+
+        let limits = local_model_limits_from_settings(&overrides);
+
+        assert_eq!(
+            limits
+                .get("ollama/gemma4")
+                .and_then(|limits| limits.context_tokens),
+            Some(8192)
+        );
+        assert_eq!(
+            limits
+                .get("ollama/gemma4:latest")
+                .and_then(|limits| limits.context_tokens),
+            Some(8192)
+        );
+        assert_eq!(
+            limits
+                .get("lmstudio/google/gemma-4-26b-a4b")
+                .and_then(|limits| limits.context_tokens),
+            Some(4096)
+        );
+        assert!(!limits.contains_key("openrouter/google/gemini-3.5-flash"));
     }
 
     #[test]

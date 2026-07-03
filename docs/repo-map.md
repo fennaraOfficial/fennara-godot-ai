@@ -31,7 +31,8 @@ This is the quick map for contributors and coding agents working in this reposit
 | `local/crates/fennara-mcp/` | Local stdio MCP server and tool schema forwarding. |
 | `local/crates/fennara-daemon/` | Local daemon used for runtime sessions and Godot bridge work. |
 | `local/crates/fennara-daemon/src/runtime_daemon/permissions.rs` | Built-in chat approval modes, tool-risk classification, permission decisions, and pending approval request types. |
-| `local/crates/fennara-daemon/src/runtime_daemon/chat/exec_command.rs` | Daemon-owned built-in chat `exec_command` implementation: shell detection, cwd validation, process spawn, timeout/tree-kill, output capture, and result formatting. |
+| `local/crates/fennara-daemon/src/runtime_daemon/chat/exec_command.rs` | Daemon-owned built-in chat `exec_command` implementation: shell detection, cwd validation, process spawn, timeout/tree-kill, output capture, result artifact logging, and result formatting. |
+| `local/crates/fennara-daemon/src/runtime_daemon/chat/context_compaction/` | Built-in chat context compaction planner: exact-tail protection, OpenCode-style old tool-result pressure pruning, summary chunk selection/storage/replay, summary prompt serialization, token budgets, and placeholder rendering. |
 | `local/crates/fennara-daemon/src/runtime_daemon/chat/prompt.rs` | Built-in chat PromptBuilder and generated runtime environment context. |
 | `local/crates/fennara-daemon/src/runtime_daemon/chat/trace.rs` | Local-only built-in chat trace recorder, SQLite event rows, retention, and debug query helpers. |
 | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/` | Built-in chat provider runtime primitives, catalog/resolution, context preflight hooks, normalized stream/error types, and OpenAI-compatible or Anthropic-compatible adapters for OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, Ollama/local, and LM Studio. |

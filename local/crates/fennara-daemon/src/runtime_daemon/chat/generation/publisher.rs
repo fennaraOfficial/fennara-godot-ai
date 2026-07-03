@@ -21,6 +21,11 @@ pub(super) struct StreamedAssistant {
     pub(super) reasoning_content: Option<String>,
 }
 
+pub(super) struct AssistantStreamError {
+    pub(super) error: LlmError,
+    pub(super) emitted_output: bool,
+}
+
 #[derive(Clone, Debug)]
 struct ProvisionalTool {
     name: String,
@@ -40,7 +45,7 @@ pub(super) async fn stream_one_assistant<S>(
     state: &AppState,
     chat_id: &str,
     trace: trace::TraceRecorder,
-) -> Result<Result<StreamedAssistant, LlmError>, S::Error>
+) -> Result<Result<StreamedAssistant, AssistantStreamError>, S::Error>
 where
     S: Sink<Message> + Unpin,
     S::Error: std::fmt::Debug,
@@ -63,6 +68,7 @@ where
                 reasoning_effort: reasoning_effort_for_task,
                 messages: messages_for_task,
                 tools: tools_for_task,
+                max_output_tokens: None,
             },
             Some(trace_for_task),
             |item| {
@@ -87,6 +93,7 @@ where
     let mut usage: Option<Value> = None;
     let mut reasoning_content: Option<String> = None;
     let mut provisional_tools: HashMap<String, ProvisionalTool> = HashMap::new();
+    let mut emitted_output = false;
     let mut done_rx = done_rx;
     let completion = loop {
         tokio::select! {
@@ -94,6 +101,9 @@ where
                 let Some(item) = item else {
                     continue;
                 };
+                if stream_item_has_assistant_output(&item) {
+                    emitted_output = true;
+                }
                 match item {
                     StreamItem::Text { content, done } => {
                         send_json(
@@ -313,8 +323,21 @@ where
                 "Provider stream ended before this tool call finalized.",
             )
             .await?;
-            Ok(Err(error))
+            Ok(Err(AssistantStreamError {
+                error,
+                emitted_output,
+            }))
         }
+    }
+}
+
+fn stream_item_has_assistant_output(item: &StreamItem) -> bool {
+    match item {
+        StreamItem::Text { .. }
+        | StreamItem::FunctionCall { .. }
+        | StreamItem::FunctionCallError { .. } => true,
+        StreamItem::Reasoning { content, .. } => !content.trim().is_empty(),
+        StreamItem::Status { .. } | StreamItem::Usage(_) => false,
     }
 }
 
@@ -511,5 +534,35 @@ mod tests {
     fn final_tool_call_helpers_ignore_missing_or_blank_ids() {
         assert_eq!(tool_call_id(&json!({ "id": "  " })), None);
         assert_eq!(tool_call_id(&json!({})), None);
+    }
+
+    #[test]
+    fn status_and_usage_items_do_not_count_as_assistant_output() {
+        assert!(!stream_item_has_assistant_output(&StreamItem::Status {
+            message: "Retrying request...".to_string(),
+        }));
+        assert!(!stream_item_has_assistant_output(&StreamItem::Usage(
+            json!({ "prompt_tokens": 1 }),
+        )));
+        assert!(!stream_item_has_assistant_output(&StreamItem::Reasoning {
+            content: "  ".to_string(),
+            done: false,
+        }));
+        assert!(stream_item_has_assistant_output(&StreamItem::Reasoning {
+            content: "thinking".to_string(),
+            done: false,
+        }));
+        assert!(stream_item_has_assistant_output(&StreamItem::Text {
+            content: "hello".to_string(),
+            done: false,
+        }));
+        assert!(stream_item_has_assistant_output(
+            &StreamItem::FunctionCall {
+                id: "call_1".to_string(),
+                name: "read_file".to_string(),
+                arguments: "{}".to_string(),
+                done: true,
+            }
+        ));
     }
 }

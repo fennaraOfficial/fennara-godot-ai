@@ -1,4 +1,3 @@
-use reqwest::Client;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -582,65 +581,12 @@ fn openrouter_model_id(model_id: &str) -> String {
 }
 
 async fn fetch_ollama_models(base_url: &str) -> Result<Vec<Value>, String> {
-    let client = Client::builder()
-        .connect_timeout(Duration::from_secs(2))
-        .timeout(LOCAL_MODELS_TIMEOUT)
-        .build()
-        .map_err(|error| format!("Failed to create Ollama HTTP client: {error}"))?;
-    let response = client
-        .get(format!(
-            "{}/api/tags",
-            providers::ollama_api_base_url(base_url)
-        ))
-        .send()
-        .await
-        .map_err(|error| format!("Failed to fetch Ollama models: {error}"))?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "Ollama models request failed: {}",
-            response.status()
-        ));
-    }
-    let body: Value = response
-        .json()
-        .await
-        .map_err(|error| format!("Ollama models response was invalid: {error}"))?;
-    Ok(body
-        .get("models")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default())
+    providers::fetch_ollama_models(base_url).await
 }
 
 async fn fetch_lmstudio_models(base_url: &str) -> Result<Vec<Value>, String> {
-    let client = Client::builder()
-        .connect_timeout(Duration::from_secs(2))
-        .timeout(LOCAL_MODELS_TIMEOUT)
-        .build()
-        .map_err(|error| format!("Failed to create LM Studio HTTP client: {error}"))?;
-    let response = client
-        .get(format!(
-            "{}/models",
-            providers::lmstudio_v1_base_url(base_url)
-        ))
-        .send()
-        .await
-        .map_err(|error| format!("Failed to fetch LM Studio models: {error}"))?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "LM Studio models request failed: {}",
-            response.status()
-        ));
-    }
-    let body: Value = response
-        .json()
-        .await
-        .map_err(|error| format!("LM Studio models response was invalid: {error}"))?;
-    Ok(body
-        .get("data")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default())
+    let api_key = auth::api_key(ProviderId::LMSTUDIO);
+    providers::fetch_lmstudio_models(base_url, api_key.as_deref()).await
 }
 
 fn append_ollama_models(models: &mut Vec<ModelInfo>, raw_models: &[Value], custom_ids: &[String]) {
@@ -673,7 +619,8 @@ fn append_lmstudio_models(
 ) {
     for raw in raw_models {
         let Some(local_id) = raw
-            .get("id")
+            .get("key")
+            .or_else(|| raw.get("id"))
             .or_else(|| raw.get("model"))
             .and_then(Value::as_str)
         else {
@@ -812,9 +759,8 @@ fn ollama_model_info(id: &str, raw: Option<&Value>, custom: bool, verified: bool
             .and_then(Value::as_str)
             .map(ToString::to_string),
         context_length: raw
-            .and_then(|model| model.get("details"))
-            .and_then(|details| details.get("context_length"))
-            .and_then(Value::as_u64),
+            .and_then(providers::ollama_context_tokens)
+            .map(u64::from),
         max_output_tokens: None,
         input_cost_per_million: Some(0.0),
         output_cost_per_million: Some(0.0),
@@ -844,13 +790,25 @@ fn lmstudio_model_info(
         model.source = "local";
         model.verified = true;
         model.canonical_slug = Some(local_id.to_string());
+        if let Some(context_length) = raw
+            .and_then(|model| providers::lmstudio_context_tokens(model, local_id))
+            .map(u64::from)
+        {
+            model.context_length = Some(context_length);
+        }
         return model;
     }
 
     ModelInfo {
         id: id.to_string(),
         display_name: raw
-            .and_then(|model| model.get("id"))
+            .and_then(|model| {
+                model
+                    .get("display_name")
+                    .or_else(|| model.get("key"))
+                    .or_else(|| model.get("id"))
+                    .or_else(|| model.get("model"))
+            })
             .and_then(Value::as_str)
             .map(fallback_display_name)
             .unwrap_or_else(|| fallback_display_name(local_id)),
@@ -862,7 +820,9 @@ fn lmstudio_model_info(
         verified: true,
         latest_alias: false,
         canonical_slug: Some(local_id.to_string()),
-        context_length: None,
+        context_length: raw
+            .and_then(|model| providers::lmstudio_context_tokens(model, local_id))
+            .map(u64::from),
         max_output_tokens: None,
         input_cost_per_million: Some(0.0),
         output_cost_per_million: Some(0.0),
@@ -873,7 +833,11 @@ fn lmstudio_model_info(
         supports_tools: true,
         supports_reasoning: false,
         supported_reasoning_efforts: Vec::new(),
-        description: Some("Loaded from the local LM Studio server.".to_string()),
+        description: raw
+            .and_then(|model| model.get("description"))
+            .and_then(Value::as_str)
+            .map(|description| description.trim().to_string())
+            .or_else(|| Some("Loaded from the local LM Studio server.".to_string())),
     }
 }
 
@@ -1035,6 +999,7 @@ fn string_array_contains(value: Option<&Value>, needle: &str) -> bool {
 mod tests {
     use super::super::providers::models_dev::parse_moonshot_catalog;
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn appends_moonshot_catalog_models_with_native_prefix() {
@@ -1110,5 +1075,65 @@ mod tests {
         assert_eq!(models[0].provider_id, ProviderId::MINIMAX);
         assert_eq!(models[0].provider, "MiniMax (minimax.io)");
         assert_eq!(models[0].canonical_slug.as_deref(), Some("MiniMax-M3"));
+    }
+
+    #[test]
+    fn ollama_model_info_prefers_running_context_length() {
+        let raw = json!({
+            "name": "gemma4",
+            "details": {
+                "parameter_size": "8.0B",
+                "quantization_level": "Q4_K_M",
+                "context_length": 262144
+            },
+            "context_length": 4096,
+            "capabilities": ["completion", "tools"]
+        });
+
+        let model = ollama_model_info("ollama/gemma4", Some(&raw), false, true);
+
+        assert_eq!(model.context_length, Some(4096));
+    }
+
+    #[test]
+    fn lmstudio_model_info_prefers_loaded_instance_context_length() {
+        let raw = json!({
+            "type": "llm",
+            "key": "google/gemma-4-26b-a4b",
+            "display_name": "Gemma 4 26B A4B",
+            "loaded_instances": [
+                {
+                    "id": "google/gemma-4-26b-a4b",
+                    "config": {
+                        "context_length": 4096
+                    }
+                }
+            ],
+            "max_context_length": 262144
+        });
+        let mut models = Vec::new();
+
+        append_lmstudio_models(&mut models, &[raw], None, &[]);
+
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "lmstudio/google/gemma-4-26b-a4b");
+        assert_eq!(models[0].context_length, Some(4096));
+    }
+
+    #[test]
+    fn lmstudio_model_info_uses_max_context_when_unloaded() {
+        let raw = json!({
+            "type": "llm",
+            "key": "deepseek-r1",
+            "display_name": "DeepSeek R1",
+            "loaded_instances": [],
+            "max_context_length": 131072
+        });
+        let mut models = Vec::new();
+
+        append_lmstudio_models(&mut models, &[raw], None, &[]);
+
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].context_length, Some(131072));
     }
 }

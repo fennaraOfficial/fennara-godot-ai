@@ -67,6 +67,13 @@ pub(crate) fn estimate_request_tokens(request: &LlmRequest) -> u32 {
     (message_tokens + tool_tokens).max(1).min(u32::MAX as usize) as u32
 }
 
+pub(crate) fn request_usable_input_tokens(request: &LlmRequest) -> Option<u32> {
+    usable_input_tokens(
+        &request.model.model.limits,
+        request.model.request.generation.max_output_tokens,
+    )
+}
+
 fn estimate_message_tokens(message: &Value) -> usize {
     let Some(object) = message.as_object() else {
         return estimate_value_text_tokens(message);
@@ -213,6 +220,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
             custom_models: Vec::new(),
+            local_model_limits: std::collections::BTreeMap::new(),
         };
         let catalog = Catalog::from_settings(&settings);
         let model_ref = super::super::catalog::model_ref_from_selection(
@@ -256,6 +264,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
             custom_models: Vec::new(),
+            local_model_limits: std::collections::BTreeMap::new(),
         };
         let request = LlmRequest::from_chat(
             &settings,
@@ -264,6 +273,7 @@ mod tests {
                 reasoning_effort: "medium".to_string(),
                 messages: vec![json!({ "role": "user", "content": "hello" })],
                 tools: Vec::new(),
+                max_output_tokens: None,
             },
         )
         .unwrap();
@@ -311,6 +321,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
             custom_models: Vec::new(),
+            local_model_limits: std::collections::BTreeMap::new(),
         };
         let catalog = Catalog::from_settings(&settings);
         let model_ref = super::super::catalog::model_ref_from_selection(
@@ -372,6 +383,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
             custom_models: Vec::new(),
+            local_model_limits: std::collections::BTreeMap::new(),
         };
         let catalog = Catalog::from_settings(&settings);
         let model_ref = super::super::catalog::model_ref_from_selection(

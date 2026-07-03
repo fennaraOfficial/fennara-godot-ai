@@ -69,7 +69,10 @@ resolve under that root, and absolute cwd values outside the root are rejected.
 Shell commands use real filesystem paths; Godot tools continue to use `res://`
 and `user://`. This is approval and cwd restriction, not OS sandboxing. Phase one
 does not support PTY sessions, background `session_id`, `write_stdin`, custom
-environment variables, or shell-specific network controls.
+environment variables, or shell-specific network controls. Each executed command
+also writes a daemon-side raw log and result envelope under Fennara app data so
+older compacted chat history can point to exact stdout/stderr without replaying
+large command output into model context.
 
 The difference is presentation, not tool identity. External MCP clients receive
 compact markdown tool results over MCP. The built-in chat may add UI-specific
@@ -173,8 +176,6 @@ Use get_node_properties for the Player node in res://scenes/player.tscn before e
 Use this before `run_scene_edit_script` when touching Godot nodes/resources. It
 helps avoid invented method names, wrong properties, wrong enum usage, and wrong
 constructor assumptions by returning the real Godot API surface for a class.
-For GDExtension/native addon classes, Fennara skips official Godot XML docs
-lookup and returns runtime ClassDB/property information instead.
 
 For built-in Godot classes, Fennara reads official XML docs from the GitHub
 branch matching the connected editor's major/minor version, with an explicit

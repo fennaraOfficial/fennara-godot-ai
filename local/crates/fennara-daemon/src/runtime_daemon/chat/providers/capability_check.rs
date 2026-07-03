@@ -82,6 +82,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
             custom_models: Vec::new(),
+            local_model_limits: std::collections::BTreeMap::new(),
         };
         let catalog = Catalog::from_settings(&settings);
         let model_ref = crate::runtime_daemon::chat::providers::catalog::model_ref_from_selection(

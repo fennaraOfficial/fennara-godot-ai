@@ -3,6 +3,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::{
+    context_compaction::{self, ContextSummaryChunk, InsertContextSummary, SummaryCandidate},
     ids::{new_id, now_ms},
     schema::{connection, model_trace_from_selection, to_store_error},
     settings::{self, DEFAULT_MODEL},
@@ -71,9 +72,20 @@ pub(crate) struct StoredMessage {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub(crate) struct ContextCompactionMarker {
+    pub(crate) id: String,
+    pub(crate) chat_id: String,
+    pub(crate) created_at_ms: i64,
+    pub(crate) covered_start_sequence: i64,
+    pub(crate) covered_end_sequence: i64,
+    pub(crate) source_message_count: i64,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub(crate) struct OpenedChat {
     pub(crate) chat: ChatSummary,
     pub(crate) messages: Vec<StoredMessage>,
+    pub(crate) context_compactions: Vec<ContextCompactionMarker>,
 }
 
 #[derive(Clone, Debug)]
@@ -106,8 +118,13 @@ pub(crate) fn open_chat(scope: &ProjectScope, chat_id: &str) -> Result<OpenedCha
     let chat = get_chat_for_scope(&conn, scope, chat_id)?
         .ok_or_else(|| "Chat not found for this project.".to_string())?;
     let messages = messages_for_chat(&conn, chat_id)?;
+    let context_compactions = context_compactions_for_chat(&conn, chat_id)?;
     set_active_chat_id(scope, chat_id)?;
-    Ok(OpenedChat { chat, messages })
+    Ok(OpenedChat {
+        chat,
+        messages,
+        context_compactions,
+    })
 }
 
 pub(crate) fn chat_summary(chat_id: &str) -> Result<ChatSummary, String> {
@@ -653,6 +670,105 @@ pub(crate) fn replay_messages(chat_id: &str) -> Result<Vec<Value>, String> {
     replay::replay_messages_from_conn(&conn, chat_id)
 }
 
+pub(crate) fn replay_messages_with_summary_budget(
+    chat_id: &str,
+    summary_replay_budget_tokens: usize,
+) -> Result<Vec<Value>, String> {
+    let conn = connection()?;
+    replay::replay_messages_with_summary_budget_from_conn(
+        &conn,
+        chat_id,
+        Some(summary_replay_budget_tokens),
+    )
+}
+
+pub(crate) fn replay_messages_with_summary_and_exact_tail_budget(
+    chat_id: &str,
+    summary_replay_budget_tokens: usize,
+    exact_tail_budget_tokens: usize,
+) -> Result<Vec<Value>, String> {
+    let conn = connection()?;
+    replay::replay_messages_with_summary_and_exact_tail_budget_from_conn(
+        &conn,
+        chat_id,
+        summary_replay_budget_tokens,
+        exact_tail_budget_tokens,
+    )
+}
+
+pub(crate) fn replay_messages_with_summary_and_exact_tail_budget_before_sequence(
+    chat_id: &str,
+    summary_replay_budget_tokens: usize,
+    exact_tail_budget_tokens: usize,
+    before_sequence: i64,
+) -> Result<Vec<Value>, String> {
+    let conn = connection()?;
+    replay::replay_messages_with_summary_and_exact_tail_budget_before_sequence_from_conn(
+        &conn,
+        chat_id,
+        summary_replay_budget_tokens,
+        exact_tail_budget_tokens,
+        before_sequence,
+    )
+}
+
+pub(crate) fn context_summary_candidate(
+    chat_id: &str,
+    tail_budget_tokens: usize,
+) -> Result<Option<SummaryCandidate>, String> {
+    let conn = connection()?;
+    let groups = replay::raw_summary_groups_from_conn(&conn, chat_id)?;
+    let summaries = context_compaction::load_context_summaries_from_conn(&conn, chat_id)?;
+    Ok(context_compaction::select_next_summary_candidate(
+        &groups,
+        &summaries,
+        tail_budget_tokens,
+    ))
+}
+
+pub(crate) fn context_summary_candidate_before_sequence(
+    chat_id: &str,
+    tail_budget_tokens: usize,
+    before_sequence: i64,
+) -> Result<Option<SummaryCandidate>, String> {
+    let conn = connection()?;
+    let groups =
+        replay::raw_summary_groups_before_sequence_from_conn(&conn, chat_id, before_sequence)?;
+    let mut summaries = context_compaction::load_context_summaries_from_conn(&conn, chat_id)?;
+    summaries.retain(|summary| summary.covered_end_sequence < before_sequence);
+    Ok(context_compaction::select_next_summary_candidate(
+        &groups,
+        &summaries,
+        tail_budget_tokens,
+    ))
+}
+
+pub(crate) fn insert_context_summary(
+    chat_id: &str,
+    generation_id: &str,
+    summary_markdown: &str,
+    candidate: &SummaryCandidate,
+    model: &str,
+    reasoning_effort: &str,
+    usage: Option<&Value>,
+    metadata: &Value,
+) -> Result<ContextSummaryChunk, String> {
+    let mut conn = connection()?;
+    context_compaction::insert_context_summary_on_connection(
+        &mut conn,
+        InsertContextSummary {
+            chat_id,
+            generation_id,
+            summary_markdown,
+            candidate,
+            model,
+            reasoning_effort,
+            usage,
+            metadata,
+        },
+    )
+}
+
 pub(crate) fn set_active_chat_id(scope: &ProjectScope, chat_id: &str) -> Result<(), String> {
     let conn = connection()?;
     let key = active_chat_key(scope);
@@ -809,6 +925,29 @@ fn messages_for_chat(conn: &Connection, chat_id: &str) -> Result<Vec<StoredMessa
         .query_map([chat_id], message_from_row)
         .map_err(to_store_error)?;
     rows.collect::<Result<Vec<_>, _>>().map_err(to_store_error)
+}
+
+fn context_compactions_for_chat(
+    conn: &Connection,
+    chat_id: &str,
+) -> Result<Vec<ContextCompactionMarker>, String> {
+    let mut markers: Vec<_> = context_compaction::load_context_summaries_from_conn(conn, chat_id)?
+        .into_iter()
+        .map(context_compaction_marker)
+        .collect();
+    markers.sort_by_key(|marker| (marker.created_at_ms, marker.covered_end_sequence));
+    Ok(markers)
+}
+
+fn context_compaction_marker(summary: ContextSummaryChunk) -> ContextCompactionMarker {
+    ContextCompactionMarker {
+        id: summary.id,
+        chat_id: summary.chat_id,
+        created_at_ms: summary.created_at_ms,
+        covered_start_sequence: summary.covered_start_sequence,
+        covered_end_sequence: summary.covered_end_sequence,
+        source_message_count: summary.source_message_count,
+    }
 }
 
 fn refresh_chat_rollups(conn: &Connection, chat_id: &str) -> Result<(), String> {

@@ -143,6 +143,7 @@
   let defaultModel = "";
   let ollamaBaseUrl = DEFAULT_OLLAMA_BASE_URL;
   let providerBaseUrls = new Map(Object.entries(DEFAULT_LOCAL_BASE_URLS));
+  let localModelContextLengths = new Map();
   let ollamaModels = [];
   let ollamaStatus = "unknown";
   let localProviderStatuses = new Map();
@@ -259,7 +260,7 @@
     usageContextStatus,
     getSessionCost: () => sessionCost,
     getLatestPromptTokens: () => latestPromptTokens,
-    getCurrentModelInfo: () => modelPicker?.modelInfo(currentModel),
+    getCurrentModelInfo: currentModelInfo,
   });
   const formatUsageCost = usageSummary.formatUsageCost;
   const hideUsagePopoverSoon = usageSummary.hideUsagePopoverSoon;
@@ -365,6 +366,7 @@
         reasoning_effort: currentReasoningEffort,
         ollama_base_url: ollamaBaseUrl,
         provider_base_urls: providerBaseUrlPayload(),
+        local_model_context_lengths: localModelContextLengthPayload(),
         chat_surface: chatSurface,
         approval_mode: approvalMode,
       }),
@@ -676,7 +678,9 @@
   function appendDaemonUserMessage(userMessage, requestId = "") { return storedTranscript?.appendDaemonUserMessage(userMessage, requestId); }
   function hasConnectedOptimisticUserMessage(requestId) { return storedTranscript?.hasConnectedOptimisticUserMessage(requestId) || false; }
   function restorePendingOptimisticUserMessages(chatId) { return storedTranscript?.restorePendingOptimisticUserMessages(chatId); }
-  function renderStoredMessages(messages) { return storedTranscript?.renderStoredMessages(messages); }
+  function renderStoredMessages(messages, contextCompactions = []) {
+    return storedTranscript?.renderStoredMessages(messages, contextCompactions);
+  }
   function trackOptimisticRequest(requestId, value) { return storedTranscript?.trackOptimisticRequest(requestId, value); }
   function deleteOptimisticRequest(requestId) { return storedTranscript?.deleteOptimisticRequest(requestId); }
 
@@ -703,11 +707,21 @@
     transcriptRenderer.updateToolCall(item);
   }
 
+  function handleContextCompaction(message) {
+    const chatId = String(message.chat_id || "");
+    if (activeChatId && chatId && chatId !== activeChatId) {
+      return;
+    }
+    activeChatId = chatId || activeChatId;
+    transcriptRenderer.updateContextCompaction(message.status);
+  }
+
   function applySettings(settings, options = {}) {
     if (!settings) {
       return;
     }
     applyProviderBaseUrls(settings);
+    applyLocalModelContextLengths(settings);
     ollamaBaseUrl = providerBaseUrl("ollama");
     applyProviderRegistry(settings);
     hasOpenRouterKey = providerConnected("openrouter") || Boolean(settings.has_openrouter_key);
@@ -866,6 +880,61 @@
 
   function providerBaseUrlPayload() {
     return Object.fromEntries(providerBaseUrls.entries());
+  }
+
+  function applyLocalModelContextLengths(settings) {
+    localModelContextLengths = new Map();
+    Object.entries(settings?.local_model_context_lengths || {}).forEach(([model, contextLength]) => {
+      const clean = cleanUiModelId(model);
+      const value = normalizeContextLength(contextLength);
+      if (clean && value) {
+        localModelContextLengths.set(clean, value);
+      }
+    });
+  }
+
+  function localModelContextLengthPayload() {
+    return Object.fromEntries(localModelContextLengths.entries());
+  }
+
+  function currentModelInfo() {
+    const info = modelPicker?.modelInfo(currentModel) || null;
+    const override = localModelContextLengths.get(currentModel);
+    const detected = modelContextLength(info);
+    if (detected > 0) {
+      if (info && Number(info.context_length || 0) <= 0) {
+        return { ...info, context_length: detected };
+      }
+      return info;
+    }
+    if (!override) {
+      return info;
+    }
+    return {
+      ...(info || { id: currentModel }),
+      context_length: override,
+    };
+  }
+
+  function modelContextLength(info) {
+    const candidates = [
+      info?.context_length,
+      info?.contextLength,
+      info?.context_tokens,
+      info?.contextTokens,
+      info?.max_context_length,
+      info?.maxContextLength,
+      info?.limits?.context_tokens,
+      info?.limits?.contextTokens,
+      info?.limits?.context,
+    ];
+    for (const candidate of candidates) {
+      const value = normalizeContextLength(candidate);
+      if (value > 0) {
+        return value;
+      }
+    }
+    return 0;
   }
 
   function currentModelLabel() {
@@ -1070,6 +1139,7 @@
     if (!clean) {
       return;
     }
+    maybePromptForLocalContextLength(clean);
     currentProvider = providerFromModel(clean) || currentProvider;
     currentModel = clean;
     updateProviderUi();
@@ -1118,9 +1188,48 @@
       reasoning_effort: currentReasoningEffort,
       ollama_base_url: ollamaBaseUrl,
       provider_base_urls: providerBaseUrlPayload(),
+      local_model_context_lengths: localModelContextLengthPayload(),
       approval_mode: currentApprovalMode,
     };
     return send(payload);
+  }
+
+  function maybePromptForLocalContextLength(modelId) {
+    if (!isLocalContextModel(modelId) || localModelContextLengths.has(modelId)) {
+      return;
+    }
+    const detected = modelContextLength(modelPicker?.modelInfo(modelId));
+    if (detected > 0) {
+      return;
+    }
+    const raw = window.prompt(
+      `Fennara could not detect the context length for ${modelId}. Enter the token count, for example 8192 or 32768.`,
+      "",
+    );
+    const contextLength = normalizeContextLength(raw);
+    if (!contextLength) {
+      appendSystem("Local model context length is still unknown.");
+      window.setTimeout(clearSystemStatus, 1600);
+      return;
+    }
+    localModelContextLengths.set(modelId, contextLength);
+    appendSystem(`Saved ${contextLength.toLocaleString("en-US")} token context for ${modelId}.`);
+    window.setTimeout(clearSystemStatus, 1600);
+  }
+
+  function isLocalContextModel(modelId) {
+    const provider = providerFromModel(modelId);
+    return provider === "ollama" ||
+      provider === "lmstudio" ||
+      providerMetadata.get(provider)?.kind === "local";
+  }
+
+  function normalizeContextLength(value) {
+    const parsed = Number(String(value || "").replace(/,/g, "").trim());
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 0;
+    }
+    return Math.floor(parsed);
   }
 
   function chooseProvider(provider) {
@@ -1307,7 +1416,7 @@
     if (message.type === "chat_opened") {
       activeChatId = message.chat?.id || null;
       updateChatTitle(message.chat);
-      renderStoredMessages(message.messages || []);
+      renderStoredMessages(message.messages || [], message.context_compactions || []);
       if (!message.request_id) {
         restorePendingOptimisticUserMessages(activeChatId);
       }
@@ -1346,6 +1455,10 @@
         updateChatSize();
         updateSessionCost();
       }
+      return;
+    }
+    if (message.type === "chat_context_compaction") {
+      handleContextCompaction(message);
       return;
     }
     if (message.type === "chat_user_message") {
@@ -1425,6 +1538,7 @@
     }
     if (message.type === "chat_cancelled") {
       clearSystemStatus();
+      transcriptRenderer.updateContextCompaction("failed");
       updateAssistantText(message.response || "");
       transcriptRenderer.flushAssistantRender();
       transcriptRenderer.finishActiveThinking();
@@ -1440,6 +1554,7 @@
     }
     if (message.type === "error") {
       const errorText = message.message || "Chat request failed.";
+      transcriptRenderer.updateContextCompaction("failed");
       const requestId = String(message.request_id || "");
       if (requestId.startsWith("open-project-file")) {
         appendSystem(errorText);

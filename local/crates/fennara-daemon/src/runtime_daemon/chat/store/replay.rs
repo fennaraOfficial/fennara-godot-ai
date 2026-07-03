@@ -1,46 +1,178 @@
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
-use std::collections::HashSet;
 
 use super::super::{
     context,
+    context_compaction::{
+        self, CompactionAction, PlaceholderRenderer, PlannedReplayGroup, PlannedReplayRow,
+        ReplayGroup, ReplayPlan, ReplayRow,
+    },
     images::{self, ImagePlaceholder},
     schema::to_store_error,
     tools,
 };
 
-const REPLAY_MESSAGE_LIMIT: i64 = 40;
-const REPLAY_SCAN_LIMIT: i64 = REPLAY_MESSAGE_LIMIT * 5;
-
-#[derive(Clone, Debug)]
-struct ReplayRow {
-    role: String,
-    content: String,
-    tool_call_id: Option<String>,
-    tool_name: Option<String>,
-    tool_calls_json: Option<String>,
-    metadata_json: Option<String>,
-    raw_result_json: Option<String>,
-}
-
 pub(super) fn replay_messages_from_conn(
     conn: &Connection,
     chat_id: &str,
 ) -> Result<Vec<Value>, String> {
-    let mut statement = conn
-        .prepare(
-            "SELECT
+    replay_messages_with_summary_budget_from_conn(
+        conn,
+        chat_id,
+        Some(context_compaction::SUMMARY_REPLAY_BUDGET_MAX),
+    )
+}
+
+pub(super) fn replay_messages_with_summary_budget_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    summary_replay_budget_tokens: Option<usize>,
+) -> Result<Vec<Value>, String> {
+    replay_messages_with_budgets_from_conn(conn, chat_id, summary_replay_budget_tokens, None)
+}
+
+pub(super) fn replay_messages_with_summary_and_exact_tail_budget_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    summary_replay_budget_tokens: usize,
+    exact_tail_budget_tokens: usize,
+) -> Result<Vec<Value>, String> {
+    replay_messages_with_budgets_from_conn(
+        conn,
+        chat_id,
+        Some(summary_replay_budget_tokens),
+        Some(exact_tail_budget_tokens),
+    )
+}
+
+fn replay_messages_with_budgets_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    summary_replay_budget_tokens: Option<usize>,
+    exact_tail_budget_tokens: Option<usize>,
+) -> Result<Vec<Value>, String> {
+    replay_messages_with_budgets_before_sequence_from_conn(
+        conn,
+        chat_id,
+        summary_replay_budget_tokens,
+        exact_tail_budget_tokens,
+        None,
+    )
+}
+
+pub(super) fn replay_messages_with_summary_and_exact_tail_budget_before_sequence_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    summary_replay_budget_tokens: usize,
+    exact_tail_budget_tokens: usize,
+    before_sequence: i64,
+) -> Result<Vec<Value>, String> {
+    replay_messages_with_budgets_before_sequence_from_conn(
+        conn,
+        chat_id,
+        Some(summary_replay_budget_tokens),
+        Some(exact_tail_budget_tokens),
+        Some(before_sequence),
+    )
+}
+
+fn replay_messages_with_budgets_before_sequence_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    summary_replay_budget_tokens: Option<usize>,
+    exact_tail_budget_tokens: Option<usize>,
+    before_sequence: Option<i64>,
+) -> Result<Vec<Value>, String> {
+    let mut replay_groups =
+        replay_groups_before_sequence_from_conn(conn, chat_id, before_sequence)?;
+    if let Some(summary_replay_budget_tokens) = summary_replay_budget_tokens {
+        let mut summaries = context_compaction::load_context_summaries_from_conn(conn, chat_id)?;
+        if let Some(before_sequence) = before_sequence {
+            summaries.retain(|summary| summary.covered_end_sequence < before_sequence);
+        }
+        replay_groups = context_compaction::apply_summary_replay(
+            replay_groups,
+            &summaries,
+            summary_replay_budget_tokens,
+        );
+    }
+    if let Some(exact_tail_budget_tokens) = exact_tail_budget_tokens {
+        replay_groups =
+            context_compaction::apply_exact_tail_replay(replay_groups, exact_tail_budget_tokens);
+    }
+    let replay_plan = context_compaction::plan_replay(replay_groups);
+    Ok(render_replay_plan(replay_plan))
+}
+
+pub(super) fn replay_groups_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+) -> Result<Vec<ReplayGroup>, String> {
+    replay_groups_before_sequence_from_conn(conn, chat_id, None)
+}
+
+fn replay_groups_before_sequence_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    before_sequence: Option<i64>,
+) -> Result<Vec<ReplayGroup>, String> {
+    let replay_rows = replay_rows_from_conn(conn, chat_id, before_sequence)?;
+    Ok(context_compaction::sanitize_replay_groups(&replay_rows))
+}
+
+pub(super) fn raw_summary_groups_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+) -> Result<Vec<ReplayGroup>, String> {
+    raw_summary_groups_before_sequence_optional_from_conn(conn, chat_id, None)
+}
+
+pub(super) fn raw_summary_groups_before_sequence_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    before_sequence: i64,
+) -> Result<Vec<ReplayGroup>, String> {
+    raw_summary_groups_before_sequence_optional_from_conn(conn, chat_id, Some(before_sequence))
+}
+
+fn raw_summary_groups_before_sequence_optional_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    before_sequence: Option<i64>,
+) -> Result<Vec<ReplayGroup>, String> {
+    let summary_rows = summary_rows_from_conn(conn, chat_id, before_sequence)?;
+    Ok(context_compaction::group_raw_summary_rows(&summary_rows))
+}
+
+fn replay_rows_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    before_sequence: Option<i64>,
+) -> Result<Vec<ReplayRow>, String> {
+    query_replay_rows(
+        conn,
+        chat_id,
+        before_sequence,
+        "SELECT
+               id,
+               sequence,
                role,
+               status,
                content,
                tool_call_id,
                tool_name,
                tool_calls_json,
                metadata_json,
-               raw_result_json
+               raw_result_json,
+               arguments_json,
+               target_keys_json,
+               tool_status
              FROM (
                SELECT
+                 m.id,
                  m.sequence,
                  m.role,
+                 m.status,
                  CASE
                    WHEN m.role = 'tool' THEN COALESCE(t.mcp_markdown, m.content)
                    ELSE m.content
@@ -48,12 +180,19 @@ pub(super) fn replay_messages_from_conn(
                  m.tool_call_id,
                  m.tool_name,
                  m.tool_calls_json,
-                 m.metadata_json,
-                 t.raw_result_json
+                 CASE
+                   WHEN m.role = 'tool' THEN COALESCE(t.metadata_json, m.metadata_json)
+                   ELSE m.metadata_json
+                 END AS metadata_json,
+                 t.raw_result_json,
+                 t.arguments_json,
+                 t.target_keys_json,
+                 t.status AS tool_status
                FROM chat_messages m
                LEFT JOIN chat_tool_calls t ON t.id = m.tool_call_id
                LEFT JOIN chat_messages a ON a.id = t.assistant_message_id
                WHERE m.chat_id = ?1
+                 AND (?2 IS NULL OR m.sequence < ?2)
                  AND (
                    m.status = 'done'
                    OR (
@@ -64,117 +203,112 @@ pub(super) fn replay_messages_from_conn(
                  )
                  AND m.role IN ('user', 'assistant', 'tool')
                ORDER BY m.sequence DESC
-               LIMIT ?2
              )
              ORDER BY sequence ASC",
-        )
-        .map_err(to_store_error)?;
+    )
+}
+
+fn summary_rows_from_conn(
+    conn: &Connection,
+    chat_id: &str,
+    before_sequence: Option<i64>,
+) -> Result<Vec<ReplayRow>, String> {
+    query_replay_rows(
+        conn,
+        chat_id,
+        before_sequence,
+        "SELECT
+           m.id,
+           m.sequence,
+           m.role,
+           m.status,
+           CASE
+             WHEN m.role = 'tool' THEN COALESCE(t.mcp_markdown, m.content)
+             ELSE m.content
+           END AS content,
+           m.tool_call_id,
+           m.tool_name,
+           m.tool_calls_json,
+           CASE
+             WHEN m.role = 'tool' THEN COALESCE(t.metadata_json, m.metadata_json)
+             ELSE m.metadata_json
+           END AS metadata_json,
+           t.raw_result_json,
+           t.arguments_json,
+           t.target_keys_json,
+           t.status AS tool_status
+         FROM chat_messages m
+         LEFT JOIN chat_tool_calls t ON t.id = m.tool_call_id
+         WHERE m.chat_id = ?1
+           AND (?2 IS NULL OR m.sequence < ?2)
+           AND m.role IN ('user', 'assistant', 'tool')
+         ORDER BY m.sequence ASC",
+    )
+}
+
+fn query_replay_rows(
+    conn: &Connection,
+    chat_id: &str,
+    before_sequence: Option<i64>,
+    sql: &str,
+) -> Result<Vec<ReplayRow>, String> {
+    let mut statement = conn.prepare(sql).map_err(to_store_error)?;
     let mut rows = statement
-        .query(params![chat_id, REPLAY_SCAN_LIMIT])
+        .query(params![chat_id, before_sequence])
         .map_err(to_store_error)?;
     let mut replay_rows = Vec::new();
 
     while let Some(row) = rows.next().map_err(to_store_error)? {
         replay_rows.push(ReplayRow {
-            role: row.get(0).map_err(to_store_error)?,
-            content: row.get(1).map_err(to_store_error)?,
-            tool_call_id: row.get(2).map_err(to_store_error)?,
-            tool_name: row.get(3).map_err(to_store_error)?,
-            tool_calls_json: row.get(4).map_err(to_store_error)?,
-            metadata_json: row.get(5).map_err(to_store_error)?,
-            raw_result_json: row.get(6).map_err(to_store_error)?,
+            id: row.get(0).map_err(to_store_error)?,
+            sequence: row.get(1).map_err(to_store_error)?,
+            role: row.get(2).map_err(to_store_error)?,
+            status: row.get(3).map_err(to_store_error)?,
+            content: row.get(4).map_err(to_store_error)?,
+            tool_call_id: row.get(5).map_err(to_store_error)?,
+            tool_name: row.get(6).map_err(to_store_error)?,
+            tool_calls_json: row.get(7).map_err(to_store_error)?,
+            metadata_json: row.get(8).map_err(to_store_error)?,
+            raw_result_json: row.get(9).map_err(to_store_error)?,
+            arguments_json: row.get(10).map_err(to_store_error)?,
+            target_keys_json: row.get(11).map_err(to_store_error)?,
+            tool_status: row.get(12).map_err(to_store_error)?,
         });
     }
-
-    Ok(compact_replay_groups(sanitized_replay_groups(&replay_rows)))
+    Ok(replay_rows)
 }
 
-fn sanitized_replay_groups(rows: &[ReplayRow]) -> Vec<Vec<ReplayRow>> {
-    let mut groups = Vec::new();
-    let mut index = 0;
-    while index < rows.len() {
-        let row = &rows[index];
-        if row.role == "tool" {
-            index += 1;
-            continue;
-        }
-
-        if row.role == "assistant" {
-            if let Some(required_tool_ids) = required_tool_call_ids(row.tool_calls_json.as_deref())
-            {
-                if required_tool_ids.is_empty() {
-                    index += 1;
-                    continue;
-                }
-
-                let mut group = vec![row.clone()];
-                let mut seen_tool_ids = HashSet::new();
-                let mut next = index + 1;
-                while next < rows.len() && rows[next].role == "tool" {
-                    if let Some(tool_call_id) = rows[next].tool_call_id.as_deref() {
-                        if required_tool_ids.contains(tool_call_id) {
-                            seen_tool_ids.insert(tool_call_id.to_string());
-                            group.push(rows[next].clone());
-                        }
-                    }
-                    next += 1;
-                }
-
-                if seen_tool_ids == required_tool_ids {
-                    groups.push(group);
-                }
-                index = next;
-                continue;
-            }
-        }
-
-        groups.push(vec![row.clone()]);
-        index += 1;
-    }
-
-    groups
-}
-
-fn compact_replay_groups(groups: Vec<Vec<ReplayRow>>) -> Vec<Value> {
-    let limit = REPLAY_MESSAGE_LIMIT as usize;
-    let mut selected = Vec::new();
-    let mut message_count = 0usize;
-
-    for group in groups.into_iter().rev() {
-        let messages = replay_messages_for_group(&group);
-        if messages.is_empty() {
-            continue;
-        }
-        if messages.len() > limit {
-            if selected.is_empty() {
-                continue;
-            }
-            break;
-        }
-        if message_count + messages.len() > limit {
-            break;
-        }
-        message_count += messages.len();
-        selected.push(messages);
-    }
-
-    selected
-        .into_iter()
-        .rev()
+fn render_replay_plan(plan: ReplayPlan) -> Vec<Value> {
+    plan.groups
+        .iter()
+        .map(replay_messages_for_group)
         .flat_map(|group| group.into_iter())
         .collect()
 }
 
-fn replay_messages_for_group(rows: &[ReplayRow]) -> Vec<Value> {
-    rows.iter().flat_map(replay_messages_for_row).collect()
+fn replay_messages_for_group(group: &PlannedReplayGroup) -> Vec<Value> {
+    group
+        .rows
+        .iter()
+        .flat_map(replay_messages_for_row)
+        .collect()
 }
 
-fn replay_messages_for_row(row: &ReplayRow) -> Vec<Value> {
+fn replay_messages_for_row(planned: &PlannedReplayRow) -> Vec<Value> {
+    let row = &planned.row;
     let context_snippets = context::snippets_from_metadata(row.metadata_json.as_deref());
+    let replay_content = match planned.action {
+        CompactionAction::KeepExact => row.content.clone(),
+        CompactionAction::ReplaceWithPlaceholder => planned
+            .placeholder
+            .as_ref()
+            .map(PlaceholderRenderer::render)
+            .unwrap_or_else(|| row.content.clone()),
+    };
     let model_content = if row.role == "user" {
-        context::message_with_context_snippets(&row.content, &context_snippets)
+        context::message_with_context_snippets(&replay_content, &context_snippets)
     } else {
-        row.content.clone()
+        replay_content
     };
     let image_placeholders = image_placeholders_from_metadata(row.metadata_json.as_deref());
     let message_content = if row.role == "user" && !image_placeholders.is_empty() {
@@ -196,40 +330,14 @@ fn replay_messages_for_row(row: &ReplayRow) -> Vec<Value> {
     }
 
     let mut messages = vec![message];
-    messages.extend(replay_tool_followups(
-        &row.role,
-        row.tool_name.as_deref(),
-        row.raw_result_json.as_deref(),
-    ));
+    if planned.action == CompactionAction::KeepExact {
+        messages.extend(replay_tool_followups(
+            &row.role,
+            row.tool_name.as_deref(),
+            row.raw_result_json.as_deref(),
+        ));
+    }
     messages
-}
-
-fn required_tool_call_ids(tool_calls_json: Option<&str>) -> Option<HashSet<String>> {
-    let tool_calls_json = tool_calls_json?;
-    let Ok(tool_calls) = serde_json::from_str::<Value>(tool_calls_json) else {
-        return None;
-    };
-    let Some(tool_calls) = tool_calls.as_array() else {
-        return None;
-    };
-    if tool_calls.is_empty() {
-        return None;
-    }
-
-    let mut ids = HashSet::new();
-    for tool_call in tool_calls {
-        let Some(id) = tool_call
-            .get("id")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|id| !id.is_empty())
-        else {
-            return Some(HashSet::new());
-        };
-        ids.insert(id.to_string());
-    }
-
-    Some(ids)
 }
 
 fn replay_tool_followups(

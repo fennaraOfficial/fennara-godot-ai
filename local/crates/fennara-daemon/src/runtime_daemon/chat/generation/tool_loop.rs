@@ -479,6 +479,7 @@ where
             state,
             chat_id,
             &bound_project.session_id,
+            &tool_call_id,
             bound_project.scope.project_path.as_deref(),
             &tool_name,
             &arguments,

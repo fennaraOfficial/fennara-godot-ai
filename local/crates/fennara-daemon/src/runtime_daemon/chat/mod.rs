@@ -18,6 +18,7 @@ use crate::runtime_daemon::godot_bridge;
 mod assets;
 mod auth;
 pub(crate) mod context;
+mod context_compaction;
 mod exec_command;
 mod generation;
 mod ids;
@@ -59,6 +60,7 @@ struct ClientRequest {
     ollama_base_url: Option<String>,
     provider_base_urls: Option<BTreeMap<String, String>>,
     approval_mode: Option<String>,
+    local_model_context_lengths: Option<BTreeMap<String, u32>>,
     approval_id: Option<String>,
     decision: Option<String>,
     force: Option<bool>,
@@ -234,6 +236,7 @@ where
                     "request_id": null,
                     "chat": opened.chat,
                     "messages": opened.messages,
+                    "context_compactions": opened.context_compactions,
                     "can_revert": chat_can_revert(state, &opened.chat.id).await
                 }),
             )
@@ -373,6 +376,7 @@ where
                             "request_id": request_id,
                             "chat": opened.chat,
                             "messages": opened.messages,
+                            "context_compactions": opened.context_compactions,
                             "can_revert": chat_can_revert(state, &opened.chat.id).await
                         }),
                     )
@@ -390,6 +394,7 @@ where
                 provider_base_urls: request.provider_base_urls,
                 model: request.model,
                 reasoning_effort: request.reasoning_effort,
+                local_model_context_lengths: request.local_model_context_lengths,
                 chat_surface: request.chat_surface,
                 approval_mode: request.approval_mode,
             };
@@ -447,6 +452,7 @@ where
                             "request_id": request_id,
                             "chat": opened.chat,
                             "messages": opened.messages,
+                            "context_compactions": opened.context_compactions,
                             "can_revert": false
                         }),
                     )
@@ -592,6 +598,7 @@ where
                             "request_id": request_id.clone(),
                             "chat": opened.chat,
                             "messages": opened.messages,
+                            "context_compactions": opened.context_compactions,
                             "can_revert": false,
                             "reverted": true,
                             "restored_message": restored_message

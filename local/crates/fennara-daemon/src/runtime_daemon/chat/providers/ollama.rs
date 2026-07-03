@@ -1,5 +1,5 @@
 use reqwest::Client;
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::time::Duration;
 
 use super::error::LlmError;
@@ -13,6 +13,7 @@ use crate::runtime_daemon::chat::settings::DEFAULT_OLLAMA_BASE_URL;
 pub(crate) const PROVIDER_ID: &str = ProviderId::OLLAMA;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+const LOCAL_MODELS_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) fn provider_definition(base_url: &str) -> ProviderDefinition {
     let mut request = RequestDefaults::default();
@@ -49,6 +50,38 @@ pub(crate) fn model_id(model: &str) -> Option<&str> {
         .filter(|id| !id.trim().is_empty())
 }
 
+pub(crate) async fn fetch_models(base_url: &str) -> Result<Vec<Value>, String> {
+    let client = Client::builder()
+        .connect_timeout(Duration::from_secs(2))
+        .timeout(LOCAL_MODELS_TIMEOUT)
+        .build()
+        .map_err(|error| format!("Failed to create Ollama HTTP client: {error}"))?;
+    let mut models = fetch_tag_models(&client, base_url).await?;
+    if let Ok(running_models) = fetch_running_models(&client, base_url).await {
+        merge_running_context_lengths(&mut models, &running_models);
+    }
+    Ok(models)
+}
+
+pub(crate) fn model_name(model: &Value) -> Option<&str> {
+    model
+        .get("name")
+        .or_else(|| model.get("model"))
+        .and_then(Value::as_str)
+}
+
+pub(crate) fn context_tokens_from_model(model: &Value) -> Option<u32> {
+    model
+        .get("context_length")
+        .and_then(value_as_u32)
+        .or_else(|| {
+            model
+                .get("details")
+                .and_then(|details| details.get("context_length"))
+                .and_then(value_as_u32)
+        })
+}
+
 pub(crate) fn v1_base_url(base_url: &str) -> String {
     let trimmed = base_url.trim().trim_end_matches('/');
     if trimmed.ends_with("/v1") {
@@ -68,6 +101,77 @@ pub(crate) fn api_base_url(base_url: &str) -> String {
     } else {
         clean.to_string()
     }
+}
+
+async fn fetch_tag_models(client: &Client, base_url: &str) -> Result<Vec<Value>, String> {
+    let response = client
+        .get(format!("{}/api/tags", api_base_url(base_url)))
+        .send()
+        .await
+        .map_err(|error| format!("Failed to fetch Ollama models: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Ollama models request failed: {}",
+            response.status()
+        ));
+    }
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|error| format!("Ollama models response was invalid: {error}"))?;
+    Ok(body
+        .get("models")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default())
+}
+
+async fn fetch_running_models(client: &Client, base_url: &str) -> Result<Vec<Value>, String> {
+    let response = client
+        .get(format!("{}/api/ps", api_base_url(base_url)))
+        .send()
+        .await
+        .map_err(|error| format!("Failed to fetch running Ollama models: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Ollama running models request failed: {}",
+            response.status()
+        ));
+    }
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|error| format!("Ollama running models response was invalid: {error}"))?;
+    Ok(body
+        .get("models")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default())
+}
+
+fn merge_running_context_lengths(models: &mut Vec<Value>, running_models: &[Value]) {
+    for running in running_models {
+        let Some(running_name) = model_name(running) else {
+            continue;
+        };
+        let Some(context_length) = running.get("context_length").and_then(value_as_u32) else {
+            continue;
+        };
+        if let Some(model) = models.iter_mut().find(|model| {
+            model_name(model).is_some_and(|candidate| model_name_matches(candidate, running_name))
+        }) {
+            if let Some(object) = model.as_object_mut() {
+                object.insert("context_length".to_string(), json!(context_length));
+            }
+        } else {
+            models.push(running.clone());
+        }
+    }
+}
+
+fn value_as_u32(value: &Value) -> Option<u32> {
+    let value = value.as_u64()?;
+    u32::try_from(value).ok().filter(|value| *value > 0)
 }
 
 pub(crate) async fn validate_request(request: &LlmRequest) -> Result<(), LlmError> {
