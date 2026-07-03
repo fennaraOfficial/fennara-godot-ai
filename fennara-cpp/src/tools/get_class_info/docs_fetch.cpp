@@ -1,4 +1,5 @@
 #include "fennara/app_paths.hpp"
+#include "fennara/tools/get_class_info/docs_branch.hpp"
 #include "fennara/tools/get_class_info/docs.hpp"
 #include "fennara/tools/get_class_info/docs_internal.hpp"
 
@@ -309,7 +310,7 @@ bool _fetch_class_xml(const godot::String &class_name,
 }
 
 } // namespace
-ClassDocumentation fetch_and_parse_class_documentation(
+ClassDocumentation fetch_and_parse_class_documentation_for_branch(
     const godot::String &class_name,
     const godot::String &branch) {
     const std::string key = _cache_key(class_name, branch);
@@ -354,6 +355,46 @@ ClassDocumentation fetch_and_parse_class_documentation(
     docs = parse_class_documentation_xml(class_name, branch, xml_text);
     docs.module_notice = module_notice;
     cache[key] = docs;
+    return docs;
+}
+
+ClassDocumentation fetch_and_parse_class_documentation(
+    const godot::String &class_name,
+    const godot::String &branch) {
+    godot::String primary_branch = branch.strip_edges();
+    if (primary_branch.is_empty()) {
+        primary_branch = fallback_docs_branch();
+    }
+
+    ClassDocumentation docs =
+        fetch_and_parse_class_documentation_for_branch(class_name, primary_branch);
+    const godot::String fallback_branch = fallback_docs_branch();
+    if (docs.found || primary_branch == fallback_branch) {
+        return docs;
+    }
+
+    ClassDocumentation fallback_docs =
+        fetch_and_parse_class_documentation_for_branch(class_name, fallback_branch);
+    if (fallback_docs.found) {
+        godot::String primary_message = docs.fetch_message;
+        if (primary_message.is_empty()) {
+            primary_message = "No docs were found on the primary branch.";
+        }
+        fallback_docs.fetch_message =
+            "Docs branch '" + primary_branch + "' was unavailable for '" +
+            class_name + "'; using fallback branch '" + fallback_branch +
+            "'. Primary lookup: " + primary_message;
+        return fallback_docs;
+    }
+
+    if (docs.fetch_message.is_empty()) {
+        docs.fetch_message =
+            "No docs were found on branch '" + primary_branch + "'.";
+    }
+    if (!fallback_docs.fetch_message.is_empty()) {
+        docs.fetch_message += " Fallback branch '" + fallback_branch +
+                              "' also failed: " + fallback_docs.fetch_message;
+    }
     return docs;
 }
 

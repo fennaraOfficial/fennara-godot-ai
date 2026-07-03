@@ -38,6 +38,9 @@ godot::Dictionary target_metadata(const godot::Dictionary &klass) {
     target["class_name"] = klass.get("class_name", "");
     target["status"] = klass.get("status", "");
     target["branch"] = klass.get("branch", "");
+    target["requested_branch"] = klass.get("requested_branch", "");
+    target["api_type"] = klass.get("api_type", "");
+    target["official_docs_lookup"] = klass.get("official_docs_lookup", "");
     target["local_only"] = klass.get("local_only", true);
     target["inherits"] = klass.get("inherits", "");
     target["property_count"] = klass.get("property_count", 0);
@@ -67,6 +70,18 @@ godot::String success_section(const godot::Dictionary &klass, int index) {
     godot::String branch = klass.get("branch", "");
     if (!branch.is_empty()) {
         lines.append("Docs branch: " + branch);
+    }
+    godot::String requested_branch = klass.get("requested_branch", "");
+    if (!requested_branch.is_empty() && requested_branch != branch) {
+        lines.append("Requested docs branch: " + requested_branch);
+    }
+    godot::String api_type = klass.get("api_type", "");
+    if (!api_type.is_empty()) {
+        lines.append("ClassDB API type: " + api_type);
+    }
+    godot::String docs_lookup = klass.get("official_docs_lookup", "");
+    if (!docs_lookup.is_empty()) {
+        lines.append("Official docs lookup: " + docs_lookup);
     }
     int64_t text_lines = static_cast<int64_t>(klass.get("text_line_count", 0));
     if (text_lines > 0) {
