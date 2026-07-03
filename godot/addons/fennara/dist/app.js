@@ -678,7 +678,9 @@
   function appendDaemonUserMessage(userMessage, requestId = "") { return storedTranscript?.appendDaemonUserMessage(userMessage, requestId); }
   function hasConnectedOptimisticUserMessage(requestId) { return storedTranscript?.hasConnectedOptimisticUserMessage(requestId) || false; }
   function restorePendingOptimisticUserMessages(chatId) { return storedTranscript?.restorePendingOptimisticUserMessages(chatId); }
-  function renderStoredMessages(messages) { return storedTranscript?.renderStoredMessages(messages); }
+  function renderStoredMessages(messages, contextCompactions = []) {
+    return storedTranscript?.renderStoredMessages(messages, contextCompactions);
+  }
   function trackOptimisticRequest(requestId, value) { return storedTranscript?.trackOptimisticRequest(requestId, value); }
   function deleteOptimisticRequest(requestId) { return storedTranscript?.deleteOptimisticRequest(requestId); }
 
@@ -703,6 +705,15 @@
 
   function updateToolCall(item) {
     transcriptRenderer.updateToolCall(item);
+  }
+
+  function handleContextCompaction(message) {
+    const chatId = String(message.chat_id || "");
+    if (activeChatId && chatId && chatId !== activeChatId) {
+      return;
+    }
+    activeChatId = chatId || activeChatId;
+    transcriptRenderer.updateContextCompaction(message.status);
   }
 
   function applySettings(settings, options = {}) {
@@ -889,13 +900,41 @@
   function currentModelInfo() {
     const info = modelPicker?.modelInfo(currentModel) || null;
     const override = localModelContextLengths.get(currentModel);
-    if (!override || Number(info?.context_length || 0) > 0) {
+    const detected = modelContextLength(info);
+    if (detected > 0) {
+      if (info && Number(info.context_length || 0) <= 0) {
+        return { ...info, context_length: detected };
+      }
+      return info;
+    }
+    if (!override) {
       return info;
     }
     return {
       ...(info || { id: currentModel }),
       context_length: override,
     };
+  }
+
+  function modelContextLength(info) {
+    const candidates = [
+      info?.context_length,
+      info?.contextLength,
+      info?.context_tokens,
+      info?.contextTokens,
+      info?.max_context_length,
+      info?.maxContextLength,
+      info?.limits?.context_tokens,
+      info?.limits?.contextTokens,
+      info?.limits?.context,
+    ];
+    for (const candidate of candidates) {
+      const value = normalizeContextLength(candidate);
+      if (value > 0) {
+        return value;
+      }
+    }
+    return 0;
   }
 
   function currentModelLabel() {
@@ -1159,7 +1198,7 @@
     if (!isLocalContextModel(modelId) || localModelContextLengths.has(modelId)) {
       return;
     }
-    const detected = Number(modelPicker?.modelInfo(modelId)?.context_length || 0);
+    const detected = modelContextLength(modelPicker?.modelInfo(modelId));
     if (detected > 0) {
       return;
     }
@@ -1180,7 +1219,9 @@
 
   function isLocalContextModel(modelId) {
     const provider = providerFromModel(modelId);
-    return provider === "ollama" || provider === "lmstudio";
+    return provider === "ollama" ||
+      provider === "lmstudio" ||
+      providerMetadata.get(provider)?.kind === "local";
   }
 
   function normalizeContextLength(value) {
@@ -1375,7 +1416,7 @@
     if (message.type === "chat_opened") {
       activeChatId = message.chat?.id || null;
       updateChatTitle(message.chat);
-      renderStoredMessages(message.messages || []);
+      renderStoredMessages(message.messages || [], message.context_compactions || []);
       if (!message.request_id) {
         restorePendingOptimisticUserMessages(activeChatId);
       }
@@ -1414,6 +1455,10 @@
         updateChatSize();
         updateSessionCost();
       }
+      return;
+    }
+    if (message.type === "chat_context_compaction") {
+      handleContextCompaction(message);
       return;
     }
     if (message.type === "chat_user_message") {
@@ -1493,6 +1538,7 @@
     }
     if (message.type === "chat_cancelled") {
       clearSystemStatus();
+      transcriptRenderer.updateContextCompaction("failed");
       updateAssistantText(message.response || "");
       transcriptRenderer.flushAssistantRender();
       transcriptRenderer.finishActiveThinking();
@@ -1508,6 +1554,7 @@
     }
     if (message.type === "error") {
       const errorText = message.message || "Chat request failed.";
+      transcriptRenderer.updateContextCompaction("failed");
       const requestId = String(message.request_id || "");
       if (requestId.startsWith("open-project-file")) {
         appendSystem(errorText);

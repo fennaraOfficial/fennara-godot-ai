@@ -14,6 +14,7 @@
     const activeTools = new Map();
     let activeToolAnchor = null;
     let statusLine = null;
+    let contextCompactionMarker = null;
     let pendingAssistantText = null;
     let pendingAssistantStick = false;
     let assistantRenderFrame = 0;
@@ -38,6 +39,7 @@
       activeTools.clear();
       activeToolAnchor = null;
       statusLine = null;
+      contextCompactionMarker = null;
       streamActive = false;
       streamFollowing = false;
       clearPendingAssistantRender();
@@ -169,6 +171,54 @@
     function clearSystemStatus() {
       statusLine?.remove();
       statusLine = null;
+    }
+
+    function updateContextCompaction(status) {
+      const cleanStatus = String(status || "").toLowerCase();
+      if (cleanStatus !== "running" && cleanStatus !== "done") {
+        contextCompactionMarker?.remove();
+        contextCompactionMarker = null;
+        return;
+      }
+
+      const shouldStick = isNearBottom();
+      const marker = contextCompactionMarker?.isConnected
+        ? contextCompactionMarker
+        : createContextCompactionMarker();
+      marker.dataset.status = cleanStatus;
+      marker.classList.toggle("is-running", cleanStatus === "running");
+      marker.querySelector("[data-context-compaction-text]").textContent =
+        cleanStatus === "running" ? "Compacting context" : "Context compacted";
+      keepBottomIfNeeded(shouldStick);
+      if (cleanStatus === "done") {
+        contextCompactionMarker = null;
+      }
+    }
+
+    function createContextCompactionMarker() {
+      const marker = document.createElement("div");
+      marker.className = "context-compaction-marker";
+      marker.setAttribute("role", "status");
+      marker.setAttribute("aria-live", "polite");
+
+      const label = document.createElement("span");
+      label.className = "context-compaction-label";
+      label.innerHTML = [
+        '<span class="context-compaction-icon" aria-hidden="true">',
+        '<svg class="svg-icon" viewBox="0 0 24 24">',
+        '<path d="M8 3h8"></path>',
+        '<path d="M10 7h4"></path>',
+        '<path d="M4 12h16"></path>',
+        '<path d="M10 17h4"></path>',
+        '<path d="M8 21h8"></path>',
+        "</svg>",
+        "</span>",
+        '<span data-context-compaction-text></span>',
+      ].join("");
+      marker.append(label);
+      transcript?.append(marker);
+      contextCompactionMarker = marker;
+      return marker;
     }
 
     function resetStreamState() {
@@ -777,6 +827,7 @@
       resetActiveAssistant,
       resetStreamState,
       scrollToBottom,
+      updateContextCompaction,
       updateAssistantText,
       updateThinkingText,
       updateToolCall,

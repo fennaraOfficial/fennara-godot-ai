@@ -72,9 +72,20 @@ pub(crate) struct StoredMessage {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub(crate) struct ContextCompactionMarker {
+    pub(crate) id: String,
+    pub(crate) chat_id: String,
+    pub(crate) created_at_ms: i64,
+    pub(crate) covered_start_sequence: i64,
+    pub(crate) covered_end_sequence: i64,
+    pub(crate) source_message_count: i64,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub(crate) struct OpenedChat {
     pub(crate) chat: ChatSummary,
     pub(crate) messages: Vec<StoredMessage>,
+    pub(crate) context_compactions: Vec<ContextCompactionMarker>,
 }
 
 #[derive(Clone, Debug)]
@@ -107,8 +118,13 @@ pub(crate) fn open_chat(scope: &ProjectScope, chat_id: &str) -> Result<OpenedCha
     let chat = get_chat_for_scope(&conn, scope, chat_id)?
         .ok_or_else(|| "Chat not found for this project.".to_string())?;
     let messages = messages_for_chat(&conn, chat_id)?;
+    let context_compactions = context_compactions_for_chat(&conn, chat_id)?;
     set_active_chat_id(scope, chat_id)?;
-    Ok(OpenedChat { chat, messages })
+    Ok(OpenedChat {
+        chat,
+        messages,
+        context_compactions,
+    })
 }
 
 pub(crate) fn chat_summary(chat_id: &str) -> Result<ChatSummary, String> {
@@ -909,6 +925,29 @@ fn messages_for_chat(conn: &Connection, chat_id: &str) -> Result<Vec<StoredMessa
         .query_map([chat_id], message_from_row)
         .map_err(to_store_error)?;
     rows.collect::<Result<Vec<_>, _>>().map_err(to_store_error)
+}
+
+fn context_compactions_for_chat(
+    conn: &Connection,
+    chat_id: &str,
+) -> Result<Vec<ContextCompactionMarker>, String> {
+    let mut markers: Vec<_> = context_compaction::load_context_summaries_from_conn(conn, chat_id)?
+        .into_iter()
+        .map(context_compaction_marker)
+        .collect();
+    markers.sort_by_key(|marker| (marker.created_at_ms, marker.covered_end_sequence));
+    Ok(markers)
+}
+
+fn context_compaction_marker(summary: ContextSummaryChunk) -> ContextCompactionMarker {
+    ContextCompactionMarker {
+        id: summary.id,
+        chat_id: summary.chat_id,
+        created_at_ms: summary.created_at_ms,
+        covered_start_sequence: summary.covered_start_sequence,
+        covered_end_sequence: summary.covered_end_sequence,
+        source_message_count: summary.source_message_count,
+    }
 }
 
 fn refresh_chat_rollups(conn: &Connection, chat_id: &str) -> Result<(), String> {

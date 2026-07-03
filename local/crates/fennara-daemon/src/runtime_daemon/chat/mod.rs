@@ -236,6 +236,7 @@ where
                     "request_id": null,
                     "chat": opened.chat,
                     "messages": opened.messages,
+                    "context_compactions": opened.context_compactions,
                     "can_revert": chat_can_revert(state, &opened.chat.id).await
                 }),
             )
@@ -375,6 +376,7 @@ where
                             "request_id": request_id,
                             "chat": opened.chat,
                             "messages": opened.messages,
+                            "context_compactions": opened.context_compactions,
                             "can_revert": chat_can_revert(state, &opened.chat.id).await
                         }),
                     )
@@ -450,6 +452,7 @@ where
                             "request_id": request_id,
                             "chat": opened.chat,
                             "messages": opened.messages,
+                            "context_compactions": opened.context_compactions,
                             "can_revert": false
                         }),
                     )
@@ -595,6 +598,7 @@ where
                             "request_id": request_id.clone(),
                             "chat": opened.chat,
                             "messages": opened.messages,
+                            "context_compactions": opened.context_compactions,
                             "can_revert": false,
                             "reverted": true,
                             "restored_message": restored_message

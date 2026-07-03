@@ -202,6 +202,8 @@ where
                         "summary_replay_budget_tokens": budgets.summary_replay_budget_tokens
                     }),
                 );
+                send_context_compaction_status(sender, request_id.clone(), &chat_id, "running")
+                    .await?;
                 match try_create_context_summary(
                     provider_settings.clone(),
                     &model,
@@ -223,6 +225,13 @@ where
                                 "source_message_count": summary.source_message_count
                             }),
                         );
+                        send_context_compaction_status(
+                            sender,
+                            request_id.clone(),
+                            &chat_id,
+                            "done",
+                        )
+                        .await?;
                         replay_messages = match replay_messages_for_budget(&chat_id, Some(budgets))
                         {
                             Ok(messages) => messages,
@@ -244,6 +253,13 @@ where
                     }
                     Ok(None) => {
                         summary_span.finish("skipped", json!({ "reason": "no_candidate" }));
+                        send_context_compaction_status(
+                            sender,
+                            request_id.clone(),
+                            &chat_id,
+                            "skipped",
+                        )
+                        .await?;
                         if let Some(messages) =
                             bounded_replay_after_summary_failure(&chat_id, budgets, &trace)
                         {
@@ -263,6 +279,13 @@ where
                             "failed",
                             json!({ "message": error.as_str() }),
                         );
+                        send_context_compaction_status(
+                            sender,
+                            request_id.clone(),
+                            &chat_id,
+                            "failed",
+                        )
+                        .await?;
                         if let Some(messages) =
                             bounded_replay_after_summary_failure(&chat_id, budgets, &trace)
                         {
@@ -473,6 +496,13 @@ where
                             &provider_messages,
                         )
                         .unwrap_or(0);
+                        send_context_compaction_status(
+                            sender,
+                            request_id.clone(),
+                            &chat_id,
+                            "running",
+                        )
+                        .await?;
                         match try_create_context_summary(
                             provider_settings.clone(),
                             &model,
@@ -494,6 +524,13 @@ where
                                         "covered_end_sequence": summary.covered_end_sequence
                                     }),
                                 );
+                                send_context_compaction_status(
+                                    sender,
+                                    request_id.clone(),
+                                    &chat_id,
+                                    "done",
+                                )
+                                .await?;
                             }
                             Ok(None) => {
                                 trace.event_status(
@@ -501,6 +538,13 @@ where
                                     "skipped",
                                     json!({ "reason": "no_candidate" }),
                                 );
+                                send_context_compaction_status(
+                                    sender,
+                                    request_id.clone(),
+                                    &chat_id,
+                                    "skipped",
+                                )
+                                .await?;
                             }
                             Err(error) => {
                                 trace.event_status(
@@ -508,6 +552,13 @@ where
                                     "failed",
                                     json!({ "message": error.as_str() }),
                                 );
+                                send_context_compaction_status(
+                                    sender,
+                                    request_id.clone(),
+                                    &chat_id,
+                                    "failed",
+                                )
+                                .await?;
                             }
                         }
                         if let Some(messages) = bounded_replay_after_summary_failure_before_sequence(
@@ -1216,6 +1267,28 @@ fn estimate_provider_input_tokens(
     )
     .ok()
     .map(|estimate| estimate.estimated_input_tokens)
+}
+
+async fn send_context_compaction_status<S>(
+    sender: &mut S,
+    request_id: Option<String>,
+    chat_id: &str,
+    status: &str,
+) -> Result<(), S::Error>
+where
+    S: Sink<Message> + Unpin,
+    S::Error: std::fmt::Debug,
+{
+    send_json(
+        sender,
+        json!({
+            "type": "chat_context_compaction",
+            "request_id": request_id,
+            "chat_id": chat_id,
+            "status": status
+        }),
+    )
+    .await
 }
 
 async fn try_create_context_summary(

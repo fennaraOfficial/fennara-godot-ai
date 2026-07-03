@@ -54,8 +54,10 @@
       }
     }
 
-    function renderStoredMessages(messages) {
+    function renderStoredMessages(messages, contextCompactions = []) {
       clearTranscript(false);
+      const compactionMarkers = normalizeContextCompactions(contextCompactions);
+      let compactionMarkerIndex = 0;
       let pendingHiddenAssistantCost = 0;
       let storedPromptTokens = 0;
       for (const message of messages || []) {
@@ -72,10 +74,12 @@
         }
         if (message.role === "tool") {
           appendStoredTool(message);
+          appendDueContextCompactions(message);
           continue;
         }
         if (isStoredToolCallAssistant(message)) {
           pendingHiddenAssistantCost += storedMessageCost(message);
+          appendDueContextCompactions(message);
           continue;
         }
         const node = appendMessage(
@@ -99,10 +103,29 @@
           );
           pendingHiddenAssistantCost = 0;
         }
+        appendDueContextCompactions(message);
       }
+      appendRemainingContextCompactions();
       if (storedPromptTokens > 0) {
         setLatestPromptTokens(storedPromptTokens);
         updateChatSize();
+      }
+
+      function appendDueContextCompactions(message) {
+        while (
+          compactionMarkerIndex < compactionMarkers.length &&
+          contextCompactionBelongsAfterMessage(compactionMarkers[compactionMarkerIndex], message)
+        ) {
+          appendStoredContextCompaction();
+          compactionMarkerIndex += 1;
+        }
+      }
+
+      function appendRemainingContextCompactions() {
+        while (compactionMarkerIndex < compactionMarkers.length) {
+          appendStoredContextCompaction();
+          compactionMarkerIndex += 1;
+        }
       }
     }
 
@@ -136,6 +159,39 @@
         status,
         content: message.content || "",
       });
+    }
+
+    function appendStoredContextCompaction() {
+      transcriptRenderer?.updateContextCompaction("done");
+    }
+
+    function normalizeContextCompactions(compactions) {
+      return (Array.isArray(compactions) ? compactions : [])
+        .map((item) => ({
+          id: String(item?.id || ""),
+          createdAtMs: positiveNumber(item?.created_at_ms),
+          coveredEndSequence: positiveNumber(item?.covered_end_sequence),
+        }))
+        .filter((item) => item.id || item.createdAtMs > 0 || item.coveredEndSequence > 0)
+        .sort((left, right) =>
+          (left.createdAtMs - right.createdAtMs) ||
+          (left.coveredEndSequence - right.coveredEndSequence) ||
+          left.id.localeCompare(right.id)
+        );
+    }
+
+    function contextCompactionBelongsAfterMessage(marker, message) {
+      const messageCreatedAtMs = positiveNumber(message?.created_at_ms);
+      if (marker.createdAtMs > 0 && messageCreatedAtMs > 0) {
+        return messageCreatedAtMs >= marker.createdAtMs;
+      }
+      const sequence = positiveNumber(message?.sequence);
+      return marker.coveredEndSequence > 0 && sequence >= marker.coveredEndSequence;
+    }
+
+    function positiveNumber(value) {
+      const number = Number(value);
+      return Number.isFinite(number) && number > 0 ? number : 0;
     }
 
     function imagesFromMetadata(raw) {
