@@ -3,20 +3,41 @@
 [![Discord](https://img.shields.io/badge/Discord-Join%20Fennara-5865F2?logo=discord&logoColor=white)](https://discord.com/invite/3fF4ft9PTk)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-Fennara gives MCP clients a live connection to Godot. Agents can inspect scenes, check scripts, capture runtime errors, and validate changes inside the editor instead of guessing from project files alone.
+Used by Godot developers and teams, including [Somni Game Studios](https://somnigamestudios.com/).
 
-It is built for Godot projects where file edits are not enough. Node paths, exported variables, scene resources, runtime logs, screenshots, and editor diagnostics all matter.
+Fennara gives AI assistants a live connection to Godot. Use it from MCP-capable apps like Codex, Claude, Cursor, Gemini, and Antigravity, or from the optional in-editor chat dock.
 
-Fennara also includes an optional in-editor chat dock backed by the same local daemon. The chat can use project-aware tools, show the active MCP target, store provider settings locally, and attach image context when supported by the selected model.
+Agents can inspect scenes, check scripts, capture screenshots, read runtime errors, and validate changes inside the editor instead of guessing from project files alone.
 
-External MCP apps and the built-in chat are separate model paths. `fennara mcp-setup --claude` lets Claude use Fennara's Godot tools; it does not make the built-in dock use Claude or your Claude subscription. The dock uses the provider configured in Fennara chat settings, such as OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, local Ollama, or LM Studio. See [MCP Apps And Built-In Chat](docs/chat-vs-mcp.md) and [Built-In Chat Providers](docs/providers.md).
+<table>
+  <tr>
+    <td width="46%">
+      <a href="https://www.youtube.com/watch?v=2vSYP7GyA5U">
+        <img src="https://i.ytimg.com/vi/2vSYP7GyA5U/hqdefault.jpg" alt="Comparing Fennara with other Godot MCPs" width="100%" />
+      </a>
+    </td>
+    <td>
+      <strong>Watch: Comparing Fennara with other Godot MCPs</strong><br />
+      See how Fennara's Godot feedback loop compares with command-only MCP workflows.
+    </td>
+  </tr>
+</table>
+
+## What It Does
+
+- exposes Godot-aware tools to external AI apps through MCP
+- adds an optional local chat dock inside the Godot editor
+- returns real Godot feedback: scene trees, diagnostics, screenshots, runtime logs, and validation results
+- keeps the agent accountable to the open editor instead of only the filesystem
+
+External MCP apps and the built-in chat use separate model settings. See [MCP Apps And Built-In Chat](docs/chat-vs-mcp.md) and [Built-In Chat Providers](docs/providers.md).
 
 ## Requirements
 
 - Godot 4.5 or newer.
 - A supported desktop OS: Windows x86_64, Linux x86_64, or macOS arm64.
-- An MCP-capable coding app such as Claude, Codex, Cursor, Gemini, or Antigravity.
-- A chat provider only if you want to use the built-in Fennara chat dock. External MCP apps use their own model setup.
+- An MCP-capable coding app only if you want to use Fennara from Claude, Codex, Cursor, Gemini, Antigravity, or another external AI app.
+- A chat provider only if you want to use the built-in Fennara chat dock. This can be a cloud provider key or a local provider such as Ollama / LM Studio.
 
 For the full install walkthrough, see [Setup](docs/setup.md).
 
@@ -32,7 +53,7 @@ The built-in chat dock uses the platform webview: Microsoft Edge WebView2 on Win
 
 ## Quick Start
 
-Follow these steps in order.
+Install the CLI and Godot addon first, then choose the MCP app path, the built-in chat path, or both.
 
 ### 1. Install The CLI
 
@@ -82,7 +103,9 @@ AGENTS.md
 addons/fennara/ai/guidelines.md
 ```
 
-### 3. Configure Your MCP App
+### 3. Optional: Configure Your MCP App
+
+Skip this step if you only want to use the built-in Fennara chat dock.
 
 Claude Code and Claude Desktop:
 
@@ -118,7 +141,7 @@ Restart the MCP app after setup so it reloads the Fennara server.
 
 This step only configures the external MCP app. It does not configure the built-in Fennara chat model. See [MCP Apps And Built-In Chat](docs/chat-vs-mcp.md) if you are wondering why the dock asks for a provider even after `mcp-setup --claude`.
 
-### 4. Verify It Works
+### 4. Optional: Verify External MCP Works
 
 With the Godot project open, ask your MCP app:
 
@@ -159,30 +182,25 @@ The goal is not to replace an agent's normal file tools. Fennara gives the missi
 
 The Fennara dock includes a native web chat surface inside Godot. It talks to the local daemon, not a hosted Fennara backend.
 
-- Bring your own cloud provider key, or run a local provider such as Ollama or LM Studio.
-- Supported chat providers include OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, local Ollama, and LM Studio.
-- Provider API keys and local base URL settings are saved locally by the daemon, outside the Godot project.
-- Chat display can stay embedded in Godot, or use the system browser next time if you enable **Open chat in my system browser next time** in Chat Settings.
-- Use `/provider` to connect or switch providers and `/model` to choose a model in the dock.
-- Chat history is stored locally and scoped to the current project.
-- Select code in Godot's script editor, open the script editor context menu, and choose **Add to Chat** to attach that exact script range to the next built-in chat message.
-- Image attachments can be pasted or selected from the composer and sent as model context when the selected provider model supports vision. Ollama image input is not enabled yet.
-- The dock shows whether the current project is the MCP target for external MCP clients.
+- bring your own model provider key, or use local Ollama / LM Studio
+- use `/provider` and `/model` to switch models from inside Godot
+- attach selected script ranges and supported image context
+- keep chat history, provider keys, and local URLs on your machine
+- open the chat embedded in Godot or in your system browser
 
 More detail: [Built-In Chat Providers](docs/providers.md), [Built-In Chat Slash Commands](docs/slash-commands.md).
 
 ## Demos
 
-Start here:
+Watch a hands-on Fennara walkthrough:
 
-[![I Gave Codex an AI Game Image and It Built This in Godot](https://i.ytimg.com/vi/ztbH6zBhxMc/hqdefault.jpg)](https://www.youtube.com/watch?v=ztbH6zBhxMc)
+[![This Godot Plugin Revolutionizes AI Game Development Forever](https://i.ytimg.com/vi/pijlHyiOnz4/hqdefault.jpg)](https://www.youtube.com/watch?v=pijlHyiOnz4&t=22s)
 
 More videos:
 
+- [I Gave Codex an AI Game Image and It Built This in Godot](https://www.youtube.com/watch?v=ztbH6zBhxMc)
 - [Fennara MCP Builds a Katamari-Style Godot Game](https://www.youtube.com/watch?v=8y2Ub8pgNSs)
-- [Godot MCPs Ranked: The Best AI Tool for Godot](https://www.youtube.com/watch?v=2vSYP7GyA5U)
 - [This Godot Plugin Transforms AI Game Development Forever](https://www.youtube.com/watch?v=wKln8248y2M)
-- [This Godot Plugin Revolutionizes AI Game Development Forever](https://www.youtube.com/watch?v=pijlHyiOnz4)
 
 See [Demos](docs/demos.md) for more videos from the Fennara channel.
 

@@ -48,10 +48,6 @@ const RUN_SCENE_EDIT_SCRIPT_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../schemas/tools/run_scene_edit_script.json"
 ));
-const SAVE_CUSTOM_RESOURCE_SCHEMA: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../schemas/tools/save_custom_resource.json"
-));
 const RUNTIME_SESSION_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../schemas/tools/runtime_session.json"
@@ -76,7 +72,6 @@ const ALLOWED_TOOL_NAMES: &[&str] = &[
     "project_settings",
     "write_or_update_file",
     "run_scene_edit_script",
-    "save_custom_resource",
     "runtime_session",
     "runtime_script",
     "exec_command",
@@ -93,7 +88,6 @@ const TOOL_SCHEMAS: &[&str] = &[
     PROJECT_SETTINGS_SCHEMA,
     WRITE_OR_UPDATE_FILE_SCHEMA,
     RUN_SCENE_EDIT_SCRIPT_SCHEMA,
-    SAVE_CUSTOM_RESOURCE_SCHEMA,
     RUNTIME_SESSION_SCHEMA,
     RUNTIME_SCRIPT_SCHEMA,
     EXEC_COMMAND_SCHEMA,

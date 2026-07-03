@@ -62,7 +62,7 @@ Do not inspect or modify Godot scenes, resources, scripts, or project settings s
 
 Do not use generic file write/edit tools for `.gd`, `.cs`, `.gdshader`, `.tscn`, `.tres`, `.res`, or `project.godot` changes when a Fennara MCP tool can perform the edit. Generic app file tools are for reading, searching, diffs, and non-Godot files. Godot-aware edits must go through Fennara MCP so diagnostics, scene validation, resource serialization, and editor state stay correct.
 
-Never hand-write or directly patch `.tscn`, `.tres`, or `.res` files as plain text. Those files are Godot-serialized resources; edit them through `run_scene_edit_script`, `save_custom_resource`, `project_settings`, or another relevant Fennara MCP tool.
+Never hand-write or directly patch `.tscn`, `.tres`, or `.res` files as plain text. Those files are Godot-serialized resources; edit them through `run_scene_edit_script`, `project_settings`, or another relevant Fennara MCP tool.
 
 ## Tool Schema Rule
 
@@ -87,7 +87,7 @@ When searching for Fennara MCP tools through a tool-search system, search for al
 Use this query:
 
 ```text
-fennara_status read_file write_or_update_file run_scene_edit_script get_scene_tree save_custom_resource script_diagnostics screenshot_scene get_node_properties get_class_info validate_scene project_settings runtime_session runtime_script scrape_editor
+fennara_status read_file write_or_update_file run_scene_edit_script get_scene_tree script_diagnostics screenshot_scene get_node_properties get_class_info validate_scene project_settings runtime_session runtime_script scrape_editor
 ```
 
 If the search tool has a `limit` option, set it to `20` or higher. Do this even when you only need one specific tool, because low result limits can bury relevant Fennara tools below the cutoff.
@@ -269,13 +269,21 @@ Important behavior:
 - If it reports diagnostics, treat them as part of the tool result and fix them before claiming the script edit is complete.
 - For other file types, use appropriate follow-up validation when the file affects Godot behavior.
 - Do not use the MCP app's generic write/edit tool for `.gd`, `.cs`, or `.gdshader` files. Use `write_or_update_file` so diagnostics run automatically.
-- Do not use `write_or_update_file` or generic text editing for `.tscn`, `.tres`, or `.res` scene/resource surgery. Use `run_scene_edit_script` or the specific structured Fennara tool instead.
+- Do not use `write_or_update_file` or generic text editing for `.tscn`, `.tres`, or `.res` scene/resource surgery. Use `run_scene_edit_script`, `project_settings`, or another Godot-aware structured tool instead.
 
 For ordinary text reading, use the MCP app's own file tools.
 
 ## Scene And Resource Edits
 
 Use `run_scene_edit_script` for procedural scene or resource edits through Godot's object model.
+
+It is a real editor-side `@tool` script runner with a scene context. Use it to the full extent when normal inspection tools are not enough: scene edits, scene/resource inspection, ClassDB runtime probes, native addon/GDExtension class inspection, ResourceLoader/ResourceSaver flows, standalone `.tres` creation, and targeted project resource checks. Keep scripts tiny, bounded, and explicit; do not use this power to brute-force scan a whole project or run editor-unsafe code.
+
+Tool choice:
+
+- Use `get_class_info` first when you only need class API docs, methods, properties, inheritance, enums, or signals.
+- Use `run_scene_edit_script` when you need to execute real Godot editor code, such as instantiating an addon class, reading runtime-only property lists, loading/saving resources, or probing APIs that static class docs cannot answer.
+- If the script does not actually need the target scene, pass a small safe existing scene as context. Do not call `ctx.mark_modified()` or scene-mutating helpers unless you intentionally want to save that scene. In this mode `modified=false` and `scene_saved=false` are expected.
 
 Use it instead of raw `.tscn`, `.tres`, or `.res` surgery when editing:
 
@@ -395,11 +403,9 @@ These Fennara-added scripts and autoloads are not noise, dead code, or cleanup t
 
 If a Fennara autoload or addon script appears related to a warning, first inspect why it exists and report the finding. Prefer fixing the actual issue or asking the user before touching Fennara infrastructure.
 
-## Custom Resources
+## Standalone Resources
 
-Use `save_custom_resource` for `.tres` resources when a structured Godot resource save is needed.
-
-Use it when working with custom Resource classes, reusable data assets, materials, or configuration assets that should be written through Godot's resource system.
+Use `run_scene_edit_script` for standalone `.tres` resources when a structured Godot resource save is needed. Write a small editor-side script that loads or instantiates the resource, sets properties through Godot APIs, saves it with `ResourceSaver.save(...)`, and logs the result with `ctx.log(...)`. If the scene is only a context scene, do not call `ctx.mark_modified()`.
 
 ## Recommended Workflows
 
@@ -424,7 +430,7 @@ Use it when working with custom Resource classes, reusable data assets, material
 1. Use `get_scene_tree`.
 2. Use `get_node_properties` for nodes/resources you will touch.
 3. Use `get_class_info` for relevant node/resource APIs.
-4. Edit scenes with `run_scene_edit_script` or another structured Fennara scene/resource tool. Do not directly write `.tscn` text.
+4. Edit scenes and Godot-serialized resources with `run_scene_edit_script` or another structured Fennara scene/resource tool. Do not directly write `.tscn` text.
 5. Check the diagnostics and validation returned by `run_scene_edit_script`.
 6. Use `screenshot_scene` when visual correctness matters.
 

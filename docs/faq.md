@@ -6,7 +6,7 @@ No. Fennara is a Godot-aware agent workflow. It can work with project files, sce
 
 ## Is Fennara just another Godot MCP command server?
 
-No. Fennara exposes Godot-aware tools, but the main product thesis is the feedback loop: Godot returns diagnostics, validation, runtime errors, screenshots, and structured tool results so agents can patch mistakes.
+No. MCP is one way to use Fennara from apps like Codex, Claude, Cursor, Gemini, and Antigravity. Fennara also has an optional built-in chat dock. The main product thesis is the Godot feedback loop: diagnostics, validation, runtime errors, screenshots, and structured tool results so agents can patch mistakes.
 
 ## Does Fennara replace Godot knowledge?
 

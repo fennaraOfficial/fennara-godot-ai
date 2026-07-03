@@ -105,7 +105,6 @@ void FennaraLocalBridge::_send_hello() {
     tools.append("write_or_update_file");
     tools.append("run_scene_edit_script");
     tools.append("get_scene_tree");
-    tools.append("save_custom_resource");
     tools.append("script_diagnostics");
     tools.append("screenshot_scene");
     tools.append("get_node_properties");
