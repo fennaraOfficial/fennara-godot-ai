@@ -96,7 +96,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | Change `fennara install` or `fennara update` | `local/crates/fennara-cli/src/` |
 | Change webview prerequisite checks | `local/crates/fennara-cli/src/webview_prereq.rs`, `local/crates/fennara-cli/src/webview_runtime.rs`, and `fennara-cpp/src/ui/webview_host*` |
 | Change generated project guidance | `local/templates/` and `local/crates/fennara-cli/src/project_guidance.rs` |
-| Change MCP app setup | `local/crates/fennara-cli/src/mcp_setup.rs` |
+| Change MCP app setup | `local/crates/fennara-cli/src/mcp_setup.rs` and `docs/mcp-setup.md` |
 | Change runtime session behavior | `fennara-cpp/src/tools/runtime_session/` and `local/crates/fennara-daemon/` |
 | Change in-editor chat UI, slash commands, or model/provider picker | `ui/chat/`, `godot/addons/fennara/dist/`, `fennara-cpp/src/ui/dock.cpp`, and `fennara-cpp/src/ui/webview_host*` |
 | Change built-in chat providers | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/`, `local/crates/fennara-daemon/src/runtime_daemon/chat/models.rs`, `local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs`, and `ui/chat/` |
@@ -104,7 +104,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | Change C# support | `fennara-cpp/src/lsp/` and `local/crates/fennara-cli/src/csharp_support.rs` |
 | Change release packages or CLI self-update | `local/crates/fennara-cli/src/release_manifest.rs`, `local/crates/fennara-cli/src/release_client.rs`, `local/crates/fennara-cli/src/release_package.rs`, `local/crates/fennara-cli/src/self_update.rs`, `scripts/package-preview.mjs`, `scripts/write-release-manifest.mjs`, and `.github/workflows/release.yml` |
 | Bump version | `node scripts/set-version.mjs <version>` |
-| Update setup/docs for chat vs MCP, providers, or slash commands | `README.md`, `docs/chat-vs-mcp.md`, `docs/providers.md`, `docs/slash-commands.md`, `docs/setup.md`, `docs/faq.md`, `docs/manual-install.md`, `docs/tools.md`, `docs/examples.md`, and `llms.txt` |
+| Update setup/docs for chat vs MCP, providers, or slash commands | `README.md`, `docs/mcp-setup.md`, `docs/chat-vs-mcp.md`, `docs/providers.md`, `docs/slash-commands.md`, `docs/setup.md`, `docs/faq.md`, `docs/manual-install.md`, `docs/tools.md`, `docs/examples.md`, and `llms.txt` |
 
 ## Notes
 

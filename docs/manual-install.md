@@ -225,6 +225,10 @@ fennara mcp-setup --help
 
 Restart the MCP app after setup.
 
+If your app is not listed, or if you are manually editing MCP config as part of
+this install, see [MCP Setup](mcp-setup.md) for the stable launcher path and
+JSON/TOML examples.
+
 This only connects the external MCP app to Fennara's Godot tools. It does not
 configure the built-in Fennara chat dock's model provider. Configure the dock
 inside Godot if you want built-in chat, or see [MCP Apps And Built-In Chat](chat-vs-mcp.md).

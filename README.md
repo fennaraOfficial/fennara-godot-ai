@@ -139,6 +139,9 @@ fennara mcp-setup --help
 
 Restart the MCP app after setup so it reloads the Fennara server.
 
+If your app is not listed, or if you need to edit an MCP config by hand, see
+[MCP Setup](docs/mcp-setup.md).
+
 This step only configures the external MCP app. It does not configure the built-in Fennara chat model. See [MCP Apps And Built-In Chat](docs/chat-vs-mcp.md) if you are wondering why the dock asks for a provider even after `mcp-setup --claude`.
 
 ### 4. Optional: Verify External MCP Works
@@ -219,6 +222,7 @@ See [Demos](docs/demos.md) for more videos from the Fennara channel.
 Useful starting points:
 
 - [Setup](docs/setup.md)
+- [MCP setup](docs/mcp-setup.md)
 - [Repo map](docs/repo-map.md)
 - [Architecture](docs/architecture.md)
 - [Tools](docs/tools.md)
