@@ -95,6 +95,7 @@ pub(crate) struct RuntimeSession {
     pub(crate) command_dir: PathBuf,
     pub(crate) raw_log_path: PathBuf,
     pub(crate) log_cursor: RuntimeLogCursor,
+    pub(crate) script_log_start_offsets: HashMap<String, u64>,
     pub(crate) child: tokio::process::Child,
     pub(crate) started_ms: u128,
 }

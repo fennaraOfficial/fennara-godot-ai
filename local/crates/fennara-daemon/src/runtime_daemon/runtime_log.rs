@@ -136,6 +136,19 @@ pub(crate) async fn capture_update(
     LogCapture { receipt, lines }
 }
 
+pub(crate) async fn capture_from_offset(
+    session_id: &str,
+    log_path: &Path,
+    mode: &str,
+    byte_offset: u64,
+) -> LogCapture {
+    let mut cursor = RuntimeLogCursor {
+        byte_offset,
+        line: 0,
+    };
+    capture_update(session_id, log_path, mode, &mut cursor).await
+}
+
 pub(crate) fn findings_for_script(lines: &[(u64, String)], script_run_id: &str) -> Value {
     let mut blocks: Vec<Value> = Vec::new();
     let mut current: Vec<String> = Vec::new();
@@ -214,18 +227,11 @@ async fn log_contains(path: &Path, offset: u64, pattern: &str) -> bool {
 
 fn shown_excerpt(lines: &[(u64, String)]) -> (Vec<(u64, String)>, usize, usize) {
     let tail_lines = MAX_SHOWN_LINES.saturating_sub(HEAD_LINES);
-    let mut selected = Vec::new();
-    if lines.len() <= MAX_SHOWN_LINES {
-        selected.extend(lines.iter().cloned());
-    } else {
-        selected.extend(lines.iter().take(HEAD_LINES).cloned());
-        selected.extend(lines.iter().skip(lines.len() - tail_lines).cloned());
-    }
-
     let mut shown = Vec::new();
     let mut chars = 0usize;
     let mut truncated = 0usize;
     if lines.len() <= MAX_SHOWN_LINES {
+        let selected: Vec<(u64, String)> = lines.iter().cloned().collect();
         for (line_no, line) in selected {
             push_shown_line(line_no, line, &mut shown, &mut chars, &mut truncated);
         }
@@ -356,4 +362,124 @@ fn is_issue_continuation(line: &str) -> bool {
         || line.starts_with("              [")
         || line.starts_with('[')
         || line.starts_with("-- END OF")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn numbered_lines(count: u64) -> Vec<(u64, String)> {
+        (1..=count)
+            .map(|line| (line, format!("line {line}")))
+            .collect()
+    }
+
+    #[test]
+    fn shown_excerpt_keeps_all_lines_when_under_limit() {
+        let lines = numbered_lines(3);
+
+        let (shown, omitted, truncated) = shown_excerpt(&lines);
+
+        assert_eq!(shown, lines);
+        assert_eq!(omitted, 0);
+        assert_eq!(truncated, 0);
+    }
+
+    #[test]
+    fn shown_excerpt_uses_head_and_tail_when_over_limit() {
+        let lines = numbered_lines(65);
+
+        let (shown, omitted, truncated) = shown_excerpt(&lines);
+
+        assert_eq!(shown.len(), MAX_SHOWN_LINES);
+        assert_eq!(shown.first().map(|line| line.0), Some(1));
+        assert_eq!(shown.get(HEAD_LINES - 1).map(|line| line.0), Some(20));
+        assert_eq!(shown.get(HEAD_LINES).map(|line| line.0), Some(26));
+        assert_eq!(shown.last().map(|line| line.0), Some(65));
+        assert_eq!(omitted, 5);
+        assert_eq!(truncated, 0);
+    }
+
+    #[test]
+    fn shown_excerpt_reports_line_and_character_truncation() {
+        let lines: Vec<(u64, String)> = (1..=20)
+            .map(|line| (line, "x".repeat(MAX_LINE_CHARS)))
+            .collect();
+
+        let (shown, omitted, truncated) = shown_excerpt(&lines);
+
+        assert!(shown.len() < lines.len());
+        assert_eq!(omitted, lines.len() - shown.len());
+        assert_eq!(truncated, 0);
+    }
+
+    #[test]
+    fn line_ranges_groups_contiguous_line_numbers() {
+        let lines = vec![
+            (2, "a".to_string()),
+            (3, "b".to_string()),
+            (5, "c".to_string()),
+            (8, "d".to_string()),
+            (9, "e".to_string()),
+        ];
+
+        assert_eq!(
+            line_ranges(&lines),
+            vec![
+                json!({ "first": 2, "last": 3 }),
+                json!({ "first": 5, "last": 5 }),
+                json!({ "first": 8, "last": 9 }),
+            ]
+        );
+    }
+
+    #[test]
+    fn complete_line_prefix_len_excludes_partial_tail() {
+        assert_eq!(complete_line_prefix_len(b""), 0);
+        assert_eq!(complete_line_prefix_len(b"partial"), 0);
+        assert_eq!(complete_line_prefix_len(b"one\npartial"), 4);
+        assert_eq!(complete_line_prefix_len(b"one\r\ntwo\n"), 9);
+    }
+
+    #[test]
+    fn truncate_line_preserves_short_lines_and_marks_long_lines() {
+        let (short, short_truncated) = truncate_line("short".to_string());
+        assert_eq!(short, "short");
+        assert!(!short_truncated);
+
+        let (long, long_truncated) = truncate_line("z".repeat(MAX_LINE_CHARS + 1));
+        assert!(long_truncated);
+        assert_eq!(long.chars().take(MAX_LINE_CHARS).count(), MAX_LINE_CHARS);
+        assert!(long.ends_with(" ... [line truncated]"));
+    }
+
+    #[test]
+    fn findings_for_script_extracts_errors_warnings_and_crashes_inside_script_slice() {
+        let lines = vec![
+            (1, "ERROR: before".to_string()),
+            (2, "FENNARA_SCRIPT_STARTED: run-1".to_string()),
+            (3, "WARNING: watch this".to_string()),
+            (4, "   at: res://foo.gd:10".to_string()),
+            (5, "ERROR: broken".to_string()),
+            (6, "CrashHandlerException: crashed".to_string()),
+            (7, "FENNARA_SCRIPT_COMPLETED: run-1".to_string()),
+            (8, "ERROR: after".to_string()),
+        ];
+
+        let findings = findings_for_script(&lines, "run-1");
+
+        assert_eq!(findings["log_available"], json!(true));
+        assert_eq!(findings["has_findings"], json!(true));
+        assert_eq!(findings["warning_count"], json!(1));
+        assert_eq!(findings["error_count"], json!(2));
+        assert_eq!(findings["crash_count"], json!(1));
+        assert!(
+            findings["compacted"]
+                .as_str()
+                .unwrap()
+                .contains("WARNING: watch this")
+        );
+        assert!(!findings["compacted"].as_str().unwrap().contains("before"));
+        assert!(!findings["compacted"].as_str().unwrap().contains("after"));
+    }
 }

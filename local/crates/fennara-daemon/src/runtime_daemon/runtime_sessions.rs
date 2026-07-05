@@ -168,6 +168,7 @@ async fn runtime_session_start_inner(
 
     #[cfg(target_os = "windows")]
     command.creation_flags(CREATE_NEW_PROCESS_GROUP);
+    command.kill_on_drop(true);
 
     let mut child = command
         .spawn()
@@ -218,6 +219,7 @@ async fn runtime_session_start_inner(
         command_dir: command_dir.clone(),
         raw_log_path: raw_log_path.clone(),
         log_cursor,
+        script_log_start_offsets: Default::default(),
         child,
         started_ms: unix_millis(),
     };
@@ -403,6 +405,10 @@ async fn runtime_session_script_inner(
     let command_temp_path = command_dir.join(format!("{safe_script_run_id}.tmp"));
     let _ = tokio::fs::remove_file(&command_temp_path).await;
     let _ = tokio::fs::remove_file(&command_path).await;
+    let script_log_start_offset = tokio::fs::metadata(&raw_log_path)
+        .await
+        .map(|metadata| metadata.len())
+        .unwrap_or(0);
     let command = json!({
         "action": "run_runtime_script",
         "session_id": session_id,
@@ -418,6 +424,14 @@ async fn runtime_session_script_inner(
     tokio::fs::rename(&command_temp_path, &command_path)
         .await
         .map_err(|err| format!("publish script command failed: {err}"))?;
+    {
+        let mut sessions = state.runtime_sessions.lock().await;
+        if let Some(session) = sessions.get_mut(&session_id) {
+            session
+                .script_log_start_offsets
+                .insert(script_run_id.clone(), script_log_start_offset);
+        }
+    }
 
     let deadline = tokio::time::Instant::now()
         + Duration::from_millis(request.timeout_ms.unwrap_or(10_000).clamp(500, 120_000));
@@ -483,7 +497,19 @@ async fn attach_script_log(
         &mut session.log_cursor,
     )
     .await;
-    response["runtime_findings"] =
-        runtime_log::findings_for_script(&log_capture.lines, script_run_id);
+    let finding_lines =
+        if let Some(byte_offset) = session.script_log_start_offsets.remove(script_run_id) {
+            runtime_log::capture_from_offset(
+                &session.session_id,
+                &session.raw_log_path,
+                "runtime_script_findings",
+                byte_offset,
+            )
+            .await
+            .lines
+        } else {
+            log_capture.lines.clone()
+        };
+    response["runtime_findings"] = runtime_log::findings_for_script(&finding_lines, script_run_id);
     response["runtime_log"] = log_capture.receipt;
 }

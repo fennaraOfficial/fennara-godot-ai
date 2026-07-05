@@ -125,7 +125,7 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
             " ms");
         if (!(bool)raw_result.get("startup_ready_seen", false)) {
             lines.append(
-                "Runtime helper did not report scene ready during this startup wait. Use runtime_session.status or read runtime_session.log to see whether the scene became ready afterward.");
+                "Runtime helper did not report scene ready during this startup wait. Use `runtime_session` action `status` or read the `runtime_session.log` log file to see whether the scene became ready afterward.");
         }
     }
     if (raw_result.has("max_run_seconds")) {
