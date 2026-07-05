@@ -1,6 +1,15 @@
 {
   "name": "write_or_update_file",
-  "description": "Write a new file, completely rewrite an existing file, or update specific sections of a file. Use mode='write' to create/overwrite entire files. Use mode='update' to replace specific code sections in existing files. NOTE: Modifying .gd, .cs, or .gdshader files automatically runs diagnostics on the edited file and appends syntax/type/reference or shader parser diagnostics to the result. Modifying a .gdshader also scans .tscn and .tres files that reference that shader and reserializes those owners through Godot so stale embedded ShaderMaterial data is rewritten; the result includes reserialized_resources, reserialize_warnings, and reserialize_skipped. BLOCKED PATHS: res://project.godot, res://.godot/, res://.git/, res://addons/fennara/, any plugin.cfg. Only write to user project files.",
+  "description_lines": [
+    "Write a new file, completely rewrite an existing file, or update specific sections of a file.",
+    "Use mode=write to create/overwrite entire files.",
+    "Use mode=update to replace specific code sections in existing files.",
+    "Modifying .gd, .cs, or .gdshader files automatically runs diagnostics on the edited file and appends syntax/type/reference or shader parser diagnostics to the result.",
+    "Modifying a .gdshader also scans .tscn and .tres files that reference that shader and reserializes those owners through Godot so stale embedded ShaderMaterial data is rewritten.",
+    "The result includes reserialized_resources, reserialize_warnings, and reserialize_skipped.",
+    "Blocked paths: res://project.godot, res://.godot/, res://.git/, res://addons/fennara/, and any plugin.cfg.",
+    "Only write to user project files."
+  ],
   "parameters": {
     "type": "object",
     "properties": {

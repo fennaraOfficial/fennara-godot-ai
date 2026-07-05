@@ -1,6 +1,16 @@
 {
   "name": "screenshot_scene",
-  "description": "Open a scene file and capture a PNG image. Use camera_path to render from a specific Camera2D or Camera3D in the scene through a temporary SubViewport when authored camera framing matters. For 2D scenes, optionally specify a world-coordinate view_rect for editor viewport capture; camera_path overrides view_rect and uses the Camera2D view. For 3D scenes, optionally specify view (front, back, left, right, top, perspective, or all) and target_node_path to frame a specific node/subtree in the editor viewport with surrounding context; camera_path overrides view/target framing and uses the Camera3D view. Defaults to perspective. Internally the primary image is image_base64: for one view it is that view, for multi-view it is the full-resolution no-downscale labeled collage. Every generated screenshot is saved under user://.fennara/screenshots and returned as image_res_path plus cross-platform absolute image_path. In local MCP responses, base64 is stripped; use the returned image_path values, or read the image later with a file/image-capable tool. Multi-view responses include per-view image_path entries.",
+  "description_lines": [
+    "Open a scene file and capture a PNG image.",
+    "Use camera_path to render from a specific Camera2D or Camera3D through a temporary SubViewport when authored camera framing matters.",
+    "For 2D scenes, optionally specify a world-coordinate view_rect for editor viewport capture; camera_path overrides view_rect and uses the Camera2D view.",
+    "For 3D scenes, optionally specify view and target_node_path to frame a specific node/subtree in the editor viewport with surrounding context; camera_path overrides view/target framing and uses the Camera3D view.",
+    "Defaults to perspective.",
+    "Internally the primary image is image_base64: for one view it is that view, for multi-view it is the full-resolution no-downscale labeled collage.",
+    "Every generated screenshot is saved under user://.fennara/screenshots and returned as image_res_path plus cross-platform absolute image_path.",
+    "In local MCP responses, base64 is stripped; use returned image_path values, or read the image later with a file/image-capable tool.",
+    "Multi-view responses include per-view image_path entries."
+  ],
   "parameters": {
     "type": "object",
     "properties": {

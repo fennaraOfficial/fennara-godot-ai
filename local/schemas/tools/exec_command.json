@@ -1,6 +1,11 @@
 {
   "name": "exec_command",
-  "description": "Run one non-interactive shell command on the host from the Fennara daemon. Defaults to the active Godot project root as cwd. Shell commands use real filesystem paths, not res:// paths. Phase one has no PTY, no background sessions, no stdin, and no custom environment.",
+  "description_lines": [
+    "Run one non-interactive shell command on the host from the Fennara daemon.",
+    "Defaults to the active Godot project root as cwd.",
+    "Shell commands use real filesystem paths, not res:// paths.",
+    "Phase one has no PTY, no background sessions, no stdin, and no custom environment."
+  ],
   "parameters": {
     "type": "object",
     "additionalProperties": false,

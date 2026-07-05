@@ -1,6 +1,11 @@
 {
   "name": "save_custom_resource",
-  "description": "Create and save a custom .tres resource file. CRITICAL: For custom resource scripts (like UpgradeData, BusinessData, etc.), you MUST pass the full script path (res://path/to/script.gd) in resource_type, NOT just the class_name. Only use class names for built-in Godot types like 'Resource'.",
+  "description_lines": [
+    "Create and save a custom .tres resource file.",
+    "For custom resource scripts, pass the full script path in resource_type, e.g. res://path/to/script.gd.",
+    "Only use class names for built-in Godot types such as Resource.",
+    "Never pass just a custom class_name like UpgradeData; use the full res:// script path."
+  ],
   "parameters": {
     "type": "object",
     "properties": {

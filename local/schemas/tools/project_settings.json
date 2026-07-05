@@ -1,6 +1,11 @@
 {
   "name": "project_settings",
-  "description": "Read, write, remove, or inspect Godot project settings. Use 'list' to inspect settings actually saved/changed in this project's project.godot, including compact values and InputMap event summaries. Use 'find_setting' to discover available Godot ProjectSettings keys by prefix or query before get/set. For input actions, pass 'events' array instead of 'value' to build proper InputEvent objects.",
+  "description_lines": [
+    "Read, write, remove, or inspect Godot project settings.",
+    "Use `list` to inspect settings actually saved/changed in this project project.godot, including compact values and InputMap event summaries.",
+    "Use `find_setting` to discover available Godot ProjectSettings keys by prefix or query before get/set.",
+    "For input actions, pass an `events` array instead of `value` to build proper InputEvent objects."
+  ],
   "parameters": {
     "type": "object",
     "properties": {

@@ -1,6 +1,13 @@
 {
   "name": "scrape_editor",
-  "description": "Scrape a narrow part of the currently open Godot editor UI. For now the only supported target is `debugger`, which reads the editor debugger/errors tree snapshot without starting a scene, stopping a scene, running validation, reading runtime_session.log, or taking screenshots. The model-facing result is compacted: repeated debugger issues are grouped with counts, only the top grouped issues and a few detail lines are shown, and raw UI spam is not returned inline. Use this only when the user says they manually ran a scene in Godot/the editor and got a runtime error, or when they explicitly ask what the editor debugger currently shows. Do not use it for scenes you started through runtime_session; for managed runtime sessions, inspect runtime_session.log instead.",
+  "description_lines": [
+    "Scrape a narrow part of the currently open Godot editor UI.",
+    "For now the only supported target is `debugger`, which reads the editor debugger/errors tree snapshot.",
+    "This tool does not start a scene, stop a scene, run validation, read runtime_session.log, or take screenshots.",
+    "The model-facing result is compacted: repeated debugger issues are grouped with counts, only top grouped issues and a few detail lines are shown, and raw UI spam is omitted.",
+    "Use this only when the user says they manually ran a scene in Godot/the editor and got a runtime error, or explicitly asks what the editor debugger currently shows.",
+    "Do not use it for scenes started through runtime_session; inspect runtime_session.log instead."
+  ],
   "parameters": {
     "type": "object",
     "properties": {
