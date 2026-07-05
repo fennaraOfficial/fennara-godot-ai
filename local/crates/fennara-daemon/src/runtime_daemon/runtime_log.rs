@@ -1,0 +1,359 @@
+use serde_json::{Value, json};
+use std::{io::SeekFrom, path::Path};
+use tokio::{
+    fs::File,
+    io::{AsyncReadExt, AsyncSeekExt},
+    process::Child,
+};
+
+use super::state::RuntimeLogCursor;
+
+const READY_MARKER: &str = "FENNARA_RUNTIME_SESSION_READY";
+const MAX_SHOWN_LINES: usize = 60;
+const HEAD_LINES: usize = 20;
+const MAX_SHOWN_CHARS: usize = 12_000;
+const MAX_LINE_CHARS: usize = 1_000;
+
+pub(crate) struct LogCapture {
+    pub(crate) receipt: Value,
+    pub(crate) lines: Vec<(u64, String)>,
+}
+
+pub(crate) async fn wait_for_ready(
+    child: &mut Child,
+    log_path: &Path,
+    from_byte: u64,
+    timeout_ms: u64,
+) -> Result<(bool, bool, u64), String> {
+    let started = std::time::Instant::now();
+    let deadline = started + std::time::Duration::from_millis(timeout_ms);
+    loop {
+        let process_exited = child
+            .try_wait()
+            .map_err(|err| format!("runtime session wait failed: {err}"))?
+            .is_some();
+        let ready_seen = log_contains(log_path, from_byte, READY_MARKER).await;
+        if ready_seen || process_exited || std::time::Instant::now() >= deadline {
+            return Ok((
+                ready_seen,
+                process_exited,
+                started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+            ));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+}
+
+pub(crate) async fn capture_update(
+    session_id: &str,
+    log_path: &Path,
+    mode: &str,
+    cursor: &mut RuntimeLogCursor,
+) -> LogCapture {
+    let mut receipt = json!({
+        "available": false,
+        "mode": mode,
+        "session_id": session_id,
+        "log_path": log_path.to_string_lossy(),
+    });
+
+    let Ok(metadata) = tokio::fs::metadata(log_path).await else {
+        receipt["error"] = json!("Could not stat log file.");
+        return LogCapture {
+            receipt,
+            lines: vec![],
+        };
+    };
+    let file_size = metadata.len();
+    let log_reset = cursor.byte_offset > file_size;
+    if log_reset {
+        *cursor = RuntimeLogCursor::default();
+    }
+
+    let cursor_before = cursor.clone();
+    let Ok(bytes) = read_from(log_path, cursor_before.byte_offset).await else {
+        receipt["error"] = json!("Could not open or read log file.");
+        return LogCapture {
+            receipt,
+            lines: vec![],
+        };
+    };
+
+    let complete_len = complete_line_prefix_len(&bytes);
+    let pending_bytes = bytes.len().saturating_sub(complete_len);
+    let complete_bytes = &bytes[..complete_len];
+    let text = String::from_utf8_lossy(complete_bytes);
+    let raw_lines: Vec<String> = text.lines().map(trim_cr).collect();
+    let first_line = if raw_lines.is_empty() {
+        0
+    } else {
+        cursor_before.line + 1
+    };
+    let lines: Vec<(u64, String)> = raw_lines
+        .iter()
+        .enumerate()
+        .map(|(index, line)| (cursor_before.line + index as u64 + 1, line.clone()))
+        .collect();
+
+    let ready_line = lines
+        .iter()
+        .find_map(|(line_no, line)| line.contains(READY_MARKER).then_some(*line_no))
+        .unwrap_or(0);
+    let (shown_lines, omitted, truncated) = shown_excerpt(&lines);
+    let shown_ranges = line_ranges(&shown_lines);
+
+    cursor.byte_offset = cursor_before.byte_offset + complete_len as u64;
+    cursor.line = cursor_before.line + raw_lines.len() as u64;
+
+    receipt = json!({
+        "available": true,
+        "mode": mode,
+        "session_id": session_id,
+        "log_path": log_path.to_string_lossy(),
+        "log_reset": log_reset,
+        "cursor_before_line": cursor_before.line,
+        "cursor_after_line": cursor.line,
+        "byte_offset_before": cursor_before.byte_offset,
+        "byte_offset_after": cursor.byte_offset,
+        "bytes_added": complete_len,
+        "pending_partial_bytes": pending_bytes,
+        "lines_added": raw_lines.len(),
+        "shown_line_count": shown_lines.len(),
+        "omitted_line_count": omitted,
+        "truncated_line_count": truncated,
+        "first_line": first_line,
+        "last_line": if raw_lines.is_empty() { 0 } else { cursor.line },
+        "shown_first_line": shown_lines.first().map(|line| line.0).unwrap_or(0),
+        "shown_last_line": shown_lines.last().map(|line| line.0).unwrap_or(0),
+        "shown_ranges": shown_ranges,
+        "line_limit": MAX_SHOWN_LINES,
+        "char_limit": MAX_SHOWN_CHARS,
+        "line_char_limit": MAX_LINE_CHARS,
+        "runtime_session_ready_seen": ready_line > 0,
+        "runtime_session_ready_line": ready_line,
+        "lines": shown_lines.into_iter().map(|(_, line)| line).collect::<Vec<_>>(),
+    });
+    LogCapture { receipt, lines }
+}
+
+pub(crate) fn findings_for_script(lines: &[(u64, String)], script_run_id: &str) -> Value {
+    let mut blocks: Vec<Value> = Vec::new();
+    let mut current: Vec<String> = Vec::new();
+    let mut in_slice = false;
+
+    for (_, line) in lines {
+        if !in_slice {
+            if line.starts_with("FENNARA_SCRIPT_STARTED:") && line.contains(script_run_id) {
+                in_slice = true;
+            }
+            continue;
+        }
+        if (line.starts_with("FENNARA_SCRIPT_COMPLETED:")
+            || line.starts_with("FENNARA_SCRIPT_FAILED:"))
+            && line.contains(script_run_id)
+        {
+            flush_block(&mut blocks, &mut current);
+            break;
+        }
+        if is_issue_start(line) {
+            flush_block(&mut blocks, &mut current);
+            current.push(line.clone());
+        } else if !current.is_empty() && (is_issue_continuation(line) || line.trim().is_empty()) {
+            current.push(line.clone());
+        } else {
+            flush_block(&mut blocks, &mut current);
+        }
+    }
+    flush_block(&mut blocks, &mut current);
+
+    let warning_count = blocks
+        .iter()
+        .filter(|block| block["kind"] == "warning")
+        .count();
+    let crash_count = blocks
+        .iter()
+        .filter(|block| block["kind"] == "crash")
+        .count();
+    let error_count = blocks
+        .iter()
+        .filter(|block| block["kind"] == "error" || block["kind"] == "crash")
+        .count();
+    let compacted = blocks
+        .iter()
+        .take(12)
+        .filter_map(|block| block["text"].as_str())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    json!({
+        "log_available": true,
+        "has_findings": !blocks.is_empty(),
+        "error_count": error_count,
+        "warning_count": warning_count,
+        "crash_count": crash_count,
+        "blocks": blocks,
+        "compacted": compacted,
+    })
+}
+
+async fn read_from(path: &Path, offset: u64) -> Result<Vec<u8>, std::io::Error> {
+    let mut file = File::open(path).await?;
+    file.seek(SeekFrom::Start(offset)).await?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).await?;
+    Ok(bytes)
+}
+
+async fn log_contains(path: &Path, offset: u64, pattern: &str) -> bool {
+    read_from(path, offset)
+        .await
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .is_some_and(|text| text.contains(pattern))
+}
+
+fn shown_excerpt(lines: &[(u64, String)]) -> (Vec<(u64, String)>, usize, usize) {
+    let tail_lines = MAX_SHOWN_LINES.saturating_sub(HEAD_LINES);
+    let mut selected = Vec::new();
+    if lines.len() <= MAX_SHOWN_LINES {
+        selected.extend(lines.iter().cloned());
+    } else {
+        selected.extend(lines.iter().take(HEAD_LINES).cloned());
+        selected.extend(lines.iter().skip(lines.len() - tail_lines).cloned());
+    }
+
+    let mut shown = Vec::new();
+    let mut chars = 0usize;
+    let mut truncated = 0usize;
+    if lines.len() <= MAX_SHOWN_LINES {
+        for (line_no, line) in selected {
+            push_shown_line(line_no, line, &mut shown, &mut chars, &mut truncated);
+        }
+    } else {
+        for (line_no, line) in lines.iter().skip(lines.len() - tail_lines).cloned() {
+            push_shown_line(line_no, line, &mut shown, &mut chars, &mut truncated);
+        }
+        for (line_no, line) in lines.iter().take(HEAD_LINES).cloned() {
+            push_shown_line(line_no, line, &mut shown, &mut chars, &mut truncated);
+        }
+        shown.sort_by_key(|(line_no, _)| *line_no);
+    }
+
+    let omitted = lines.len().saturating_sub(shown.len());
+    (shown, omitted, truncated)
+}
+
+fn push_shown_line(
+    line_no: u64,
+    line: String,
+    shown: &mut Vec<(u64, String)>,
+    chars: &mut usize,
+    truncated: &mut usize,
+) {
+    let (line, was_truncated) = truncate_line(line);
+    if was_truncated {
+        *truncated += 1;
+    }
+    let next_chars = *chars + line.len() + 1;
+    if *chars > 0 && next_chars > MAX_SHOWN_CHARS {
+        return;
+    }
+    *chars = next_chars;
+    shown.push((line_no, line));
+}
+
+fn complete_line_prefix_len(bytes: &[u8]) -> usize {
+    if bytes.is_empty() {
+        return 0;
+    }
+    if matches!(bytes.last(), Some(b'\n')) {
+        return bytes.len();
+    }
+    bytes
+        .iter()
+        .rposition(|byte| *byte == b'\n')
+        .map(|index| index + 1)
+        .unwrap_or(0)
+}
+
+fn line_ranges(lines: &[(u64, String)]) -> Vec<Value> {
+    let mut ranges = Vec::new();
+    let mut start = 0u64;
+    let mut previous = 0u64;
+    for (line_no, _) in lines {
+        if start == 0 {
+            start = *line_no;
+            previous = *line_no;
+        } else if *line_no == previous + 1 {
+            previous = *line_no;
+        } else {
+            ranges.push(json!({ "first": start, "last": previous }));
+            start = *line_no;
+            previous = *line_no;
+        }
+    }
+    if start > 0 {
+        ranges.push(json!({ "first": start, "last": previous }));
+    }
+    ranges
+}
+
+fn trim_cr(line: &str) -> String {
+    line.strip_suffix('\r').unwrap_or(line).to_string()
+}
+
+fn truncate_line(line: String) -> (String, bool) {
+    if line.chars().count() <= MAX_LINE_CHARS {
+        return (line, false);
+    }
+    (
+        line.chars().take(MAX_LINE_CHARS).collect::<String>() + " ... [line truncated]",
+        true,
+    )
+}
+
+fn flush_block(blocks: &mut Vec<Value>, current: &mut Vec<String>) {
+    if current.is_empty() {
+        return;
+    }
+    let kind = issue_kind(current);
+    blocks.push(json!({
+        "kind": kind,
+        "text": current.join("\n"),
+    }));
+    current.clear();
+}
+
+fn issue_kind(block: &[String]) -> &'static str {
+    let Some(first) = block.first() else {
+        return "log";
+    };
+    if first.starts_with("WARNING:") {
+        "warning"
+    } else if first.contains("CrashHandlerException")
+        || first.contains("Program crashed with signal")
+    {
+        "crash"
+    } else {
+        "error"
+    }
+}
+
+fn is_issue_start(line: &str) -> bool {
+    line.starts_with("ERROR:")
+        || line.starts_with("SCRIPT ERROR:")
+        || line.starts_with("WARNING:")
+        || line.contains("CrashHandlerException")
+        || line.contains("Program crashed with signal")
+}
+
+fn is_issue_continuation(line: &str) -> bool {
+    line.starts_with("   at:")
+        || line.starts_with("          at:")
+        || line.starts_with("   GDScript backtrace")
+        || line.starts_with("          GDScript backtrace")
+        || line.starts_with("       [")
+        || line.starts_with("              [")
+        || line.starts_with('[')
+        || line.starts_with("-- END OF")
+}

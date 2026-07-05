@@ -11,6 +11,7 @@
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/time.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 
@@ -21,6 +22,10 @@ constexpr const char *kResultVersion = "runtime-script-result-v1";
 constexpr const char *kRuntimeScriptDir = "res://.fennara/tmp/runtime_scripts";
 constexpr const char *kLocalDaemonHost = "127.0.0.1";
 constexpr int kLocalDaemonPort = 41287;
+constexpr int64_t kDefaultScriptTimeoutMs = 30000;
+constexpr int64_t kMinScriptTimeoutMs = 500;
+constexpr int64_t kMaxScriptTimeoutMs = 120000;
+constexpr int64_t kHttpTimeoutMarginMs = 5000;
 
 godot::Dictionary make_error(const godot::String &message) {
     godot::Dictionary result;
@@ -77,141 +82,6 @@ godot::String read_script_text(const godot::String &script_path) {
     godot::Ref<godot::FileAccess> file =
         godot::FileAccess::open(script_path, godot::FileAccess::READ);
     return file.is_null() ? godot::String() : file->get_as_text();
-}
-
-godot::PackedStringArray split_lines(const godot::String &text) {
-    return text.replace("\r\n", "\n").replace("\r", "\n").split("\n");
-}
-
-bool line_has_script_id(const godot::String &line,
-                        const godot::String &script_run_id) {
-    return !script_run_id.is_empty() && line.find(script_run_id) >= 0;
-}
-
-bool is_issue_start(const godot::String &line) {
-    return line.begins_with("ERROR:") ||
-           line.begins_with("SCRIPT ERROR:") ||
-           line.begins_with("WARNING:") ||
-           line.find("CrashHandlerException") >= 0 ||
-           line.find("Program crashed with signal") >= 0;
-}
-
-bool is_issue_continuation(const godot::String &line) {
-    return line.begins_with("   at:") ||
-           line.begins_with("          at:") ||
-           line.begins_with("   GDScript backtrace") ||
-           line.begins_with("          GDScript backtrace") ||
-           line.begins_with("       [") ||
-           line.begins_with("              [") ||
-           line.begins_with("[") ||
-           line.begins_with("-- END OF");
-}
-
-godot::String issue_kind(const godot::PackedStringArray &block) {
-    if (block.is_empty()) {
-        return "log";
-    }
-    godot::String first = block[0];
-    if (first.begins_with("WARNING:")) {
-        return "warning";
-    }
-    if (first.find("CrashHandlerException") >= 0 ||
-        first.find("Program crashed with signal") >= 0) {
-        return "crash";
-    }
-    return "error";
-}
-
-godot::Dictionary runtime_findings_for_script(const godot::String &raw_log_path,
-                                              const godot::String &script_run_id) {
-    godot::Dictionary findings;
-    findings["has_findings"] = false;
-    findings["error_count"] = 0;
-    findings["warning_count"] = 0;
-    findings["crash_count"] = 0;
-    findings["blocks"] = godot::Array();
-    findings["compacted"] = godot::String();
-
-    if (raw_log_path.is_empty() || !godot::FileAccess::file_exists(raw_log_path)) {
-        findings["log_available"] = false;
-        return findings;
-    }
-    findings["log_available"] = true;
-    godot::Ref<godot::FileAccess> file =
-        godot::FileAccess::open(raw_log_path, godot::FileAccess::READ);
-    if (file.is_null()) {
-        findings["log_available"] = false;
-        return findings;
-    }
-
-    godot::PackedStringArray lines = split_lines(file->get_as_text());
-    bool in_slice = false;
-    godot::Array blocks;
-    godot::PackedStringArray current_block;
-
-    auto flush_block = [&]() {
-        if (current_block.is_empty()) {
-            return;
-        }
-        godot::String kind = issue_kind(current_block);
-        godot::Dictionary block;
-        block["kind"] = kind;
-        block["text"] = godot::String("\n").join(current_block);
-        blocks.append(block);
-        if (kind == "warning") {
-            findings["warning_count"] =
-                static_cast<int>(findings.get("warning_count", 0)) + 1;
-        } else if (kind == "crash") {
-            findings["crash_count"] =
-                static_cast<int>(findings.get("crash_count", 0)) + 1;
-            findings["error_count"] =
-                static_cast<int>(findings.get("error_count", 0)) + 1;
-        } else if (kind == "error") {
-            findings["error_count"] =
-                static_cast<int>(findings.get("error_count", 0)) + 1;
-        }
-        current_block.clear();
-    };
-
-    for (int i = 0; i < lines.size(); i++) {
-        godot::String line = lines[i];
-        if (!in_slice) {
-            if (line.begins_with("FENNARA_SCRIPT_STARTED:") &&
-                line_has_script_id(line, script_run_id)) {
-                in_slice = true;
-            }
-            continue;
-        }
-
-        if ((line.begins_with("FENNARA_SCRIPT_COMPLETED:") ||
-             line.begins_with("FENNARA_SCRIPT_FAILED:")) &&
-            line_has_script_id(line, script_run_id)) {
-            flush_block();
-            break;
-        }
-
-        if (is_issue_start(line)) {
-            flush_block();
-            current_block.append(line);
-        } else if (!current_block.is_empty() && is_issue_continuation(line)) {
-            current_block.append(line);
-        } else if (!current_block.is_empty() && line.strip_edges().is_empty()) {
-            current_block.append(line);
-        } else {
-            flush_block();
-        }
-    }
-    flush_block();
-
-    findings["blocks"] = blocks;
-    findings["has_findings"] = !blocks.is_empty();
-    godot::PackedStringArray compacted;
-    for (int i = 0; i < blocks.size() && i < 12; i++) {
-        godot::Dictionary block = blocks[i];
-        compacted.append(godot::String(block.get("text", "")));
-    }
-    findings["compacted"] = godot::String("\n\n").join(compacted);
-    return findings;
 }
 
 godot::Dictionary validate_contract(const godot::String &script_path) {
@@ -344,12 +214,21 @@ godot::Dictionary FennaraRuntimeScriptTool::submit(const godot::Dictionary &args
     }
 
     godot::String script_run_id = make_script_run_id();
+    int64_t requested_timeout_ms = static_cast<int64_t>(
+        args.get("timeout_ms", kDefaultScriptTimeoutMs));
+    requested_timeout_ms = std::clamp(
+        requested_timeout_ms, kMinScriptTimeoutMs, kMaxScriptTimeoutMs);
     godot::Dictionary payload;
     payload["session_id"] = requested_session_id;
     payload["script_run_id"] = script_run_id;
     payload["script_path"] = script_path;
-    payload["timeout_ms"] = static_cast<int64_t>(args.get("timeout_ms", 30000));
-    godot::Dictionary result = post_daemon("/runtime/session/script", payload, 35000);
+    payload["timeout_ms"] = requested_timeout_ms;
+
+    int http_timeout_ms = static_cast<int>(
+        std::min(requested_timeout_ms + kHttpTimeoutMarginMs,
+                 kMaxScriptTimeoutMs + kHttpTimeoutMarginMs));
+    godot::Dictionary result =
+        post_daemon("/runtime/session/script", payload, http_timeout_ms);
     result["tool_name"] = "runtime_script";
     result["format_version"] = kResultVersion;
     result["session_id"] = requested_session_id;
@@ -376,8 +255,6 @@ godot::Dictionary FennaraRuntimeScriptTool::submit(const godot::Dictionary &args
     godot::String raw_log_path = result.get("raw_log_path", "");
     if (!raw_log_path.is_empty()) {
         result["log_path"] = raw_log_path;
-        result["runtime_findings"] =
-            runtime_findings_for_script(raw_log_path, script_run_id);
     }
     runtime_script_diagnostics::apply_to_result(diagnostics, result);
     return result;

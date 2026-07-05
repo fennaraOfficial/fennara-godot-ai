@@ -1,6 +1,7 @@
 #include "fennara/tool_results/runtime_script.hpp"
 
 #include "fennara/tool_results/envelope.hpp"
+#include "fennara/tool_results/runtime_log_excerpt.hpp"
 
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -59,6 +60,8 @@ godot::Dictionary format_runtime_script(const godot::Dictionary &raw_result) {
     godot::Dictionary script_result = raw_result.get("result", godot::Dictionary());
     godot::Dictionary runtime_findings =
         raw_result.get("runtime_findings", godot::Dictionary());
+    godot::Dictionary runtime_log =
+        raw_result.get("runtime_log", godot::Dictionary());
     if (!session_id.is_empty()) lines.append("Session id: " + session_id);
     if (!script_run_id.is_empty()) lines.append("Script run id: " + script_run_id);
     if (!script_path.is_empty()) lines.append("Script path: " + script_path);
@@ -123,6 +126,7 @@ godot::Dictionary format_runtime_script(const godot::Dictionary &raw_result) {
                          ": " + image_path);
         }
     }
+    append_runtime_log_excerpt(lines, raw_result);
     if ((bool)runtime_findings.get("has_findings", false)) {
         lines.append("");
         lines.append("## Runtime findings during script");
@@ -141,7 +145,7 @@ godot::Dictionary format_runtime_script(const godot::Dictionary &raw_result) {
     }
     if (!log_path.is_empty()) {
         lines.append(
-            "This result is a script receipt, not a full scene-health verdict. Read the session log for script logs, runtime errors, and follow-up state.");
+            "This result is a script receipt, not a full scene-health verdict. Use the runtime log update above for new log lines since the previous runtime receipt, and read the full session log when older history matters.");
     }
 
     godot::Dictionary metadata =
@@ -157,6 +161,7 @@ godot::Dictionary format_runtime_script(const godot::Dictionary &raw_result) {
     metadata["captures_dir"] = visible_captures_dir;
     metadata["raw_captures_dir"] = captures_dir;
     metadata["captures"] = captures;
+    metadata["runtime_log"] = runtime_log;
     metadata["runtime_findings"] = runtime_findings;
     return make_envelope(godot::String("\n").join(lines),
                          metadata,

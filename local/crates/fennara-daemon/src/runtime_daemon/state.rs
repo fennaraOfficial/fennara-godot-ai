@@ -94,6 +94,13 @@ pub(crate) struct RuntimeSession {
     pub(crate) artifact_dir: PathBuf,
     pub(crate) command_dir: PathBuf,
     pub(crate) raw_log_path: PathBuf,
+    pub(crate) log_cursor: RuntimeLogCursor,
     pub(crate) child: tokio::process::Child,
     pub(crate) started_ms: u128,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct RuntimeLogCursor {
+    pub(crate) byte_offset: u64,
+    pub(crate) line: u64,
 }
