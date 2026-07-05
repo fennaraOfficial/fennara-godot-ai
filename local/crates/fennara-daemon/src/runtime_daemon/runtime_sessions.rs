@@ -6,12 +6,14 @@ use tokio::process::Command;
 
 use super::{
     process_helpers::resolve_godot_executable,
-    state::{AppState, RuntimeSession},
+    runtime_log,
+    state::{AppState, RuntimeLogCursor, RuntimeSession},
     util::{sanitize_path_component, unix_millis},
 };
 
 #[cfg(target_os = "windows")]
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+const STARTUP_READY_TIMEOUT_MS: u64 = 5_000;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct RuntimeSessionStartRequest {
@@ -166,11 +168,49 @@ async fn runtime_session_start_inner(
 
     #[cfg(target_os = "windows")]
     command.creation_flags(CREATE_NEW_PROCESS_GROUP);
+    command.kill_on_drop(true);
 
-    let child = command
+    let mut child = command
         .spawn()
         .map_err(|err| format!("failed to start runtime session: {err}"))?;
     let pid = child.id().unwrap_or_default();
+    let mut log_cursor = RuntimeLogCursor::default();
+    let (ready_seen, process_exited, startup_wait_ms) = runtime_log::wait_for_ready(
+        &mut child,
+        &raw_log_path,
+        log_cursor.byte_offset,
+        STARTUP_READY_TIMEOUT_MS,
+    )
+    .await?;
+    let log_capture =
+        runtime_log::capture_update(&session_id, &raw_log_path, "start", &mut log_cursor).await;
+    if process_exited && !ready_seen {
+        let exit_code = child
+            .try_wait()
+            .map_err(|err| format!("runtime session wait failed: {err}"))?
+            .and_then(|status| status.code());
+        return Ok(json!({
+            "ok": false,
+            "status": "exited_before_ready",
+            "scope": "global",
+            "scope_note": "Fennara currently allows one managed runtime session across all connected Godot editors.",
+            "session_id": session_id,
+            "pid": pid,
+            "scene_path": request.scene_path,
+            "artifact_dir": artifact_dir.to_string_lossy(),
+            "command_dir": command_dir.to_string_lossy(),
+            "raw_log_path": raw_log_path.to_string_lossy(),
+            "spec_path": spec_path.to_string_lossy(),
+            "executable": executable.to_string_lossy(),
+            "startup_log_wait_ms": startup_wait_ms,
+            "startup_ready_seen": ready_seen,
+            "startup_process_exited": process_exited,
+            "exit_code": exit_code,
+            "error": "Runtime process exited before the runtime helper reported scene ready.",
+            "runtime_log": log_capture.receipt,
+        }));
+    }
+
     let session = RuntimeSession {
         session_id: session_id.clone(),
         scene_path: request.scene_path.clone(),
@@ -178,28 +218,54 @@ async fn runtime_session_start_inner(
         artifact_dir: artifact_dir.clone(),
         command_dir: command_dir.clone(),
         raw_log_path: raw_log_path.clone(),
+        log_cursor,
+        script_log_start_offsets: Default::default(),
         child,
         started_ms: unix_millis(),
     };
-    state
-        .runtime_sessions
-        .lock()
-        .await
-        .insert(session_id.clone(), session);
+    let mut sessions = state.runtime_sessions.lock().await;
+    let mut running_session_id = None;
+    for (existing_id, existing) in sessions.iter_mut() {
+        if existing
+            .child
+            .try_wait()
+            .map_err(|err| format!("runtime session wait failed: {err}"))?
+            .is_none()
+        {
+            running_session_id = Some(existing_id.clone());
+            break;
+        }
+    }
+    if let Some(existing_id) = running_session_id {
+        drop(sessions);
+        let mut session = session;
+        let _ = session.child.kill().await;
+        return Err(format!(
+            "Runtime session already running: {existing_id}. Fennara currently allows one managed runtime session across all connected Godot editors. Use runtime_session.status or runtime_session.stop before starting another scene."
+        ));
+    }
+    sessions.insert(session_id.clone(), session);
+    let session = sessions
+        .get_mut(&session_id)
+        .ok_or_else(|| format!("Runtime session disappeared after start: {session_id}"))?;
 
     Ok(json!({
         "ok": true,
         "status": "started",
         "scope": "global",
         "scope_note": "Fennara currently allows one managed runtime session across all connected Godot editors.",
-        "session_id": session_id,
+        "session_id": session.session_id,
         "pid": pid,
-        "scene_path": request.scene_path,
+        "scene_path": session.scene_path,
         "artifact_dir": artifact_dir.to_string_lossy(),
         "command_dir": command_dir.to_string_lossy(),
         "raw_log_path": raw_log_path.to_string_lossy(),
         "spec_path": spec_path.to_string_lossy(),
         "executable": executable.to_string_lossy(),
+        "startup_log_wait_ms": startup_wait_ms,
+        "startup_ready_seen": ready_seen,
+        "startup_process_exited": process_exited,
+        "runtime_log": log_capture.receipt,
     }))
 }
 
@@ -212,6 +278,13 @@ async fn runtime_session_status_inner(state: &AppState, session_id: &str) -> Res
         .child
         .try_wait()
         .map_err(|err| format!("runtime session wait failed: {err}"))?;
+    let log_capture = runtime_log::capture_update(
+        &session.session_id,
+        &session.raw_log_path,
+        "status",
+        &mut session.log_cursor,
+    )
+    .await;
     Ok(json!({
         "ok": true,
         "session_id": session.session_id,
@@ -225,6 +298,7 @@ async fn runtime_session_status_inner(state: &AppState, session_id: &str) -> Res
         "raw_log_path": session.raw_log_path.to_string_lossy(),
         "working_directory": session.working_directory.to_string_lossy(),
         "started_ms": session.started_ms,
+        "runtime_log": log_capture.receipt,
     }))
 }
 
@@ -248,6 +322,13 @@ async fn runtime_session_stop_inner(state: &AppState, session_id: &str) -> Resul
             exit_code = status.code();
         }
     }
+    let log_capture = runtime_log::capture_update(
+        &session.session_id,
+        &session.raw_log_path,
+        "stop",
+        &mut session.log_cursor,
+    )
+    .await;
     Ok(json!({
         "ok": true,
         "status": "stopped",
@@ -256,6 +337,7 @@ async fn runtime_session_stop_inner(state: &AppState, session_id: &str) -> Resul
         "exit_code": exit_code,
         "artifact_dir": session.artifact_dir.to_string_lossy(),
         "raw_log_path": session.raw_log_path.to_string_lossy(),
+        "runtime_log": log_capture.receipt,
     }))
 }
 
@@ -263,11 +345,46 @@ async fn runtime_session_script_inner(
     state: &AppState,
     request: RuntimeScriptRequest,
 ) -> Result<Value, String> {
+    let session_id = request.session_id.clone();
+    let script_run_id = request.script_run_id.clone();
     let (command_dir, artifact_dir, raw_log_path) = {
-        let sessions = state.runtime_sessions.lock().await;
+        let mut sessions = state.runtime_sessions.lock().await;
         let session = sessions
-            .get(&request.session_id)
-            .ok_or_else(|| format!("Runtime session not found: {}", request.session_id))?;
+            .get_mut(&session_id)
+            .ok_or_else(|| format!("Runtime session not found: {session_id}"))?;
+        let exit_status = session
+            .child
+            .try_wait()
+            .map_err(|err| format!("runtime session wait failed: {err}"))?;
+        if let Some(status) = exit_status {
+            let mut session = sessions
+                .remove(&session_id)
+                .ok_or_else(|| format!("Runtime session not found: {session_id}"))?;
+            drop(sessions);
+            let log_capture = runtime_log::capture_update(
+                &session.session_id,
+                &session.raw_log_path,
+                "runtime_script",
+                &mut session.log_cursor,
+            )
+            .await;
+            return Ok(json!({
+                "ok": false,
+                "status": "session_exited",
+                "scope": "global",
+                "session_id": session_id,
+                "script_run_id": script_run_id,
+                "artifact_dir": session.artifact_dir.to_string_lossy(),
+                "raw_log_path": session.raw_log_path.to_string_lossy(),
+                "exit_code": status.code(),
+                "error": "Runtime session process exited before the script command could be sent.",
+                "runtime_log": log_capture.receipt,
+                "runtime_findings": runtime_log::findings_for_script(&log_capture.lines, &script_run_id),
+            }));
+        }
+        let session = sessions
+            .get(&session_id)
+            .ok_or_else(|| format!("Runtime session not found: {session_id}"))?;
         (
             session.command_dir.clone(),
             session.artifact_dir.clone(),
@@ -281,46 +398,59 @@ async fn runtime_session_script_inner(
     tokio::fs::create_dir_all(&status_dir)
         .await
         .map_err(|err| format!("create runtime_script_results dir failed: {err}"))?;
-    let status_path = status_dir.join(format!(
-        "{}.json",
-        sanitize_path_component(&request.script_run_id)
-    ));
+    let safe_script_run_id = sanitize_path_component(&script_run_id);
+    let status_path = status_dir.join(format!("{safe_script_run_id}.json"));
     let _ = tokio::fs::remove_file(&status_path).await;
-    let command_path = command_dir.join(format!(
-        "{}.json",
-        sanitize_path_component(&request.script_run_id)
-    ));
+    let command_path = command_dir.join(format!("{safe_script_run_id}.json"));
+    let command_temp_path = command_dir.join(format!("{safe_script_run_id}.tmp"));
+    let _ = tokio::fs::remove_file(&command_temp_path).await;
+    let _ = tokio::fs::remove_file(&command_path).await;
+    let script_log_start_offset = tokio::fs::metadata(&raw_log_path)
+        .await
+        .map(|metadata| metadata.len())
+        .unwrap_or(0);
     let command = json!({
         "action": "run_runtime_script",
-        "session_id": request.session_id,
-        "script_run_id": request.script_run_id,
+        "session_id": session_id,
+        "script_run_id": script_run_id,
         "script_path": request.script_path,
         "status_path": status_path.to_string_lossy(),
     });
-    tokio::fs::write(
-        &command_path,
-        serde_json::to_string_pretty(&command)
-            .map_err(|err| format!("serialize script command failed: {err}"))?,
-    )
-    .await
-    .map_err(|err| format!("write script command failed: {err}"))?;
+    let command_text = serde_json::to_string_pretty(&command)
+        .map_err(|err| format!("serialize script command failed: {err}"))?;
+    tokio::fs::write(&command_temp_path, command_text)
+        .await
+        .map_err(|err| format!("write script command temp file failed: {err}"))?;
+    tokio::fs::rename(&command_temp_path, &command_path)
+        .await
+        .map_err(|err| format!("publish script command failed: {err}"))?;
+    {
+        let mut sessions = state.runtime_sessions.lock().await;
+        if let Some(session) = sessions.get_mut(&session_id) {
+            session
+                .script_log_start_offsets
+                .insert(script_run_id.clone(), script_log_start_offset);
+        }
+    }
 
     let deadline = tokio::time::Instant::now()
         + Duration::from_millis(request.timeout_ms.unwrap_or(10_000).clamp(500, 120_000));
     loop {
         if tokio::time::Instant::now() >= deadline {
-            return Ok(json!({
+            let mut response = json!({
                 "ok": false,
                 "status": "timeout",
                 "scope": "global",
-                "session_id": request.session_id,
-                "script_run_id": request.script_run_id,
+                "session_id": session_id,
+                "script_run_id": script_run_id,
                 "command_path": command_path.to_string_lossy(),
                 "artifact_dir": artifact_dir.to_string_lossy(),
                 "status_path": status_path.to_string_lossy(),
                 "raw_log_path": raw_log_path.to_string_lossy(),
                 "error": "Runtime script result did not arrive before timeout.",
-            }));
+            });
+            attach_script_log(state, &session_id, &script_run_id, &mut response).await;
+            return Ok(response);
         }
         if status_path.is_file() {
             let text = tokio::fs::read_to_string(&status_path)
@@ -329,21 +459,57 @@ async fn runtime_session_script_inner(
             if let Ok(value) = serde_json::from_str::<Value>(&text) {
                 let status = value.get("status").and_then(Value::as_str).unwrap_or("");
                 if status == "completed" || status == "failed" {
-                    return Ok(json!({
+                    let mut response = json!({
                         "ok": status == "completed",
                         "status": status,
                         "scope": "global",
-                        "session_id": request.session_id,
-                        "script_run_id": request.script_run_id,
+                        "session_id": session_id,
+                        "script_run_id": script_run_id,
                         "command_path": command_path.to_string_lossy(),
                         "artifact_dir": artifact_dir.to_string_lossy(),
                         "status_path": status_path.to_string_lossy(),
                         "raw_log_path": raw_log_path.to_string_lossy(),
                         "result": value,
-                    }));
+                    });
+                    attach_script_log(state, &session_id, &script_run_id, &mut response).await;
+                    return Ok(response);
                 }
             }
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
+}
+
+async fn attach_script_log(
+    state: &AppState,
+    session_id: &str,
+    script_run_id: &str,
+    response: &mut Value,
+) {
+    let mut sessions = state.runtime_sessions.lock().await;
+    let Some(session) = sessions.get_mut(session_id) else {
+        return;
+    };
+    let log_capture = runtime_log::capture_update(
+        &session.session_id,
+        &session.raw_log_path,
+        "runtime_script",
+        &mut session.log_cursor,
+    )
+    .await;
+    let finding_lines =
+        if let Some(byte_offset) = session.script_log_start_offsets.remove(script_run_id) {
+            runtime_log::capture_from_offset(
+                &session.session_id,
+                &session.raw_log_path,
+                "runtime_script_findings",
+                byte_offset,
+            )
+            .await
+            .lines
+        } else {
+            log_capture.lines.clone()
+        };
+    response["runtime_findings"] = runtime_log::findings_for_script(&finding_lines, script_run_id);
+    response["runtime_log"] = log_capture.receipt;
 }

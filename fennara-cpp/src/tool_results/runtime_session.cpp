@@ -1,6 +1,7 @@
 #include "fennara/tool_results/runtime_session.hpp"
 
 #include "fennara/tool_results/envelope.hpp"
+#include "fennara/tool_results/runtime_log_excerpt.hpp"
 
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -94,8 +95,9 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
     append_if_present(lines, "Captures dir", raw_result, "captures_dir");
     if (!godot::String(raw_result.get("log_path", "")).is_empty()) {
         lines.append(
-            "Session log is the source of truth for runtime progress, debugger issues, script logs, captures, and whether the scene actually failed.");
+            "Session log remains the full source of truth; this receipt includes new log lines since the previous runtime receipt when available.");
     }
+    append_runtime_log_excerpt(lines, raw_result);
 
     if (raw_result.has("running")) {
         lines.append(
@@ -114,6 +116,17 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
             godot::String((bool)raw_result.get("script_running", false)
                               ? "true"
                               : "false"));
+    }
+    if (raw_result.has("startup_log_wait_ms")) {
+        lines.append(
+            "Startup log wait: " +
+            godot::String::num_int64(
+                static_cast<int64_t>(raw_result.get("startup_log_wait_ms", 0))) +
+            " ms");
+        if (!(bool)raw_result.get("startup_ready_seen", false)) {
+            lines.append(
+                "Runtime helper did not report scene ready during this startup wait. Use `runtime_session` action `status` or read the `runtime_session.log` log file to see whether the scene became ready afterward.");
+        }
     }
     if (raw_result.has("max_run_seconds")) {
         double seconds = static_cast<double>(
@@ -358,6 +371,8 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
     metadata["log_path"] = raw_result.get("log_path", "");
     metadata["captures_dir"] = raw_result.get("captures_dir", "");
     metadata["script_running"] = raw_result.get("script_running", false);
+    metadata["startup_log_wait_ms"] = raw_result.get("startup_log_wait_ms", 0);
+    metadata["startup_ready_seen"] = raw_result.get("startup_ready_seen", false);
     metadata["runtime_issue_count"] = raw_result.get("runtime_issue_count", 0);
     metadata["latest_runtime_issues"] = latest_runtime_issues;
     metadata["latest_runtime_summary"] = raw_result.get("latest_runtime_summary", godot::Dictionary());
@@ -375,6 +390,7 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
     metadata["msbuild_issue_count"] = raw_result.get("msbuild_issue_count", msbuild_issues.size());
     metadata["msbuild_issues_path"] = raw_result.get("msbuild_issues_path", "");
     metadata["msbuild_log_path"] = raw_result.get("msbuild_log_path", "");
+    metadata["runtime_log"] = raw_result.get("runtime_log", godot::Dictionary());
 
     godot::Dictionary envelope = make_envelope(
         godot::String("\n").join(lines),

@@ -11,6 +11,7 @@ pub(crate) mod docs_cache;
 pub(crate) mod godot_bridge;
 pub(crate) mod permissions;
 pub(crate) mod process_helpers;
+pub(crate) mod runtime_log;
 pub(crate) mod runtime_sessions;
 pub(crate) mod scene_runner;
 pub(crate) mod state;
