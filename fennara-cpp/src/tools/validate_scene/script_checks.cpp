@@ -76,52 +76,120 @@ godot::Dictionary s_scene_props_for_node(
     return scene_props;
 }
 
-bool s_is_identifier_char(char32_t c) {
-    return c == '_' ||
-           (c >= '0' && c <= '9') ||
-           (c >= 'A' && c <= 'Z') ||
-           (c >= 'a' && c <= 'z');
+godot::String s_join_samples(const godot::Array &samples) {
+    godot::PackedStringArray parts;
+    for (int i = 0; i < samples.size(); i++) {
+        parts.append(samples[i]);
+    }
+    return godot::String(", ").join(parts);
 }
 
-int s_count_identifier_mentions(const godot::String &text,
-                                const godot::String &identifier) {
-    if (text.is_empty() || identifier.is_empty()) {
-        return 0;
-    }
-
-    int count = 0;
-    int pos = 0;
-    while (true) {
-        pos = text.find(identifier, pos);
-        if (pos < 0) {
-            break;
+godot::String s_format_unset_properties(const godot::Array &properties) {
+    godot::PackedStringArray parts;
+    for (int i = 0; i < properties.size(); i++) {
+        if (properties[i].get_type() != godot::Variant::DICTIONARY) {
+            continue;
         }
-
-        int after_pos = pos + identifier.length();
-        bool has_identifier_before =
-            pos > 0 && s_is_identifier_char(text[pos - 1]);
-        bool has_identifier_after =
-            after_pos < text.length() && s_is_identifier_char(text[after_pos]);
-        if (!has_identifier_before && !has_identifier_after) {
-            count++;
+        godot::Dictionary prop = properties[i];
+        godot::String name = prop.get("name", "");
+        godot::String type = prop.get("type", "");
+        if (name.is_empty()) {
+            continue;
         }
-        pos = after_pos;
+        parts.append(type.is_empty() ? name : name + " (" + type + ")");
     }
-    return count;
+    return godot::String(", ").join(parts);
 }
 
-bool s_script_references_property_beyond_export(
+void s_append_unique_string(
+    godot::Array &values,
+    godot::Dictionary &seen,
+    const godot::String &value,
+    int limit) {
+    if (value.is_empty() || seen.has(value)) {
+        return;
+    }
+    seen[value] = true;
+    if (limit <= 0 || values.size() < limit) {
+        values.append(value);
+    }
+}
+
+void s_record_unset_export_group(
+    godot::Dictionary &groups,
+    godot::Array &group_order,
+    const godot::String &node_path,
     const godot::String &script_path,
-    const godot::String &property_name) {
-    godot::Ref<godot::FileAccess> file =
-        godot::FileAccess::open(script_path, godot::FileAccess::READ);
-    if (!file.is_valid()) {
-        return false;
+    const godot::String &instance_scene_path,
+    const godot::String &prop_name,
+    const godot::String &type_label) {
+    godot::String key = script_path;
+
+    godot::Dictionary group;
+    if (groups.has(key)) {
+        group = groups[key];
+    } else {
+        group["script_path"] = script_path;
+        group["properties"] = godot::Array();
+        group["property_seen"] = godot::Dictionary();
+        group["node_count"] = 0;
+        group["sample_seen"] = godot::Dictionary();
+        group["instance_scenes"] = godot::Array();
+        group["instance_scene_seen"] = godot::Dictionary();
+        group_order.append(key);
     }
 
-    // Cheap signal: one occurrence is normally the export declaration; more
-    // occurrences mean the script likely reads or writes the property.
-    return s_count_identifier_mentions(file->get_as_text(), property_name) > 1;
+    godot::String prop_key = prop_name + godot::String("\n") + type_label;
+    godot::Dictionary property_seen =
+        group.get("property_seen", godot::Dictionary());
+    if (!property_seen.has(prop_key)) {
+        property_seen[prop_key] = true;
+        godot::Dictionary prop;
+        prop["name"] = prop_name;
+        prop["type"] = type_label;
+        godot::Array properties = group.get("properties", godot::Array());
+        properties.append(prop);
+        group["properties"] = properties;
+        group["property_seen"] = property_seen;
+    }
+
+    godot::Dictionary sample_seen = group.get("sample_seen", godot::Dictionary());
+    int node_count = static_cast<int>(group.get("node_count", 0));
+    if (!sample_seen.has(node_path)) {
+        sample_seen[node_path] = true;
+        group["node_count"] = node_count + 1;
+        group["sample_seen"] = sample_seen;
+    }
+
+    godot::Array instance_scenes =
+        group.get("instance_scenes", godot::Array());
+    godot::Dictionary instance_scene_seen =
+        group.get("instance_scene_seen", godot::Dictionary());
+    if (!instance_scene_path.is_empty() &&
+        !instance_scene_seen.has(instance_scene_path)) {
+        int total = static_cast<int>(group.get("instance_scene_total", 0));
+        group["instance_scene_total"] = total + 1;
+    }
+    s_append_unique_string(
+        instance_scenes, instance_scene_seen, instance_scene_path, 5);
+    group["instance_scenes"] = instance_scenes;
+    group["instance_scene_seen"] = instance_scene_seen;
+
+    groups[key] = group;
+}
+
+godot::String s_count_label(int count, const godot::String &singular,
+                            const godot::String &plural) {
+    return godot::String::num_int64(count) + " " +
+           (count == 1 ? singular : plural);
+}
+
+godot::String s_omitted_label(int total, int shown) {
+    int omitted = total - shown;
+    if (omitted <= 0) {
+        return "";
+    }
+    return ", " + s_count_label(omitted, "omitted", "omitted");
 }
 
 } // namespace
@@ -154,6 +222,9 @@ void FennaraValidateSceneTool::_check_script_extends_mismatch(
 void FennaraValidateSceneTool::_check_unset_export_vars(
     const godot::Ref<godot::SceneState> &state, godot::Array &issues) {
     int count = state->get_node_count();
+    godot::Dictionary groups;
+    godot::Array group_order;
+
     for (int i = 0; i < count; i++) {
         godot::String script_path = _get_script_path(state, i);
         godot::String instance_scene_path;
@@ -198,41 +269,60 @@ void FennaraValidateSceneTool::_check_unset_export_vars(
             godot::String type_label =
                 hint_string.is_empty() ? "Object" : hint_string;
 
-            godot::Dictionary extra;
-            extra["property"] = prop_name;
-            extra["type"] = type_label;
-            if (!instance_scene_path.is_empty()) {
-                extra["instance_scene"] = instance_scene_path;
-            }
-
-            bool referenced_in_script =
-                s_script_references_property_beyond_export(
-                    script_path, prop_name);
-            extra["referenced_in_script"] = referenced_in_script;
-
-            godot::String message;
-            godot::String severity = referenced_in_script ? "warning" : "info";
-            if (referenced_in_script) {
-                message = godot::String("Unset Resource export var '") +
-                    prop_name + "' (type: " + type_label + ")";
-            } else {
-                message = godot::String("Exported Resource var '") +
-                    prop_name + "' (type: " + type_label + ") is unset";
-            }
-            if (!instance_scene_path.is_empty()) {
-                message += " inherited from instance " + instance_scene_path;
-            }
-            if (referenced_in_script) {
-                message +=
-                    " and referenced by the script; verify it is optional/null-guarded or assign it in the scene";
-            } else {
-                message += ". This is OK if optional or assigned at runtime";
-            }
-            _add_issue(issues, _build_node_path(state, i),
-                       "unset_export_var", severity,
-                       message,
-                       extra);
+            s_record_unset_export_group(
+                groups,
+                group_order,
+                _build_node_path(state, i),
+                script_path,
+                instance_scene_path,
+                prop_name,
+                type_label);
         }
+    }
+
+    for (int i = 0; i < group_order.size(); i++) {
+        godot::String key = group_order[i];
+        godot::Dictionary group = groups[key];
+        godot::String script_path = group.get("script_path", "");
+        godot::Array properties = group.get("properties", godot::Array());
+        int node_count = static_cast<int>(group.get("node_count", 0));
+        godot::Array instance_scenes =
+            group.get("instance_scenes", godot::Array());
+
+        godot::String severity = "info";
+        godot::String message =
+            godot::String("Script ") +
+            (script_path.is_empty() ? godot::String("<unknown>") : script_path) +
+            " has " +
+            s_count_label(properties.size(), "unset exported Object/Resource var",
+                          "unset exported Object/Resource vars");
+        godot::String prop_text = s_format_unset_properties(properties);
+        if (!prop_text.is_empty()) {
+            message += ": " + prop_text;
+        }
+        message += " on " + s_count_label(node_count, "node", "nodes");
+        if (!script_path.is_empty()) {
+            message += " using this script";
+        }
+        if (!instance_scenes.is_empty()) {
+            message += ". Instanced scene samples: " +
+                       s_join_samples(instance_scenes);
+            message += s_omitted_label(
+                static_cast<int>(group.get("instance_scene_total",
+                                           instance_scenes.size())),
+                instance_scenes.size());
+        }
+        message += ". Ignore this note if these references are intentionally optional or assigned at runtime";
+
+        godot::Dictionary extra;
+        extra["properties"] = properties;
+        extra["script_path"] = script_path;
+        extra["node_count"] = node_count;
+        if (!instance_scenes.is_empty()) {
+            extra["instance_scenes"] = instance_scenes;
+        }
+
+        _add_issue(issues, "", "unset_export_var", severity, message, extra);
     }
 }
 

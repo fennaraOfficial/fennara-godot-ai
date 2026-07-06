@@ -3,7 +3,7 @@
     "description_lines": [
       "Validate one or more scene files for common issues.",
       "Structural checks include missing scripts/resources, script extends mismatch, invalid NodePath properties, invalid script $Node/get_node() references, duplicate sibling names, cyclic scene dependencies, and unset exported Resource/Object vars.",
-      "Declaration-only unset exports are notes because they may be optional or assigned at runtime; unset exports referenced elsewhere in the script are warnings to verify/null-guard or assign.",
+      "Unset exported Resource/Object vars are grouped once per script with unique var names and capped affected scene counts; ignore the note if those references are intentionally optional or assigned at runtime.",
       "For scenes with no structural errors, Fennara also runs each scene headlessly for 3 seconds through the local daemon using up to 3 memory-throttled workers.",
       "The result includes each scene runtime status, crash/error/warning flags, compacted runtime output, and paths to the full result JSON and raw runtime logs.",
       "The daemon intentionally stops the process after the validation window, so a non-zero exit code from that stop is not by itself a scene failure; use crash/error/warning flags and logs as the health signal.",
