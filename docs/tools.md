@@ -326,11 +326,12 @@ invalid NodePath properties, invalid script `$Node`/`get_node()` references,
 duplicate sibling names, cyclic scene dependencies, and unset exported
 Resource/Object variables.
 
-Unset exported Resource/Object variables are split by signal strength.
-Declaration-only unset exports are reported as structural notes because they may
-be optional or assigned at runtime. Unset exports referenced elsewhere in the
-script are structural warnings to verify/null-guard or assign; they are not
-automatic proof that a placeholder resource should be created.
+Unset exported Resource/Object variables are reported as structural notes because
+they may be optional or assigned at runtime. Repeated unset exports are grouped
+once per script with the unique variable names and capped node samples per scene,
+so large scenes do not flood the receipt with one line per node/property pair.
+Ignore these notes when the references are intentionally optional or assigned at
+runtime.
 
 For scenes with zero structural errors, Fennara also runs each scene headlessly
 for exactly 3 seconds through the local daemon using up to 3 memory-throttled

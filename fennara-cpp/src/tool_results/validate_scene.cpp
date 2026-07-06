@@ -65,10 +65,268 @@ godot::Dictionary target_metadata(const godot::Dictionary &scene) {
     return target;
 }
 
+bool is_unset_export_issue(const godot::Dictionary &issue) {
+    return godot::String(issue.get("check", "")) == "unset_export_var";
+}
+
+godot::String count_label(int count, const godot::String &singular,
+                          const godot::String &plural) {
+    return godot::String::num_int64(count) + " " +
+           (count == 1 ? singular : plural);
+}
+
+godot::String join_array_strings(const godot::Array &values) {
+    godot::PackedStringArray parts;
+    for (int i = 0; i < values.size(); i++) {
+        parts.append(values[i]);
+    }
+    return godot::String(", ").join(parts);
+}
+
+void add_unique_unset_property(godot::Dictionary &group,
+                               const godot::String &name,
+                               const godot::String &type) {
+    if (name.is_empty()) {
+        return;
+    }
+    godot::String key = name + godot::String("\n") + type;
+    godot::Dictionary seen = group.get("property_seen", godot::Dictionary());
+    if (seen.has(key)) {
+        return;
+    }
+    seen[key] = true;
+    godot::Array properties = group.get("properties", godot::Array());
+    godot::Dictionary property;
+    property["name"] = name;
+    property["type"] = type;
+    properties.append(property);
+    group["properties"] = properties;
+    group["property_seen"] = seen;
+}
+
+void add_unset_issue_properties(godot::Dictionary &group,
+                                const godot::Dictionary &issue) {
+    godot::Variant props_var = issue.get("properties", godot::Variant());
+    if (props_var.get_type() == godot::Variant::ARRAY) {
+        godot::Array props = props_var;
+        for (int i = 0; i < props.size(); i++) {
+            if (props[i].get_type() != godot::Variant::DICTIONARY) {
+                continue;
+            }
+            godot::Dictionary prop = props[i];
+            add_unique_unset_property(group, prop.get("name", ""),
+                                      prop.get("type", ""));
+        }
+        return;
+    }
+
+    add_unique_unset_property(group, issue.get("property", ""),
+                              issue.get("type", ""));
+}
+
+godot::String format_unset_properties(const godot::Array &properties) {
+    godot::PackedStringArray parts;
+    for (int i = 0; i < properties.size(); i++) {
+        if (properties[i].get_type() != godot::Variant::DICTIONARY) {
+            continue;
+        }
+        godot::Dictionary prop = properties[i];
+        godot::String name = prop.get("name", "");
+        godot::String type = prop.get("type", "");
+        if (name.is_empty()) {
+            continue;
+        }
+        parts.append(type.is_empty() ? name : name + " (" + type + ")");
+    }
+    return godot::String(", ").join(parts);
+}
+
+void add_unset_node_sample(godot::Dictionary &scene_group,
+                           const godot::String &node_path) {
+    if (node_path.is_empty()) {
+        return;
+    }
+    godot::Dictionary seen = scene_group.get("sample_seen", godot::Dictionary());
+    if (seen.has(node_path)) {
+        return;
+    }
+    seen[node_path] = true;
+    godot::Array samples = scene_group.get("samples", godot::Array());
+    if (samples.size() < 5) {
+        samples.append(node_path);
+        scene_group["samples"] = samples;
+    }
+    scene_group["sample_seen"] = seen;
+}
+
+void add_unset_issue_scene(godot::Dictionary &group,
+                           const godot::String &scene_path,
+                           const godot::Dictionary &issue) {
+    godot::Dictionary scenes = group.get("scenes", godot::Dictionary());
+    godot::Array scene_order = group.get("scene_order", godot::Array());
+    godot::Dictionary scene_group;
+    if (scenes.has(scene_path)) {
+        scene_group = scenes[scene_path];
+    } else {
+        scene_group["count"] = 0;
+        scene_group["samples"] = godot::Array();
+        scene_group["sample_seen"] = godot::Dictionary();
+        scene_order.append(scene_path);
+    }
+
+    int count = static_cast<int>(
+        scene_group.get("count", 0));
+    int issue_node_count = static_cast<int>(
+        issue.get("node_count", issue.get("unset_count", 1)));
+    scene_group["count"] = count + issue_node_count;
+
+    godot::Variant samples_var = issue.get("samples", godot::Variant());
+    if (samples_var.get_type() == godot::Variant::ARRAY) {
+        godot::Array samples = samples_var;
+        for (int i = 0; i < samples.size(); i++) {
+            add_unset_node_sample(scene_group, samples[i]);
+        }
+    } else {
+        add_unset_node_sample(
+            scene_group,
+            issue.get("node_path", issue.get("node", "")));
+    }
+
+    scenes[scene_path] = scene_group;
+    group["scenes"] = scenes;
+    group["scene_order"] = scene_order;
+}
+
+godot::String format_unset_scene_samples(const godot::Dictionary &group) {
+    godot::Array scene_order = group.get("scene_order", godot::Array());
+    godot::Dictionary scenes = group.get("scenes", godot::Dictionary());
+    godot::PackedStringArray parts;
+    int scene_limit = 5;
+    int shown_scenes = scene_order.size() < scene_limit
+        ? scene_order.size()
+        : scene_limit;
+    for (int i = 0; i < shown_scenes; i++) {
+        godot::String scene_path = scene_order[i];
+        godot::Dictionary scene_group = scenes[scene_path];
+        int count = static_cast<int>(scene_group.get("count", 0));
+        godot::Array samples = scene_group.get("samples", godot::Array());
+        godot::String text = scene_path + ": ";
+        if (samples.is_empty()) {
+            text += count_label(count, "node", "nodes");
+        } else {
+            text += join_array_strings(samples);
+            int omitted = count - samples.size();
+            if (omitted > 0) {
+                text += ", " + count_label(omitted, "omitted", "omitted");
+            }
+        }
+        parts.append(text);
+    }
+    int omitted_scenes = scene_order.size() - shown_scenes;
+    if (omitted_scenes > 0) {
+        parts.append(count_label(omitted_scenes, "scene omitted",
+                                 "scenes omitted"));
+    }
+    return godot::String("; ").join(parts);
+}
+
+godot::String global_unset_export_section(
+    const godot::Array &scenes,
+    godot::Dictionary &scene_unset_counts) {
+    godot::Dictionary groups;
+    godot::Array group_order;
+
+    for (int i = 0; i < scenes.size(); i++) {
+        if (scenes[i].get_type() != godot::Variant::DICTIONARY) {
+            continue;
+        }
+        godot::Dictionary scene = scenes[i];
+        godot::String scene_path = scene_label(scene, i);
+        godot::Array issues = scene.get("issues", godot::Array());
+        for (int issue_index = 0; issue_index < issues.size(); issue_index++) {
+            if (issues[issue_index].get_type() != godot::Variant::DICTIONARY) {
+                continue;
+            }
+            godot::Dictionary issue = issues[issue_index];
+            if (!is_unset_export_issue(issue)) {
+                continue;
+            }
+
+            int scene_count = static_cast<int>(
+                scene_unset_counts.get(scene_path, 0));
+            scene_unset_counts[scene_path] = scene_count + 1;
+
+            godot::String script_path = issue.get("script_path", "");
+            godot::String key =
+                script_path.is_empty() ? godot::String(issue.get("message", ""))
+                                       : script_path;
+            godot::Dictionary group;
+            if (groups.has(key)) {
+                group = groups[key];
+            } else {
+                group["script_path"] = script_path;
+                group["properties"] = godot::Array();
+                group["property_seen"] = godot::Dictionary();
+                group["node_count"] = 0;
+                group["scenes"] = godot::Dictionary();
+                group["scene_order"] = godot::Array();
+                group_order.append(key);
+            }
+
+            add_unset_issue_properties(group, issue);
+            int node_count = static_cast<int>(group.get("node_count", 0));
+            group["node_count"] = node_count +
+                static_cast<int>(issue.get("node_count", issue.get("unset_count", 1)));
+            add_unset_issue_scene(group, scene_path, issue);
+            groups[key] = group;
+        }
+    }
+
+    if (group_order.is_empty()) {
+        return "";
+    }
+
+    godot::PackedStringArray lines;
+    lines.append("## Unset export notes");
+    for (int i = 0; i < group_order.size(); i++) {
+        godot::String key = group_order[i];
+        godot::Dictionary group = groups[key];
+        godot::String script_path = group.get("script_path", "");
+        godot::Array properties = group.get("properties", godot::Array());
+        int node_count = static_cast<int>(group.get("node_count", 0));
+        godot::String prop_text = format_unset_properties(properties);
+
+        godot::String bullet = "- info (unset_export_var) ";
+        bullet += script_path.is_empty()
+            ? godot::String("Script <unknown>")
+            : godot::String("Script ") + script_path;
+        bullet += ": " +
+            count_label(properties.size(), "unset exported Object/Resource var",
+                        "unset exported Object/Resource vars");
+        if (!prop_text.is_empty()) {
+            bullet += ": " + prop_text;
+        }
+        bullet += " on " + count_label(node_count, "node", "nodes") + ". ";
+        bullet += "Ignore this note if these references are intentionally optional or assigned at runtime.";
+        godot::String node_text = format_unset_scene_samples(group);
+        if (!node_text.is_empty()) {
+            bullet += " Nodes: " + node_text;
+        }
+        lines.append(bullet);
+    }
+
+    return godot::String("\n").join(lines);
+}
+
 godot::String issue_extra_text(const godot::Dictionary &issue) {
     static const char *skip_keys[] = {
         "node", "node_path", "check", "severity", "message"
     };
+    static const char *unset_export_skip_keys[] = {
+        "property", "type", "script_path", "unset_count", "instance_scene",
+        "properties", "node_count", "samples", "instance_scenes"
+    };
+    bool is_unset_export = is_unset_export_issue(issue);
 
     godot::PackedStringArray parts;
     godot::Array keys = issue.keys();
@@ -79,6 +337,14 @@ godot::String issue_extra_text(const godot::Dictionary &issue) {
             if (key == skip_key) {
                 skip = true;
                 break;
+            }
+        }
+        if (!skip && is_unset_export) {
+            for (const char *skip_key : unset_export_skip_keys) {
+                if (key == skip_key) {
+                    skip = true;
+                    break;
+                }
             }
         }
         if (!skip) {
@@ -110,7 +376,8 @@ godot::String issue_bullet(const godot::Dictionary &issue) {
 }
 
 godot::Array issues_for_severity(const godot::Dictionary &scene,
-                                 const godot::String &severity) {
+                                 const godot::String &severity,
+                                 bool include_unset_exports) {
     godot::Array out;
     godot::Array issues = scene.get("issues", godot::Array());
     for (int i = 0; i < issues.size(); i++) {
@@ -118,6 +385,9 @@ godot::Array issues_for_severity(const godot::Dictionary &scene,
             continue;
         }
         godot::Dictionary issue = issues[i];
+        if (!include_unset_exports && is_unset_export_issue(issue)) {
+            continue;
+        }
         if (godot::String(issue.get("severity", "")) == severity) {
             out.append(issue);
         }
@@ -397,6 +667,14 @@ godot::Dictionary format_validate_scene(const godot::Dictionary &raw_result) {
         per_scene_budget = 1;
     }
 
+    godot::Dictionary scene_unset_export_counts;
+    godot::String unset_export_section =
+        global_unset_export_section(scenes, scene_unset_export_counts);
+    bool summarized_unset_exports = !unset_export_section.is_empty();
+    if (summarized_unset_exports) {
+        sections.append(unset_export_section);
+    }
+
     for (int i = 0; i < scenes.size(); i++) {
         if (scenes[i].get_type() != godot::Variant::DICTIONARY) {
             continue;
@@ -448,11 +726,14 @@ godot::Dictionary format_validate_scene(const godot::Dictionary &raw_result) {
             detail_budget = 1;
         }
 
-        int shown = 0;
+        int shown = summarized_unset_exports
+            ? static_cast<int>(scene_unset_export_counts.get(scene_label(scene, i), 0))
+            : 0;
         for (int severity_index = 0; severity_index < 3; severity_index++) {
             godot::String severity = severity_index == 0 ? "error" :
                 (severity_index == 1 ? "warning" : "info");
-            godot::Array issues = issues_for_severity(scene, severity);
+            godot::Array issues =
+                issues_for_severity(scene, severity, !summarized_unset_exports);
             if (issues.is_empty()) {
                 continue;
             }
