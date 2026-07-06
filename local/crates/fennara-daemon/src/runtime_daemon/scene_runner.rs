@@ -362,7 +362,7 @@ async fn run_batch_scene_process(
     .map_err(|err| format!("write raw log header failed for {scene_path}: {err}"))?;
     writeln!(
         log_file,
-        "Args: --headless --path {} {scene_path}",
+        "Args: --headless --debug --ignore-error-breaks --path {} {scene_path}",
         working_directory.display()
     )
     .map_err(|err| format!("write raw log header failed for {scene_path}: {err}"))?;
@@ -375,6 +375,8 @@ async fn run_batch_scene_process(
     let mut command = Command::new(executable);
     command
         .arg("--headless")
+        .arg("--debug")
+        .arg("--ignore-error-breaks")
         .arg("--path")
         .arg(working_directory)
         .arg(scene_path)
