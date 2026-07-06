@@ -13,7 +13,7 @@ Run `check-version.mjs` in CI and before release packaging. Use `set-version.mjs
 
 ## Packaging Scripts
 
-- `package-preview.mjs`: assembles per-platform preview archives after the GDExtension and local Rust binaries have already been built.
+- `package-preview.mjs`: syncs committed addon payloads, then assembles per-platform preview archives after the GDExtension and local Rust binaries have already been built.
 - `package-addon-all.mjs`: combines platform addon parts into the final all-platform addon archive.
 - `write-release-manifest.mjs`: writes `fennara-release-manifest-v<version>.json` from release assets and validates every referenced SHA-256.
 
@@ -42,8 +42,14 @@ The CEF scripts operate on copied staging files only. They must not mutate the d
 
 `godot_demo/addons/fennara/runtime/` is intentionally committed because released addon zips must contain the Godot-side runtime helper scripts. Make changes in `runtime/`, run the sync script, and commit both source and generated addon assets together.
 
+## Guidance Sync
+
+- `sync-guidance.mjs`: copies `local/templates/fennara-guidelines.md` into `godot_demo/addons/fennara/ai/guidelines.md`, matching the file that `fennara install` and `fennara update` write into user projects.
+
+`godot_demo/addons/fennara/ai/guidelines.md` is intentionally committed because the demo addon mirrors an installed addon layout. Make changes in `local/templates/`, run the sync script, and commit both source and generated addon guidance together.
+
 ## Boundaries
 
 - Scripts may create `.package-preview/` and root `dist/` outputs.
-- Scripts may update committed generated payloads only when that is their explicit job, such as `sync-chat-ui.mjs`, `sync-runtime.mjs`, or `set-version.mjs`.
+- Scripts may update committed generated payloads only when that is their explicit job, such as `sync-chat-ui.mjs`, `sync-runtime.mjs`, `sync-guidance.mjs`, or `set-version.mjs`.
 - Scripts must not write Godot editor cache, local app-data installs, downloaded release artifacts, or VM test output into tracked source folders.

@@ -390,9 +390,11 @@ Godot editors. The full `runtime_session.log` is the source of truth for Godot
 stdout/stderr, runtime errors, `FENNARA_SCRIPT_*` markers, captures,
 close/stop events, and `ctx.log(...)` output.
 
-After spawning, `start` waits up to 5 seconds for startup log output. If the
-ready marker is not seen in that window, the receipt says so and later
-`status` calls can show new log lines.
+After spawning, `start` waits up to 5 seconds for startup log output, including
+the `FENNARA_RUNTIME_SESSION_READY` marker and the
+`FENNARA_RUNTIME_ORIENTATION_NOTE` startup orientation tail marker when the
+helper prints it in time. If either marker is not seen in that window, the
+receipt says so and later `status` calls can show new log lines.
 
 Example prompt:
 

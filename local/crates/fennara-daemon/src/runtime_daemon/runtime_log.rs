@@ -9,6 +9,7 @@ use tokio::{
 use super::state::RuntimeLogCursor;
 
 const READY_MARKER: &str = "FENNARA_RUNTIME_SESSION_READY";
+const STARTUP_ORIENTATION_MARKER: &str = "FENNARA_RUNTIME_ORIENTATION_NOTE";
 const MAX_SHOWN_LINES: usize = 60;
 const HEAD_LINES: usize = 20;
 const MAX_SHOWN_CHARS: usize = 12_000;
@@ -24,7 +25,7 @@ pub(crate) async fn wait_for_ready(
     log_path: &Path,
     from_byte: u64,
     timeout_ms: u64,
-) -> Result<(bool, bool, u64), String> {
+) -> Result<(bool, bool, bool, u64), String> {
     let started = std::time::Instant::now();
     let deadline = started + std::time::Duration::from_millis(timeout_ms);
     loop {
@@ -32,10 +33,14 @@ pub(crate) async fn wait_for_ready(
             .try_wait()
             .map_err(|err| format!("runtime session wait failed: {err}"))?
             .is_some();
-        let ready_seen = log_contains(log_path, from_byte, READY_MARKER).await;
-        if ready_seen || process_exited || std::time::Instant::now() >= deadline {
+        let startup = startup_markers(log_path, from_byte).await;
+        if (startup.ready_seen && startup.orientation_seen)
+            || process_exited
+            || std::time::Instant::now() >= deadline
+        {
             return Ok((
-                ready_seen,
+                startup.ready_seen,
+                startup.orientation_seen,
                 process_exited,
                 started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
             ));
@@ -99,6 +104,13 @@ pub(crate) async fn capture_update(
         .iter()
         .find_map(|(line_no, line)| line.contains(READY_MARKER).then_some(*line_no))
         .unwrap_or(0);
+    let orientation_line = lines
+        .iter()
+        .find_map(|(line_no, line)| {
+            line.contains(STARTUP_ORIENTATION_MARKER)
+                .then_some(*line_no)
+        })
+        .unwrap_or(0);
     let (shown_lines, omitted, truncated) = shown_excerpt(&lines);
     let shown_ranges = line_ranges(&shown_lines);
 
@@ -131,6 +143,8 @@ pub(crate) async fn capture_update(
         "line_char_limit": MAX_LINE_CHARS,
         "runtime_session_ready_seen": ready_line > 0,
         "runtime_session_ready_line": ready_line,
+        "runtime_session_orientation_seen": orientation_line > 0,
+        "runtime_session_orientation_line": orientation_line,
         "lines": shown_lines.into_iter().map(|(_, line)| line).collect::<Vec<_>>(),
     });
     LogCapture { receipt, lines }
@@ -217,12 +231,65 @@ async fn read_from(path: &Path, offset: u64) -> Result<Vec<u8>, std::io::Error> 
     Ok(bytes)
 }
 
-async fn log_contains(path: &Path, offset: u64, pattern: &str) -> bool {
+#[derive(Default)]
+struct StartupMarkers {
+    ready_seen: bool,
+    orientation_seen: bool,
+}
+
+async fn startup_markers(path: &Path, offset: u64) -> StartupMarkers {
     read_from(path, offset)
         .await
         .ok()
-        .and_then(|bytes| String::from_utf8(bytes).ok())
-        .is_some_and(|text| text.contains(pattern))
+        .map(|bytes| {
+            let complete_len = complete_line_prefix_len(&bytes);
+            String::from_utf8_lossy(&bytes[..complete_len]).to_string()
+        })
+        .map(|text| startup_markers_from_text(&text))
+        .unwrap_or_default()
+}
+
+fn startup_markers_from_text(text: &str) -> StartupMarkers {
+    let Some(ready_index) = text.find(READY_MARKER) else {
+        return StartupMarkers::default();
+    };
+    StartupMarkers {
+        ready_seen: true,
+        orientation_seen: text[ready_index..].contains(STARTUP_ORIENTATION_MARKER),
+    }
+}
+
+#[cfg(test)]
+mod startup_marker_tests {
+    use super::*;
+
+    #[test]
+    fn startup_markers_detect_ready_only() {
+        let markers = startup_markers_from_text(&format!("{READY_MARKER}: {{}}\n"));
+
+        assert!(markers.ready_seen);
+        assert!(!markers.orientation_seen);
+    }
+
+    #[test]
+    fn startup_markers_detect_orientation_after_ready() {
+        let markers = startup_markers_from_text(&format!(
+            "{READY_MARKER}: {{}}\n{STARTUP_ORIENTATION_MARKER}: startup\n"
+        ));
+
+        assert!(markers.ready_seen);
+        assert!(markers.orientation_seen);
+    }
+
+    #[test]
+    fn startup_markers_ignore_orientation_before_ready() {
+        let markers = startup_markers_from_text(&format!(
+            "{STARTUP_ORIENTATION_MARKER}: startup\n{READY_MARKER}: {{}}\n"
+        ));
+
+        assert!(markers.ready_seen);
+        assert!(!markers.orientation_seen);
+    }
 }
 
 fn shown_excerpt(lines: &[(u64, String)]) -> (Vec<(u64, String)>, usize, usize) {

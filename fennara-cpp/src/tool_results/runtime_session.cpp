@@ -126,6 +126,9 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
         if (!(bool)raw_result.get("startup_ready_seen", false)) {
             lines.append(
                 "Runtime helper did not report scene ready during this startup wait. Use `runtime_session` action `status` or read the `runtime_session.log` log file to see whether the scene became ready afterward.");
+        } else if (!(bool)raw_result.get("startup_orientation_seen", false)) {
+            lines.append(
+                "Runtime helper reported scene ready, but startup orientation lines were not complete during this startup wait. Use `runtime_session` action `status` or read the `runtime_session.log` log file to see the orientation block.");
         }
     }
     if (raw_result.has("max_run_seconds")) {
@@ -373,6 +376,8 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
     metadata["script_running"] = raw_result.get("script_running", false);
     metadata["startup_log_wait_ms"] = raw_result.get("startup_log_wait_ms", 0);
     metadata["startup_ready_seen"] = raw_result.get("startup_ready_seen", false);
+    metadata["startup_orientation_seen"] =
+        raw_result.get("startup_orientation_seen", false);
     metadata["runtime_issue_count"] = raw_result.get("runtime_issue_count", 0);
     metadata["latest_runtime_issues"] = latest_runtime_issues;
     metadata["latest_runtime_summary"] = raw_result.get("latest_runtime_summary", godot::Dictionary());
