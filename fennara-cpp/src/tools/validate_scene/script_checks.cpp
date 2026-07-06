@@ -171,6 +171,11 @@ void s_record_unset_export_group(
         group.get("instance_scenes", godot::Array());
     godot::Dictionary instance_scene_seen =
         group.get("instance_scene_seen", godot::Dictionary());
+    if (!instance_scene_path.is_empty() &&
+        !instance_scene_seen.has(instance_scene_path)) {
+        int total = static_cast<int>(group.get("instance_scene_total", 0));
+        group["instance_scene_total"] = total + 1;
+    }
     s_append_unique_string(
         instance_scenes, instance_scene_seen, instance_scene_path, 5);
     group["instance_scenes"] = instance_scenes;
