@@ -36,7 +36,7 @@ fn launcher_answers_initialize_when_stdio_uses_socketpairs() {
     let mut child = Command::new(&launcher)
         .stdin(unsafe { Stdio::from_raw_fd(stdin_child.into_raw_fd()) })
         .stdout(unsafe { Stdio::from_raw_fd(stdout_child.into_raw_fd()) })
-        .stderr(Stdio::piped())
+        .stderr(Stdio::inherit())
         .spawn()
         .expect("spawn launcher with socket stdio");
 
