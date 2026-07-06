@@ -140,14 +140,15 @@ func _resolve_node(node_or_path: Variant) -> Node:
 		return null
 	if node_or_path is Node:
 		return node_or_path
-	var root := _get_scene_root()
 	var path := str(node_or_path)
 	if path.strip_edges().is_empty():
 		return null
+	var root := _get_scene_root()
+	var tree := _get_scene_tree()
 	if path.begins_with("/root/"):
-		return _helper.get_tree().root.get_node_or_null(NodePath(path.trim_prefix("/root/")))
+		return tree.root.get_node_or_null(NodePath(path.trim_prefix("/root/"))) if tree != null and tree.root != null else null
 	if path.begins_with("/"):
-		return _helper.get_tree().root.get_node_or_null(NodePath(path.trim_prefix("/")))
+		return tree.root.get_node_or_null(NodePath(path.trim_prefix("/"))) if tree != null and tree.root != null else null
 	if root != null:
 		return root.get_node_or_null(NodePath(path))
 	return null
@@ -156,17 +157,28 @@ func _resolve_node(node_or_path: Variant) -> Node:
 func _get_scene_root() -> Node:
 	if _scene_root_getter.is_valid():
 		var root_value: Variant = _scene_root_getter.call()
+		if root_value is Object and not is_instance_valid(root_value):
+			return null
 		if root_value is Node:
 			return root_value
-	if _helper != null and _helper.is_inside_tree():
-		var tree := _helper.get_tree()
-		if tree.current_scene != null:
+	var tree := _get_scene_tree()
+	if tree != null:
+		if tree.current_scene != null and is_instance_valid(tree.current_scene):
 			return tree.current_scene
-		return tree.root
+		if tree.root != null and is_instance_valid(tree.root):
+			return tree.root
+	return null
+
+
+func _get_scene_tree() -> SceneTree:
+	if _helper != null and is_instance_valid(_helper) and _helper.is_inside_tree():
+		return _helper.get_tree()
 	return null
 
 
 func _node_path_text(target: Node) -> String:
+	if target == null or not is_instance_valid(target):
+		return ""
 	var root := _get_scene_root()
 	if target == root:
 		return "."

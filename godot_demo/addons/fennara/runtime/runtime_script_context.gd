@@ -485,10 +485,16 @@ func release_all_inputs() -> void:
 
 
 func get_scene_root() -> Node:
+	if _helper == null or not is_instance_valid(_helper):
+		return null
 	var tree := _helper.get_tree()
-	if tree.current_scene != null:
+	if tree == null:
+		return null
+	if tree.current_scene != null and is_instance_valid(tree.current_scene):
 		return tree.current_scene
-	return tree.root
+	if tree.root != null and is_instance_valid(tree.root):
+		return tree.root
+	return null
 
 
 func _run_action_sequence_step(step: Dictionary) -> Dictionary:
@@ -682,11 +688,14 @@ func _resolve_node(node_or_path: Variant) -> Node:
 	var path := str(node_or_path)
 	if path.strip_edges().is_empty():
 		return null
+	var tree := _helper.get_tree() if _helper != null and is_instance_valid(_helper) else null
 	if path.begins_with("/root/"):
-		return _helper.get_tree().root.get_node_or_null(NodePath(path.trim_prefix("/root/")))
+		return tree.root.get_node_or_null(NodePath(path.trim_prefix("/root/"))) if tree != null and tree.root != null else null
 	if path.begins_with("/"):
-		return _helper.get_tree().root.get_node_or_null(NodePath(path.trim_prefix("/")))
-	return root.get_node_or_null(NodePath(path))
+		return tree.root.get_node_or_null(NodePath(path.trim_prefix("/"))) if tree != null and tree.root != null else null
+	if root != null:
+		return root.get_node_or_null(NodePath(path))
+	return null
 
 
 func _viewport_for_reference(reference_node_or_path: Variant = null) -> Viewport:
@@ -697,14 +706,18 @@ func _viewport_for_reference(reference_node_or_path: Variant = null) -> Viewport
 	var root := get_scene_root()
 	if root != null and root.is_inside_tree():
 		return root.get_viewport()
-	if _helper != null and _helper.is_inside_tree():
+	if _helper != null and is_instance_valid(_helper) and _helper.is_inside_tree():
 		return _helper.get_viewport()
-	if _helper != null and _helper.get_tree() != null:
-		return _helper.get_tree().root
+	if _helper != null and is_instance_valid(_helper):
+		var tree := _helper.get_tree()
+		if tree != null:
+			return tree.root
 	return null
 
 
 func _node_path_text(node: Node) -> String:
+	if node == null or not is_instance_valid(node):
+		return ""
 	var root := get_scene_root()
 	if node == root:
 		return "."
@@ -714,6 +727,8 @@ func _node_path_text(node: Node) -> String:
 
 
 func _find_button_by_text_recursive(node: Node, text: String, case_sensitive: bool, exact: bool, visible_only: bool) -> BaseButton:
+	if node == null or not is_instance_valid(node):
+		return null
 	if node is BaseButton:
 		var button := node as BaseButton
 		if (not visible_only or button.is_visible_in_tree()) and _text_matches(button.text, text, case_sensitive, exact):

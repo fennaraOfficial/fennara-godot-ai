@@ -38,13 +38,15 @@ func read_json_file(path: String) -> Dictionary:
 
 
 func normalized_screenshot_times(value: Variant) -> Array[float]:
-	var times: Array[float] = []
+	var collected: Array[float] = []
 	if value is Array:
 		for entry in value:
-			var time := maxf(0.0, float(entry))
-			if times.is_empty() or absf(times[times.size() - 1] - time) > 0.001:
-				times.append(time)
-	times.sort()
+			collected.append(maxf(0.0, float(entry)))
+	collected.sort()
+	var times: Array[float] = []
+	for time in collected:
+		if times.is_empty() or absf(times[times.size() - 1] - time) > 0.001:
+			times.append(time)
 	return times
 
 
@@ -164,6 +166,11 @@ func viewport_image(max_resolution: int) -> Dictionary:
 func write_env_runtime_status(path: String, payload: Dictionary) -> void:
 	if path.strip_edges().is_empty():
 		return
+	var base_dir := path.get_base_dir()
+	if base_dir.is_absolute_path():
+		DirAccess.make_dir_recursive_absolute(base_dir)
+	else:
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(base_dir))
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		return
