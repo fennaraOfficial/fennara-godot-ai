@@ -104,6 +104,7 @@ fn replay_messages_with_budgets_before_sequence_from_conn(
     Ok(render_replay_plan(replay_plan))
 }
 
+#[cfg(test)]
 pub(super) fn replay_groups_from_conn(
     conn: &Connection,
     chat_id: &str,

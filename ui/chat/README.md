@@ -6,7 +6,7 @@ The first version is buildless on purpose: plain HTML, CSS, and JavaScript.
 That keeps the OSS repo easy to inspect and avoids adding a frontend toolchain
 before the webview host and daemon chat bridge are settled.
 
-The packaged copy lives in `godot/addons/fennara/dist/`.
+The packaged copy lives in `godot_demo/addons/fennara/dist/`.
 
 After editing this folder, run:
 

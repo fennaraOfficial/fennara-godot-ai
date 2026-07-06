@@ -49,94 +49,94 @@ fn asset(path: &str) -> Option<Asset> {
     let asset = match path {
         "index.html" => Asset {
             content_type: "text/html; charset=utf-8",
-            body: include_bytes!("../../../../../../godot/addons/fennara/dist/index.html"),
+            body: include_bytes!("../../../../../../godot_demo/addons/fennara/dist/index.html"),
         },
         "app.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/app.js"
+            "../../../../../../godot_demo/addons/fennara/dist/app.js"
         )),
         "attachment-manager.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/attachment-manager.js"
+            "../../../../../../godot_demo/addons/fennara/dist/attachment-manager.js"
         )),
         "chat-navigation.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/chat-navigation.js"
+            "../../../../../../godot_demo/addons/fennara/dist/chat-navigation.js"
         )),
         "command-palette.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/command-palette.js"
+            "../../../../../../godot_demo/addons/fennara/dist/command-palette.js"
         )),
         "composer-actions.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/composer-actions.js"
+            "../../../../../../godot_demo/addons/fennara/dist/composer-actions.js"
         )),
         "daemon-client.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/daemon-client.js"
+            "../../../../../../godot_demo/addons/fennara/dist/daemon-client.js"
         )),
         "effort-controls.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/effort-controls.js"
+            "../../../../../../godot_demo/addons/fennara/dist/effort-controls.js"
         )),
         "model-picker.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/model-picker.js"
+            "../../../../../../godot_demo/addons/fennara/dist/model-picker.js"
         )),
         "overlay-manager.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/overlay-manager.js"
+            "../../../../../../godot_demo/addons/fennara/dist/overlay-manager.js"
         )),
         "project-file-links.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/project-file-links.js"
+            "../../../../../../godot_demo/addons/fennara/dist/project-file-links.js"
         )),
         "project-status.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/project-status.js"
+            "../../../../../../godot_demo/addons/fennara/dist/project-status.js"
         )),
         "provider-popovers.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/provider-popovers.js"
+            "../../../../../../godot_demo/addons/fennara/dist/provider-popovers.js"
         )),
         "settings-panel.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/settings-panel.js"
+            "../../../../../../godot_demo/addons/fennara/dist/settings-panel.js"
         )),
         "shell-bindings.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/shell-bindings.js"
+            "../../../../../../godot_demo/addons/fennara/dist/shell-bindings.js"
         )),
         "stored-transcript.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/stored-transcript.js"
+            "../../../../../../godot_demo/addons/fennara/dist/stored-transcript.js"
         )),
         "transcript-renderer.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/transcript-renderer.js"
+            "../../../../../../godot_demo/addons/fennara/dist/transcript-renderer.js"
         )),
         "usage-summary.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/usage-summary.js"
+            "../../../../../../godot_demo/addons/fennara/dist/usage-summary.js"
         )),
         "styles.css" => css(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/styles.css"
+            "../../../../../../godot_demo/addons/fennara/dist/styles.css"
         )),
         "styles/base.css" => css(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/styles/base.css"
+            "../../../../../../godot_demo/addons/fennara/dist/styles/base.css"
         )),
         "styles/chat.css" => css(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/styles/chat.css"
+            "../../../../../../godot_demo/addons/fennara/dist/styles/chat.css"
         )),
         "styles/controls.css" => css(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/styles/controls.css"
+            "../../../../../../godot_demo/addons/fennara/dist/styles/controls.css"
         )),
         "styles/drawer.css" => css(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/styles/drawer.css"
+            "../../../../../../godot_demo/addons/fennara/dist/styles/drawer.css"
         )),
         "styles/icons.css" => css(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/styles/icons.css"
+            "../../../../../../godot_demo/addons/fennara/dist/styles/icons.css"
         )),
         "styles/model-picker.css" => css(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/styles/model-picker.css"
+            "../../../../../../godot_demo/addons/fennara/dist/styles/model-picker.css"
         )),
         "styles/responsive.css" => css(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/styles/responsive.css"
+            "../../../../../../godot_demo/addons/fennara/dist/styles/responsive.css"
         )),
         "styles/settings.css" => css(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/styles/settings.css"
+            "../../../../../../godot_demo/addons/fennara/dist/styles/settings.css"
         )),
         "vendor/markdown-it.min.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/vendor/markdown-it.min.js"
+            "../../../../../../godot_demo/addons/fennara/dist/vendor/markdown-it.min.js"
         )),
         "vendor/markdown-it-task-lists.min.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/vendor/markdown-it-task-lists.min.js"
+            "../../../../../../godot_demo/addons/fennara/dist/vendor/markdown-it-task-lists.min.js"
         )),
         "vendor/purify.min.js" => js(include_bytes!(
-            "../../../../../../godot/addons/fennara/dist/vendor/purify.min.js"
+            "../../../../../../godot_demo/addons/fennara/dist/vendor/purify.min.js"
         )),
         _ => return None,
     };
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn browser_chat_assets_referenced_by_html_are_embedded() {
-        let index = include_str!("../../../../../../godot/addons/fennara/dist/index.html");
+        let index = include_str!("../../../../../../godot_demo/addons/fennara/dist/index.html");
         for line in index.lines() {
             assert_referenced_asset(line, "<script src=\"./");
             assert_referenced_asset(line, "<link rel=\"stylesheet\" href=\"./");
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn browser_chat_stylesheet_imports_are_embedded() {
-        let styles = include_str!("../../../../../../godot/addons/fennara/dist/styles.css");
+        let styles = include_str!("../../../../../../godot_demo/addons/fennara/dist/styles.css");
         for line in styles.lines() {
             assert_referenced_asset(line, "@import \"./");
         }

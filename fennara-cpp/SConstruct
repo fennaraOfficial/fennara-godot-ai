@@ -41,7 +41,7 @@ if env["platform"] == "linux":
 build_sources = [s.replace("src", build_dir, 1) for s in sources]
 
 # Output binary to the installable Godot addon payload.
-out_dir = "../godot/addons/fennara/bin"
+out_dir = "../godot_demo/addons/fennara/bin"
 
 if env["platform"] == "macos":
     file_name = "libfennara.{}.{}".format(env["platform"], env["target"])

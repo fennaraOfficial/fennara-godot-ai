@@ -11,11 +11,11 @@ fennara-cpp/build/
 local/target/
 
 dist/
-!godot/addons/fennara/dist/
-!godot/addons/fennara/dist/**
+!godot_demo/addons/fennara/dist/
+!godot_demo/addons/fennara/dist/**
 .package-preview/
 plans/
 temp/
 
-godot/addons/fennara/bin/*
-!godot/addons/fennara/bin/.gitkeep
+godot_demo/addons/fennara/bin/*
+!godot_demo/addons/fennara/bin/.gitkeep

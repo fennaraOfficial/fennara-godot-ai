@@ -15,6 +15,7 @@ rmSync(stageRoot, { recursive: true, force: true });
 mkdirSync(distDir, { recursive: true });
 
 syncChatUi();
+syncRuntimeHelpers();
 
 const addonPart = packageAddonPart();
 const cliArchive = packageCli();
@@ -25,7 +26,7 @@ console.log(`Created ${path.relative(root, cliArchive)}`);
 console.log(`Created ${path.relative(root, localArchive)}`);
 
 function packageAddonPart() {
-  const source = path.join(root, "godot", "addons", "fennara");
+  const source = path.join(root, "godot_demo", "addons", "fennara");
   const target = path.join(distDir, `addon-part-${platform}-${arch}`, "addons", "fennara");
 
   rmSync(path.dirname(path.dirname(target)), { recursive: true, force: true });
@@ -45,7 +46,20 @@ function packageAddonPart() {
 
 function syncChatUi() {
   const source = path.join(root, "ui", "chat");
-  const target = path.join(root, "godot", "addons", "fennara", "dist");
+  const target = path.join(root, "godot_demo", "addons", "fennara", "dist");
+
+  rmSync(target, { recursive: true, force: true });
+  copyDir(source, target, (sourcePath) => {
+    const relative = path.relative(source, sourcePath).replaceAll(path.sep, "/");
+    return relative !== "README.md";
+  });
+
+  console.log(`Synced ${path.relative(root, source)} -> ${path.relative(root, target)}`);
+}
+
+function syncRuntimeHelpers() {
+  const source = path.join(root, "runtime");
+  const target = path.join(root, "godot_demo", "addons", "fennara", "runtime");
 
   rmSync(target, { recursive: true, force: true });
   copyDir(source, target, (sourcePath) => {

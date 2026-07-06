@@ -3,8 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const source = path.join(root, "ui", "chat");
-const target = path.join(root, "godot_demo", "addons", "fennara", "dist");
+const source = path.join(root, "runtime");
+const target = path.join(root, "godot_demo", "addons", "fennara", "runtime");
 
 rmSync(target, { recursive: true, force: true });
 copyDir(source, target);

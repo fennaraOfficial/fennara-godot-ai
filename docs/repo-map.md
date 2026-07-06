@@ -9,9 +9,10 @@ This is the quick map for contributors and coding agents working in this reposit
 | `.github/` | Pull request template, issue templates, and GitHub Actions workflows. |
 | `docs/` | Project docs, setup guides, architecture notes, examples, demos, and release notes. |
 | `fennara-cpp/` | C++ Godot GDExtension source and SCons build entrypoint. |
-| `godot/addons/fennara/` | Installable Godot addon payload copied into user projects. |
+| `godot_demo/addons/fennara/` | Installable Godot addon payload copied into user projects. |
 | `local/` | Rust CLI, MCP server, daemon, schemas, and local runtime code. |
 | `media/` | Images and public media used by docs. |
+| `runtime/` | Source Godot runtime helper scripts used by `runtime_session` and `runtime_script`. |
 | `scripts/` | Versioning, packaging, and release helper scripts. |
 | `ui/chat/` | Source for the optional in-editor web chat UI. |
 | `local/templates/` | Markdown templates written into Godot projects by `fennara install` and refreshed by `fennara update`. |
@@ -55,18 +56,31 @@ This is the quick map for contributors and coding agents working in this reposit
 | `fennara-cpp/src/ui/linux_cef_bridge/` | Small Linux-only bridge library built from the pinned official CEF 139 `libcef_dll_wrapper` source and Fennara's CEF OSR adapter. The main GDExtension dlopens this after the external `libcef.so` runtime is loaded. |
 | `fennara-cpp/src/tools/` | Godot-facing tool implementations. |
 | `fennara-cpp/src/lsp/` | Script diagnostics and language-server helpers. |
-| `fennara-cpp/src/runtime/` | Runtime capture/session support used by runtime tools. |
+| `fennara-cpp/src/runtime/` | Native runtime support used by tools, including runtime scene preflight, script diagnostics, and debugger snapshots. |
 | `fennara-cpp/godot-cpp/` | Godot C++ bindings submodule. |
 
 ## Addon Payload
 
 | Path | Owns |
 | --- | --- |
-| `godot/addons/fennara/fennara.gdextension` | Godot GDExtension registration file. |
-| `godot/addons/fennara/VERSION` | Addon package version. |
-| `godot/addons/fennara/bin/` | Built platform libraries. |
-| `godot/addons/fennara/dist/` | Packaged web UI assets used by the in-editor chat webview. |
-| `godot/addons/fennara/runtime/` | Runtime helper scripts packaged with the addon. |
+| `godot_demo/addons/fennara/fennara.gdextension` | Godot GDExtension registration file. |
+| `godot_demo/addons/fennara/VERSION` | Addon package version. |
+| `godot_demo/addons/fennara/bin/` | Built platform libraries. |
+| `godot_demo/addons/fennara/dist/` | Packaged web UI assets used by the in-editor chat webview. |
+| `godot_demo/addons/fennara/runtime/` | Synced packaged copy of `runtime/` shipped inside the addon. |
+
+## Runtime Helper Source
+
+| Path | Owns |
+| --- | --- |
+| `runtime/game_capture_helper.gd` | Runtime helper entrypoint loaded by the GDExtension for scene sessions and runtime checks. |
+| `runtime/runtime_script_context.gd` | Public `ctx` helper surface exposed to `runtime_script`, including wait/capture/action/input/snapshot/until/raycast/click helpers. |
+| `runtime/runtime_input_driver.gd` | Low-level runtime input event driver for keys, mouse buttons, absolute mouse motion, relative mouse motion, modifiers, and input cleanup. |
+| `runtime/runtime_node_snapshot.gd` | Runtime node lookup, existence checks, stale-reference-safe snapshots, property reads, and child summaries. |
+| `runtime/runtime_physics_query.gd` | Runtime 2D/3D exact raycast and scan helpers with compact hit receipts. |
+| `runtime/runtime_query_utils.gd` | Shared runtime query utilities for vector coercion, safe node/path resolution, object identity, and generic target matching. |
+| `runtime/runtime_capture_store.gd` | Runtime capture/status artifact writer used by runtime sessions, scripts, and environment checks. |
+| `runtime/runtime_check_runner.gd` | Runtime check runner for non-interactive scene execution specs. |
 
 ## Scripts And Workflows
 
@@ -75,6 +89,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `scripts/set-version.mjs` | Updates versioned files across the repo. |
 | `scripts/check-version.mjs` | Checks version sync. |
 | `scripts/sync-chat-ui.mjs` | Copies the buildless chat UI source into the addon payload. |
+| `scripts/sync-runtime.mjs` | Copies repo-root runtime helper source into the addon payload. |
 | `scripts/package-preview.mjs` | Assembles addon, CLI, and local runtime preview/release zips after platform builds. |
 | `scripts/prepare-linux-cef-runtime.mjs` | Stages the separate Linux x64 CEF runtime zip, strips staged ELF binaries, validates required files, and can write the generated release manifest. |
 | `scripts/prepare-linux-cef-sdk.mjs` | Downloads and extracts the pinned official CEF 139 Linux minimal SDK for CI builds that need `libcef_dll/` wrapper source. |
@@ -97,10 +112,11 @@ This is the quick map for contributors and coding agents working in this reposit
 | Change webview prerequisite checks | `local/crates/fennara-cli/src/webview_prereq.rs`, `local/crates/fennara-cli/src/webview_runtime.rs`, and `fennara-cpp/src/ui/webview_host*` |
 | Change generated project guidance | `local/templates/` and `local/crates/fennara-cli/src/project_guidance.rs` |
 | Change MCP app setup | `local/crates/fennara-cli/src/mcp_setup.rs` and `docs/mcp-setup.md` |
-| Change runtime session behavior | `fennara-cpp/src/tools/runtime_session/` and `local/crates/fennara-daemon/` |
-| Change in-editor chat UI, slash commands, or model/provider picker | `ui/chat/`, `godot/addons/fennara/dist/`, `fennara-cpp/src/ui/dock.cpp`, and `fennara-cpp/src/ui/webview_host*` |
+| Change runtime session process/log behavior | `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`, `local/crates/fennara-daemon/src/runtime_daemon/runtime_log.rs`, `fennara-cpp/src/tools/runtime_session/`, and `fennara-cpp/src/tool_results/` |
+| Change `runtime_script` ctx helpers, input, snapshots, waits, raycasts, captures, or cleanup | `runtime/`, `scripts/sync-runtime.mjs`, `godot_demo/addons/fennara/runtime/`, `local/schemas/tools/runtime_script.json`, and `docs/tools.md` |
+| Change in-editor chat UI, slash commands, or model/provider picker | `ui/chat/`, `godot_demo/addons/fennara/dist/`, `fennara-cpp/src/ui/dock.cpp`, and `fennara-cpp/src/ui/webview_host*` |
 | Change built-in chat providers | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/`, `local/crates/fennara-daemon/src/runtime_daemon/chat/models.rs`, `local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs`, and `ui/chat/` |
-| Change vendored chat UI libraries | `ui/chat/vendor/`, `godot/addons/fennara/dist/vendor/`, and `THIRD_PARTY_NOTICES.md` |
+| Change vendored chat UI libraries | `ui/chat/vendor/`, `godot_demo/addons/fennara/dist/vendor/`, and `THIRD_PARTY_NOTICES.md` |
 | Change C# support | `fennara-cpp/src/lsp/` and `local/crates/fennara-cli/src/csharp_support.rs` |
 | Change release packages or CLI self-update | `local/crates/fennara-cli/src/release_manifest.rs`, `local/crates/fennara-cli/src/release_client.rs`, `local/crates/fennara-cli/src/release_package.rs`, `local/crates/fennara-cli/src/self_update.rs`, `scripts/package-preview.mjs`, `scripts/write-release-manifest.mjs`, and `.github/workflows/release.yml` |
 | Bump version | `node scripts/set-version.mjs <version>` |

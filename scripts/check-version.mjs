@@ -11,7 +11,7 @@ if (!/^\d+\.\d+\.\d+$/.test(version)) {
 }
 
 expect(
-  "godot/addons/fennara/VERSION",
+  "godot_demo/addons/fennara/VERSION",
   new RegExp(`^${escapeRegExp(version)}\\r?\\n?$`),
   `addon VERSION must be ${version}`,
 );

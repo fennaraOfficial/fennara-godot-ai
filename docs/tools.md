@@ -225,74 +225,41 @@ Use write_or_update_file to patch res://scripts/player.gd, then report any diagn
 
 ### `run_scene_edit_script`
 
-Use this for scene/resource edits that are safer through Godot APIs than raw
-text editing. The tool runs one editor-time worker script against exactly one
-target scene. It gives the script an instantiated scene object graph, not a full
-running gameplay scene.
+Use this for scene/resource edits that need Godot APIs and Godot serialization.
+The tool runs one editor-time `@tool` worker script against exactly one target
+scene/resource graph.
 
-Because the worker is a real editor-side `@tool` script, it can also inspect a
-wide range of Godot/editor/project state when normal inspection tools are not
-enough: ClassDB runtime behavior, native addon/GDExtension classes,
-ResourceLoader/ResourceSaver flows, standalone `.tres` resources, and targeted
-project resource checks. Keep these probes small and bounded.
-
-Use `get_class_info` first when you only need class API docs, methods,
-properties, inheritance, enums, or signals. Use `run_scene_edit_script` when
-you need to execute real editor-side Godot code that static class info cannot
-answer.
-
-If the script does not actually need the target scene, pass a small safe
-existing scene as context. Do not call `ctx.mark_modified()` or scene-mutating
-helpers unless you intentionally want to save that scene. In this mode
-`modified=false` and `scene_saved=false` are expected.
-
-Good uses:
+Good fit for:
 
 - add, rename, remove, or reparent nodes
-- assign resources and scene-owned SubResources
-- update exported properties
-- create a new scene
-- edit Control layout, cameras, collision shapes, materials, AnimationPlayer
-  setup, signals, and groups
-- inspect scene-owned resources and log a concise summary
-- inspect addon/runtime-only class behavior that `get_class_info` cannot answer
-- create or update standalone `.tres` resources through `ResourceSaver.save`
+- assign resources, SubResources, and exported properties
+- edit Control layout, cameras, collision shapes, materials, animations,
+  signals, and groups
+- create a new scene or standalone `.tres` resource
+- inspect editor-only or addon/runtime-only Godot behavior that static class info
+  cannot answer
 
-Before using it, inspect relevant classes with `get_class_info`.
+Script contract:
 
-The worker script must be `@tool`, extend `RefCounted`, and define
-`func run(ctx) -> void`. Inline `code` is saved under
-`res://.fennara/tmp/editor_scripts/`; every result includes the effective
-`script_path`. If a long or failed script needs a retry, patch that returned
-`script_path` with `write_or_update_file` and rerun with `scene_path` plus
-`script_path` instead of pasting a fresh full script.
+- worker scripts use `@tool`, extend `RefCounted`, and define
+  `func run(ctx) -> void`
+- inline code is saved under `res://.fennara/tmp/editor_scripts/`
+- every result includes the effective `script_path`
+- call `ctx.mark_modified()` only when the target should be saved
 
-Useful context methods include `ctx.get_scene_root()`, `ctx.set_scene_root()`,
+Common context helpers include `ctx.get_scene_root()`, `ctx.set_scene_root()`,
 `ctx.own()`, `ctx.instance_scene()`, `ctx.get_node_or_null()`,
 `ctx.find_nodes_by_name()`, `ctx.remove_node()`, `ctx.clear_children()`,
 `ctx.mark_modified()`, `ctx.log()`, and `ctx.error()`.
 
-New raw nodes must be given meaningful names and owned with `ctx.own(node)` so
-Godot serializes them. PackedScene instances should be added with
-`ctx.instance_scene(parent, "res://path/to/scene.tscn", "DesiredName")`; do not
-recursively own instance internals.
-
-For inherited scenes, the tool tries to preserve inherited roots and save only
-valid overrides/additions. If Godot would flatten the inherited root, the tool
-restores the original scene and returns a failure instead of silently saving a
-bad scene. In that case, patch the returned script or choose a narrower edit.
-
-Read-only inspection scripts should only log. They should not call
-`ctx.mark_modified()` or mutating helpers. Unmodified inspection runs return
-logs without rewriting the `.tscn`.
-
-`run_scene_edit_script` automatically runs script diagnostics and scene
-validation after edits. Treat those results as part of the edit result.
+The result includes logs, modified/saved status, script diagnostics, and scene
+validation after edits. Use `get_class_info` when you need class API details
+before writing the worker script.
 
 Example prompt:
 
 ```text
-Use get_class_info first, then run_scene_edit_script to add a named HealthBar node to res://scenes/player.tscn.
+Use get_class_info first, then run_scene_edit_script to add a named StatusLabel node to res://scenes/main.tscn.
 ```
 
 ### `project_settings`
@@ -394,70 +361,62 @@ Use screenshot_scene on res://scenes/main_menu.tscn and check whether the button
 
 ### `runtime_session`
 
-Use this to start, check, or stop a managed running scene. A start request first
-runs scene-execution gates:
+Use this to start, check, or stop a managed windowed Godot runtime session.
 
-- C# projects run `dotnet build`.
-- The requested scene gets a structural `validate_scene` preflight without the
-  headless runtime pass.
-- Fennara checks autoload and scene-attached scripts with targeted diagnostics.
+A `start` request first runs scene-execution gates. If a gate fails, Fennara
+does not open the scene. If the gates pass, Fennara launches the scene in a
+separate Godot process with the runtime helper enabled.
 
-If any gate fails, Fennara does not open the scene. If the gates pass, Fennara
-launches the scene in a separate windowed Godot process with the runtime helper
-enabled.
+Actions:
 
-The daemon currently allows one managed runtime session globally across all
-connected Godot editors. If another managed scene is running, call
-`runtime_session.status` to inspect it or `runtime_session.stop` to close it
-before starting a new one.
+- `start`: open the scene, wait briefly for startup output, and return
+  `session_id`, process state, log paths, and a capped new-log excerpt
+- `status`: report the active managed session/process state and any new-log
+  excerpt
+- `stop`: stop the managed runtime process and return final process/log
+  details
 
-Start returns a `session_id` and a `runtime_session.log` path. Treat that log as
-the source of truth for startup output, raw Godot stdout/stderr, runtime errors,
-`FENNARA_SCRIPT_*` markers, `ctx.log(...)` messages, captures, close/stop
-events, and completion events. `runtime_session.status` and
-`runtime_session.stop` are process receipts; a stopped process or non-zero exit
-code after intentional cleanup is not by itself proof that the scene failed.
+The daemon currently allows one managed runtime session globally across connected
+Godot editors. The full `runtime_session.log` is the source of truth for Godot
+stdout/stderr, runtime errors, `FENNARA_SCRIPT_*` markers, captures,
+close/stop events, and `ctx.log(...)` output.
+
+After spawning, `start` waits up to 5 seconds for startup log output. If the
+ready marker is not seen in that window, the receipt says so and later
+`status` calls can show new log lines.
 
 Example prompt:
 
 ```text
-Use runtime_session to start res://scenes/main.tscn, then inspect the session log.
+Use runtime_session to start res://scenes/main.tscn, then inspect the returned runtime log excerpt.
 ```
 
 ### `runtime_script`
 
-Use this inside an active `runtime_session` to inspect live state, press input
-actions, click UI, capture frames, or run small bounded probes.
+Use this inside an active `runtime_session` to inspect live state, send input,
+click UI, capture frames, or run small bounded probes.
 
-Runtime scripts are not editor tool scripts. Do not include `@tool`. The script
-must extend `RefCounted`, define `func run(ctx: Variant) -> void`, and use
-explicit local types for meaningful variables.
+Script contract:
 
-Runtime scripts can finish while the scene stays open. Use follow-up
-`runtime_script` calls for incremental observe/experiment/verify loops, then
-close the scene with `runtime_session.stop` or a final script that calls
-`ctx.close_scene()`.
+- scripts are runtime scripts, not editor `@tool` scripts
+- scripts extend `RefCounted` and define `func run(ctx: Variant) -> void`
+- pass the active `session_id` and either inline `code` or a `script_path`
+- a script may finish while the scene stays open
 
-Treat `runtime_script` results as receipts for one probe. They are not full
-scene-health verdicts or gameplay-success proof; use runtime findings and
-`runtime_session.log` to verify errors, close events, and observed state.
+The result includes status, `session_id`, `script_run_id`, `script_path`,
+diagnostics, capture paths, runtime findings, scene/session state when
+available, log paths, and a capped new-log excerpt.
 
-Await yielding helpers such as `ctx.wait(...)`, `ctx.capture(...)`,
-`ctx.tap_action(...)`, `ctx.action(...)`, `ctx.action_sequence(...)`,
-`ctx.click_at(...)`, and `ctx.click_button(...)`. Synchronous helpers such as
-`ctx.log(...)`, `ctx.press_action(...)`, `ctx.release_action(...)`,
-`ctx.set_mouse_position(...)`, `ctx.release_all_actions()`, and getters do not
-need `await`.
-
-Do not guess a game's controls or objectives. Inspect `project_settings`,
-scripts, the scene tree, and runtime state first. Infer action effects from
-measured state changes, not from action names, attempted input, elapsed time, or
-proximity alone.
+The `ctx` helper surface covers logging, waiting, screenshots, InputMap
+actions, key/mouse events, mouse motion, 2D world-to-viewport mouse conversion,
+node lookup, snapshots, wait/until helpers, raycasts, scan raycasts, and basic UI clicking. See the
+`runtime_script` schema and `res://addons/fennara/runtime/` helper scripts for
+exact helper names and signatures.
 
 Example prompt:
 
 ```text
-Use runtime_script in the active session to press the jump action once, wait, capture a screenshot, and release all actions.
+Use runtime_script in the active session to read the current scene state, capture a frame, and report any runtime errors.
 ```
 
 ### `scrape_editor`
