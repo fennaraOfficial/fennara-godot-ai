@@ -1,9 +1,13 @@
 use serde_json::Value;
 use std::env;
 use std::fs;
+#[cfg(not(unix))]
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
+#[cfg(not(unix))]
+use std::process::Stdio;
+#[cfg(not(unix))]
 use std::thread;
 
 fn main() {
@@ -15,6 +19,24 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let runtime_path = runtime_path("mcp_runtime")?;
+    run_runtime(runtime_path)
+}
+
+#[cfg(unix)]
+fn run_runtime(runtime_path: PathBuf) -> Result<(), String> {
+    use std::os::unix::process::CommandExt;
+
+    let error = Command::new(&runtime_path)
+        .args(env::args_os().skip(1))
+        .exec();
+    Err(format!(
+        "failed to exec {}: {error}",
+        runtime_path.display()
+    ))
+}
+
+#[cfg(not(unix))]
+fn run_runtime(runtime_path: PathBuf) -> Result<(), String> {
     let mut child = Command::new(&runtime_path)
         .args(env::args_os().skip(1))
         .stdin(Stdio::piped())
