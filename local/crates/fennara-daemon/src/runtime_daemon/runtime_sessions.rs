@@ -5,7 +5,7 @@ use std::{path::PathBuf, time::Duration};
 use tokio::process::Command;
 
 use super::{
-    process_helpers::resolve_godot_executable,
+    process_helpers::{auto_continue_local_debugger, resolve_godot_executable},
     runtime_log,
     state::{AppState, RuntimeLogCursor, RuntimeSession},
     util::{sanitize_path_component, unix_millis},
@@ -156,13 +156,15 @@ async fn runtime_session_start_inner(
     let mut command = Command::new(&executable);
     command
         .arg("--windowed")
+        .arg("--debug")
+        .arg("--ignore-error-breaks")
         .arg("--path")
         .arg(&working_directory)
         .arg("--scene")
         .arg(&request.scene_path)
         .current_dir(&working_directory)
         .env("FENNARA_RT_SPEC", &spec_path)
-        .stdin(std::process::Stdio::null())
+        .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::from(log_file))
         .stderr(std::process::Stdio::from(stderr_file));
 
@@ -173,6 +175,9 @@ async fn runtime_session_start_inner(
     let mut child = command
         .spawn()
         .map_err(|err| format!("failed to start runtime session: {err}"))?;
+    if let Some(stdin) = child.stdin.take() {
+        auto_continue_local_debugger(stdin);
+    }
     let pid = child.id().unwrap_or_default();
     let mut log_cursor = RuntimeLogCursor::default();
     let (ready_seen, process_exited, startup_wait_ms) = runtime_log::wait_for_ready(

@@ -13,8 +13,8 @@ use tokio::{process::Command, sync::Semaphore};
 
 use super::{
     process_helpers::{
-        allowed_child_env, append_runtime_log_footer, resolve_godot_executable,
-        wait_for_memory_headroom,
+        allowed_child_env, append_runtime_log_footer, auto_continue_local_debugger,
+        resolve_godot_executable, wait_for_memory_headroom,
     },
     util::sanitize_path_component,
 };
@@ -362,7 +362,7 @@ async fn run_batch_scene_process(
     .map_err(|err| format!("write raw log header failed for {scene_path}: {err}"))?;
     writeln!(
         log_file,
-        "Args: --headless --path {} {scene_path}",
+        "Args: --headless --debug --ignore-error-breaks --path {} {scene_path}",
         working_directory.display()
     )
     .map_err(|err| format!("write raw log header failed for {scene_path}: {err}"))?;
@@ -375,11 +375,13 @@ async fn run_batch_scene_process(
     let mut command = Command::new(executable);
     command
         .arg("--headless")
+        .arg("--debug")
+        .arg("--ignore-error-breaks")
         .arg("--path")
         .arg(working_directory)
         .arg(scene_path)
         .current_dir(working_directory)
-        .stdin(std::process::Stdio::null())
+        .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::from(log_file))
         .stderr(std::process::Stdio::from(stderr_file));
 
@@ -389,6 +391,9 @@ async fn run_batch_scene_process(
     let mut child = command
         .spawn()
         .map_err(|err| format!("failed to start Godot for {scene_path}: {err}"))?;
+    if let Some(stdin) = child.stdin.take() {
+        auto_continue_local_debugger(stdin);
+    }
     let mut killed = false;
     let deadline = tokio::time::Instant::now() + timeout;
     let exit_status;

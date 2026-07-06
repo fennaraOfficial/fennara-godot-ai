@@ -6,6 +6,7 @@
     "If those gates fail, the scene is not opened.",
     "Fennara currently allows one managed runtime session globally across all connected Godot editors; if another runtime session is already running, start is blocked and you must call status or stop first.",
     "If gates pass, Fennara launches one scene from the selected/bound Godot project in a separate windowed Godot process with the runtime helper enabled.",
+    "Runtime sessions enable Godot's local debugger with error breaks ignored or auto-continued so debugger-aware addons can send debugger messages without requiring an attached editor session; normal errors and warnings are still captured in runtime_session.log.",
     "The returned session_id can be reused for multiple runtime_script probes against the same running scene.",
     "End the session with runtime_session.stop or with a final runtime_script that calls ctx.close_scene().",
     "`status` and `stop` are operational receipts; a stopped process or non-zero exit code after an intentional stop is not by itself proof of a scene failure.",
