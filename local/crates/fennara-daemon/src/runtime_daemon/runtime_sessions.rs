@@ -180,13 +180,14 @@ async fn runtime_session_start_inner(
     }
     let pid = child.id().unwrap_or_default();
     let mut log_cursor = RuntimeLogCursor::default();
-    let (ready_seen, process_exited, startup_wait_ms) = runtime_log::wait_for_ready(
-        &mut child,
-        &raw_log_path,
-        log_cursor.byte_offset,
-        STARTUP_READY_TIMEOUT_MS,
-    )
-    .await?;
+    let (ready_seen, orientation_seen, process_exited, startup_wait_ms) =
+        runtime_log::wait_for_ready(
+            &mut child,
+            &raw_log_path,
+            log_cursor.byte_offset,
+            STARTUP_READY_TIMEOUT_MS,
+        )
+        .await?;
     let log_capture =
         runtime_log::capture_update(&session_id, &raw_log_path, "start", &mut log_cursor).await;
     if process_exited && !ready_seen {
@@ -209,6 +210,7 @@ async fn runtime_session_start_inner(
             "executable": executable.to_string_lossy(),
             "startup_log_wait_ms": startup_wait_ms,
             "startup_ready_seen": ready_seen,
+            "startup_orientation_seen": orientation_seen,
             "startup_process_exited": process_exited,
             "exit_code": exit_code,
             "error": "Runtime process exited before the runtime helper reported scene ready.",
@@ -269,6 +271,7 @@ async fn runtime_session_start_inner(
         "executable": executable.to_string_lossy(),
         "startup_log_wait_ms": startup_wait_ms,
         "startup_ready_seen": ready_seen,
+        "startup_orientation_seen": orientation_seen,
         "startup_process_exited": process_exited,
         "runtime_log": log_capture.receipt,
     }))

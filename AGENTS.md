@@ -29,11 +29,14 @@ Read this file before changing the repository.
 
 - After editing `ui/chat/`, run `node scripts/sync-chat-ui.mjs` and commit the matching `godot_demo/addons/fennara/dist/` changes.
 - After editing `runtime/`, run `node scripts/sync-runtime.mjs` and commit the matching `godot_demo/addons/fennara/runtime/` changes.
+- After editing `local/templates/fennara-guidelines.md`, run `node scripts/sync-guidance.mjs` and commit the matching `godot_demo/addons/fennara/ai/guidelines.md` changes.
 - Do not hand-edit generated addon webview files in `godot_demo/addons/fennara/dist/` without also updating the source in `ui/chat/`.
 - Do not hand-edit synced addon runtime helpers in `godot_demo/addons/fennara/runtime/` without also updating the source in `runtime/`.
+- Do not hand-edit generated addon guidance in `godot_demo/addons/fennara/ai/guidelines.md` without also updating `local/templates/fennara-guidelines.md`.
 - Root `dist/` and `.package-preview/` are build outputs and should stay untracked.
 - `godot_demo/addons/fennara/dist/` is intentionally tracked because release addon zips must contain the built chat UI.
 - `godot_demo/addons/fennara/runtime/` is intentionally tracked because release addon zips must contain the Godot runtime helper scripts.
+- `godot_demo/addons/fennara/ai/guidelines.md` is intentionally tracked because release addon zips should mirror the installed addon guidance layout.
 
 ## Documentation Updates
 

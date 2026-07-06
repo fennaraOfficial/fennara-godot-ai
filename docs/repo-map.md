@@ -111,6 +111,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | Change `fennara install` or `fennara update` | `local/crates/fennara-cli/src/` |
 | Change webview prerequisite checks | `local/crates/fennara-cli/src/webview_prereq.rs`, `local/crates/fennara-cli/src/webview_runtime.rs`, and `fennara-cpp/src/ui/webview_host*` |
 | Change generated project guidance | `local/templates/` and `local/crates/fennara-cli/src/project_guidance.rs` |
+| Sync generated demo addon guidance | `local/templates/fennara-guidelines.md`, `scripts/sync-guidance.mjs`, and `godot_demo/addons/fennara/ai/guidelines.md` |
 | Change MCP app setup | `local/crates/fennara-cli/src/mcp_setup.rs` and `docs/mcp-setup.md` |
 | Change runtime session process/log behavior | `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`, `local/crates/fennara-daemon/src/runtime_daemon/runtime_log.rs`, `fennara-cpp/src/tools/runtime_session/`, and `fennara-cpp/src/tool_results/` |
 | Change `runtime_script` ctx helpers, input, snapshots, waits, raycasts, captures, or cleanup | `runtime/`, `scripts/sync-runtime.mjs`, `godot_demo/addons/fennara/runtime/`, `local/schemas/tools/runtime_script.json`, and `docs/tools.md` |
