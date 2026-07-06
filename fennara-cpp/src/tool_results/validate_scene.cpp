@@ -75,14 +75,6 @@ godot::String count_label(int count, const godot::String &singular,
            (count == 1 ? singular : plural);
 }
 
-godot::String join_array_strings(const godot::Array &values) {
-    godot::PackedStringArray parts;
-    for (int i = 0; i < values.size(); i++) {
-        parts.append(values[i]);
-    }
-    return godot::String(", ").join(parts);
-}
-
 void add_unique_unset_property(godot::Dictionary &group,
                                const godot::String &name,
                                const godot::String &type) {
@@ -141,24 +133,6 @@ godot::String format_unset_properties(const godot::Array &properties) {
     return godot::String(", ").join(parts);
 }
 
-void add_unset_node_sample(godot::Dictionary &scene_group,
-                           const godot::String &node_path) {
-    if (node_path.is_empty()) {
-        return;
-    }
-    godot::Dictionary seen = scene_group.get("sample_seen", godot::Dictionary());
-    if (seen.has(node_path)) {
-        return;
-    }
-    seen[node_path] = true;
-    godot::Array samples = scene_group.get("samples", godot::Array());
-    if (samples.size() < 5) {
-        samples.append(node_path);
-        scene_group["samples"] = samples;
-    }
-    scene_group["sample_seen"] = seen;
-}
-
 void add_unset_issue_scene(godot::Dictionary &group,
                            const godot::String &scene_path,
                            const godot::Dictionary &issue) {
@@ -169,8 +143,6 @@ void add_unset_issue_scene(godot::Dictionary &group,
         scene_group = scenes[scene_path];
     } else {
         scene_group["count"] = 0;
-        scene_group["samples"] = godot::Array();
-        scene_group["sample_seen"] = godot::Dictionary();
         scene_order.append(scene_path);
     }
 
@@ -180,24 +152,12 @@ void add_unset_issue_scene(godot::Dictionary &group,
         issue.get("node_count", issue.get("unset_count", 1)));
     scene_group["count"] = count + issue_node_count;
 
-    godot::Variant samples_var = issue.get("samples", godot::Variant());
-    if (samples_var.get_type() == godot::Variant::ARRAY) {
-        godot::Array samples = samples_var;
-        for (int i = 0; i < samples.size(); i++) {
-            add_unset_node_sample(scene_group, samples[i]);
-        }
-    } else {
-        add_unset_node_sample(
-            scene_group,
-            issue.get("node_path", issue.get("node", "")));
-    }
-
     scenes[scene_path] = scene_group;
     group["scenes"] = scenes;
     group["scene_order"] = scene_order;
 }
 
-godot::String format_unset_scene_samples(const godot::Dictionary &group) {
+godot::String format_unset_scene_counts(const godot::Dictionary &group) {
     godot::Array scene_order = group.get("scene_order", godot::Array());
     godot::Dictionary scenes = group.get("scenes", godot::Dictionary());
     godot::PackedStringArray parts;
@@ -209,17 +169,8 @@ godot::String format_unset_scene_samples(const godot::Dictionary &group) {
         godot::String scene_path = scene_order[i];
         godot::Dictionary scene_group = scenes[scene_path];
         int count = static_cast<int>(scene_group.get("count", 0));
-        godot::Array samples = scene_group.get("samples", godot::Array());
-        godot::String text = scene_path + ": ";
-        if (samples.is_empty()) {
-            text += count_label(count, "node", "nodes");
-        } else {
-            text += join_array_strings(samples);
-            int omitted = count - samples.size();
-            if (omitted > 0) {
-                text += ", " + count_label(omitted, "omitted", "omitted");
-            }
-        }
+        godot::String text =
+            scene_path + " (" + count_label(count, "node", "nodes") + ")";
         parts.append(text);
     }
     int omitted_scenes = scene_order.size() - shown_scenes;
@@ -308,9 +259,9 @@ godot::String global_unset_export_section(
         }
         bullet += " on " + count_label(node_count, "node", "nodes") + ". ";
         bullet += "Ignore this note if these references are intentionally optional or assigned at runtime.";
-        godot::String node_text = format_unset_scene_samples(group);
-        if (!node_text.is_empty()) {
-            bullet += " Nodes: " + node_text;
+        godot::String scene_text = format_unset_scene_counts(group);
+        if (!scene_text.is_empty()) {
+            bullet += " Scenes: " + scene_text;
         }
         lines.append(bullet);
     }

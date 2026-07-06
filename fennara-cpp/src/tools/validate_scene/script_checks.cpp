@@ -133,7 +133,6 @@ void s_record_unset_export_group(
         group["properties"] = godot::Array();
         group["property_seen"] = godot::Dictionary();
         group["node_count"] = 0;
-        group["samples"] = godot::Array();
         group["sample_seen"] = godot::Dictionary();
         group["instance_scenes"] = godot::Array();
         group["instance_scene_seen"] = godot::Dictionary();
@@ -154,16 +153,11 @@ void s_record_unset_export_group(
         group["property_seen"] = property_seen;
     }
 
-    godot::Array samples = group.get("samples", godot::Array());
     godot::Dictionary sample_seen = group.get("sample_seen", godot::Dictionary());
     int node_count = static_cast<int>(group.get("node_count", 0));
     if (!sample_seen.has(node_path)) {
         sample_seen[node_path] = true;
         group["node_count"] = node_count + 1;
-        if (samples.size() < 5) {
-            samples.append(node_path);
-            group["samples"] = samples;
-        }
         group["sample_seen"] = sample_seen;
     }
 
@@ -292,7 +286,6 @@ void FennaraValidateSceneTool::_check_unset_export_vars(
         godot::String script_path = group.get("script_path", "");
         godot::Array properties = group.get("properties", godot::Array());
         int node_count = static_cast<int>(group.get("node_count", 0));
-        godot::Array samples = group.get("samples", godot::Array());
         godot::Array instance_scenes =
             group.get("instance_scenes", godot::Array());
 
@@ -320,24 +313,16 @@ void FennaraValidateSceneTool::_check_unset_export_vars(
                 instance_scenes.size());
         }
         message += ". Ignore this note if these references are intentionally optional or assigned at runtime";
-        if (!samples.is_empty()) {
-            message += ". Samples: " + s_join_samples(samples);
-            message += s_omitted_label(node_count, samples.size());
-        }
 
         godot::Dictionary extra;
         extra["properties"] = properties;
         extra["script_path"] = script_path;
         extra["node_count"] = node_count;
-        extra["samples"] = samples;
         if (!instance_scenes.is_empty()) {
             extra["instance_scenes"] = instance_scenes;
         }
 
-        godot::String node_path =
-            node_count > 1 ? godot::String("multiple nodes")
-                            : godot::String(samples.is_empty() ? "" : samples[0]);
-        _add_issue(issues, node_path, "unset_export_var", severity, message, extra);
+        _add_issue(issues, "", "unset_export_var", severity, message, extra);
     }
 }
 

@@ -328,7 +328,7 @@ Resource/Object variables.
 
 Unset exported Resource/Object variables are reported as structural notes because
 they may be optional or assigned at runtime. Repeated unset exports are grouped
-once per script with the unique variable names and capped node samples per scene,
+once per script with the unique variable names and capped affected scene counts,
 so large scenes do not flood the receipt with one line per node/property pair.
 Ignore these notes when the references are intentionally optional or assigned at
 runtime.
