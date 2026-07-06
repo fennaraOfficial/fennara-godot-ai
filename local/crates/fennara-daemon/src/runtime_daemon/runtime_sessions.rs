@@ -156,6 +156,8 @@ async fn runtime_session_start_inner(
     let mut command = Command::new(&executable);
     command
         .arg("--windowed")
+        .arg("--debug")
+        .arg("--ignore-error-breaks")
         .arg("--path")
         .arg(&working_directory)
         .arg("--scene")

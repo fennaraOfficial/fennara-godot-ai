@@ -369,7 +369,10 @@ Use this to start, check, or stop a managed windowed Godot runtime session.
 
 A `start` request first runs scene-execution gates. If a gate fails, Fennara
 does not open the scene. If the gates pass, Fennara launches the scene in a
-separate Godot process with the runtime helper enabled.
+separate Godot process with the runtime helper enabled. Runtime sessions enable
+Godot's local debugger with error breaks ignored so debugger-aware addons can
+send debugger messages without requiring an attached editor session; normal
+errors and warnings are still captured in `runtime_session.log`.
 
 Actions:
 
