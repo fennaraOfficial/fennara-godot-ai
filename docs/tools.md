@@ -337,9 +337,10 @@ For scenes with zero structural errors, Fennara also runs each scene headlessly
 for exactly 3 seconds through the local daemon using up to 3 memory-throttled
 workers. The result includes runtime status, crash/error/warning flags, compact
 runtime output inline, and paths to the full result JSON and raw runtime logs.
-The headless pass enables Godot's local debugger with error breaks ignored so
-debugger-aware addons can send debugger messages without requiring an attached
-editor session; normal errors and warnings are still captured in the log.
+The headless pass enables Godot's local debugger with error breaks ignored or
+auto-continued so debugger-aware addons can send debugger messages without
+requiring an attached editor session; normal errors and warnings are still
+captured in the log.
 Fennara intentionally stops the process after the validation window, so a
 non-zero exit code from that stop is not by itself a scene failure. It does not
 open scenes in the editor or scrape the editor Output panel.
@@ -370,9 +371,10 @@ Use this to start, check, or stop a managed windowed Godot runtime session.
 A `start` request first runs scene-execution gates. If a gate fails, Fennara
 does not open the scene. If the gates pass, Fennara launches the scene in a
 separate Godot process with the runtime helper enabled. Runtime sessions enable
-Godot's local debugger with error breaks ignored so debugger-aware addons can
-send debugger messages without requiring an attached editor session; normal
-errors and warnings are still captured in `runtime_session.log`.
+Godot's local debugger with error breaks ignored or auto-continued so
+debugger-aware addons can send debugger messages without requiring an attached
+editor session; normal errors and warnings are still captured in
+`runtime_session.log`.
 
 Actions:
 

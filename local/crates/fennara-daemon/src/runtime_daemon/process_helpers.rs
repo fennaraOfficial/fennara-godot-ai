@@ -5,9 +5,11 @@ use std::{
 };
 
 use sysinfo::System;
+use tokio::io::AsyncWriteExt;
 
 const LOW_MEMORY_AVAILABLE_BYTES: u64 = 1_500_000_000;
 const HIGH_MEMORY_USED_RATIO: f64 = 0.90;
+const DEBUGGER_AUTO_CONTINUE_INTERVAL_MS: u64 = 25;
 
 pub(crate) fn resolve_godot_executable(sent_path: &str) -> Option<PathBuf> {
     let trimmed = sent_path.trim();
@@ -86,4 +88,19 @@ pub(crate) async fn append_runtime_log_footer(
     tokio::io::AsyncWriteExt::write_all(&mut file, footer.as_bytes())
         .await
         .map_err(|err| format!("write raw log footer failed: {err}"))
+}
+
+pub(crate) fn auto_continue_local_debugger(mut stdin: tokio::process::ChildStdin) {
+    tokio::spawn(async move {
+        loop {
+            // Godot 4.5's local debugger can ignore --ignore-error-breaks and park at `debug>`.
+            if stdin.write_all(b"continue\n").await.is_err() {
+                break;
+            }
+            if stdin.flush().await.is_err() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(DEBUGGER_AUTO_CONTINUE_INTERVAL_MS)).await;
+        }
+    });
 }
