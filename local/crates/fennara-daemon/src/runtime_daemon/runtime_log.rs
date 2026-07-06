@@ -259,6 +259,39 @@ fn startup_markers_from_text(text: &str) -> StartupMarkers {
     }
 }
 
+#[cfg(test)]
+mod startup_marker_tests {
+    use super::*;
+
+    #[test]
+    fn startup_markers_detect_ready_only() {
+        let markers = startup_markers_from_text(&format!("{READY_MARKER}: {{}}\n"));
+
+        assert!(markers.ready_seen);
+        assert!(!markers.orientation_seen);
+    }
+
+    #[test]
+    fn startup_markers_detect_orientation_after_ready() {
+        let markers = startup_markers_from_text(&format!(
+            "{READY_MARKER}: {{}}\n{STARTUP_ORIENTATION_MARKER}: startup\n"
+        ));
+
+        assert!(markers.ready_seen);
+        assert!(markers.orientation_seen);
+    }
+
+    #[test]
+    fn startup_markers_ignore_orientation_before_ready() {
+        let markers = startup_markers_from_text(&format!(
+            "{STARTUP_ORIENTATION_MARKER}: startup\n{READY_MARKER}: {{}}\n"
+        ));
+
+        assert!(markers.ready_seen);
+        assert!(!markers.orientation_seen);
+    }
+}
+
 fn shown_excerpt(lines: &[(u64, String)]) -> (Vec<(u64, String)>, usize, usize) {
     let tail_lines = MAX_SHOWN_LINES.saturating_sub(HEAD_LINES);
     let mut shown = Vec::new();
