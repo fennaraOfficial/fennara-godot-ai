@@ -32,12 +32,18 @@ The CEF scripts operate on copied staging files only. They must not mutate the d
 
 ## UI Sync
 
-- `sync-chat-ui.mjs`: copies `ui/chat/` into `godot/addons/fennara/dist/`.
+- `sync-chat-ui.mjs`: copies `ui/chat/` into `godot_demo/addons/fennara/dist/`.
 
-`godot/addons/fennara/dist/` is intentionally committed because released addon zips must contain the built chat webview. Make changes in `ui/chat/`, run the sync script, and commit both source and generated addon assets together.
+`godot_demo/addons/fennara/dist/` is intentionally committed because released addon zips must contain the built chat webview. Make changes in `ui/chat/`, run the sync script, and commit both source and generated addon assets together.
+
+## Runtime Sync
+
+- `sync-runtime.mjs`: copies `runtime/` into `godot_demo/addons/fennara/runtime/`.
+
+`godot_demo/addons/fennara/runtime/` is intentionally committed because released addon zips must contain the Godot-side runtime helper scripts. Make changes in `runtime/`, run the sync script, and commit both source and generated addon assets together.
 
 ## Boundaries
 
 - Scripts may create `.package-preview/` and root `dist/` outputs.
-- Scripts may update committed generated payloads only when that is their explicit job, such as `sync-chat-ui.mjs` or `set-version.mjs`.
+- Scripts may update committed generated payloads only when that is their explicit job, such as `sync-chat-ui.mjs`, `sync-runtime.mjs`, or `set-version.mjs`.
 - Scripts must not write Godot editor cache, local app-data installs, downloaded release artifacts, or VM test output into tracked source folders.

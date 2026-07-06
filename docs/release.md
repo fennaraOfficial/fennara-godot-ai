@@ -15,7 +15,7 @@ node scripts/set-version.mjs 0.3.1
 The script updates:
 
 - `VERSION`
-- `godot/addons/fennara/VERSION`
+- `godot_demo/addons/fennara/VERSION`
 - plugin version constants
 - Rust workspace package version under `local/`
 - `local/Cargo.lock`
@@ -64,6 +64,7 @@ artifacts. It does not create tags, GitHub Releases, or `latest`.
 Package Preview mirrors the non-publishing parts of Release closely enough to
 exercise release packaging before merge:
 
+- syncs buildless chat UI and runtime helper source into the addon payload
 - builds the Linux CEF runtime zip
 - writes the generated Linux CEF runtime manifest
 - feeds that generated manifest into platform package builds
@@ -193,7 +194,7 @@ the package update with `--no-self-update`. If self-update is not available for
 that release or install location, it should fail before installing packages and
 print a clear instruction to rerun `install.sh` or `install.ps1`.
 
-The shared addon zip contains every built GDExtension binary referenced by `godot/addons/fennara/fennara.gdextension`. Godot loads the matching library for the user's OS and ignores the others.
+The shared addon zip contains every built GDExtension binary referenced by `godot_demo/addons/fennara/fennara.gdextension`. Godot loads the matching library for the user's OS and ignores the others.
 
 Linux CEF webview runtime payloads are separate from the addon archive. Release
 packaging generates the enabled runtime manifest and embeds that data into

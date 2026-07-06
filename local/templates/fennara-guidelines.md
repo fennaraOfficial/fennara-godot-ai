@@ -163,33 +163,45 @@ If a Fennara tool call takes unusually long or times out, do not immediately ret
 
 ## Runtime Sessions
 
-`runtime_session` starts, checks, or stops one daemon-managed windowed Godot runtime session. `start` first runs scene-execution gates: C# projects run `dotnet build`, the requested scene gets structural `validate_scene` preflight without a headless runtime run, and Fennara checks autoload plus scene-attached scripts with targeted diagnostics. If those fail, Fennara does not open the scene. Fennara currently allows one managed runtime session globally across all connected Godot editors; if another runtime session is already running, `start` is blocked. Call `runtime_session.status` to inspect it or `runtime_session.stop` to close it before starting another scene. If it starts, the returned `runtime_session.log` is the source of truth for scene startup output, raw Godot stdout/stderr, runtime errors, `FENNARA_SCRIPT_*` markers, `ctx.log(...)` messages, captures, close/stop events, and completion/failure events. `status` and `stop` results are process receipts; a stopped process or non-zero exit code after intentional cleanup is not by itself proof that the scene failed. The log is written live as the scene and runtime scripts run, so during one still-running session you can inspect or search `runtime_session.log` between `runtime_script` calls before deciding the next script. Read that log after `runtime_session.start`, after every `runtime_script`, and when checking `runtime_session.status`.
+`runtime_session` starts, checks, or stops one daemon-managed windowed Godot runtime session. Use the `runtime_session` tool schema for exact actions, arguments, startup wait behavior, log excerpt behavior, and result fields.
 
-`runtime_script` sends one short `RefCounted` GDScript inspector/input-driver probe into that running scene through Fennara's runtime helper. A script may complete without closing the scene; that is the normal incremental workflow when you want to submit another runtime_script against the same live scene. Treat the `runtime_script` tool result as an operational receipt, not proof that the scene had no runtime errors or that a gameplay goal succeeded. Close the scene when finished with `runtime_session.stop` or with a final script that calls `ctx.close_scene()`.
+If a session starts, the returned `runtime_session.log` is the full source of truth for scene startup output, raw Godot stdout/stderr, runtime errors, `FENNARA_SCRIPT_*` markers, `ctx.log(...)` messages, captures, close/stop events, and completion/failure events. Tool receipts include capped log excerpts for convenience, but inspect/search the full log when older history, omitted text, or exact failure context matters.
+
+`runtime_script` sends one bounded `RefCounted` GDScript inspector/input-driver probe into that running scene through Fennara's runtime helper. A script may complete without closing the scene; that is the normal incremental workflow when you want to submit another `runtime_script` against the same live scene. Use the `runtime_script` tool schema for the script contract, ctx helper names, await rules, helper options, and result fields.
+
+When runtime testing includes project edits, distinguish product fixes from probe fixes. It is valid to edit project code to fix real bugs or requested behavior, but do not change controller/input/gameplay/UI semantics merely to make a runtime probe easier and then claim the original behavior worked. If project code changes during testing, log what changed and verify the final behavior against the intended product behavior.
 
 Write runtime scripts so the shared runtime log stays token-efficient. Use `ctx.log(...)` only for compact milestones, sampled state, and final summaries; do not log every frame, loop iteration, action press/release, mouse move, or full node dump. In loops, accumulate counters, min/max values, small sample arrays, and goal status, then emit one concise summary log plus a few named captures.
 
 Runtime controls are intentionally low-level and game-agnostic. For unknown gameplay mechanics, do not assume common genres, objectives, movement semantics, or success conditions. Treat all gameplay semantics as project-local until observed. Agents must inspect the project's real controls and game code, then compose primitive runtime actions for that specific game. Detailed runtime_script syntax, ctx methods, strict typing requirements, and input-driving patterns live in the runtime_script tool schema.
 
-First run small inspection/probing scripts to discover the live control model and state signals: inspect InputMap action names, controller/player scripts, scene tree, UI, signals, animations, transforms, resources, and current runtime state before driving. Test one primitive input at a time for a short bounded duration, release actions, wait at least one frame, then observe what changed. Infer action effects from measured state deltas, not from action names.
+First run small inspection/probing scripts to discover the live control model and state signals: inspect InputMap action names, controller scripts, scene-owned scripts, scene tree, UI, signals, animations, transforms, resources, and current runtime state before driving. Before controlling a node or scene, inspect its script, input handlers, state properties, movement/aim/camera code, groups, paths, coordinate spaces, and real success signals. Test one primitive input at a time for a short bounded duration, release actions, wait at least one frame, then observe what changed. Infer action effects from measured state deltas, not from action names.
 
 Use adaptive observe -> experiment -> infer -> act -> verify loops. Keep experiments bounded by time or iteration count, re-fetch live nodes/state inside loops, and log compact summaries of attempted inputs, observed deltas, inferred effects, chosen next steps, and verified outcomes. If no reliable verification signal is found, report uncertainty and gather more observations instead of claiming success.
 
-Await yielding runtime ctx helpers in scripts: `await ctx.wait(...)`, `await ctx.capture(...)`, `await ctx.tap_action(...)`, `await ctx.action(...)`, `await ctx.action_sequence(...)`, `await ctx.click_at(...)`, and `await ctx.click_button(...)`. Without `await`, a script may continue immediately and produce false observations. Synchronous helpers such as `ctx.log(...)`, `ctx.press_action(...)`, `ctx.release_action(...)`, `ctx.set_mouse_position(...)`, `ctx.release_all_actions()`, and getters do not need await.
+Runtime helpers provide sensing and primitive input; the agent is responsible for the control loop. Coordinate spaces are separate contracts, node references can become stale after waits or scene reloads, and helper return values are evidence rather than proof of success. Read the tool schema for exact helper names and then verify every claim from real project state.
+
+For longer runtime attempts, it is good practice to write a small project-local probe harness inside the runtime script after the controls are understood. Keep it as ordinary GDScript helper functions for repeated work such as observing state, applying one short input pulse, waiting for a stable condition, cleaning up held input, and summarizing progress. This reduces messy copy/paste loops without turning Fennara into a game-specific automation system. The harness should stay bounded, re-fetch live state after awaits, use real project evidence, and remain scratch/probe code unless the user explicitly asks to keep it.
 
 Do not derive success from intent. Pressed input, proximity to a target, clicked coordinates, elapsed time, or suggestive action names are not verification. Verify success from actual runtime state after the game has processed at least one frame, such as a property/counter/UI text change, signal firing, node disappearing or becoming inactive/hidden/disabled, animation/state/scene transition, resource/object count change, or another project-specific state change discovered through inspection.
 
-Do not encode genre-specific helpers or assumptions such as navigation, collecting, attacking, jumping, talking, inventory use, pathing, quests, combat, economy, or UI flow. Fennara tools and schemas must remain primitive and game-agnostic: agents should compose low-level inspection, input, timing, capture, and validation primitives for the specific project they are observing.
+Do not encode genre-specific helpers, domain verbs, progression systems, control semantics, or UI-flow assumptions. Fennara tools and schemas must remain primitive and game-agnostic: agents should compose low-level inspection, input, timing, capture, and validation primitives for the specific project they are observing.
 
 Avoid these runtime_script anti-patterns:
 
+- changing project behavior only to fit the probe while claiming the original behavior worked
+- failing to report product edits made during runtime testing
+- choosing helpers by name similarity instead of by the question being answered
+- treating helper return values as proof of project success instead of evidence to verify
+- sending input through a path the project does not actually read
+- driving a node before inspecting the script and state that actually control it
 - holding one guessed action for several seconds without recomputing from live state
 - assuming InputMap action names map to world directions or common gameplay verbs
 - incrementing success counters from proximity, attempted input, or elapsed time
-- keeping stale node references across scene reloads, respawns, or object replacement
+- keeping stale node references across scene reloads or object replacement
 - logging every frame instead of concise samples and summaries
-- calling yielding ctx helpers such as wait(), capture(), action(), tap_action(), action_sequence(), click_at(), or click_button() without await
-- leaving actions pressed after a loop, failure, timeout, or early return
+- calling yielding ctx helpers without `await`
+- leaving actions or inputs pressed after a loop, failure, timeout, or early return
 
 ## Editor Scraping
 
@@ -203,7 +215,7 @@ Use it when:
 
 - you need to know the actual node hierarchy
 - you need node paths for scripts or scene edits
-- you are about to modify UI, cameras, player nodes, enemies, managers, animation players, or resources owned by a scene
+- you are about to modify UI, cameras, controller nodes, managers, animation players, or resources owned by a scene
 - the user refers to a node by a human name but the exact path is unknown
 
 Do not guess node paths. Read the scene tree first.

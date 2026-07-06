@@ -25,7 +25,8 @@ MCP client
 | MCP runtime | `local/crates/fennara-mcp/` | Speaks MCP over stdio and forwards tool calls to the local bridge. |
 | Daemon launcher | `local/crates/fennara-daemon/` | Stable executable used to start the active daemon runtime. |
 | Daemon runtime | `local/crates/fennara-daemon/` | Keeps local state, coordinates with Godot, and serves the MCP runtime. |
-| Godot addon | `godot/addons/fennara/` | The addon payload copied into user projects. |
+| Godot addon | `godot_demo/addons/fennara/` | The addon payload copied into user projects. |
+| Runtime helper source | `runtime/` | Godot-side runtime helper scripts synced into the addon payload for runtime sessions and runtime scripts. |
 | GDExtension | `fennara-cpp/` | Godot-facing tools, dock UI, diagnostics, validation, runtime capture, and editor integration. |
 | Tool schemas | `local/schemas/tools/` | MCP tool descriptions exposed to clients. |
 
