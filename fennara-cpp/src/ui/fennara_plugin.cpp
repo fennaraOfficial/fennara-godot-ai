@@ -181,8 +181,17 @@ void FennaraPlugin::_ensure_export_presets_exclude_fennara() {
         return;
     }
 
-    static const char *required_filters[] = {
+    static const char *obsolete_filters[] = {
         "addons/fennara/*",
+    };
+    static const char *required_filters[] = {
+        "addons/fennara/ai/*",
+        "addons/fennara/bin/*",
+        "addons/fennara/dist/*",
+        "addons/fennara/*.gdextension",
+        "addons/fennara/*.gdextension.uid",
+        "addons/fennara/*.md",
+        "addons/fennara/VERSION",
         ".fennara/*",
     };
 
@@ -198,6 +207,14 @@ void FennaraPlugin::_ensure_export_presets_exclude_fennara() {
         godot::PackedStringArray filters =
             _split_export_filter(config->get_value(section, "exclude_filter", ""));
         bool section_changed = false;
+        for (const char *filter : obsolete_filters) {
+            godot::String pattern(filter);
+            int existing_index = filters.find(pattern);
+            if (existing_index >= 0) {
+                filters.remove_at(existing_index);
+                section_changed = true;
+            }
+        }
         for (const char *filter : required_filters) {
             godot::String pattern(filter);
             if (!filters.has(pattern)) {
