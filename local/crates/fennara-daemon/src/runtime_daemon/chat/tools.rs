@@ -442,10 +442,19 @@ pub(crate) fn model_messages_for_tool_result(
     } else {
         text_only_followups(tool_name, &result.model_followup_messages)
     };
-    if !result.model_images.iter().any(ModelImage::has_model_data) {
+    if result.model_images.is_empty() {
         return messages;
     }
     if allow_images {
+        if !result.model_images.iter().any(ModelImage::has_model_data) {
+            messages.push(json!({
+                "role": "user",
+                "content": format!(
+                    "[Image output from {tool_name} omitted because the image data was unavailable or exceeded the model image budget. The textual tool result and saved file path remain available.]"
+                )
+            }));
+            return messages;
+        }
         messages.extend(screenshot_model_image_messages(
             tool_name,
             &result.model_images,
@@ -554,7 +563,7 @@ fn model_images_from_response(tool_name: &str, response: &Value) -> Vec<ModelIma
                 .iter()
                 .take(MAX_TOOL_MODEL_IMAGE_COUNT)
                 .filter_map(|image| {
-                    let mut image = validate_model_image(image)?;
+                    let mut image = validate_model_image(tool_name, image)?;
                     if image.has_model_data() {
                         if model_bytes.saturating_add(image.size_bytes)
                             > MAX_TOOL_MODEL_IMAGE_TOTAL_BYTES
@@ -578,7 +587,7 @@ fn tool_supports_model_images(tool_name: &str) -> bool {
     )
 }
 
-fn validate_model_image(image: &Value) -> Option<ModelImage> {
+fn validate_model_image(tool_name: &str, image: &Value) -> Option<ModelImage> {
     let raw_data = image
         .get("data")
         .or_else(|| image.get("base64"))
@@ -621,7 +630,7 @@ fn validate_model_image(image: &Value) -> Option<ModelImage> {
     Some(ModelImage {
         data: model_data.map(|(data, _)| data),
         mime_type: mime_type.to_string(),
-        label: image_label(image),
+        label: image_label(tool_name, image),
         size_bytes,
         file_path: clean_optional_string(
             image
@@ -686,7 +695,7 @@ fn detect_image_mime(bytes: &[u8]) -> Option<&'static str> {
     None
 }
 
-fn image_label(image: &Value) -> String {
+fn image_label(tool_name: &str, image: &Value) -> String {
     image
         .get("label")
         .or_else(|| image.get("description"))
@@ -694,7 +703,15 @@ fn image_label(image: &Value) -> String {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| value.chars().take(160).collect())
-        .unwrap_or_else(|| "Screenshot from screenshot_scene".to_string())
+        .unwrap_or_else(|| default_image_label(tool_name))
+}
+
+fn default_image_label(tool_name: &str) -> String {
+    if tool_name == "screenshot_scene" {
+        "Screenshot from screenshot_scene".to_string()
+    } else {
+        format!("Image from {tool_name}")
+    }
 }
 
 impl ModelImage {
@@ -704,7 +721,7 @@ impl ModelImage {
 
     fn label_for_tool(&self, tool_name: &str) -> String {
         if self.label.trim().is_empty() {
-            return format!("Screenshot from {tool_name}");
+            return default_image_label(tool_name);
         }
         self.label.clone()
     }
@@ -975,11 +992,14 @@ mod tests {
 
     #[test]
     fn screenshot_model_images_degrade_to_text_for_non_vision_models() {
-        let image = validate_model_image(&json!({
-            "data": PNG_1X1,
-            "mime_type": "image/png",
-            "image_path": "C:/tmp/fennara-shot.png"
-        }))
+        let image = validate_model_image(
+            "screenshot_scene",
+            &json!({
+                "data": PNG_1X1,
+                "mime_type": "image/png",
+                "image_path": "C:/tmp/fennara-shot.png"
+            }),
+        )
         .unwrap();
         let result = ExecutedTool {
             ok: true,
@@ -997,6 +1017,54 @@ mod tests {
         assert!(serialized.contains("does not support image input"));
         assert!(!serialized.contains("image_url"));
         assert!(!serialized.contains(PNG_1X1));
+    }
+
+    #[test]
+    fn runtime_model_images_without_label_use_tool_specific_fallback() {
+        let images = model_images_from_response(
+            "runtime_session",
+            &json!({
+                "model_images": [{
+                    "data": PNG_1X1,
+                    "mime_type": "image/png",
+                    "image_path": "C:/tmp/.fennara/startup.png"
+                }]
+            }),
+        );
+
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].label, "Image from runtime_session");
+    }
+
+    #[test]
+    fn tool_images_without_model_data_emit_omitted_notice() {
+        let oversized_base64 = "A".repeat(((MAX_TOOL_MODEL_IMAGE_BYTES + 16) * 4 / 3) + 8);
+        let images = model_images_from_response(
+            "runtime_script",
+            &json!({
+                "model_images": [{
+                    "data": oversized_base64,
+                    "mime_type": "image/png",
+                    "image_path": "C:/tmp/.fennara/large.png"
+                }]
+            }),
+        );
+        let result = ExecutedTool {
+            ok: true,
+            raw_result: json!({}),
+            mcp_markdown: String::new(),
+            plugin_markdown: String::new(),
+            metadata: json!({}),
+            target_keys: Vec::new(),
+            model_followup_messages: Vec::new(),
+            model_images: images,
+        };
+
+        let model_messages = model_messages_for_tool_result("runtime_script", &result, true);
+        let serialized = serde_json::to_string(&model_messages).unwrap();
+
+        assert!(serialized.contains("omitted because the image data was unavailable"));
+        assert!(!serialized.contains("image_url"));
     }
 
     #[test]
@@ -1028,7 +1096,10 @@ mod tests {
             model_images: images,
         };
 
-        assert!(model_messages_for_tool_result("screenshot_scene", &result, true).is_empty());
+        let model_messages = model_messages_for_tool_result("screenshot_scene", &result, true);
+        let serialized_messages = serde_json::to_string(&model_messages).unwrap();
+        assert!(serialized_messages.contains("omitted because the image data was unavailable"));
+        assert!(!serialized_messages.contains("image_url"));
         let ui_images = ui_images_for_tool_result("call_large", &result);
         assert_eq!(ui_images.len(), 1);
         assert_eq!(ui_images[0]["file_path"], "C:/tmp/large-fennara-shot.png");

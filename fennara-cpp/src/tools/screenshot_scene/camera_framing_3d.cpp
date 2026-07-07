@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/control.hpp>
@@ -25,15 +26,18 @@ godot::Transform3D FennaraScreenshotSceneTool::_local_tree_3d_transform(godot::N
         return transform;
     }
 
-    godot::Node *chain[256];
-    int count = 0;
+    std::vector<godot::Node *> chain;
     godot::Node *current = node;
-    while (current && count < 256) {
-        chain[count++] = current;
+    while (current) {
+        chain.push_back(current);
+        godot::Node3D *node_3d = godot::Object::cast_to<godot::Node3D>(current);
+        if (node_3d && node_3d->is_set_as_top_level()) {
+            break;
+        }
         current = current->get_parent();
     }
 
-    for (int i = count - 1; i >= 0; i--) {
+    for (int i = static_cast<int>(chain.size()) - 1; i >= 0; i--) {
         godot::Node3D *node_3d = godot::Object::cast_to<godot::Node3D>(chain[i]);
         if (node_3d) {
             transform = transform * node_3d->get_transform();

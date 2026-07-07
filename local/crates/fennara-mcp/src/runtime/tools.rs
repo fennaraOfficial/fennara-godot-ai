@@ -3,6 +3,7 @@ use super::{
     protocol::{SERVER_NAME, SERVER_VERSION, error_response, success_response},
     schemas::{is_forwarded_tool, load_embedded_tool_schemas},
 };
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 
 const MAX_MCP_TOOL_IMAGE_COUNT: usize = 6;
@@ -193,14 +194,29 @@ fn mcp_image_block(image: &Value, total_bytes: &mut usize) -> ImageBlockResult {
         ));
     }
 
-    let mime_type = image
+    let decoded = match STANDARD.decode(data.as_bytes()) {
+        Ok(decoded) if !decoded.is_empty() => decoded,
+        _ => return ImageBlockResult::Omitted("base64 payload was invalid".to_string()),
+    };
+    let Some(detected_mime) = detect_image_mime(&decoded) else {
+        return ImageBlockResult::Omitted("unsupported image bytes".to_string());
+    };
+    let declared_mime = image
         .get("mime_type")
         .and_then(Value::as_str)
         .map(str::trim)
-        .filter(|mime| !mime.is_empty())
-        .unwrap_or("image/png");
-    if !is_supported_image_mime(mime_type) {
+        .filter(|mime| !mime.is_empty());
+    let Some(mime_type) = declared_mime
+        .map(normalize_supported_image_mime)
+        .unwrap_or(Some(detected_mime))
+    else {
+        let mime_type = declared_mime.unwrap_or("unknown");
         return ImageBlockResult::Omitted(format!("unsupported MIME type {mime_type}"));
+    };
+    if mime_type != detected_mime {
+        return ImageBlockResult::Omitted(format!(
+            "MIME type {mime_type} did not match image bytes {detected_mime}"
+        ));
     }
 
     *total_bytes += decoded_bytes;
@@ -234,11 +250,30 @@ fn is_base64_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || matches!(ch, '+' | '/' | '=')
 }
 
-fn is_supported_image_mime(mime_type: &str) -> bool {
-    matches!(
-        mime_type,
-        "image/png" | "image/jpeg" | "image/webp" | "image/gif"
-    )
+fn normalize_supported_image_mime(mime_type: &str) -> Option<&'static str> {
+    match mime_type.trim().to_ascii_lowercase().as_str() {
+        "image/png" => Some("image/png"),
+        "image/jpeg" | "image/jpg" => Some("image/jpeg"),
+        "image/webp" => Some("image/webp"),
+        "image/gif" => Some("image/gif"),
+        _ => None,
+    }
+}
+
+fn detect_image_mime(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some("image/png");
+    }
+    if bytes.starts_with(b"\xff\xd8\xff") {
+        return Some("image/jpeg");
+    }
+    if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        return Some("image/webp");
+    }
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return Some("image/gif");
+    }
+    None
 }
 
 fn text_from_plugin_result(tool_name: &str, response: &Value) -> String {
@@ -261,6 +296,8 @@ fn text_from_plugin_result(tool_name: &str, response: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const PNG_1X1: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 
     #[test]
     fn forwarded_tool_result_sends_only_plugin_result() {
@@ -323,7 +360,7 @@ mod tests {
             },
             "model_images": [
                 {
-                    "data": "YWJjMTIz+/=",
+                    "data": PNG_1X1,
                     "mime_type": "image/png",
                     "label": "Screenshot from screenshot_scene (single)",
                     "width": 10,
@@ -345,13 +382,13 @@ mod tests {
             "[Screenshot from screenshot_scene (single)]"
         );
         assert_eq!(result["content"][2]["type"], "image");
-        assert_eq!(result["content"][2]["data"], "YWJjMTIz+/=");
+        assert_eq!(result["content"][2]["data"], PNG_1X1);
         assert_eq!(result["content"][2]["mimeType"], "image/png");
         assert!(
             !result["content"][0]["text"]
                 .as_str()
                 .unwrap()
-                .contains("YWJjMTIz")
+                .contains(PNG_1X1)
         );
     }
 
@@ -362,7 +399,7 @@ mod tests {
             "result": "Tool: screenshot_scene\nStatus: success",
             "raw_result": {
                 "success": true,
-                "image_base64": "bGVnYWN5",
+                "image_base64": PNG_1X1,
                 "mime_type": "image/png"
             }
         });
@@ -375,7 +412,7 @@ mod tests {
             "[Screenshot image from screenshot_scene]"
         );
         assert_eq!(result["content"][2]["type"], "image");
-        assert_eq!(result["content"][2]["data"], "bGVnYWN5");
+        assert_eq!(result["content"][2]["data"], PNG_1X1);
         assert!(!result.to_string().contains("raw_result"));
     }
 
@@ -416,12 +453,12 @@ mod tests {
             "result": "Tool: runtime_script\nStatus: completed\nCaptures: 2",
             "model_images": [
                 {
-                    "data": "Y2FwdHVyZTE=",
+                    "data": PNG_1X1,
                     "mime_type": "image/png",
                     "label": "Runtime script capture 1: before"
                 },
                 {
-                    "data": "Y2FwdHVyZTI=",
+                    "data": PNG_1X1,
                     "mime_type": "image/png",
                     "label": "Runtime script capture 2: after"
                 }
@@ -435,12 +472,38 @@ mod tests {
             "[Runtime script capture 1: before]"
         );
         assert_eq!(result["content"][2]["type"], "image");
-        assert_eq!(result["content"][2]["data"], "Y2FwdHVyZTE=");
+        assert_eq!(result["content"][2]["data"], PNG_1X1);
         assert_eq!(
             result["content"][3]["text"],
             "[Runtime script capture 2: after]"
         );
         assert_eq!(result["content"][4]["type"], "image");
-        assert_eq!(result["content"][4]["data"], "Y2FwdHVyZTI=");
+        assert_eq!(result["content"][4]["data"], PNG_1X1);
+    }
+
+    #[test]
+    fn forwarded_image_result_omits_mime_mismatch() {
+        let response = json!({
+            "ok": true,
+            "result": "Tool: runtime_script\nStatus: completed",
+            "model_images": [
+                {
+                    "data": PNG_1X1,
+                    "mime_type": "image/jpeg",
+                    "label": "Wrong mime"
+                }
+            ]
+        });
+
+        let result = forwarded_tool_result("runtime_script", &response, false);
+
+        assert_eq!(result["content"][1]["type"], "text");
+        assert!(
+            result["content"][1]["text"]
+                .as_str()
+                .unwrap()
+                .contains("did not match image bytes")
+        );
+        assert!(!result.to_string().contains("\"type\":\"image\""));
     }
 }

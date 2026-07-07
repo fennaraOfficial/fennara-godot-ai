@@ -200,14 +200,12 @@ async fn runtime_session_start_inner(
         .await?;
     let log_capture =
         runtime_log::capture_update(&session_id, &raw_log_path, "start", &mut log_cursor).await;
-    let startup_capture =
-        wait_for_json_file(&startup_capture_status_path, STARTUP_CAPTURE_TIMEOUT_MS).await;
     if process_exited && !ready_seen {
         let exit_code = child
             .try_wait()
             .map_err(|err| format!("runtime session wait failed: {err}"))?
             .and_then(|status| status.code());
-        let mut response = json!({
+        let response = json!({
             "ok": false,
             "status": "exited_before_ready",
             "scope": "global",
@@ -230,9 +228,10 @@ async fn runtime_session_start_inner(
             "error": "Runtime process exited before the runtime helper reported scene ready.",
             "runtime_log": log_capture.receipt,
         });
-        attach_startup_capture(&mut response, startup_capture);
         return Ok(response);
     }
+    let startup_capture =
+        wait_for_json_file(&startup_capture_status_path, STARTUP_CAPTURE_TIMEOUT_MS).await;
 
     let session = RuntimeSession {
         session_id: session_id.clone(),

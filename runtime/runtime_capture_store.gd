@@ -90,7 +90,7 @@ func capture_runtime_script(ctx, label: String, max_resolution: int = 1280) -> D
 	return result
 
 
-func capture_runtime_session_start(artifact_dir: String, session_id: String, scene_path: String, max_resolution: int = 1280) -> Dictionary:
+func capture_runtime_session_start(captures_dir: String, session_id: String, scene_path: String, max_resolution: int = 1280) -> Dictionary:
 	var capture: Dictionary = await wait_for_viewport_image(max_resolution)
 	if not capture.get("success", false):
 		return {
@@ -102,7 +102,6 @@ func capture_runtime_session_start(artifact_dir: String, session_id: String, sce
 			"scene_path": scene_path,
 		}
 
-	var captures_dir := artifact_dir.path_join("captures")
 	if not ensure_dir(captures_dir):
 		return {
 			"success": false,

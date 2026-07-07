@@ -12,6 +12,7 @@ use std::{
 use super::{is_allowed_browser_origin, store};
 
 const CACHE_CONTROL: &str = "no-store";
+const MAX_TOOL_MEDIA_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
 
 struct Asset {
     content_type: &'static str,
@@ -72,9 +73,18 @@ pub(crate) async fn chat_tool_media(
     if !path.is_file() || !is_fennara_media_path(&path) {
         return StatusCode::NOT_FOUND.into_response();
     }
-    let Ok(body) = fs::read(path) else {
+    let Ok(metadata) = fs::metadata(&path) else {
         return StatusCode::NOT_FOUND.into_response();
     };
+    if metadata.len() == 0 || metadata.len() > MAX_TOOL_MEDIA_IMAGE_BYTES {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let Ok(body) = fs::read(&path) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    if body.len() as u64 > MAX_TOOL_MEDIA_IMAGE_BYTES {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     if detect_image_mime(&body) != Some(mime_type) {
         return StatusCode::NOT_FOUND.into_response();
     }

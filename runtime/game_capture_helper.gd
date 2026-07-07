@@ -108,9 +108,10 @@ func _run_env_runtime_session(request: Dictionary) -> void:
 	}))
 	_print_runtime_orientation("startup")
 	var startup_capture: Dictionary = {}
-	if not _file_artifact_dir.strip_edges().is_empty():
+	var captures_dir := str(request.get("captures_dir", ""))
+	if not captures_dir.strip_edges().is_empty():
 		startup_capture = await _capture_store.capture_runtime_session_start(
-			_file_artifact_dir,
+			captures_dir,
 			_file_session_id,
 			str(request.get("scene_path", "")),
 			int(request.get("startup_capture_max_resolution", 1280))
