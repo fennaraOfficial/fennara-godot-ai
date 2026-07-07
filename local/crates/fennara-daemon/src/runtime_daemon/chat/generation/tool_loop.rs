@@ -37,6 +37,7 @@ pub(super) async fn run_tool_calls<S>(
     generation_id: &str,
     assistant_content: &str,
     approval_mode: ApprovalMode,
+    allow_image_followups: bool,
     tool_calls: Vec<Value>,
     recorder: trace::TraceRecorder,
 ) -> Result<ToolLoopResult, S::Error>
@@ -250,6 +251,7 @@ where
                     &tool_call_id,
                     &tool_name,
                     result,
+                    allow_image_followups,
                     &tool_trace,
                 )
                 .await?
@@ -273,6 +275,7 @@ where
                         &tool_call_id,
                         &tool_name,
                         result,
+                        allow_image_followups,
                         &tool_trace,
                     )
                     .await?
@@ -368,6 +371,7 @@ where
                             &tool_call_id,
                             &tool_name,
                             result,
+                            allow_image_followups,
                             &tool_trace,
                         )
                         .await?
@@ -400,6 +404,7 @@ where
                             &tool_call_id,
                             &tool_name,
                             result,
+                            allow_image_followups,
                             &tool_trace,
                         )
                         .await?
@@ -432,6 +437,7 @@ where
                             &tool_call_id,
                             &tool_name,
                             result,
+                            allow_image_followups,
                             &tool_trace,
                         )
                         .await?
@@ -509,6 +515,7 @@ where
             &tool_call_id,
             &tool_name,
             result,
+            allow_image_followups,
             &tool_trace,
         )
         .await?
@@ -673,6 +680,7 @@ async fn finish_tool_result<S>(
     tool_call_id: &str,
     tool_name: &str,
     result: tools::ExecutedTool,
+    allow_image_followups: bool,
     recorder: &trace::TraceRecorder,
 ) -> Result<Option<Vec<Value>>, S::Error>
 where
@@ -733,18 +741,23 @@ where
             "mcp_markdown_bytes": result.mcp_markdown.len()
         }),
     );
+    let ui_images = tools::ui_images_for_tool_result(tool_call_id, &result);
+    let mut item = json!({
+        "id": tool_call_id,
+        "type": "tool_result",
+        "name": tool_name,
+        "content": result.plugin_markdown,
+        "status": status
+    });
+    if !ui_images.is_empty() {
+        item["images"] = Value::Array(ui_images);
+    }
     send_json(
         sender,
         json!({
             "type": "chat_item_update",
             "request_id": request_id.clone(),
-            "item": {
-                "id": tool_call_id,
-                "type": "tool_result",
-                "name": tool_name,
-                "content": result.plugin_markdown,
-                "status": status
-            }
+            "item": item
         }),
     )
     .await?;
@@ -755,7 +768,11 @@ where
         "name": tool_name,
         "content": result.mcp_markdown
     })];
-    messages.extend(result.model_followup_messages);
+    messages.extend(tools::model_messages_for_tool_result(
+        tool_name,
+        &result,
+        allow_image_followups,
+    ));
     Ok(Some(messages))
 }
 

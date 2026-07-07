@@ -10,6 +10,7 @@
     "- Scripts must extend RefCounted and define `func run(ctx: Variant) -> void`.",
     "- Use explicit types for meaningful local variables.",
     "- Use `ctx.log(...)` for observations.",
+    "- `await ctx.capture(label)` saves a viewport image under the runtime session captures/ folder; when the caller/model supports image input, captured images are returned as image context alongside the text receipt.",
     "- Scripts may complete without closing the scene; use follow-up runtime_script calls against the same running scene.",
     "- Call `ctx.close_scene()` only for the final script when intentionally ending the runtime session, or use runtime_session.stop externally.",
     "",

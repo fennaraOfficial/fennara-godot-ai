@@ -8,6 +8,7 @@
     "If gates pass, Fennara launches one scene from the selected/bound Godot project in a separate windowed Godot process with the runtime helper enabled.",
     "Runtime sessions enable Godot's local debugger with error breaks ignored or auto-continued so debugger-aware addons can send debugger messages without requiring an attached editor session; normal errors and warnings are still captured in runtime_session.log.",
     "The returned session_id can be reused for multiple runtime_script probes against the same running scene.",
+    "`start` saves one startup viewport capture under the session captures/ folder and, when the caller/model supports image input, returns that capture as image context in addition to the text receipt.",
     "End the session with runtime_session.stop or with a final runtime_script that calls ctx.close_scene().",
     "`status` and `stop` are operational receipts; a stopped process or non-zero exit code after an intentional stop is not by itself proof of a scene failure.",
     "The returned runtime_session.log path is the full source of truth for scene startup output, runtime errors, runtime_script ctx.log output, capture events, and completion markers.",

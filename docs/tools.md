@@ -358,6 +358,23 @@ Use validate_scene on res://scenes/main.tscn and explain any errors or warnings.
 Use this when layout, framing, camera view, rendering, material/shader output,
 animation-visible state, or visual correctness matters.
 
+External MCP clients receive the primary screenshot as an image content block
+when their client/model supports image inputs, while the text receipt still
+includes saved paths and metadata as a fallback.
+
+In the built-in chat, the daemon attaches the primary screenshot to the next
+model request only when the selected model advertises image input support. If
+the selected model is text-only, the tool still succeeds and the model receives
+the text receipt plus saved `image_path`/`image_res_path` values. The chat UI
+renders screenshots from saved-file references, including when history is
+loaded in a later session; raw screenshot bytes are not persisted in tool raw
+results, markdown, replay messages, or summaries.
+
+For 3D scenes, `view: "all"` captures front, back, left, right, top,
+perspective, and isometric into one labeled collage. `target_node_path`
+captures frame the camera around the requested subtree while leaving the rest
+of the scene visible for context.
+
 Example prompt:
 
 ```text
@@ -379,7 +396,8 @@ editor session; normal errors and warnings are still captured in
 Actions:
 
 - `start`: open the scene, wait briefly for startup output, and return
-  `session_id`, process state, log paths, and a capped new-log excerpt
+  `session_id`, process state, log paths, a startup capture path, optional image
+  context for image-capable callers, and a capped new-log excerpt
 - `status`: report the active managed session/process state and any new-log
   excerpt
 - `stop`: stop the managed runtime process and return final process/log
@@ -415,8 +433,9 @@ Script contract:
 - a script may finish while the scene stays open
 
 The result includes status, `session_id`, `script_run_id`, `script_path`,
-diagnostics, capture paths, runtime findings, scene/session state when
-available, log paths, and a capped new-log excerpt.
+diagnostics, capture paths, optional image context for `ctx.capture(...)`
+outputs when the caller supports images, runtime findings, scene/session state
+when available, log paths, and a capped new-log excerpt.
 
 The `ctx` helper surface covers logging, waiting, screenshots, InputMap
 actions, key/mouse events, mouse motion, 2D world-to-viewport mouse conversion,

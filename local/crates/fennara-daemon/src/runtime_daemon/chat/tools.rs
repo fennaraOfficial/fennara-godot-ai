@@ -1,3 +1,7 @@
+use base64::{
+    Engine,
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+};
 use serde_json::{Value, json};
 
 use crate::runtime_daemon::{godot_bridge, state::AppState};
@@ -60,6 +64,9 @@ const EXEC_COMMAND_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../schemas/tools/exec_command.json"
 ));
+const MAX_TOOL_MODEL_IMAGE_COUNT: usize = 6;
+const MAX_TOOL_MODEL_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_TOOL_MODEL_IMAGE_TOTAL_BYTES: usize = 24 * 1024 * 1024;
 const ALLOWED_TOOL_NAMES: &[&str] = &[
     "read_file",
     "script_diagnostics",
@@ -102,6 +109,18 @@ pub(crate) struct ExecutedTool {
     pub(crate) metadata: Value,
     pub(crate) target_keys: Vec<String>,
     pub(crate) model_followup_messages: Vec<Value>,
+    pub(crate) model_images: Vec<ModelImage>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ModelImage {
+    data: Option<String>,
+    mime_type: String,
+    label: String,
+    size_bytes: usize,
+    file_path: Option<String>,
+    resource_path: Option<String>,
+    access_token: String,
 }
 
 pub(crate) fn definitions() -> Vec<Value> {
@@ -158,10 +177,14 @@ pub(crate) async fn execute(
     )
     .await;
     let ok = response.get("ok").and_then(Value::as_bool).unwrap_or(false);
-    let raw_result = response
+    let mut raw_result = response
         .get("raw_result")
         .cloned()
         .unwrap_or_else(|| response.clone());
+    let model_images = model_images_from_response(name, &response);
+    if name == "screenshot_scene" {
+        raw_result = strip_screenshot_image_bytes(raw_result);
+    }
     let formatted = response.get("formatted_result").cloned().unwrap_or_else(
         || json!({ "content": response.get("result").cloned().unwrap_or(Value::Null) }),
     );
@@ -185,6 +208,9 @@ pub(crate) async fn execute(
     {
         metadata["plugin_metadata"] = plugin_metadata.clone();
     }
+    if !model_images.is_empty() {
+        metadata["tool_images"] = tool_image_metadata(tool_call_id, &model_images);
+    }
     let mcp_markdown = strip_update_notice(&markdown_from_response(&response, &formatted, name));
     let plugin_markdown = plugin_markdown_for(name, &mcp_markdown, &metadata, &raw_result, ok);
     let target_keys = target_keys_from_metadata(&metadata);
@@ -198,7 +224,8 @@ pub(crate) async fn execute(
                 "mcp_markdown_bytes": mcp_markdown.len(),
                 "plugin_markdown_bytes": plugin_markdown.len(),
                 "target_key_count": target_keys.len(),
-                "model_followup_count": model_followup_messages.len()
+                "model_followup_count": model_followup_messages.len(),
+                "model_image_count": model_images.len()
             }),
         );
     }
@@ -211,6 +238,7 @@ pub(crate) async fn execute(
         metadata,
         target_keys,
         model_followup_messages,
+        model_images,
     }
 }
 
@@ -252,6 +280,7 @@ fn terminal_tool(name: &str, status: &'static str, error: String) -> ExecutedToo
         }),
         target_keys: Vec::new(),
         model_followup_messages: Vec::new(),
+        model_images: Vec::new(),
     }
 }
 
@@ -318,7 +347,7 @@ fn plugin_markdown_for(
             targets.join(", ")
         )
     };
-    if (name == "screenshot_scene" || name == "read_file") && ok {
+    if name == "read_file" && ok {
         let image_markdown = inline_image_markdown(raw_result, name);
         if !image_markdown.is_empty() {
             markdown.push_str("\n\n");
@@ -400,10 +429,49 @@ pub(crate) fn model_followups_for(name: &str, raw_result: &Value) -> Vec<Value> 
     if name == "read_file" {
         return read_file_model_images(raw_result);
     }
-    if name != "screenshot_scene" {
-        return Vec::new();
+    Vec::new()
+}
+
+pub(crate) fn model_messages_for_tool_result(
+    tool_name: &str,
+    result: &ExecutedTool,
+    allow_images: bool,
+) -> Vec<Value> {
+    let mut messages = if allow_images {
+        result.model_followup_messages.clone()
+    } else {
+        text_only_followups(tool_name, &result.model_followup_messages)
+    };
+    if result.model_images.is_empty() {
+        return messages;
     }
-    screenshot_model_images(raw_result, name)
+    if allow_images {
+        if !result.model_images.iter().any(ModelImage::has_model_data) {
+            messages.push(json!({
+                "role": "user",
+                "content": format!(
+                    "[Image output from {tool_name} omitted because the image data was unavailable or exceeded the model image budget. The textual tool result and saved file path remain available.]"
+                )
+            }));
+            return messages;
+        }
+        messages.extend(screenshot_model_image_messages(
+            tool_name,
+            &result.model_images,
+        ));
+    } else {
+        messages.push(json!({
+            "role": "user",
+            "content": format!(
+                "[Image output from {tool_name} omitted because the selected model does not support image input. The textual tool result and saved file path remain available.]"
+            )
+        }));
+    }
+    messages
+}
+
+pub(crate) fn ui_images_for_tool_result(tool_call_id: &str, result: &ExecutedTool) -> Vec<Value> {
+    result.tool_image_metadata(tool_call_id)
 }
 
 fn read_file_model_images(raw_result: &Value) -> Vec<Value> {
@@ -430,56 +498,313 @@ fn read_file_model_images(raw_result: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-fn screenshot_model_images(raw_result: &Value, tool_name: &str) -> Vec<Value> {
-    let mut messages = Vec::new();
-    if let Some(image) = image_content_part(raw_result) {
-        messages.push(json!({
-            "role": "user",
-            "content": [
-                { "type": "text", "text": format!("[Screenshot from {tool_name}]") },
-                image
-            ]
-        }));
-        return messages;
-    }
-    if let Some(images) = raw_result.get("images").and_then(Value::as_array) {
-        for (index, image) in images.iter().enumerate() {
-            if let Some(image_part) = image_content_part(image) {
-                let view = image
-                    .get("view")
-                    .and_then(Value::as_str)
-                    .filter(|value| !value.is_empty())
-                    .map(|value| format!(" {value}"))
-                    .unwrap_or_else(|| format!(" {}", index + 1));
-                messages.push(json!({
-                    "role": "user",
-                    "content": [
-                        { "type": "text", "text": format!("[Screenshot from {tool_name}{view}]") },
-                        image_part
-                    ]
-                }));
-            }
-        }
-    }
-    messages
+fn screenshot_model_image_messages(tool_name: &str, images: &[ModelImage]) -> Vec<Value> {
+    images
+        .iter()
+        .filter_map(|image| {
+            let image_part = model_image_content_part(image)?;
+            Some(json!({
+                "role": "user",
+                "content": [
+                    { "type": "text", "text": format!("[{}]", image.label_for_tool(tool_name)) },
+                    image_part
+                ]
+            }))
+        })
+        .collect()
 }
 
-fn image_content_part(image: &Value) -> Option<Value> {
-    let image_base64 = image.get("image_base64").and_then(Value::as_str)?;
-    if image_base64.is_empty() {
-        return None;
-    }
-    let mime_type = image
-        .get("mime_type")
-        .and_then(Value::as_str)
-        .filter(|mime| !mime.is_empty())
-        .unwrap_or("image/png");
+fn model_image_content_part(image: &ModelImage) -> Option<Value> {
+    let data = image.data.as_deref()?;
     Some(json!({
         "type": "image_url",
         "image_url": {
-            "url": format!("data:{mime_type};base64,{image_base64}")
+            "url": format!("data:{};base64,{data}", image.mime_type)
         }
     }))
+}
+
+fn text_only_followups(tool_name: &str, messages: &[Value]) -> Vec<Value> {
+    if !messages.iter().any(value_includes_image) {
+        return messages.to_vec();
+    }
+    vec![json!({
+        "role": "user",
+        "content": format!(
+            "[Image output from {tool_name} omitted because the selected model does not support image input. The textual tool result remains available.]"
+        )
+    })]
+}
+
+fn value_includes_image(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => {
+            object
+                .get("type")
+                .and_then(Value::as_str)
+                .is_some_and(|kind| kind == "image_url")
+                || object.values().any(value_includes_image)
+        }
+        Value::Array(items) => items.iter().any(value_includes_image),
+        _ => false,
+    }
+}
+
+fn model_images_from_response(tool_name: &str, response: &Value) -> Vec<ModelImage> {
+    if !tool_supports_model_images(tool_name) {
+        return Vec::new();
+    }
+    let mut model_bytes = 0usize;
+    response
+        .get("model_images")
+        .and_then(Value::as_array)
+        .map(|images| {
+            images
+                .iter()
+                .take(MAX_TOOL_MODEL_IMAGE_COUNT)
+                .filter_map(|image| {
+                    let mut image = validate_model_image(tool_name, image)?;
+                    if image.has_model_data() {
+                        if model_bytes.saturating_add(image.size_bytes)
+                            > MAX_TOOL_MODEL_IMAGE_TOTAL_BYTES
+                        {
+                            image.data = None;
+                        } else {
+                            model_bytes += image.size_bytes;
+                        }
+                    }
+                    Some(image)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn tool_supports_model_images(tool_name: &str) -> bool {
+    matches!(
+        tool_name,
+        "screenshot_scene" | "runtime_session" | "runtime_script"
+    )
+}
+
+fn validate_model_image(tool_name: &str, image: &Value) -> Option<ModelImage> {
+    let raw_data = image
+        .get("data")
+        .or_else(|| image.get("base64"))
+        .and_then(Value::as_str)?
+        .trim();
+    if raw_data.is_empty() {
+        return None;
+    }
+    let (data_url_mime, data) = split_data_url(raw_data)?;
+    if data.is_empty() || !data.chars().all(is_base64_char) {
+        return None;
+    }
+    let approx_bytes = data.len().saturating_mul(3) / 4;
+    let declared_mime = image
+        .get("mime_type")
+        .or_else(|| image.get("mimeType"))
+        .and_then(Value::as_str)
+        .and_then(normalize_image_mime);
+    let data_mime = data_url_mime.as_deref().and_then(normalize_image_mime);
+    if declared_mime.is_some() && data_mime.is_some() && declared_mime != data_mime {
+        return None;
+    }
+    let mime_type = declared_mime.or(data_mime).unwrap_or("image/png");
+    let model_data = if approx_bytes > MAX_TOOL_MODEL_IMAGE_BYTES + 2 {
+        None
+    } else {
+        let decoded = STANDARD.decode(data.as_bytes()).ok()?;
+        if decoded.is_empty() {
+            return None;
+        }
+        if detect_image_mime(&decoded)? != mime_type {
+            return None;
+        }
+        Some((data.to_string(), decoded.len()))
+    };
+    let size_bytes = model_data
+        .as_ref()
+        .map(|(_, size_bytes)| *size_bytes)
+        .unwrap_or(approx_bytes);
+    Some(ModelImage {
+        data: model_data.map(|(data, _)| data),
+        mime_type: mime_type.to_string(),
+        label: image_label(tool_name, image),
+        size_bytes,
+        file_path: clean_optional_string(
+            image
+                .get("image_path")
+                .or_else(|| image.get("file_path"))
+                .or_else(|| image.get("path")),
+        ),
+        resource_path: clean_optional_string(
+            image
+                .get("image_res_path")
+                .or_else(|| image.get("resource_path"))
+                .or_else(|| image.get("res_path")),
+        ),
+        access_token: new_tool_media_token()?,
+    })
+}
+
+fn new_tool_media_token() -> Option<String> {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).ok()?;
+    Some(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn split_data_url(raw: &str) -> Option<(Option<String>, &str)> {
+    if !raw.starts_with("data:") {
+        return Some((None, raw));
+    }
+    let (prefix, data) = raw.split_once(',')?;
+    if !prefix.to_ascii_lowercase().contains(";base64") {
+        return None;
+    }
+    let mime = prefix
+        .strip_prefix("data:")
+        .and_then(|value| value.split(';').next())
+        .map(str::to_string);
+    Some((mime, data.trim()))
+}
+
+fn normalize_image_mime(mime: &str) -> Option<&'static str> {
+    match mime.trim().to_ascii_lowercase().as_str() {
+        "image/png" => Some("image/png"),
+        "image/jpeg" | "image/jpg" => Some("image/jpeg"),
+        "image/webp" => Some("image/webp"),
+        "image/gif" => Some("image/gif"),
+        _ => None,
+    }
+}
+
+fn detect_image_mime(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some("image/png");
+    }
+    if bytes.starts_with(b"\xff\xd8\xff") {
+        return Some("image/jpeg");
+    }
+    if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        return Some("image/webp");
+    }
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return Some("image/gif");
+    }
+    None
+}
+
+fn image_label(tool_name: &str, image: &Value) -> String {
+    image
+        .get("label")
+        .or_else(|| image.get("description"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.chars().take(160).collect())
+        .unwrap_or_else(|| default_image_label(tool_name))
+}
+
+fn default_image_label(tool_name: &str) -> String {
+    if tool_name == "screenshot_scene" {
+        "Screenshot from screenshot_scene".to_string()
+    } else {
+        format!("Image from {tool_name}")
+    }
+}
+
+impl ModelImage {
+    fn has_model_data(&self) -> bool {
+        self.data.as_deref().is_some_and(|data| !data.is_empty())
+    }
+
+    fn label_for_tool(&self, tool_name: &str) -> String {
+        if self.label.trim().is_empty() {
+            return default_image_label(tool_name);
+        }
+        self.label.clone()
+    }
+}
+
+impl ExecutedTool {
+    fn tool_image_metadata(&self, tool_call_id: &str) -> Vec<Value> {
+        self.model_images
+            .iter()
+            .enumerate()
+            .filter_map(|(index, image)| tool_image_metadata_entry(tool_call_id, index, image))
+            .collect()
+    }
+}
+
+fn tool_image_metadata(tool_call_id: &str, images: &[ModelImage]) -> Value {
+    Value::Array(
+        images
+            .iter()
+            .enumerate()
+            .filter_map(|(index, image)| tool_image_metadata_entry(tool_call_id, index, image))
+            .collect(),
+    )
+}
+
+fn tool_image_metadata_entry(
+    tool_call_id: &str,
+    index: usize,
+    image: &ModelImage,
+) -> Option<Value> {
+    let file_path = image.file_path.as_deref()?.trim();
+    if file_path.is_empty() {
+        return None;
+    }
+    let mut entry = json!({
+        "mime_type": image.mime_type,
+        "name": image.label,
+        "size": image.size_bytes,
+        "file_path": file_path,
+        "token": image.access_token,
+        "index": index
+    });
+    if !tool_call_id.trim().is_empty() {
+        entry["tool_call_id"] = json!(tool_call_id);
+        entry["url"] = json!(format!(
+            "/chat/tool-media/{tool_call_id}/{index}?token={}",
+            image.access_token
+        ));
+    }
+    if let Some(resource_path) = image.resource_path.as_deref() {
+        entry["resource_path"] = json!(resource_path);
+    }
+    Some(entry)
+}
+
+fn clean_optional_string(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.chars().take(1024).collect())
+}
+
+fn strip_screenshot_image_bytes(mut value: Value) -> Value {
+    strip_image_base64_fields(&mut value);
+    value
+}
+
+fn strip_image_base64_fields(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            object.remove("image_base64");
+            for child in object.values_mut() {
+                strip_image_base64_fields(child);
+            }
+        }
+        Value::Array(items) => {
+            for child in items {
+                strip_image_base64_fields(child);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn read_file_image_content_part(image: &Value) -> Option<Value> {
@@ -504,33 +829,7 @@ fn inline_image_markdown(raw_result: &Value, tool_name: &str) -> String {
     if tool_name == "read_file" {
         return read_file_image_markdown(raw_result);
     }
-    screenshot_image_markdown(raw_result)
-}
-
-fn screenshot_image_markdown(raw_result: &Value) -> String {
-    if let Some(primary) = image_markdown(raw_result, "Screenshot") {
-        return primary;
-    }
-    raw_result
-        .get("images")
-        .and_then(Value::as_array)
-        .map(|images| {
-            images
-                .iter()
-                .enumerate()
-                .filter_map(|(index, image)| {
-                    let label = image
-                        .get("view")
-                        .and_then(Value::as_str)
-                        .filter(|view| !view.is_empty())
-                        .map(|view| format!("Screenshot {view}"))
-                        .unwrap_or_else(|| format!("Screenshot {}", index + 1));
-                    image_markdown(image, &label)
-                })
-                .collect::<Vec<_>>()
-                .join("\n\n")
-        })
-        .unwrap_or_default()
+    String::new()
 }
 
 fn read_file_image_markdown(raw_result: &Value) -> String {
@@ -549,21 +848,6 @@ fn read_file_image_markdown(raw_result: &Value) -> String {
                 .join("\n\n")
         })
         .unwrap_or_default()
-}
-
-fn image_markdown(image: &Value, label: &str) -> Option<String> {
-    let image_base64 = image.get("image_base64").and_then(Value::as_str)?;
-    if image_base64.is_empty() {
-        return None;
-    }
-    let mime_type = image
-        .get("mime_type")
-        .and_then(Value::as_str)
-        .filter(|mime| !mime.is_empty())
-        .unwrap_or("image/png");
-    Some(format!(
-        "![{label}](data:{mime_type};base64,{image_base64})"
-    ))
 }
 
 fn read_file_image_markdown_part(image: &Value, label: &str) -> Option<String> {
@@ -589,14 +873,298 @@ fn normalize_res_path(path: &str) -> String {
     }
 }
 
+fn is_base64_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '+' | '/' | '=')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const PNG_1X1: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 
     #[test]
     fn exec_command_is_daemon_local_and_allowed() {
         assert!(is_allowed_tool("exec_command"));
         assert!(is_daemon_local_tool("exec_command"));
         assert!(!is_daemon_local_tool("read_file"));
+    }
+
+    #[test]
+    fn screenshot_model_images_create_transient_model_context_and_ui_metadata() {
+        let images = model_images_from_response(
+            "screenshot_scene",
+            &json!({
+                "model_images": [{
+                    "data": PNG_1X1,
+                    "mime_type": "image/png",
+                    "label": "Scene screenshot",
+                    "image_path": "C:/tmp/fennara-shot.png",
+                    "image_res_path": "user://.fennara/fennara-shot.png"
+                }]
+            }),
+        );
+        assert_eq!(images.len(), 1);
+
+        let result = ExecutedTool {
+            ok: true,
+            raw_result: json!({}),
+            mcp_markdown: "Tool: screenshot_scene\nStatus: success".to_string(),
+            plugin_markdown: "Tool: screenshot_scene\nStatus: success".to_string(),
+            metadata: json!({}),
+            target_keys: Vec::new(),
+            model_followup_messages: Vec::new(),
+            model_images: images,
+        };
+
+        let model_messages = model_messages_for_tool_result("screenshot_scene", &result, true);
+        assert_eq!(model_messages.len(), 1);
+        assert_eq!(model_messages[0]["content"][1]["type"], "image_url");
+        assert!(
+            model_messages[0]["content"][1]["image_url"]["url"]
+                .as_str()
+                .unwrap()
+                .contains(PNG_1X1)
+        );
+
+        let ui_images = ui_images_for_tool_result("call_1", &result);
+        assert_eq!(ui_images.len(), 1);
+        let url = ui_images[0]["url"].as_str().unwrap();
+        assert!(url.starts_with("/chat/tool-media/call_1/0?token="));
+        let token = ui_images[0]["token"].as_str().unwrap();
+        assert!(token.len() >= 32);
+        assert!(url.ends_with(token));
+        assert_eq!(ui_images[0]["file_path"], "C:/tmp/fennara-shot.png");
+        assert!(
+            !ui_images
+                .iter()
+                .any(|image| serde_json::to_string(image).unwrap().contains(PNG_1X1))
+        );
+    }
+
+    #[test]
+    fn runtime_script_model_images_create_multiple_transient_model_messages() {
+        let images = model_images_from_response(
+            "runtime_script",
+            &json!({
+                "model_images": [
+                    {
+                        "data": PNG_1X1,
+                        "mime_type": "image/png",
+                        "label": "Runtime script capture 1: before",
+                        "image_path": "C:/tmp/.fennara/before.png"
+                    },
+                    {
+                        "data": PNG_1X1,
+                        "mime_type": "image/png",
+                        "label": "Runtime script capture 2: after",
+                        "image_path": "C:/tmp/.fennara/after.png"
+                    }
+                ]
+            }),
+        );
+        assert_eq!(images.len(), 2);
+        let result = ExecutedTool {
+            ok: true,
+            raw_result: json!({}),
+            mcp_markdown: String::new(),
+            plugin_markdown: String::new(),
+            metadata: json!({}),
+            target_keys: Vec::new(),
+            model_followup_messages: Vec::new(),
+            model_images: images,
+        };
+
+        let model_messages = model_messages_for_tool_result("runtime_script", &result, true);
+
+        assert_eq!(model_messages.len(), 2);
+        assert_eq!(
+            model_messages[0]["content"][0]["text"],
+            "[Runtime script capture 1: before]"
+        );
+        assert_eq!(model_messages[0]["content"][1]["type"], "image_url");
+        assert_eq!(
+            model_messages[1]["content"][0]["text"],
+            "[Runtime script capture 2: after]"
+        );
+        assert_eq!(model_messages[1]["content"][1]["type"], "image_url");
+    }
+
+    #[test]
+    fn screenshot_model_images_degrade_to_text_for_non_vision_models() {
+        let image = validate_model_image(
+            "screenshot_scene",
+            &json!({
+                "data": PNG_1X1,
+                "mime_type": "image/png",
+                "image_path": "C:/tmp/fennara-shot.png"
+            }),
+        )
+        .unwrap();
+        let result = ExecutedTool {
+            ok: true,
+            raw_result: json!({}),
+            mcp_markdown: String::new(),
+            plugin_markdown: String::new(),
+            metadata: json!({}),
+            target_keys: Vec::new(),
+            model_followup_messages: Vec::new(),
+            model_images: vec![image],
+        };
+
+        let model_messages = model_messages_for_tool_result("screenshot_scene", &result, false);
+        let serialized = serde_json::to_string(&model_messages).unwrap();
+        assert!(serialized.contains("does not support image input"));
+        assert!(!serialized.contains("image_url"));
+        assert!(!serialized.contains(PNG_1X1));
+    }
+
+    #[test]
+    fn runtime_model_images_without_label_use_tool_specific_fallback() {
+        let images = model_images_from_response(
+            "runtime_session",
+            &json!({
+                "model_images": [{
+                    "data": PNG_1X1,
+                    "mime_type": "image/png",
+                    "image_path": "C:/tmp/.fennara/startup.png"
+                }]
+            }),
+        );
+
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].label, "Image from runtime_session");
+    }
+
+    #[test]
+    fn tool_images_without_model_data_emit_omitted_notice() {
+        let oversized_base64 = "A".repeat(((MAX_TOOL_MODEL_IMAGE_BYTES + 16) * 4 / 3) + 8);
+        let images = model_images_from_response(
+            "runtime_script",
+            &json!({
+                "model_images": [{
+                    "data": oversized_base64,
+                    "mime_type": "image/png",
+                    "image_path": "C:/tmp/.fennara/large.png"
+                }]
+            }),
+        );
+        let result = ExecutedTool {
+            ok: true,
+            raw_result: json!({}),
+            mcp_markdown: String::new(),
+            plugin_markdown: String::new(),
+            metadata: json!({}),
+            target_keys: Vec::new(),
+            model_followup_messages: Vec::new(),
+            model_images: images,
+        };
+
+        let model_messages = model_messages_for_tool_result("runtime_script", &result, true);
+        let serialized = serde_json::to_string(&model_messages).unwrap();
+
+        assert!(serialized.contains("omitted because the image data was unavailable"));
+        assert!(!serialized.contains("image_url"));
+    }
+
+    #[test]
+    fn oversized_screenshot_keeps_ui_metadata_without_model_image_data() {
+        let oversized_base64 = "A".repeat(((MAX_TOOL_MODEL_IMAGE_BYTES + 16) * 4 / 3) + 8);
+        let images = model_images_from_response(
+            "screenshot_scene",
+            &json!({
+                "model_images": [{
+                    "data": oversized_base64,
+                    "mime_type": "image/png",
+                    "label": "Large screenshot",
+                    "image_path": "C:/tmp/large-fennara-shot.png",
+                    "image_res_path": "user://.fennara/large-fennara-shot.png"
+                }]
+            }),
+        );
+        assert_eq!(images.len(), 1);
+        assert!(!images[0].has_model_data());
+
+        let result = ExecutedTool {
+            ok: true,
+            raw_result: json!({}),
+            mcp_markdown: "Tool: screenshot_scene\nStatus: success".to_string(),
+            plugin_markdown: "Tool: screenshot_scene\nStatus: success".to_string(),
+            metadata: json!({}),
+            target_keys: Vec::new(),
+            model_followup_messages: Vec::new(),
+            model_images: images,
+        };
+
+        let model_messages = model_messages_for_tool_result("screenshot_scene", &result, true);
+        let serialized_messages = serde_json::to_string(&model_messages).unwrap();
+        assert!(serialized_messages.contains("omitted because the image data was unavailable"));
+        assert!(!serialized_messages.contains("image_url"));
+        let ui_images = ui_images_for_tool_result("call_large", &result);
+        assert_eq!(ui_images.len(), 1);
+        assert_eq!(ui_images[0]["file_path"], "C:/tmp/large-fennara-shot.png");
+        assert!(
+            ui_images[0]["url"]
+                .as_str()
+                .unwrap()
+                .starts_with("/chat/tool-media/call_large/0?token=")
+        );
+        assert!(!serde_json::to_string(&ui_images).unwrap().contains("AAAA"));
+    }
+
+    #[test]
+    fn screenshot_raw_result_strips_bytes_and_is_not_replayed_as_image() {
+        let stripped = strip_screenshot_image_bytes(json!({
+            "image_base64": PNG_1X1,
+            "mime_type": "image/png",
+            "image_path": "C:/tmp/fennara-shot.png",
+            "images": [{
+                "view": "front",
+                "image_base64": PNG_1X1,
+                "image_path": "C:/tmp/front.png"
+            }]
+        }));
+        let serialized = serde_json::to_string(&stripped).unwrap();
+        assert!(!serialized.contains("image_base64"));
+        assert!(!serialized.contains(PNG_1X1));
+        assert_eq!(stripped["image_path"], "C:/tmp/fennara-shot.png");
+        assert_eq!(
+            model_followups_for(
+                "screenshot_scene",
+                &json!({ "image_base64": PNG_1X1, "mime_type": "image/png" }),
+            ),
+            Vec::<Value>::new()
+        );
+    }
+
+    #[test]
+    fn invalid_screenshot_model_images_are_ignored() {
+        assert!(model_images_from_response("screenshot_scene", &json!({})).is_empty());
+        assert!(
+            model_images_from_response(
+                "screenshot_scene",
+                &json!({
+                    "model_images": [{
+                        "data": PNG_1X1,
+                        "mime_type": "image/jpeg",
+                        "image_path": "C:/tmp/not-a-jpeg.jpg"
+                    }]
+                }),
+            )
+            .is_empty()
+        );
+        assert!(
+            model_images_from_response(
+                "screenshot_scene",
+                &json!({
+                    "model_images": [{
+                        "data": "not base64",
+                        "mime_type": "image/png",
+                        "image_path": "C:/tmp/bad.png"
+                    }]
+                }),
+            )
+            .is_empty()
+        );
     }
 }

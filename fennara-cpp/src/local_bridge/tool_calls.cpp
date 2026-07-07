@@ -22,6 +22,7 @@
 #include <godot_cpp/classes/text_edit.hpp>
 #include <godot_cpp/core/object.hpp>
 #include <godot_cpp/classes/time.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include <algorithm>
@@ -161,13 +162,69 @@ void _queue_free_executor(godot::Object *executor) {
     }
 }
 
-godot::Dictionary _prepare_mcp_screenshot_result(const godot::Dictionary &result) {
-    if (!(bool)result.get("success", false)) {
-        return result;
+void _copy_if_present(godot::Dictionary &target,
+                      const godot::Dictionary &source,
+                      const godot::String &key) {
+    if (source.has(key)) {
+        target[key] = source[key];
+    }
+}
+
+godot::String _screenshot_model_image_label(const godot::Dictionary &image) {
+    godot::PackedStringArray parts;
+    godot::String role = image.get("image_role", "");
+    if (!role.is_empty()) {
+        parts.append(role);
+    }
+    godot::String view = image.get("view", "");
+    if (!view.is_empty()) {
+        parts.append("view=" + view);
     }
 
+    godot::String suffix;
+    if (!parts.is_empty()) {
+        suffix = " (" + godot::String(", ").join(parts) + ")";
+    }
+    return "Screenshot from screenshot_scene" + suffix;
+}
+
+godot::Dictionary _screenshot_model_image_payload(const godot::Dictionary &image) {
+    godot::Dictionary payload;
+    godot::String data = image.get("image_base64", "");
+    if (data.is_empty()) {
+        return payload;
+    }
+
+    payload["data"] = data;
+    payload["mime_type"] = image.get("mime_type", "image/png");
+    payload["label"] = _screenshot_model_image_label(image);
+    _copy_if_present(payload, image, "format");
+    _copy_if_present(payload, image, "width");
+    _copy_if_present(payload, image, "height");
+    _copy_if_present(payload, image, "image_role");
+    _copy_if_present(payload, image, "view");
+    _copy_if_present(payload, image, "image_res_path");
+    _copy_if_present(payload, image, "image_path");
+    return payload;
+}
+
+godot::Array _model_images_from_screenshot_result(const godot::Dictionary &result) {
+    godot::Array images;
+    if (!(bool)result.get("success", false)) {
+        return images;
+    }
+
+    godot::Dictionary primary = _screenshot_model_image_payload(result);
+    if (!primary.is_empty()) {
+        images.append(primary);
+    }
+    return images;
+}
+
+godot::Dictionary _screenshot_result_without_image_bytes(const godot::Dictionary &result) {
+    godot::Dictionary transformed = result;
+    transformed.erase("image_base64");
     if (result.has("images")) {
-        godot::Dictionary transformed = result;
         godot::Array images = result.get("images", godot::Array());
         godot::Array transformed_images;
         for (int i = 0; i < images.size(); i++) {
@@ -178,13 +235,6 @@ godot::Dictionary _prepare_mcp_screenshot_result(const godot::Dictionary &result
         }
         transformed["images"] = transformed_images;
     }
-
-    if (!result.has("image_base64")) {
-        return result;
-    }
-
-    godot::Dictionary transformed = result;
-    transformed.erase("image_base64");
     return transformed;
 }
 
@@ -555,10 +605,19 @@ void FennaraLocalBridge::_handle_tool_call(const godot::Dictionary &message) {
     FennaraSnapshotManager::set_active(nullptr);
     _log_mcp_tool_complete();
     godot::Dictionary result = tool_results::format_for_model(tool, args, raw_result);
+    godot::Array model_images;
+    if (tool == "screenshot_scene") {
+        model_images = _model_images_from_screenshot_result(raw_result);
+        raw_result = _screenshot_result_without_image_bytes(raw_result);
+        result = _screenshot_result_without_image_bytes(result);
+    }
     response["ok"] = result.get("success", false);
     response["result"] = _mcp_model_facing_result(result);
     response["raw_result"] = raw_result;
     response["formatted_result"] = result;
+    if (!model_images.is_empty()) {
+        response["model_images"] = model_images;
+    }
     tool_call_log::log_completed(_session_id, request_id, tool, args,
                                  godot::Dictionary(response["result"]),
                                  response["ok"], started_at_ms);
@@ -654,13 +713,19 @@ void FennaraLocalBridge::_on_async_tool_call_completed(const godot::Array &resul
     godot::Dictionary wrapped = first;
     godot::Dictionary result = wrapped.get("result", godot::Dictionary());
     godot::Dictionary raw_result = wrapped.get("raw_result", godot::Dictionary());
+    godot::Array model_images;
     if (tool_name == "screenshot_scene") {
-        result = _prepare_mcp_screenshot_result(result);
+        model_images = _model_images_from_screenshot_result(raw_result);
+        raw_result = _screenshot_result_without_image_bytes(raw_result);
+        result = _screenshot_result_without_image_bytes(result);
     }
     response["ok"] = result.get("success", false);
     response["result"] = _mcp_model_facing_result(result);
     response["raw_result"] = raw_result;
     response["formatted_result"] = result;
+    if (!model_images.is_empty()) {
+        response["model_images"] = model_images;
+    }
     if (wrapped.has("plugin_metadata")) {
         response["plugin_metadata"] = wrapped["plugin_metadata"];
     }

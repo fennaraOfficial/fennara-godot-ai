@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/control.hpp>
@@ -19,6 +20,32 @@
 
 namespace fennara {
 
+godot::Transform3D FennaraScreenshotSceneTool::_local_tree_3d_transform(godot::Node *node) {
+    godot::Transform3D transform;
+    if (!node) {
+        return transform;
+    }
+
+    std::vector<godot::Node *> chain;
+    godot::Node *current = node;
+    while (current) {
+        chain.push_back(current);
+        godot::Node3D *node_3d = godot::Object::cast_to<godot::Node3D>(current);
+        if (node_3d && node_3d->is_set_as_top_level()) {
+            break;
+        }
+        current = current->get_parent();
+    }
+
+    for (int i = static_cast<int>(chain.size()) - 1; i >= 0; i--) {
+        godot::Node3D *node_3d = godot::Object::cast_to<godot::Node3D>(chain[i]);
+        if (node_3d) {
+            transform = transform * node_3d->get_transform();
+        }
+    }
+    return transform;
+}
+
 void FennaraScreenshotSceneTool::_accumulate_3d_bounds(godot::Node *node,
                                                 godot::AABB &bounds,
                                                 bool &has_bounds) {
@@ -30,7 +57,7 @@ void FennaraScreenshotSceneTool::_accumulate_3d_bounds(godot::Node *node,
         godot::AABB local_bounds = visual->get_aabb();
         if (local_bounds.has_surface()) {
             godot::AABB global_bounds =
-                visual->get_global_transform().xform(local_bounds).abs();
+                _local_tree_3d_transform(visual).xform(local_bounds).abs();
             if (has_bounds) {
                 bounds.merge_with(global_bounds);
             } else {
@@ -117,7 +144,9 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
     if (!has_bounds) {
         godot::Node3D *target_3d = godot::Object::cast_to<godot::Node3D>(bounds_root);
         if (target_3d) {
-            bounds = godot::AABB(target_3d->get_global_position() - godot::Vector3(1, 1, 1),
+            godot::Vector3 target_position =
+                _local_tree_3d_transform(target_3d).origin;
+            bounds = godot::AABB(target_position - godot::Vector3(1, 1, 1),
                                  godot::Vector3(2, 2, 2));
             has_bounds = true;
         } else {
@@ -153,8 +182,10 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
     } else if (view == "top") {
         view_dir = godot::Vector3(0.0, 1.0, 0.0);
         up = godot::Vector3(0.0, 0.0, -1.0);
-    } else if (view == "isometric" || view == "perspective") {
-        view = "perspective";
+    } else if (view == "isometric") {
+        view_dir = godot::Vector3(1.0, 0.85, 1.0).normalized();
+    } else if (view == "perspective") {
+        view_dir = godot::Vector3(1.0, 0.65, 1.0).normalized();
     } else {
         memdelete(root);
         result["success"] = false;
@@ -202,6 +233,33 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
     double distance = std::max(fit_distance * effective_margin, radius + 0.75);
     godot::Vector3 camera_position = center + view_dir * distance;
 
+    double orthographic_size = 0.0;
+    if (view == "isometric") {
+        double projected_half_width = 0.0;
+        double projected_half_height = 0.0;
+        for (int xi = -1; xi <= 1; xi += 2) {
+            for (int yi = -1; yi <= 1; yi += 2) {
+                for (int zi = -1; zi <= 1; zi += 2) {
+                    godot::Vector3 corner = center + godot::Vector3(
+                        half.x * double(xi),
+                        half.y * double(yi),
+                        half.z * double(zi));
+                    godot::Vector3 offset = corner - center;
+                    projected_half_width =
+                        std::max(projected_half_width, std::abs(double(offset.dot(right))));
+                    projected_half_height =
+                        std::max(projected_half_height, std::abs(double(offset.dot(camera_up))));
+                }
+            }
+        }
+        orthographic_size = std::max(projected_half_height * 2.0,
+                                     (projected_half_width * 2.0) /
+                                         std::max(aspect, 0.0001));
+        orthographic_size = std::max(orthographic_size * effective_margin, 1.0);
+        distance = std::max(radius * 3.0, orthographic_size + radius + 1.0);
+        camera_position = center + view_dir * distance;
+    }
+
     godot::SubViewport *viewport = memnew(godot::SubViewport);
     viewport->set_name("FennaraFramedScreenshotViewport");
     viewport->set_size(viewport_size);
@@ -212,8 +270,13 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
 
     godot::Camera3D *camera = memnew(godot::Camera3D);
     camera->set_name("FennaraFramedScreenshotCamera");
-    camera->set_projection(godot::Camera3D::PROJECTION_PERSPECTIVE);
-    camera->set_fov(float(fov_degrees));
+    if (view == "isometric") {
+        camera->set_projection(godot::Camera3D::PROJECTION_ORTHOGONAL);
+        camera->set_size(float(orthographic_size));
+    } else {
+        camera->set_projection(godot::Camera3D::PROJECTION_PERSPECTIVE);
+        camera->set_fov(float(fov_degrees));
+    }
     camera->set_near(0.05f);
     camera->set_far(float(std::max(distance + radius * 10.0, 1000.0)));
 
@@ -238,6 +301,10 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
     result["framed_bounds"] = bounds_dict;
     result["camera_distance"] = distance;
     result["camera_position"] = camera_position;
+    result["projection"] = view == "isometric" ? "orthogonal" : "perspective";
+    if (view == "isometric") {
+        result["orthographic_size"] = orthographic_size;
+    }
     result["context_margin"] = margin;
     result["effective_context_margin"] = effective_margin;
     result["capture_delay_seconds"] = 0.15;

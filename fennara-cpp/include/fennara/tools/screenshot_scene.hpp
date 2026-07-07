@@ -5,6 +5,7 @@
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/transform3d.hpp>
 
 namespace godot {
 class SubViewport;
@@ -33,6 +34,7 @@ private:
                                             const godot::String &cls);
     static godot::Node *_resolve_scene_node(godot::Node *root,
                                             const godot::String &node_path);
+    static godot::Transform3D _local_tree_3d_transform(godot::Node *node);
     static void _accumulate_3d_bounds(godot::Node *node, godot::AABB &bounds,
                                       bool &has_bounds);
     static godot::Dictionary _frame_3d_editor_camera(const godot::Dictionary &args);

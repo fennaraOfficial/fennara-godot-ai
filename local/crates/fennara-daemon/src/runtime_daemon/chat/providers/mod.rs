@@ -445,6 +445,31 @@ pub(crate) fn model_context_estimate(
     )
 }
 
+pub(crate) fn selected_model_supports_image_input(
+    settings: &ProviderSettings,
+    model: &str,
+    reasoning_effort: &str,
+) -> bool {
+    let request = ChatRequest {
+        model: model.to_string(),
+        reasoning_effort: reasoning_effort.to_string(),
+        messages: vec![json!({ "role": "user", "content": "" })],
+        tools: Vec::new(),
+        max_output_tokens: None,
+    };
+    LlmRequest::from_chat(settings, &request)
+        .map(|request| {
+            request
+                .model
+                .model
+                .capabilities
+                .input
+                .iter()
+                .any(|value| value == "image")
+        })
+        .unwrap_or(false)
+}
+
 #[derive(Default)]
 struct StreamAccumulator {
     text: String,

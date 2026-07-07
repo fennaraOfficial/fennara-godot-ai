@@ -93,6 +93,12 @@ pub(crate) struct StartedGeneration {
     pub(crate) id: String,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct ToolImageFile {
+    pub(crate) file_path: String,
+    pub(crate) mime_type: String,
+}
+
 pub(crate) fn list_chats(scope: &ProjectScope) -> Result<Vec<ChatSummary>, String> {
     let conn = connection()?;
     let mut statement = conn
@@ -663,6 +669,98 @@ pub(crate) fn finish_tool_call_with_message(
         metadata,
         target_keys,
     )
+}
+
+pub(crate) fn tool_image_file(
+    tool_call_id: &str,
+    image_index: usize,
+    access_token: &str,
+) -> Result<Option<ToolImageFile>, String> {
+    if !is_safe_tool_image_token(access_token) {
+        return Ok(None);
+    }
+    let conn = connection()?;
+    let metadata_json: Option<String> = conn
+        .query_row(
+            "SELECT metadata_json FROM chat_tool_calls WHERE id = ?1",
+            params![tool_call_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(to_store_error)?
+        .flatten();
+    let Some(metadata_json) = metadata_json else {
+        return Ok(None);
+    };
+    let metadata: Value =
+        serde_json::from_str(&metadata_json).map_err(|error| error.to_string())?;
+    let Some(image) = metadata
+        .get("tool_images")
+        .and_then(Value::as_array)
+        .and_then(|images| images.get(image_index))
+    else {
+        return Ok(None);
+    };
+    let Some(file_path) = image
+        .get("file_path")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(None);
+    };
+    let Some(stored_token) = image
+        .get("token")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| constant_time_eq(value.as_bytes(), access_token.as_bytes()))
+    else {
+        return Ok(None);
+    };
+    if !is_safe_tool_image_token(stored_token) {
+        return Ok(None);
+    }
+    let Some(mime_type) = image
+        .get("mime_type")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .and_then(normalize_tool_image_mime)
+    else {
+        return Ok(None);
+    };
+    Ok(Some(ToolImageFile {
+        file_path: file_path.to_string(),
+        mime_type: mime_type.to_string(),
+    }))
+}
+
+fn is_safe_tool_image_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (left, right) in left.iter().zip(right) {
+        diff |= left ^ right;
+    }
+    diff == 0
+}
+
+fn normalize_tool_image_mime(mime: &str) -> Option<&'static str> {
+    match mime.trim().to_ascii_lowercase().as_str() {
+        "image/png" => Some("image/png"),
+        "image/jpeg" | "image/jpg" => Some("image/jpeg"),
+        "image/webp" => Some("image/webp"),
+        "image/gif" => Some("image/gif"),
+        _ => None,
+    }
 }
 
 pub(crate) fn replay_messages(chat_id: &str) -> Result<Vec<Value>, String> {

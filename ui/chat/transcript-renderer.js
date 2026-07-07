@@ -4,6 +4,7 @@
     const markdown = options.markdown;
     const copyIcon = options.copyIcon;
     const checkIcon = options.checkIcon;
+    const toolMediaOrigin = cleanToolMediaOrigin(options.toolMediaOrigin);
     const onProjectFileReference = options.onProjectFileReference;
     const onToolApprovalReview = options.onToolApprovalReview;
     const userCollapseChars = options.userCollapseChars || 700;
@@ -388,7 +389,13 @@
       if (body) {
         chainToolBodyWheel(body);
         const content = item.content || approvalMarkdown(item.approval) || (item.arguments ? "```json\n" + item.arguments + "\n```" : "");
+        const images = normalizeAttachments(item.images || item.attachments || []);
         renderMarkdown(body, content);
+        const markdownImages = extractMarkdownImageAttachments(body);
+        const toolImages = images.concat(markdownImages);
+        if (toolImages.length > 0) {
+          body.append(renderAttachmentGrid(toolImages, "message-attachments tool-attachments"));
+        }
         renderToolApproval(body, item.approval);
       }
       keepBottomIfNeeded(shouldStick);
@@ -625,16 +632,81 @@
         .map((image) => {
           const mime = String(image?.mime_type || image?.type || "").toLowerCase();
           const base64 = String(image?.base64 || "").trim();
-          if (!base64 || !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mime)) {
+          const url = safeImageUrl(image?.url || image?.src || "");
+          if ((!base64 && !url) || !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mime)) {
             return null;
           }
           return {
             base64,
+            url,
             mime_type: mime,
             name: String(image?.name || image?.description || "Attached image").slice(0, 120),
           };
         })
         .filter(Boolean);
+    }
+
+    function extractMarkdownImageAttachments(target) {
+      const images = [];
+      target.querySelectorAll("img").forEach((img) => {
+        const attachment = attachmentFromMarkdownImage(img);
+        if (!attachment) {
+          return;
+        }
+        images.push(attachment);
+        removeMarkdownImage(img);
+      });
+      return images;
+    }
+
+    function attachmentFromMarkdownImage(img) {
+      const src = String(img.getAttribute("src") || img.src || "").trim();
+      const dataImage = parseDataImageUrl(src);
+      const name = String(img.getAttribute("alt") || "Attached image").slice(0, 120);
+      if (dataImage) {
+        return {
+          base64: dataImage.base64,
+          url: "",
+          mime_type: dataImage.mime_type,
+          name,
+        };
+      }
+      const url = safeImageUrl(src);
+      if (!url) {
+        return null;
+      }
+      return {
+        base64: "",
+        url,
+        mime_type: "image/png",
+        name,
+      };
+    }
+
+    function parseDataImageUrl(src) {
+      const match = String(src || "").match(/^data:(image\/(?:png|jpe?g|webp|gif));base64,([a-z0-9+/=]+)$/i);
+      if (!match) {
+        return null;
+      }
+      const mime = match[1].toLowerCase() === "image/jpg" ? "image/jpeg" : match[1].toLowerCase();
+      return {
+        mime_type: mime,
+        base64: match[2],
+      };
+    }
+
+    function removeMarkdownImage(img) {
+      const parent = img.parentElement;
+      if (
+        parent &&
+        parent.tagName === "P" &&
+        parent.children.length === 1 &&
+        parent.textContent.trim() === ""
+      ) {
+        parent.remove();
+        return;
+      }
+      img.remove();
     }
 
     function normalizeContextSnippets(snippets) {
@@ -672,7 +744,7 @@
         button.setAttribute("aria-label", `Open ${image.name || "attached image"}`);
         img.loading = "lazy";
         img.alt = image.name || "Attached image";
-        img.src = `data:${image.mime_type};base64,${image.base64}`;
+        img.src = image.url || `data:${image.mime_type};base64,${image.base64}`;
         button.addEventListener("click", () => openImagePreview(img.src, img.alt));
         button.append(img);
         figure.append(button);
@@ -715,6 +787,57 @@
         ? `${snippet.start_line}-${snippet.end_line}`
         : `${snippet.start_line}`;
       return `${fileName}:${range}`;
+    }
+
+    function safeImageUrl(value) {
+      const raw = String(value || "").trim();
+      if (!raw) {
+        return "";
+      }
+      try {
+        const base = raw.startsWith("/chat/tool-media/") && toolMediaOrigin
+          ? toolMediaOrigin
+          : window.location.href;
+        const parsed = new URL(raw, base);
+        if (isAllowedToolMediaUrl(parsed)) {
+          return parsed.href;
+        }
+      } catch {
+        return "";
+      }
+      return "";
+    }
+
+    function cleanToolMediaOrigin(value) {
+      const raw = String(value || "").trim();
+      if (!raw) {
+        return "";
+      }
+      try {
+        const parsed = new URL(raw);
+        return /^https?:$/.test(parsed.protocol) && isLocalDaemonHost(parsed.hostname)
+          ? parsed.origin
+          : "";
+      } catch {
+        return "";
+      }
+    }
+
+    function isAllowedToolMediaUrl(parsed) {
+      if (!parsed.pathname.startsWith("/chat/tool-media/")) {
+        return false;
+      }
+      if (!/^https?:$/.test(parsed.protocol)) {
+        return false;
+      }
+      if (toolMediaOrigin && parsed.origin === toolMediaOrigin) {
+        return true;
+      }
+      return parsed.origin === window.location.origin && isLocalDaemonHost(parsed.hostname);
+    }
+
+    function isLocalDaemonHost(hostname) {
+      return hostname === "127.0.0.1" || hostname === "localhost";
     }
 
     function openImagePreview(src, alt) {

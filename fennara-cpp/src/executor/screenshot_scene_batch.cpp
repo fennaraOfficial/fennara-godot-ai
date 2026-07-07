@@ -44,6 +44,7 @@ void FennaraExecutor::_start_next_screenshot_scene() {
             _screenshot_views.append("right");
             _screenshot_views.append("top");
             _screenshot_views.append("perspective");
+            _screenshot_views.append("isometric");
         } else {
             _screenshot_views.append(view);
         }

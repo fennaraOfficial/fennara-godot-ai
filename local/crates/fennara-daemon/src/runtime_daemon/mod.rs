@@ -34,6 +34,10 @@ pub async fn run() {
         .route("/chat", get(chat::chat_index_redirect))
         .route("/chat/", get(chat::chat_index))
         .route("/chat/traces", get(chat::chat_traces))
+        .route(
+            "/chat/tool-media/{tool_call_id}/{index}",
+            get(chat::chat_tool_media),
+        )
         .route("/chat/{*path}", get(chat::chat_asset))
         .route("/chat/ws", get(chat::chat_ws))
         .route("/tools/call", post(godot_bridge::call_tool))

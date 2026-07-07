@@ -20,6 +20,8 @@ uint8_t _label_glyph(char c, int row) {
         case 'I': { static const uint8_t g[7] = {14, 4, 4, 4, 4, 4, 14}; return g[row]; }
         case 'K': { static const uint8_t g[7] = {17, 18, 20, 24, 20, 18, 17}; return g[row]; }
         case 'L': { static const uint8_t g[7] = {16, 16, 16, 16, 16, 16, 31}; return g[row]; }
+        case 'M': { static const uint8_t g[7] = {17, 27, 21, 21, 17, 17, 17}; return g[row]; }
+        case 'N': { static const uint8_t g[7] = {17, 25, 21, 19, 17, 17, 17}; return g[row]; }
         case 'O': { static const uint8_t g[7] = {14, 17, 17, 17, 17, 17, 14}; return g[row]; }
         case 'P': { static const uint8_t g[7] = {30, 17, 17, 30, 16, 16, 16}; return g[row]; }
         case 'R': { static const uint8_t g[7] = {30, 17, 17, 30, 20, 18, 17}; return g[row]; }
