@@ -5,7 +5,9 @@ use super::{
 };
 use serde_json::{Value, json};
 
-const MAX_MCP_SCREENSHOT_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_MCP_TOOL_IMAGE_COUNT: usize = 6;
+const MAX_MCP_TOOL_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_MCP_TOOL_IMAGE_TOTAL_BYTES: usize = 24 * 1024 * 1024;
 
 pub(crate) fn tools_list_result() -> Value {
     let mut tools = vec![json!({
@@ -103,40 +105,58 @@ fn forwarded_tool_result(tool_name: &str, response: &Value, is_error: bool) -> V
 }
 
 fn image_content_for_tool_result(tool_name: &str, response: &Value) -> Vec<Value> {
-    if tool_name != "screenshot_scene" {
+    if !tool_supports_mcp_images(tool_name) {
         return Vec::new();
     }
 
-    let Some(primary_image) = primary_screenshot_image(response) else {
-        return Vec::new();
-    };
-
-    match mcp_image_block(primary_image) {
-        ImageBlockResult::Block(block) => {
-            let label = model_image_label(primary_image);
-            vec![json!({ "type": "text", "text": label }), block]
+    let mut content = Vec::new();
+    let mut total_bytes = 0usize;
+    for image in model_images_for_tool_result(tool_name, response)
+        .into_iter()
+        .take(MAX_MCP_TOOL_IMAGE_COUNT)
+    {
+        match mcp_image_block(image, &mut total_bytes) {
+            ImageBlockResult::Block(block) => {
+                let label = model_image_label(tool_name, image);
+                content.push(json!({ "type": "text", "text": label }));
+                content.push(block);
+            }
+            ImageBlockResult::Omitted(reason) => content.push(json!({
+                "type": "text",
+                "text": format!("[Image from {tool_name} omitted from MCP image context: {reason}]")
+            })),
+            ImageBlockResult::None => {}
         }
-        ImageBlockResult::Omitted(reason) => vec![json!({
-            "type": "text",
-            "text": format!("[Screenshot image omitted from MCP image context: {reason}]")
-        })],
-        ImageBlockResult::None => Vec::new(),
     }
+    content
 }
 
-fn primary_screenshot_image(response: &Value) -> Option<&Value> {
-    response
+fn tool_supports_mcp_images(tool_name: &str) -> bool {
+    matches!(
+        tool_name,
+        "screenshot_scene" | "runtime_session" | "runtime_script"
+    )
+}
+
+fn model_images_for_tool_result<'a>(tool_name: &str, response: &'a Value) -> Vec<&'a Value> {
+    let images: Vec<_> = response
         .get("model_images")
         .and_then(Value::as_array)
-        .and_then(|images| images.first())
-        .or_else(|| {
-            response.get("raw_result").filter(|raw_result| {
-                raw_result
-                    .get("image_base64")
-                    .and_then(Value::as_str)
-                    .is_some()
-            })
+        .map(|images| images.iter().collect())
+        .unwrap_or_default();
+    if !images.is_empty() || tool_name != "screenshot_scene" {
+        return images;
+    }
+    response
+        .get("raw_result")
+        .filter(|raw_result| {
+            raw_result
+                .get("image_base64")
+                .and_then(Value::as_str)
+                .is_some()
         })
+        .into_iter()
+        .collect()
 }
 
 enum ImageBlockResult {
@@ -145,7 +165,7 @@ enum ImageBlockResult {
     None,
 }
 
-fn mcp_image_block(image: &Value) -> ImageBlockResult {
+fn mcp_image_block(image: &Value, total_bytes: &mut usize) -> ImageBlockResult {
     let Some(data) = image
         .get("data")
         .or_else(|| image.get("image_base64"))
@@ -159,10 +179,17 @@ fn mcp_image_block(image: &Value) -> ImageBlockResult {
     if !data.chars().all(is_base64_char) {
         return ImageBlockResult::Omitted("base64 payload was invalid".to_string());
     }
-    if estimated_decoded_bytes(data) > MAX_MCP_SCREENSHOT_IMAGE_BYTES {
+    let decoded_bytes = estimated_decoded_bytes(data);
+    if decoded_bytes > MAX_MCP_TOOL_IMAGE_BYTES {
         return ImageBlockResult::Omitted(format!(
             "image exceeded {} MB",
-            MAX_MCP_SCREENSHOT_IMAGE_BYTES / 1024 / 1024
+            MAX_MCP_TOOL_IMAGE_BYTES / 1024 / 1024
+        ));
+    }
+    if total_bytes.saturating_add(decoded_bytes) > MAX_MCP_TOOL_IMAGE_TOTAL_BYTES {
+        return ImageBlockResult::Omitted(format!(
+            "image budget exceeded {} MB",
+            MAX_MCP_TOOL_IMAGE_TOTAL_BYTES / 1024 / 1024
         ));
     }
 
@@ -176,6 +203,7 @@ fn mcp_image_block(image: &Value) -> ImageBlockResult {
         return ImageBlockResult::Omitted(format!("unsupported MIME type {mime_type}"));
     }
 
+    *total_bytes += decoded_bytes;
     ImageBlockResult::Block(json!({
         "type": "image",
         "data": data,
@@ -183,13 +211,19 @@ fn mcp_image_block(image: &Value) -> ImageBlockResult {
     }))
 }
 
-fn model_image_label(image: &Value) -> String {
+fn model_image_label(tool_name: &str, image: &Value) -> String {
     image
         .get("label")
         .and_then(Value::as_str)
         .filter(|value| !value.is_empty())
         .map(|label| format!("[{label}]"))
-        .unwrap_or_else(|| "[Screenshot image from screenshot_scene]".to_string())
+        .unwrap_or_else(|| {
+            if tool_name == "screenshot_scene" {
+                "[Screenshot image from screenshot_scene]".to_string()
+            } else {
+                format!("[Image from {tool_name}]")
+            }
+        })
 }
 
 fn estimated_decoded_bytes(base64: &str) -> usize {
@@ -355,7 +389,7 @@ mod tests {
             },
             "model_images": [
                 {
-                    "data": "a".repeat((MAX_MCP_SCREENSHOT_IMAGE_BYTES * 4 / 3) + 16),
+                    "data": "a".repeat((MAX_MCP_TOOL_IMAGE_BYTES * 4 / 3) + 16),
                     "mime_type": "image/png",
                     "label": "Screenshot from screenshot_scene"
                 }
@@ -373,5 +407,40 @@ mod tests {
                 .contains("image exceeded")
         );
         assert!(!result.to_string().contains("\"type\":\"image\""));
+    }
+
+    #[test]
+    fn forwarded_runtime_script_result_attaches_multiple_mcp_images() {
+        let response = json!({
+            "ok": true,
+            "result": "Tool: runtime_script\nStatus: completed\nCaptures: 2",
+            "model_images": [
+                {
+                    "data": "Y2FwdHVyZTE=",
+                    "mime_type": "image/png",
+                    "label": "Runtime script capture 1: before"
+                },
+                {
+                    "data": "Y2FwdHVyZTI=",
+                    "mime_type": "image/png",
+                    "label": "Runtime script capture 2: after"
+                }
+            ]
+        });
+
+        let result = forwarded_tool_result("runtime_script", &response, false);
+
+        assert_eq!(
+            result["content"][1]["text"],
+            "[Runtime script capture 1: before]"
+        );
+        assert_eq!(result["content"][2]["type"], "image");
+        assert_eq!(result["content"][2]["data"], "Y2FwdHVyZTE=");
+        assert_eq!(
+            result["content"][3]["text"],
+            "[Runtime script capture 2: after]"
+        );
+        assert_eq!(result["content"][4]["type"], "image");
+        assert_eq!(result["content"][4]["data"], "Y2FwdHVyZTI=");
     }
 }

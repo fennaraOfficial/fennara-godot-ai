@@ -90,6 +90,61 @@ func capture_runtime_script(ctx, label: String, max_resolution: int = 1280) -> D
 	return result
 
 
+func capture_runtime_session_start(artifact_dir: String, session_id: String, scene_path: String, max_resolution: int = 1280) -> Dictionary:
+	var capture: Dictionary = await wait_for_viewport_image(max_resolution)
+	if not capture.get("success", false):
+		return {
+			"success": false,
+			"error": str(capture.get("error", "Runtime startup screenshot failed.")),
+			"label": "startup",
+			"image_role": "runtime_startup",
+			"session_id": session_id,
+			"scene_path": scene_path,
+		}
+
+	var captures_dir := artifact_dir.path_join("captures")
+	if not ensure_dir(captures_dir):
+		return {
+			"success": false,
+			"error": "Could not create runtime capture directory.",
+			"label": "startup",
+			"image_role": "runtime_startup",
+			"session_id": session_id,
+			"scene_path": scene_path,
+		}
+
+	var file_name := "%s_startup_%d.png" % [
+		safe_file_component(session_id, "runtime"),
+		Time.get_ticks_msec(),
+	]
+	var image_res_path: String = captures_dir.path_join(file_name)
+	var image: Image = capture["image"]
+	var png_error_code := image.save_png(image_res_path)
+	if png_error_code != OK:
+		return {
+			"success": false,
+			"error": "Failed to save runtime startup PNG.",
+			"label": "startup",
+			"image_role": "runtime_startup",
+			"session_id": session_id,
+			"scene_path": scene_path,
+		}
+
+	return {
+		"success": true,
+		"label": "startup",
+		"image_role": "runtime_startup",
+		"session_id": session_id,
+		"scene_path": scene_path,
+		"image_res_path": image_res_path,
+		"image_path": absolute_path(image_res_path),
+		"width": capture["width"],
+		"height": capture["height"],
+		"original_width": capture["original_width"],
+		"original_height": capture["original_height"],
+	}
+
+
 func capture_env_runtime_screenshot(
 	screenshot_dir: String,
 	check_id: String,

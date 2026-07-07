@@ -396,7 +396,8 @@ editor session; normal errors and warnings are still captured in
 Actions:
 
 - `start`: open the scene, wait briefly for startup output, and return
-  `session_id`, process state, log paths, and a capped new-log excerpt
+  `session_id`, process state, log paths, a startup capture path, optional image
+  context for image-capable callers, and a capped new-log excerpt
 - `status`: report the active managed session/process state and any new-log
   excerpt
 - `stop`: stop the managed runtime process and return final process/log
@@ -432,8 +433,9 @@ Script contract:
 - a script may finish while the scene stays open
 
 The result includes status, `session_id`, `script_run_id`, `script_path`,
-diagnostics, capture paths, runtime findings, scene/session state when
-available, log paths, and a capped new-log excerpt.
+diagnostics, capture paths, optional image context for `ctx.capture(...)`
+outputs when the caller supports images, runtime findings, scene/session state
+when available, log paths, and a capped new-log excerpt.
 
 The `ctx` helper surface covers logging, waiting, screenshots, InputMap
 actions, key/mouse events, mouse motion, 2D world-to-viewport mouse conversion,

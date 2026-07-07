@@ -6,10 +6,12 @@ use axum::{
     },
     response::IntoResponse,
 };
+use base64::{Engine, engine::general_purpose::STANDARD};
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
+    path::{Component, Path},
     sync::atomic::Ordering,
     time::{Duration, Instant},
 };
@@ -25,6 +27,10 @@ use super::{
     state::{AppState, DaemonStatus, GodotProjectStatus, PendingToolCall},
     util::{optional_string, string_array},
 };
+
+const MAX_RUNTIME_MODEL_IMAGE_COUNT: usize = 6;
+const MAX_RUNTIME_MODEL_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_RUNTIME_MODEL_IMAGE_TOTAL_BYTES: u64 = 24 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct ToolCallRequest {
@@ -162,7 +168,7 @@ pub(crate) async fn call_tool_value_for_session_traced(
     }
 
     match tokio::time::timeout(Duration::from_secs(295), response_rx).await {
-        Ok(Ok(response)) => {
+        Ok(Ok(mut response)) => {
             if let Some(trace) = &bridge_trace {
                 let ok = response.get("ok").and_then(Value::as_bool).unwrap_or(false);
                 trace.event_status(
@@ -176,6 +182,7 @@ pub(crate) async fn call_tool_value_for_session_traced(
                     }),
                 );
             }
+            attach_runtime_model_images(tool, &mut response).await;
             response
         }
         Ok(Err(_)) => {
@@ -212,6 +219,168 @@ pub(crate) async fn call_tool_value_for_session_traced(
             })
         }
     }
+}
+
+async fn attach_runtime_model_images(tool: &str, response: &mut Value) {
+    if !matches!(tool, "runtime_session" | "runtime_script")
+        || response.get("model_images").is_some()
+    {
+        return;
+    }
+
+    let raw_result = response
+        .get("raw_result")
+        .cloned()
+        .unwrap_or_else(|| response.clone());
+    let captures = runtime_capture_candidates(tool, &raw_result);
+    if captures.is_empty() {
+        return;
+    }
+
+    let mut images = Vec::new();
+    let mut total_bytes = 0u64;
+    for (index, capture) in captures
+        .iter()
+        .take(MAX_RUNTIME_MODEL_IMAGE_COUNT)
+        .enumerate()
+    {
+        if let Some(image) =
+            runtime_capture_model_image(tool, capture, index, &mut total_bytes).await
+        {
+            images.push(image);
+        }
+    }
+
+    if !images.is_empty() {
+        response["model_images"] = Value::Array(images);
+    }
+}
+
+fn runtime_capture_candidates(tool: &str, raw_result: &Value) -> Vec<Value> {
+    match tool {
+        "runtime_session" => {
+            if raw_result.get("status").and_then(Value::as_str) != Some("started") {
+                return Vec::new();
+            }
+            raw_result
+                .get("startup_capture")
+                .filter(|capture| capture.get("success").and_then(Value::as_bool) == Some(true))
+                .cloned()
+                .into_iter()
+                .collect()
+        }
+        "runtime_script" => raw_result
+            .get("captures")
+            .or_else(|| raw_result.pointer("/result/captures"))
+            .and_then(Value::as_array)
+            .map(|captures| {
+                captures
+                    .iter()
+                    .filter(|capture| capture.get("success").and_then(Value::as_bool) == Some(true))
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+async fn runtime_capture_model_image(
+    tool: &str,
+    capture: &Value,
+    index: usize,
+    total_bytes: &mut u64,
+) -> Option<Value> {
+    let image_path = capture.get("image_path").and_then(Value::as_str)?.trim();
+    if image_path.is_empty() {
+        return None;
+    }
+    let path = Path::new(image_path);
+    let canonical_path = tokio::fs::canonicalize(path).await.ok()?;
+    if !canonical_path.is_file() || !is_fennara_media_path(&canonical_path) {
+        return None;
+    }
+    let metadata = tokio::fs::metadata(&canonical_path).await.ok()?;
+    let size = metadata.len();
+    if size == 0 || size > MAX_RUNTIME_MODEL_IMAGE_BYTES {
+        return None;
+    }
+    if total_bytes.saturating_add(size) > MAX_RUNTIME_MODEL_IMAGE_TOTAL_BYTES {
+        return None;
+    }
+
+    let bytes = tokio::fs::read(&canonical_path).await.ok()?;
+    if bytes.len() as u64 != size {
+        return None;
+    }
+    let mime_type = detect_image_mime(&bytes)?;
+    *total_bytes += size;
+
+    let mut image = json!({
+        "data": STANDARD.encode(bytes),
+        "mime_type": mime_type,
+        "label": runtime_capture_label(tool, capture, index),
+        "image_path": image_path,
+        "image_role": capture
+            .get("image_role")
+            .and_then(Value::as_str)
+            .unwrap_or(if tool == "runtime_session" { "runtime_startup" } else { "runtime_capture" }),
+        "size_bytes": size,
+    });
+    copy_if_present(capture, &mut image, "image_res_path");
+    copy_if_present(capture, &mut image, "width");
+    copy_if_present(capture, &mut image, "height");
+    copy_if_present(capture, &mut image, "original_width");
+    copy_if_present(capture, &mut image, "original_height");
+    copy_if_present(capture, &mut image, "session_id");
+    copy_if_present(capture, &mut image, "script_run_id");
+    copy_if_present(capture, &mut image, "scene_path");
+    Some(image)
+}
+
+fn runtime_capture_label(tool: &str, capture: &Value, index: usize) -> String {
+    let label = capture
+        .get("label")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("capture");
+    match tool {
+        "runtime_session" => "Runtime startup screenshot".to_string(),
+        "runtime_script" => format!("Runtime script capture {}: {label}", index + 1),
+        _ => format!("Runtime capture {}: {label}", index + 1),
+    }
+}
+
+fn copy_if_present(source: &Value, target: &mut Value, key: &str) {
+    if let Some(value) = source.get(key) {
+        target[key] = value.clone();
+    }
+}
+
+fn detect_image_mime(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some("image/png");
+    }
+    if bytes.starts_with(b"\xff\xd8\xff") {
+        return Some("image/jpeg");
+    }
+    if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        return Some("image/webp");
+    }
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return Some("image/gif");
+    }
+    None
+}
+
+fn is_fennara_media_path(path: &Path) -> bool {
+    path.components().any(|component| {
+        matches!(
+            component,
+            Component::Normal(name) if name.to_string_lossy().eq_ignore_ascii_case(".fennara")
+        )
+    })
 }
 
 pub(crate) async fn begin_snapshot_turn_for_session_traced(

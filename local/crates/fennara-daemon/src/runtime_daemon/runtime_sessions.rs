@@ -14,6 +14,8 @@ use super::{
 #[cfg(target_os = "windows")]
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
 const STARTUP_READY_TIMEOUT_MS: u64 = 5_000;
+const STARTUP_CAPTURE_TIMEOUT_MS: u64 = 3_000;
+const STARTUP_CAPTURE_MAX_RESOLUTION: u16 = 1280;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct RuntimeSessionStartRequest {
@@ -124,6 +126,10 @@ async fn runtime_session_start_inner(
     tokio::fs::create_dir_all(&command_dir)
         .await
         .map_err(|err| format!("create command_dir failed: {err}"))?;
+    let captures_dir = artifact_dir.join("captures");
+    tokio::fs::create_dir_all(&captures_dir)
+        .await
+        .map_err(|err| format!("create captures_dir failed: {err}"))?;
 
     let session_id = request
         .session_id
@@ -132,11 +138,15 @@ async fn runtime_session_start_inner(
         .unwrap_or_else(|| format!("runtime-{}", unix_millis()));
     let raw_log_path = artifact_dir.join("runtime_session.log");
     let spec_path = artifact_dir.join("runtime_session_spec.json");
+    let startup_capture_status_path = artifact_dir.join("runtime_session_startup_capture.json");
     let spec = json!({
         "mode": "runtime_session",
         "session_id": session_id,
         "command_dir": command_dir.to_string_lossy(),
         "artifact_dir": artifact_dir.to_string_lossy(),
+        "captures_dir": captures_dir.to_string_lossy(),
+        "startup_capture_status_path": startup_capture_status_path.to_string_lossy(),
+        "startup_capture_max_resolution": STARTUP_CAPTURE_MAX_RESOLUTION,
         "scene_path": request.scene_path,
     });
     tokio::fs::write(
@@ -190,12 +200,14 @@ async fn runtime_session_start_inner(
         .await?;
     let log_capture =
         runtime_log::capture_update(&session_id, &raw_log_path, "start", &mut log_cursor).await;
+    let startup_capture =
+        wait_for_json_file(&startup_capture_status_path, STARTUP_CAPTURE_TIMEOUT_MS).await;
     if process_exited && !ready_seen {
         let exit_code = child
             .try_wait()
             .map_err(|err| format!("runtime session wait failed: {err}"))?
             .and_then(|status| status.code());
-        return Ok(json!({
+        let mut response = json!({
             "ok": false,
             "status": "exited_before_ready",
             "scope": "global",
@@ -204,9 +216,11 @@ async fn runtime_session_start_inner(
             "pid": pid,
             "scene_path": request.scene_path,
             "artifact_dir": artifact_dir.to_string_lossy(),
+            "captures_dir": captures_dir.to_string_lossy(),
             "command_dir": command_dir.to_string_lossy(),
             "raw_log_path": raw_log_path.to_string_lossy(),
             "spec_path": spec_path.to_string_lossy(),
+            "startup_capture_status_path": startup_capture_status_path.to_string_lossy(),
             "executable": executable.to_string_lossy(),
             "startup_log_wait_ms": startup_wait_ms,
             "startup_ready_seen": ready_seen,
@@ -215,7 +229,9 @@ async fn runtime_session_start_inner(
             "exit_code": exit_code,
             "error": "Runtime process exited before the runtime helper reported scene ready.",
             "runtime_log": log_capture.receipt,
-        }));
+        });
+        attach_startup_capture(&mut response, startup_capture);
+        return Ok(response);
     }
 
     let session = RuntimeSession {
@@ -223,8 +239,10 @@ async fn runtime_session_start_inner(
         scene_path: request.scene_path.clone(),
         working_directory,
         artifact_dir: artifact_dir.clone(),
+        captures_dir: captures_dir.clone(),
         command_dir: command_dir.clone(),
         raw_log_path: raw_log_path.clone(),
+        startup_capture: startup_capture.clone(),
         log_cursor,
         script_log_start_offsets: Default::default(),
         child,
@@ -256,7 +274,7 @@ async fn runtime_session_start_inner(
         .get_mut(&session_id)
         .ok_or_else(|| format!("Runtime session disappeared after start: {session_id}"))?;
 
-    Ok(json!({
+    let mut response = json!({
         "ok": true,
         "status": "started",
         "scope": "global",
@@ -265,16 +283,20 @@ async fn runtime_session_start_inner(
         "pid": pid,
         "scene_path": session.scene_path,
         "artifact_dir": artifact_dir.to_string_lossy(),
+        "captures_dir": captures_dir.to_string_lossy(),
         "command_dir": command_dir.to_string_lossy(),
         "raw_log_path": raw_log_path.to_string_lossy(),
         "spec_path": spec_path.to_string_lossy(),
+        "startup_capture_status_path": startup_capture_status_path.to_string_lossy(),
         "executable": executable.to_string_lossy(),
         "startup_log_wait_ms": startup_wait_ms,
         "startup_ready_seen": ready_seen,
         "startup_orientation_seen": orientation_seen,
         "startup_process_exited": process_exited,
         "runtime_log": log_capture.receipt,
-    }))
+    });
+    attach_startup_capture(&mut response, startup_capture);
+    Ok(response)
 }
 
 async fn runtime_session_status_inner(state: &AppState, session_id: &str) -> Result<Value, String> {
@@ -302,10 +324,12 @@ async fn runtime_session_status_inner(state: &AppState, session_id: &str) -> Res
         "scope_note": "Fennara currently allows one managed runtime session across all connected Godot editors.",
         "exit_code": exit_status.and_then(|status| status.code()),
         "artifact_dir": session.artifact_dir.to_string_lossy(),
+        "captures_dir": session.captures_dir.to_string_lossy(),
         "command_dir": session.command_dir.to_string_lossy(),
         "raw_log_path": session.raw_log_path.to_string_lossy(),
         "working_directory": session.working_directory.to_string_lossy(),
         "started_ms": session.started_ms,
+        "startup_capture": session.startup_capture.clone(),
         "runtime_log": log_capture.receipt,
     }))
 }
@@ -344,7 +368,9 @@ async fn runtime_session_stop_inner(state: &AppState, session_id: &str) -> Resul
         "session_id": session_id,
         "exit_code": exit_code,
         "artifact_dir": session.artifact_dir.to_string_lossy(),
+        "captures_dir": session.captures_dir.to_string_lossy(),
         "raw_log_path": session.raw_log_path.to_string_lossy(),
+        "startup_capture": session.startup_capture,
         "runtime_log": log_capture.receipt,
     }))
 }
@@ -355,7 +381,7 @@ async fn runtime_session_script_inner(
 ) -> Result<Value, String> {
     let session_id = request.session_id.clone();
     let script_run_id = request.script_run_id.clone();
-    let (command_dir, artifact_dir, raw_log_path) = {
+    let (command_dir, artifact_dir, captures_dir, raw_log_path) = {
         let mut sessions = state.runtime_sessions.lock().await;
         let session = sessions
             .get_mut(&session_id)
@@ -383,6 +409,7 @@ async fn runtime_session_script_inner(
                 "session_id": session_id,
                 "script_run_id": script_run_id,
                 "artifact_dir": session.artifact_dir.to_string_lossy(),
+                "captures_dir": session.captures_dir.to_string_lossy(),
                 "raw_log_path": session.raw_log_path.to_string_lossy(),
                 "exit_code": status.code(),
                 "error": "Runtime session process exited before the script command could be sent.",
@@ -396,6 +423,7 @@ async fn runtime_session_script_inner(
         (
             session.command_dir.clone(),
             session.artifact_dir.clone(),
+            session.captures_dir.clone(),
             session.raw_log_path.clone(),
         )
     };
@@ -453,6 +481,7 @@ async fn runtime_session_script_inner(
                 "script_run_id": script_run_id,
                 "command_path": command_path.to_string_lossy(),
                 "artifact_dir": artifact_dir.to_string_lossy(),
+                "captures_dir": captures_dir.to_string_lossy(),
                 "status_path": status_path.to_string_lossy(),
                 "raw_log_path": raw_log_path.to_string_lossy(),
                 "error": "Runtime script result did not arrive before timeout.",
@@ -475,6 +504,7 @@ async fn runtime_session_script_inner(
                         "script_run_id": script_run_id,
                         "command_path": command_path.to_string_lossy(),
                         "artifact_dir": artifact_dir.to_string_lossy(),
+                        "captures_dir": captures_dir.to_string_lossy(),
                         "status_path": status_path.to_string_lossy(),
                         "raw_log_path": raw_log_path.to_string_lossy(),
                         "result": value,
@@ -520,4 +550,29 @@ async fn attach_script_log(
         };
     response["runtime_findings"] = runtime_log::findings_for_script(&finding_lines, script_run_id);
     response["runtime_log"] = log_capture.receipt;
+}
+
+async fn wait_for_json_file(path: &PathBuf, timeout_ms: u64) -> Option<Value> {
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
+    loop {
+        if let Ok(text) = tokio::fs::read_to_string(path).await {
+            if let Ok(value) = serde_json::from_str::<Value>(&text) {
+                return Some(value);
+            }
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return None;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+fn attach_startup_capture(response: &mut Value, startup_capture: Option<Value>) {
+    let Some(capture) = startup_capture else {
+        return;
+    };
+    response["startup_capture"] = capture.clone();
+    if capture.get("success").and_then(Value::as_bool) == Some(true) {
+        response["captures"] = json!([capture]);
+    }
 }

@@ -107,6 +107,19 @@ func _run_env_runtime_session(request: Dictionary) -> void:
 		"time_ms": Time.get_ticks_msec(),
 	}))
 	_print_runtime_orientation("startup")
+	var startup_capture: Dictionary = {}
+	if not _file_artifact_dir.strip_edges().is_empty():
+		startup_capture = await _capture_store.capture_runtime_session_start(
+			_file_artifact_dir,
+			_file_session_id,
+			str(request.get("scene_path", "")),
+			int(request.get("startup_capture_max_resolution", 1280))
+		)
+		_capture_store.write_env_runtime_status(
+			str(request.get("startup_capture_status_path", "")),
+			startup_capture
+		)
+		print("FENNARA_RUNTIME_SESSION_STARTUP_CAPTURE: %s" % JSON.stringify(startup_capture))
 
 	while is_inside_tree() and not _runtime_session_closing:
 		_poll_runtime_session_commands()

@@ -64,8 +64,9 @@ const EXEC_COMMAND_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../schemas/tools/exec_command.json"
 ));
-const MAX_TOOL_MODEL_IMAGE_COUNT: usize = 1;
+const MAX_TOOL_MODEL_IMAGE_COUNT: usize = 6;
 const MAX_TOOL_MODEL_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_TOOL_MODEL_IMAGE_TOTAL_BYTES: usize = 24 * 1024 * 1024;
 const ALLOWED_TOOL_NAMES: &[&str] = &[
     "read_file",
     "script_diagnostics",
@@ -541,9 +542,10 @@ fn value_includes_image(value: &Value) -> bool {
 }
 
 fn model_images_from_response(tool_name: &str, response: &Value) -> Vec<ModelImage> {
-    if tool_name != "screenshot_scene" {
+    if !tool_supports_model_images(tool_name) {
         return Vec::new();
     }
+    let mut model_bytes = 0usize;
     response
         .get("model_images")
         .and_then(Value::as_array)
@@ -551,10 +553,29 @@ fn model_images_from_response(tool_name: &str, response: &Value) -> Vec<ModelIma
             images
                 .iter()
                 .take(MAX_TOOL_MODEL_IMAGE_COUNT)
-                .filter_map(validate_model_image)
+                .filter_map(|image| {
+                    let mut image = validate_model_image(image)?;
+                    if image.has_model_data() {
+                        if model_bytes.saturating_add(image.size_bytes)
+                            > MAX_TOOL_MODEL_IMAGE_TOTAL_BYTES
+                        {
+                            image.data = None;
+                        } else {
+                            model_bytes += image.size_bytes;
+                        }
+                    }
+                    Some(image)
+                })
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn tool_supports_model_images(tool_name: &str) -> bool {
+    matches!(
+        tool_name,
+        "screenshot_scene" | "runtime_session" | "runtime_script"
+    )
 }
 
 fn validate_model_image(image: &Value) -> Option<ModelImage> {
@@ -902,6 +923,54 @@ mod tests {
                 .iter()
                 .any(|image| serde_json::to_string(image).unwrap().contains(PNG_1X1))
         );
+    }
+
+    #[test]
+    fn runtime_script_model_images_create_multiple_transient_model_messages() {
+        let images = model_images_from_response(
+            "runtime_script",
+            &json!({
+                "model_images": [
+                    {
+                        "data": PNG_1X1,
+                        "mime_type": "image/png",
+                        "label": "Runtime script capture 1: before",
+                        "image_path": "C:/tmp/.fennara/before.png"
+                    },
+                    {
+                        "data": PNG_1X1,
+                        "mime_type": "image/png",
+                        "label": "Runtime script capture 2: after",
+                        "image_path": "C:/tmp/.fennara/after.png"
+                    }
+                ]
+            }),
+        );
+        assert_eq!(images.len(), 2);
+        let result = ExecutedTool {
+            ok: true,
+            raw_result: json!({}),
+            mcp_markdown: String::new(),
+            plugin_markdown: String::new(),
+            metadata: json!({}),
+            target_keys: Vec::new(),
+            model_followup_messages: Vec::new(),
+            model_images: images,
+        };
+
+        let model_messages = model_messages_for_tool_result("runtime_script", &result, true);
+
+        assert_eq!(model_messages.len(), 2);
+        assert_eq!(
+            model_messages[0]["content"][0]["text"],
+            "[Runtime script capture 1: before]"
+        );
+        assert_eq!(model_messages[0]["content"][1]["type"], "image_url");
+        assert_eq!(
+            model_messages[1]["content"][0]["text"],
+            "[Runtime script capture 2: after]"
+        );
+        assert_eq!(model_messages[1]["content"][1]["type"], "image_url");
     }
 
     #[test]

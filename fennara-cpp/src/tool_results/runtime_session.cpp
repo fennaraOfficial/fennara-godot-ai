@@ -93,6 +93,17 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
     append_if_present(lines, "Session id", raw_result, "session_id");
     append_if_present(lines, "Log file", raw_result, "log_path");
     append_if_present(lines, "Captures dir", raw_result, "captures_dir");
+    godot::Dictionary startup_capture =
+        raw_result.get("startup_capture", godot::Dictionary());
+    if (!startup_capture.is_empty() &&
+        (bool)startup_capture.get("success", false)) {
+        godot::String startup_image =
+            normalize_path_for_model(
+                godot::String(startup_capture.get("image_path", "")));
+        if (!startup_image.is_empty()) {
+            lines.append("Startup capture: " + startup_image);
+        }
+    }
     if (!godot::String(raw_result.get("log_path", "")).is_empty()) {
         lines.append(
             "Session log remains the full source of truth; this receipt includes new log lines since the previous runtime receipt when available.");
@@ -373,6 +384,8 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
     metadata["playing_scene"] = raw_result.get("playing_scene", "");
     metadata["log_path"] = raw_result.get("log_path", "");
     metadata["captures_dir"] = raw_result.get("captures_dir", "");
+    metadata["startup_capture"] = startup_capture;
+    metadata["captures"] = raw_result.get("captures", godot::Array());
     metadata["script_running"] = raw_result.get("script_running", false);
     metadata["startup_log_wait_ms"] = raw_result.get("startup_log_wait_ms", 0);
     metadata["startup_ready_seen"] = raw_result.get("startup_ready_seen", false);
