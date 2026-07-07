@@ -27,14 +27,17 @@ func _safe_file_component(value: String, fallback: String) -> String:
 func _ready() -> void:
 	if Engine.is_editor_hint():
 		return
-	_ensure_runtime_helpers()
 	var runtime_spec := OS.get_environment(RUNTIME_SPEC_ENV)
-	if not runtime_spec.strip_edges().is_empty():
-		var request := _read_json_file(runtime_spec)
-		if str(request.get("mode", "")) == "runtime_session":
-			_run_env_runtime_session.call_deferred(request)
-		else:
-			_check_runner.call_deferred("run_env_runtime_check", runtime_spec)
+	if runtime_spec.strip_edges().is_empty():
+		queue_free()
+		return
+
+	_ensure_runtime_helpers()
+	var request := _read_json_file(runtime_spec)
+	if str(request.get("mode", "")) == "runtime_session":
+		_run_env_runtime_session.call_deferred(request)
+	else:
+		_check_runner.call_deferred("run_env_runtime_check", runtime_spec)
 
 func _run_runtime_script(data: Array) -> void:
 	_ensure_runtime_helpers()
