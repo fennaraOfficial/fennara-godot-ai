@@ -790,6 +790,7 @@ fn completed_exec_tool(
         }),
         target_keys: vec![resolved.cwd.to_string_lossy().into_owned()],
         model_followup_messages: Vec::new(),
+        model_images: Vec::new(),
     }
 }
 
@@ -824,6 +825,7 @@ fn failed_exec_tool(
         }),
         target_keys: Vec::new(),
         model_followup_messages: Vec::new(),
+        model_images: Vec::new(),
     }
 }
 

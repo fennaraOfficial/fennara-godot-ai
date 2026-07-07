@@ -14,6 +14,23 @@
     return token ? baseUrl + "?chat_token=" + encodeURIComponent(token) : baseUrl;
   }
 
+  function daemonHttpOrigin(defaultWsUrl) {
+    try {
+      const url = new URL(daemonWsUrl(defaultWsUrl));
+      if (url.protocol === "wss:") {
+        url.protocol = "https:";
+      } else if (url.protocol === "ws:") {
+        url.protocol = "http:";
+      }
+      url.pathname = "/";
+      url.search = "";
+      url.hash = "";
+      return url.origin;
+    } catch {
+      return "http://127.0.0.1:41287";
+    }
+  }
+
   function createDaemonClient(options = {}) {
     const defaultWsUrl = options.defaultWsUrl || "ws://127.0.0.1:41287/chat/ws";
     const reconnectDelayMs = Number(options.reconnectDelayMs || 250);
@@ -101,6 +118,7 @@
 
   window.FennaraDaemonClient = {
     createDaemonClient,
+    daemonHttpOrigin,
     daemonWsUrl,
     chatWsUrl,
   };

@@ -1269,7 +1269,7 @@ fn replay_pressure_keeps_latest_two_user_turn_tool_results_exact() {
 }
 
 #[test]
-fn replay_messages_reconstructs_tool_model_followup_images() {
+fn replay_messages_do_not_reconstruct_screenshot_images_from_raw_result() {
     let conn = Connection::open_in_memory().unwrap();
     create_tool_persistence_schema(&conn);
     conn.execute_batch(
@@ -1315,7 +1315,7 @@ fn replay_messages_reconstructs_tool_model_followup_images() {
 
     let messages = replay::replay_messages_from_conn(&conn, "chat_1").unwrap();
 
-    assert_eq!(messages.len(), 3);
+    assert_eq!(messages.len(), 2);
     assert_eq!(
         messages[0],
         json!({
@@ -1336,14 +1336,6 @@ fn replay_messages_reconstructs_tool_model_followup_images() {
             "tool_call_id": "call_1",
             "name": "screenshot_scene"
         })
-    );
-    assert_eq!(messages[2]["role"], "user");
-    let content = messages[2]["content"].as_array().unwrap();
-    assert_eq!(content[0]["text"], "[Screenshot from screenshot_scene]");
-    assert_eq!(content[1]["type"], "image_url");
-    assert_eq!(
-        content[1]["image_url"]["url"],
-        "data:image/png;base64,abc123"
     );
 }
 

@@ -150,6 +150,23 @@ where
             json!({ "model": model.as_str(), "message": error }),
         );
     }
+    let allow_tool_image_followups = providers::selected_model_supports_image_input(
+        &provider_settings,
+        &model,
+        &reasoning_effort,
+    );
+    trace.event_status(
+        "model.image_input",
+        if allow_tool_image_followups {
+            "supported"
+        } else {
+            "unsupported"
+        },
+        json!({
+            "model": model.as_str(),
+            "tool_image_followups": allow_tool_image_followups
+        }),
+    );
     let summary_budgets =
         summary_budgets_for_model(&provider_settings, &model, &reasoning_effort, &trace);
 
@@ -886,6 +903,7 @@ where
             &current_generation.id,
             &streamed.completion.content,
             settings.approval_mode,
+            allow_tool_image_followups,
             tool_calls,
             current_trace.clone(),
         )

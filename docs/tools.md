@@ -358,6 +358,23 @@ Use validate_scene on res://scenes/main.tscn and explain any errors or warnings.
 Use this when layout, framing, camera view, rendering, material/shader output,
 animation-visible state, or visual correctness matters.
 
+External MCP clients receive the primary screenshot as an image content block
+when their client/model supports image inputs, while the text receipt still
+includes saved paths and metadata as a fallback.
+
+In the built-in chat, the daemon attaches the primary screenshot to the next
+model request only when the selected model advertises image input support. If
+the selected model is text-only, the tool still succeeds and the model receives
+the text receipt plus saved `image_path`/`image_res_path` values. The chat UI
+renders screenshots from saved-file references, including when history is
+loaded in a later session; raw screenshot bytes are not persisted in tool raw
+results, markdown, replay messages, or summaries.
+
+For 3D scenes, `view: "all"` captures front, back, left, right, top,
+perspective, and isometric into one labeled collage. `target_node_path`
+captures frame the camera around the requested subtree while leaving the rest
+of the scene visible for context.
+
 Example prompt:
 
 ```text

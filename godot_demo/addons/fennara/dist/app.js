@@ -169,6 +169,7 @@
     markdown,
     copyIcon: COPY_ICON,
     checkIcon: CHECK_ICON,
+    toolMediaOrigin: window.FennaraDaemonClient.daemonHttpOrigin(DAEMON_WS_URL),
     userCollapseChars: USER_COLLAPSE_CHARS,
     autoScrollThreshold: AUTO_SCROLL_THRESHOLD,
     onProjectFileReference: handleProjectFileReference,

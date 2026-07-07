@@ -158,6 +158,7 @@
         name,
         status,
         content: message.content || "",
+        images: toolImagesFromMetadata(message.metadata_json),
       });
     }
 
@@ -206,6 +207,24 @@
           supportedImageTypes.has(String(image.mime_type || "").toLowerCase()) &&
           typeof image.base64 === "string" &&
           image.base64.length > 0
+        );
+      } catch {
+        return [];
+      }
+    }
+
+    function toolImagesFromMetadata(raw) {
+      if (!raw) {
+        return [];
+      }
+      try {
+        const metadata = typeof raw === "string" ? JSON.parse(raw) : raw;
+        const images = Array.isArray(metadata?.tool_images) ? metadata.tool_images : [];
+        return images.filter((image) =>
+          image &&
+          supportedImageTypes.has(String(image.mime_type || "").toLowerCase()) &&
+          typeof image.url === "string" &&
+          image.url.length > 0
         );
       } catch {
         return [];

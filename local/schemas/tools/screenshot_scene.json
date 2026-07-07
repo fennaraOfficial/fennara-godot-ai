@@ -5,10 +5,13 @@
     "Use camera_path to render from a specific Camera2D or Camera3D through a temporary SubViewport when authored camera framing matters.",
     "For 2D scenes, optionally specify a world-coordinate view_rect for editor viewport capture; camera_path overrides view_rect and uses the Camera2D view.",
     "For 3D scenes, optionally specify view and target_node_path to frame a specific node/subtree in the editor viewport with surrounding context; camera_path overrides view/target framing and uses the Camera3D view.",
+    "For 3D view=all captures front, back, left, right, top, perspective, and isometric into one labeled collage.",
+    "For 3D target_node_path captures, the camera is framed around the target subtree while the rest of the scene remains visible for context.",
     "Defaults to perspective.",
-    "Internally the primary image is image_base64: for one view it is that view, for multi-view it is the full-resolution no-downscale labeled collage.",
     "Every generated screenshot is saved under user://.fennara/screenshots and returned as image_res_path plus cross-platform absolute image_path.",
-    "In local MCP responses, base64 is stripped; use returned image_path values, or read the image later with a file/image-capable tool.",
+    "External MCP responses include the primary screenshot as model image context when the client/model supports image content; visible text still returns image_path values and metadata as a fallback.",
+    "Built-in chat attaches the primary screenshot as transient model image context only when the selected model supports image input; non-vision models receive the text receipt and saved paths only.",
+    "Built-in chat UI/history render screenshots from saved-file references instead of storing raw image bytes in raw results, markdown, replay, or summaries.",
     "Multi-view responses include per-view image_path entries."
   ],
   "parameters": {
@@ -35,12 +38,12 @@
       },
       "view": {
         "type": "string",
-        "description": "3D editor-viewport capture only. Camera view to capture: front, back, left, right, top, perspective, isometric, or all. Defaults to perspective. Ignored when camera_path is provided.",
+        "description": "3D editor-viewport capture only. Camera view to capture: front, back, left, right, top, perspective, isometric, or all. `all` captures all seven listed views into one labeled collage. Defaults to perspective. Ignored when camera_path is provided.",
         "enum": ["front", "back", "left", "right", "top", "perspective", "isometric", "all"]
       },
       "target_node_path": {
         "type": "string",
-        "description": "3D only. Optional node path relative to the scene root. Frames this node/subtree instead of the whole scene. Choose the smallest meaningful visual subtree: if you target a very large node such as a floor, terrain, or whole level section, the tool must fit all of that node's bounds in frame and smaller objects on/near it will appear tiny."
+        "description": "3D only. Optional node path relative to the scene root. Frames the camera around this node/subtree instead of the whole scene while leaving the rest of the scene visible for context. Choose the smallest meaningful visual subtree: if you target a very large node such as a floor, terrain, or whole level section, the tool must fit all of that node's bounds in frame and smaller objects on/near it will appear tiny."
       },
       "context_margin": {
         "type": "number",

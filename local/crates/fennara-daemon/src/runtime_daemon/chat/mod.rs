@@ -32,7 +32,7 @@ mod store;
 mod tools;
 pub(crate) mod trace;
 
-pub(crate) use assets::{chat_asset, chat_index, chat_index_redirect};
+pub(crate) use assets::{chat_asset, chat_index, chat_index_redirect, chat_tool_media};
 use settings::{SaveSettingsRequest, load_settings, save_settings};
 
 #[derive(Debug, Deserialize)]

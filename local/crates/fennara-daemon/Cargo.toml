@@ -9,6 +9,7 @@ repository.workspace = true
 axum = { version = "0.8", features = ["ws"] }
 base64 = "0.22"
 futures-util = "0.3"
+getrandom = "0.3"
 libc = "0.2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
