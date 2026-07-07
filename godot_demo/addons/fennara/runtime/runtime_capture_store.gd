@@ -51,97 +51,53 @@ func normalized_screenshot_times(value: Variant) -> Array[float]:
 
 
 func capture_runtime_script(ctx, label: String, max_resolution: int = 1280) -> Dictionary:
-	var capture: Dictionary = await wait_for_viewport_image(max_resolution)
-	if not capture.get("success", false):
-		var capture_error := str(capture.get("error", "Runtime screenshot failed."))
-		ctx.error(capture_error)
-		return {"success": false, "error": capture_error}
-
 	var captures_dir: String = ctx._captures_dir
-	if not ensure_dir(captures_dir):
-		var dir_message := "Could not create runtime capture directory."
-		ctx.error(dir_message)
-		return {"success": false, "error": dir_message}
-
 	var file_name := "%s_%s_%d.png" % [
 		safe_file_component(ctx._script_run_id, "script"),
 		safe_file_component(label, "capture"),
 		Time.get_ticks_msec(),
 	]
-	var image_res_path: String = captures_dir.path_join(file_name)
-	var image: Image = capture["image"]
-	var png_error_code := image.save_png(image_res_path)
-	if png_error_code != OK:
-		var png_error := "Failed to save runtime capture PNG."
-		ctx.error(png_error)
-		return {"success": false, "error": png_error}
+	var result: Dictionary = await _capture_viewport_png(
+		captures_dir,
+		file_name,
+		max_resolution,
+		{},
+		{"label": label},
+		"Runtime screenshot failed.",
+		"Could not create runtime capture directory.",
+		"Failed to save runtime capture PNG.",
+		true
+	)
+	if not result.get("success", false):
+		ctx.error(str(result.get("error", "Runtime screenshot failed.")))
+		return result
 
-	var result := {
-		"success": true,
-		"label": label,
-		"image_res_path": image_res_path,
-		"image_path": absolute_path(image_res_path),
-		"width": capture["width"],
-		"height": capture["height"],
-		"original_width": capture["original_width"],
-		"original_height": capture["original_height"],
-	}
 	ctx._print_event("FENNARA_SCRIPT_CAPTURE", result)
 	return result
 
 
 func capture_runtime_session_start(captures_dir: String, session_id: String, scene_path: String, max_resolution: int = 1280) -> Dictionary:
-	var capture: Dictionary = await wait_for_viewport_image(max_resolution)
-	if not capture.get("success", false):
-		return {
-			"success": false,
-			"error": str(capture.get("error", "Runtime startup screenshot failed.")),
-			"label": "startup",
-			"image_role": "runtime_startup",
-			"session_id": session_id,
-			"scene_path": scene_path,
-		}
-
-	if not ensure_dir(captures_dir):
-		return {
-			"success": false,
-			"error": "Could not create runtime capture directory.",
-			"label": "startup",
-			"image_role": "runtime_startup",
-			"session_id": session_id,
-			"scene_path": scene_path,
-		}
-
 	var file_name := "%s_startup_%d.png" % [
 		safe_file_component(session_id, "runtime"),
 		Time.get_ticks_msec(),
 	]
-	var image_res_path: String = captures_dir.path_join(file_name)
-	var image: Image = capture["image"]
-	var png_error_code := image.save_png(image_res_path)
-	if png_error_code != OK:
-		return {
-			"success": false,
-			"error": "Failed to save runtime startup PNG.",
-			"label": "startup",
-			"image_role": "runtime_startup",
-			"session_id": session_id,
-			"scene_path": scene_path,
-		}
-
-	return {
-		"success": true,
+	var base := {
 		"label": "startup",
 		"image_role": "runtime_startup",
 		"session_id": session_id,
 		"scene_path": scene_path,
-		"image_res_path": image_res_path,
-		"image_path": absolute_path(image_res_path),
-		"width": capture["width"],
-		"height": capture["height"],
-		"original_width": capture["original_width"],
-		"original_height": capture["original_height"],
 	}
+	return await _capture_viewport_png(
+		captures_dir,
+		file_name,
+		max_resolution,
+		base,
+		base,
+		"Runtime startup screenshot failed.",
+		"Could not create runtime capture directory.",
+		"Failed to save runtime startup PNG.",
+		true
+	)
 
 
 func capture_env_runtime_screenshot(
@@ -151,33 +107,69 @@ func capture_env_runtime_screenshot(
 	time_seconds: float,
 	max_resolution: int
 ) -> Dictionary:
-	var capture: Dictionary = await wait_for_viewport_image(max_resolution)
-	if not capture.get("success", false):
-		return {
-			"success": false,
-			"error": str(capture.get("error", "Runtime screenshot failed.")),
-			"time_seconds": time_seconds,
-		}
 	var file_name := "%s_%02d_%.2fs.png" % [
 		safe_file_component(check_id, "runtime"),
 		index,
 		time_seconds,
 	]
-	var image_path := screenshot_dir.path_join(file_name)
-	var image: Image = capture["image"]
-	var png_error := image.save_png(image_path)
-	if png_error != OK:
-		return {"success": false, "error": "Failed to save runtime screenshot PNG.", "time_seconds": time_seconds}
-
-	return {
-		"success": true,
+	var base := {
 		"time_seconds": time_seconds,
-		"image_path": image_path,
-		"width": capture["width"],
-		"height": capture["height"],
-		"original_width": capture["original_width"],
-		"original_height": capture["original_height"],
 	}
+	return await _capture_viewport_png(
+		screenshot_dir,
+		file_name,
+		max_resolution,
+		base,
+		base,
+		"Runtime screenshot failed.",
+		"Could not create screenshot directory.",
+		"Failed to save runtime screenshot PNG.",
+		false
+	)
+
+
+func _capture_viewport_png(
+	captures_dir: String,
+	file_name: String,
+	max_resolution: int,
+	failure_fields: Dictionary,
+	success_fields: Dictionary,
+	capture_error_message: String,
+	dir_error_message: String,
+	png_error_message: String,
+	include_res_path: bool
+) -> Dictionary:
+	var capture: Dictionary = await wait_for_viewport_image(max_resolution)
+	if not capture.get("success", false):
+		return _capture_error_result(failure_fields, str(capture.get("error", capture_error_message)))
+
+	if not ensure_dir(captures_dir):
+		return _capture_error_result(failure_fields, dir_error_message)
+
+	var image_res_path := captures_dir.path_join(file_name)
+	var image: Image = capture["image"]
+	if image.save_png(image_res_path) != OK:
+		return _capture_error_result(failure_fields, png_error_message)
+
+	var result := success_fields.duplicate(true)
+	result["success"] = true
+	if include_res_path:
+		result["image_res_path"] = image_res_path
+		result["image_path"] = absolute_path(image_res_path)
+	else:
+		result["image_path"] = image_res_path
+	result["width"] = capture["width"]
+	result["height"] = capture["height"]
+	result["original_width"] = capture["original_width"]
+	result["original_height"] = capture["original_height"]
+	return result
+
+
+func _capture_error_result(fields: Dictionary, message: String) -> Dictionary:
+	var result := fields.duplicate(true)
+	result["success"] = false
+	result["error"] = message
+	return result
 
 
 func wait_for_viewport_image(max_resolution: int, max_frames: int = 5) -> Dictionary:
