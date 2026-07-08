@@ -118,7 +118,11 @@ fn status_markdown(payload: &Value) -> String {
 
     let server = string_field(payload, "server").unwrap_or_else(|| SERVER_NAME.to_string());
     let version = string_field(payload, "version").unwrap_or_else(|| SERVER_VERSION.to_string());
-    lines.push(format!("MCP server: {server} {version}"));
+    lines.push(format!(
+        "MCP server: {} {}",
+        markdown_escape(&server),
+        markdown_escape(&version)
+    ));
 
     let daemon_connected = payload
         .get("daemon_connected")
@@ -139,7 +143,7 @@ fn status_markdown(payload: &Value) -> String {
             ));
         }
         if let Some(message) = string_field(payload, "message") {
-            lines.push(format!("Message: {message}"));
+            lines.push(format!("Message: {}", markdown_escape(&message)));
         }
     }
 
@@ -152,7 +156,7 @@ fn append_daemon_status_lines(lines: &mut Vec<String>, daemon: Option<&Value>) {
     };
 
     if let Some(version) = string_field(daemon, "version") {
-        lines.push(format!("Daemon version: {version}"));
+        lines.push(format!("Daemon version: {}", markdown_escape(&version)));
     }
     if let Some(plugin_connected) = daemon
         .get("godot_plugin_connected")
@@ -175,7 +179,7 @@ fn append_daemon_status_lines(lines: &mut Vec<String>, daemon: Option<&Value>) {
 
     let active_session_id = string_field(daemon, "active_session_id");
     if let Some(session_id) = active_session_id.as_deref() {
-        lines.push(format!("Active session: {session_id}"));
+        lines.push(format!("Active session: {}", markdown_escape(session_id)));
     }
     if let Some(projects) = daemon.get("connected_projects").and_then(Value::as_array) {
         append_connected_projects(lines, projects, active_session_id.as_deref());
@@ -185,10 +189,16 @@ fn append_daemon_status_lines(lines: &mut Vec<String>, daemon: Option<&Value>) {
 fn append_active_project_summary(lines: &mut Vec<String>, project: &Value) {
     let project_name =
         string_field(project, "project_name").unwrap_or_else(|| "connected project".to_string());
-    lines.push(format!("Active project: {project_name}"));
+    lines.push(format!(
+        "Active project: {}",
+        markdown_escape(&project_name)
+    ));
 
     if let Some(project_path) = string_field(project, "project_path") {
-        lines.push(format!("Active project path: {project_path}"));
+        lines.push(format!(
+            "Active project path: {}",
+            markdown_escape(&project_path)
+        ));
     }
 }
 
@@ -211,7 +221,11 @@ fn append_connected_projects(
             .zip(string_field(project, "session_id").as_deref())
             .is_some_and(|(active, project_session)| active == project_session);
         let marker = if is_active { " (active)" } else { "" };
-        lines.push(format!("{}. {title}{marker}", index + 1));
+        lines.push(format!(
+            "{}. {}{marker}",
+            index + 1,
+            markdown_escape(&title)
+        ));
 
         append_project_field(lines, project, "project_path", "Path");
         append_project_field(lines, project, "session_id", "Session");
@@ -233,7 +247,7 @@ fn string_field(value: &Value, key: &str) -> Option<String> {
 
 fn append_project_field(lines: &mut Vec<String>, value: &Value, key: &str, label: &str) {
     if let Some(field) = string_field(value, key) {
-        lines.push(format!("   {label}: {field}"));
+        lines.push(format!("   {label}: {}", markdown_escape(&field)));
     }
 }
 
@@ -244,7 +258,7 @@ fn append_project_tools(lines: &mut Vec<String>, project: &Value) {
     let tool_names: Vec<_> = tools
         .iter()
         .filter_map(Value::as_str)
-        .map(single_line)
+        .map(|tool_name| markdown_escape(&single_line(tool_name)))
         .filter(|name| !name.is_empty())
         .collect();
     if !tool_names.is_empty() {
@@ -278,7 +292,7 @@ fn append_rendering_context(lines: &mut Vec<String>, rendering_context: Option<&
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
-        .map(single_line)
+        .map(|warning| markdown_escape(&single_line(warning)))
         .filter(|warning| !warning.is_empty())
         .collect();
     if !warnings.is_empty() {
@@ -293,6 +307,20 @@ fn single_line(value: &str) -> String {
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn markdown_escape(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        if matches!(
+            ch,
+            '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '>' | '(' | ')'
+        ) {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
+    }
+    escaped
 }
 
 fn connection_state(connected: bool) -> &'static str {
@@ -513,9 +541,9 @@ mod tests {
     #[test]
     fn status_tool_result_uses_markdown_text_and_keeps_structured_content() {
         let active_project = json!({
-            "project_name": "Top Down Template 2d",
-            "project_path": "C:/godot/SimpleTopDownShooterTemplate2D/",
-            "session_id": "C:/godot/SimpleTopDownShooterTemplate2D/#26740",
+            "project_name": "Top_Down Template 2d",
+            "project_path": "C:\\godot\\SimpleTopDownShooter_Template2D\\",
+            "session_id": "C:\\godot\\SimpleTopDownShooter_Template2D\\#26740",
             "godot_version": "4.6.3-stable (official)",
             "plugin_version": "0.3.5",
             "godot_executable_path": "C:/Users/Tushar/Downloads/GODOT/Godot.exe",
@@ -529,8 +557,8 @@ mod tests {
             }
         });
         let second_project = json!({
-            "project_name": "Puzzle Project",
-            "project_path": "D:/Games/Puzzle/",
+            "project_name": "Puzzle_Project [Test]",
+            "project_path": "D:\\Games\\Puzzle_Project\\",
             "session_id": "D:/Games/Puzzle/#99",
             "godot_version": "4.5-stable",
             "plugin_version": "0.3.6",
@@ -542,7 +570,7 @@ mod tests {
             "ok": true,
             "version": "0.3.6",
             "godot_plugin_connected": true,
-            "active_session_id": "C:/godot/SimpleTopDownShooterTemplate2D/#26740",
+            "active_session_id": "C:\\godot\\SimpleTopDownShooter_Template2D\\#26740",
             "active_project": active_project,
             "connected_projects": [active_project, second_project]
         }));
@@ -553,23 +581,38 @@ mod tests {
         assert!(text.contains("Tool: fennara_status"));
         assert!(text.contains("MCP server: fennara-mcp 0.3.6"));
         assert!(text.contains("Daemon: connected"));
-        assert!(text.contains("Active project: Top Down Template 2d"));
-        assert!(text.contains("Active project path: C:/godot/SimpleTopDownShooterTemplate2D/"));
+        assert!(text.contains("Active project: Top\\_Down Template 2d"));
+        assert!(
+            text.contains(
+                "Active project path: C:\\\\godot\\\\SimpleTopDownShooter\\_Template2D\\\\"
+            )
+        );
+        assert!(text.contains(
+            "Active session: C:\\\\godot\\\\SimpleTopDownShooter\\_Template2D\\\\#26740"
+        ));
         assert!(text.contains("Connected projects: 2"));
-        assert!(text.contains("1. Top Down Template 2d (active)"));
-        assert!(text.contains("2. Puzzle Project"));
-        assert!(text.contains("Path: D:/Games/Puzzle/"));
+        assert!(text.contains("1. Top\\_Down Template 2d (active)"));
+        assert!(text.contains("2. Puzzle\\_Project \\[Test\\]"));
+        assert!(text.contains("Path: D:\\\\Games\\\\Puzzle\\_Project\\\\"));
         assert!(text.contains("Godot: 4.5-stable"));
-        assert!(text.contains("Tools: read_file, screenshot_scene"));
+        assert!(text.contains("Tools: read\\_file, screenshot\\_scene"));
         assert!(!text.contains("rendering_context"));
         assert!(!text.contains("connected_projects"));
         assert_eq!(
             result["structuredContent"]["daemon"]["active_project"]["project_name"],
-            "Top Down Template 2d"
+            "Top_Down Template 2d"
         );
         assert_eq!(
             result["structuredContent"]["daemon"]["active_project"]["project_path"],
-            "C:/godot/SimpleTopDownShooterTemplate2D/"
+            "C:\\godot\\SimpleTopDownShooter_Template2D\\"
+        );
+        assert_eq!(
+            result["structuredContent"]["daemon"]["connected_projects"][1]["project_name"],
+            "Puzzle_Project [Test]"
+        );
+        assert_eq!(
+            result["structuredContent"]["daemon"]["connected_projects"][1]["project_path"],
+            "D:\\Games\\Puzzle_Project\\"
         );
         assert!(
             result["structuredContent"]["daemon"]["active_project"]
