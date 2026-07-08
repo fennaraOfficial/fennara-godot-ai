@@ -561,14 +561,14 @@ mod tests {
             "project_path": "D:\\Games\\Puzzle_Project\\",
             "session_id": "D:/Games/Puzzle/#99",
             "godot_version": "4.5-stable",
-            "plugin_version": "0.3.6",
+            "plugin_version": "0.3.7",
             "rendering_context": {
                 "runtime_rendering_method": "mobile"
             }
         });
         let payload = connected_status_payload(json!({
             "ok": true,
-            "version": "0.3.6",
+            "version": "0.3.7",
             "godot_plugin_connected": true,
             "active_session_id": "C:\\godot\\SimpleTopDownShooter_Template2D\\#26740",
             "active_project": active_project,
@@ -579,7 +579,7 @@ mod tests {
 
         let text = result["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("Tool: fennara_status"));
-        assert!(text.contains("MCP server: fennara-mcp 0.3.6"));
+        assert!(text.contains("MCP server: fennara-mcp 0.3.7"));
         assert!(text.contains("Daemon: connected"));
         assert!(text.contains("Active project: Top\\_Down Template 2d"));
         assert!(
@@ -630,7 +630,7 @@ mod tests {
         let payload = json!({
             "ok": true,
             "server": "fennara-mcp",
-            "version": "0.3.6",
+            "version": "0.3.7",
             "daemon_connected": false,
             "godot_plugin_connected": false,
             "message": "Open a Godot project with Fennara enabled."
@@ -648,7 +648,7 @@ mod tests {
     fn status_tool_result_handles_connected_daemon_without_active_project() {
         let payload = connected_status_payload(json!({
             "ok": true,
-            "version": "0.3.6",
+            "version": "0.3.7",
             "godot_plugin_connected": false,
             "active_session_id": null,
             "active_project": null,
