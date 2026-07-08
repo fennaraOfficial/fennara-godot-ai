@@ -34,7 +34,7 @@ pub(crate) fn handle_tool_call(id: Value, params: Option<&Value>) -> Value {
         .and_then(Value::as_str);
 
     match tool_name {
-        Some("fennara_status") => success_response(id, tool_result(status_payload())),
+        Some("fennara_status") => success_response(id, status_tool_result(status_payload())),
         Some(name) if is_forwarded_tool(name) => {
             let args = params
                 .and_then(|params| params.get("arguments"))
@@ -57,13 +57,7 @@ pub(crate) fn handle_tool_call(id: Value, params: Option<&Value>) -> Value {
 
 fn status_payload() -> Value {
     match daemon_status() {
-        Ok(status) => json!({
-            "ok": true,
-            "server": SERVER_NAME,
-            "version": SERVER_VERSION,
-            "daemon_connected": true,
-            "daemon": status
-        }),
+        Ok(status) => connected_status_payload(status),
         Err(error) => json!({
             "ok": true,
             "server": SERVER_NAME,
@@ -75,21 +69,266 @@ fn status_payload() -> Value {
     }
 }
 
-fn tool_result(payload: Value) -> Value {
-    json_tool_result_with_error(payload, false)
+fn connected_status_payload(status: Value) -> Value {
+    json!({
+        "ok": true,
+        "server": SERVER_NAME,
+        "version": SERVER_VERSION,
+        "daemon_connected": true,
+        "daemon": daemon_status_for_mcp(status)
+    })
 }
 
-fn json_tool_result_with_error(payload: Value, is_error: bool) -> Value {
+fn daemon_status_for_mcp(mut status: Value) -> Value {
+    if let Some(active_project) = status
+        .get("active_project")
+        .filter(|active_project| active_project.is_object())
+    {
+        status["active_project"] = active_project_summary(active_project);
+    }
+    status
+}
+
+fn active_project_summary(project: &Value) -> Value {
+    json!({
+        "project_name": string_field(project, "project_name"),
+        "project_path": string_field(project, "project_path")
+    })
+}
+
+fn status_tool_result(payload: Value) -> Value {
+    let text = status_markdown(&payload);
     json!({
         "content": [
             {
                 "type": "text",
-                "text": payload.to_string()
+                "text": text
             }
         ],
         "structuredContent": payload,
-        "isError": is_error
+        "isError": false
     })
+}
+
+fn status_markdown(payload: &Value) -> String {
+    let mut lines = vec![
+        "Tool: fennara_status".to_string(),
+        "Status: success".to_string(),
+    ];
+
+    let server = string_field(payload, "server").unwrap_or_else(|| SERVER_NAME.to_string());
+    let version = string_field(payload, "version").unwrap_or_else(|| SERVER_VERSION.to_string());
+    lines.push(format!(
+        "MCP server: {} {}",
+        markdown_escape(&server),
+        markdown_escape(&version)
+    ));
+
+    let daemon_connected = payload
+        .get("daemon_connected")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    lines.push(format!("Daemon: {}", connection_state(daemon_connected)));
+
+    if daemon_connected {
+        append_daemon_status_lines(&mut lines, payload.get("daemon"));
+    } else {
+        if let Some(plugin_connected) = payload
+            .get("godot_plugin_connected")
+            .and_then(Value::as_bool)
+        {
+            lines.push(format!(
+                "Godot plugin: {}",
+                connection_state(plugin_connected)
+            ));
+        }
+        if let Some(message) = string_field(payload, "message") {
+            lines.push(format!("Message: {}", markdown_escape(&message)));
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn append_daemon_status_lines(lines: &mut Vec<String>, daemon: Option<&Value>) {
+    let Some(daemon) = daemon else {
+        return;
+    };
+
+    if let Some(version) = string_field(daemon, "version") {
+        lines.push(format!("Daemon version: {}", markdown_escape(&version)));
+    }
+    if let Some(plugin_connected) = daemon
+        .get("godot_plugin_connected")
+        .and_then(Value::as_bool)
+    {
+        lines.push(format!(
+            "Godot plugin: {}",
+            connection_state(plugin_connected)
+        ));
+    }
+
+    if let Some(project) = daemon
+        .get("active_project")
+        .filter(|value| value.is_object())
+    {
+        append_active_project_summary(lines, project);
+    } else {
+        lines.push("Active project: none".to_string());
+    }
+
+    let active_session_id = string_field(daemon, "active_session_id");
+    if let Some(session_id) = active_session_id.as_deref() {
+        lines.push(format!("Active session: {}", markdown_escape(session_id)));
+    }
+    if let Some(projects) = daemon.get("connected_projects").and_then(Value::as_array) {
+        append_connected_projects(lines, projects, active_session_id.as_deref());
+    }
+}
+
+fn append_active_project_summary(lines: &mut Vec<String>, project: &Value) {
+    let project_name =
+        string_field(project, "project_name").unwrap_or_else(|| "connected project".to_string());
+    lines.push(format!(
+        "Active project: {}",
+        markdown_escape(&project_name)
+    ));
+
+    if let Some(project_path) = string_field(project, "project_path") {
+        lines.push(format!(
+            "Active project path: {}",
+            markdown_escape(&project_path)
+        ));
+    }
+}
+
+fn append_connected_projects(
+    lines: &mut Vec<String>,
+    projects: &[Value],
+    active_session_id: Option<&str>,
+) {
+    lines.push(format!("Connected projects: {}", projects.len()));
+    for (index, project) in projects.iter().enumerate() {
+        if !project.is_object() {
+            lines.push(format!("{}. unsupported project status", index + 1));
+            continue;
+        }
+
+        let title = string_field(project, "project_name")
+            .or_else(|| string_field(project, "project_path"))
+            .unwrap_or_else(|| "connected project".to_string());
+        let is_active = active_session_id
+            .zip(string_field(project, "session_id").as_deref())
+            .is_some_and(|(active, project_session)| active == project_session);
+        let marker = if is_active { " (active)" } else { "" };
+        lines.push(format!(
+            "{}. {}{marker}",
+            index + 1,
+            markdown_escape(&title)
+        ));
+
+        append_project_field(lines, project, "project_path", "Path");
+        append_project_field(lines, project, "session_id", "Session");
+        append_project_field(lines, project, "godot_version", "Godot");
+        append_project_field(lines, project, "plugin_version", "Plugin");
+        append_project_field(lines, project, "godot_executable_path", "Godot executable");
+        append_project_tools(lines, project);
+        append_rendering_context(lines, project.get("rendering_context"));
+    }
+}
+
+fn string_field(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(single_line)
+        .filter(|value| !value.is_empty())
+}
+
+fn append_project_field(lines: &mut Vec<String>, value: &Value, key: &str, label: &str) {
+    if let Some(field) = string_field(value, key) {
+        lines.push(format!("   {label}: {}", markdown_escape(&field)));
+    }
+}
+
+fn append_project_tools(lines: &mut Vec<String>, project: &Value) {
+    let Some(tools) = project.get("tools").and_then(Value::as_array) else {
+        return;
+    };
+    let tool_names: Vec<_> = tools
+        .iter()
+        .filter_map(Value::as_str)
+        .map(|tool_name| markdown_escape(&single_line(tool_name)))
+        .filter(|name| !name.is_empty())
+        .collect();
+    if !tool_names.is_empty() {
+        lines.push(format!("   Tools: {}", tool_names.join(", ")));
+    }
+}
+
+fn append_rendering_context(lines: &mut Vec<String>, rendering_context: Option<&Value>) {
+    let Some(context) = rendering_context.filter(|value| value.is_object()) else {
+        return;
+    };
+
+    append_project_field(
+        lines,
+        context,
+        "runtime_rendering_method",
+        "Rendering method",
+    );
+    append_project_field(
+        lines,
+        context,
+        "runtime_rendering_driver_name",
+        "Rendering driver",
+    );
+    append_project_field(lines, context, "video_adapter_name", "Video adapter");
+    append_project_field(lines, context, "os_name", "OS");
+
+    let warnings: Vec<_> = context
+        .get("warnings")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(|warning| markdown_escape(&single_line(warning)))
+        .filter(|warning| !warning.is_empty())
+        .collect();
+    if !warnings.is_empty() {
+        lines.push(format!("   Rendering warnings: {}", warnings.join("; ")));
+    }
+}
+
+fn single_line(value: &str) -> String {
+    value
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn markdown_escape(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        if matches!(
+            ch,
+            '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '>' | '(' | ')'
+        ) {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
+    }
+    escaped
+}
+
+fn connection_state(connected: bool) -> &'static str {
+    if connected {
+        "connected"
+    } else {
+        "not connected"
+    }
 }
 
 fn forwarded_tool_result(tool_name: &str, response: &Value, is_error: bool) -> Value {
@@ -298,6 +537,133 @@ mod tests {
     use super::*;
 
     const PNG_1X1: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
+    #[test]
+    fn status_tool_result_uses_markdown_text_and_keeps_structured_content() {
+        let active_project = json!({
+            "project_name": "Top_Down Template 2d",
+            "project_path": "C:\\godot\\SimpleTopDownShooter_Template2D\\",
+            "session_id": "C:\\godot\\SimpleTopDownShooter_Template2D\\#26740",
+            "godot_version": "4.6.3-stable (official)",
+            "plugin_version": "0.3.5",
+            "godot_executable_path": "C:/Users/Tushar/Downloads/GODOT/Godot.exe",
+            "tools": ["read_file", "screenshot_scene"],
+            "rendering_context": {
+                "schema_version": "rendering-context-v1",
+                "runtime_rendering_method": "forward_plus",
+                "runtime_rendering_driver_name": "vulkan",
+                "video_adapter_name": "NVIDIA GPU",
+                "os_name": "Windows"
+            }
+        });
+        let second_project = json!({
+            "project_name": "Puzzle_Project [Test]",
+            "project_path": "D:\\Games\\Puzzle_Project\\",
+            "session_id": "D:/Games/Puzzle/#99",
+            "godot_version": "4.5-stable",
+            "plugin_version": "0.3.6",
+            "rendering_context": {
+                "runtime_rendering_method": "mobile"
+            }
+        });
+        let payload = connected_status_payload(json!({
+            "ok": true,
+            "version": "0.3.6",
+            "godot_plugin_connected": true,
+            "active_session_id": "C:\\godot\\SimpleTopDownShooter_Template2D\\#26740",
+            "active_project": active_project,
+            "connected_projects": [active_project, second_project]
+        }));
+
+        let result = status_tool_result(payload);
+
+        let text = result["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("Tool: fennara_status"));
+        assert!(text.contains("MCP server: fennara-mcp 0.3.6"));
+        assert!(text.contains("Daemon: connected"));
+        assert!(text.contains("Active project: Top\\_Down Template 2d"));
+        assert!(
+            text.contains(
+                "Active project path: C:\\\\godot\\\\SimpleTopDownShooter\\_Template2D\\\\"
+            )
+        );
+        assert!(text.contains(
+            "Active session: C:\\\\godot\\\\SimpleTopDownShooter\\_Template2D\\\\#26740"
+        ));
+        assert!(text.contains("Connected projects: 2"));
+        assert!(text.contains("1. Top\\_Down Template 2d (active)"));
+        assert!(text.contains("2. Puzzle\\_Project \\[Test\\]"));
+        assert!(text.contains("Path: D:\\\\Games\\\\Puzzle\\_Project\\\\"));
+        assert!(text.contains("Godot: 4.5-stable"));
+        assert!(text.contains("Tools: read\\_file, screenshot\\_scene"));
+        assert!(!text.contains("rendering_context"));
+        assert!(!text.contains("connected_projects"));
+        assert_eq!(
+            result["structuredContent"]["daemon"]["active_project"]["project_name"],
+            "Top_Down Template 2d"
+        );
+        assert_eq!(
+            result["structuredContent"]["daemon"]["active_project"]["project_path"],
+            "C:\\godot\\SimpleTopDownShooter_Template2D\\"
+        );
+        assert_eq!(
+            result["structuredContent"]["daemon"]["connected_projects"][1]["project_name"],
+            "Puzzle_Project [Test]"
+        );
+        assert_eq!(
+            result["structuredContent"]["daemon"]["connected_projects"][1]["project_path"],
+            "D:\\Games\\Puzzle_Project\\"
+        );
+        assert!(
+            result["structuredContent"]["daemon"]["active_project"]
+                .get("rendering_context")
+                .is_none()
+        );
+        assert_eq!(
+            result["structuredContent"]["daemon"]["connected_projects"][0]["rendering_context"]["schema_version"],
+            "rendering-context-v1"
+        );
+    }
+
+    #[test]
+    fn status_tool_result_formats_disconnected_state() {
+        let payload = json!({
+            "ok": true,
+            "server": "fennara-mcp",
+            "version": "0.3.6",
+            "daemon_connected": false,
+            "godot_plugin_connected": false,
+            "message": "Open a Godot project with Fennara enabled."
+        });
+
+        let result = status_tool_result(payload);
+
+        let text = result["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("Daemon: not connected"));
+        assert!(text.contains("Godot plugin: not connected"));
+        assert!(text.contains("Message: Open a Godot project with Fennara enabled."));
+    }
+
+    #[test]
+    fn status_tool_result_handles_connected_daemon_without_active_project() {
+        let payload = connected_status_payload(json!({
+            "ok": true,
+            "version": "0.3.6",
+            "godot_plugin_connected": false,
+            "active_session_id": null,
+            "active_project": null,
+            "connected_projects": []
+        }));
+
+        let result = status_tool_result(payload);
+
+        let text = result["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("Daemon: connected"));
+        assert!(text.contains("Godot plugin: not connected"));
+        assert!(text.contains("Active project: none"));
+        assert!(text.contains("Connected projects: 0"));
+        assert!(result["structuredContent"]["daemon"]["active_project"].is_null());
+    }
 
     #[test]
     fn forwarded_tool_result_sends_only_plugin_result() {
