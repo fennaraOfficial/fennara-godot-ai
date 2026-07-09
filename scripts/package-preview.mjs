@@ -1,5 +1,4 @@
 import {
-  copyFileSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -10,6 +9,7 @@ import {
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { copyFile } from "./package-text-assets.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = parseArgs(process.argv.slice(2));
@@ -247,11 +247,6 @@ function copyDir(source, target, filter) {
       copyFile(sourcePath, targetPath);
     }
   }
-}
-
-function copyFile(source, target) {
-  mkdirSync(path.dirname(target), { recursive: true });
-  copyFileSync(source, target);
 }
 
 function run(command, commandArgs) {

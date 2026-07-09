@@ -1,6 +1,7 @@
 # Fennara Godot AI
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Fennara-5865F2?logo=discord&logoColor=white)](https://discord.com/invite/3fF4ft9PTk)
+[![Demos](https://img.shields.io/badge/Demos-See%20all-red?logo=youtube&logoColor=white)](docs/demos.md)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
 Used by Godot developers and teams, including [Somni Game Studios](https://somnigamestudios.com/).
@@ -17,8 +18,10 @@ Agents can inspect scenes, check scripts, capture screenshots, read runtime erro
       </a>
     </td>
     <td>
-      <strong>Watch: Comparing Fennara with other Godot MCPs</strong><br />
-      See how Fennara's Godot feedback loop compares with command-only MCP workflows.
+      <strong>Watch the featured demo</strong><br />
+      Comparing Fennara with other Godot MCPs.<br />
+      <a href="https://www.youtube.com/watch?v=2vSYP7GyA5U">Play this video</a><br />
+      <a href="docs/demos.md">Browse all demo videos</a>
     </td>
   </tr>
 </table>
@@ -83,6 +86,18 @@ Run this from the Godot project folder:
 cd path/to/your-godot-project
 fennara install
 ```
+
+You can also run install and update commands from a separate tooling folder by
+passing the Godot project explicitly:
+
+```bash
+fennara install --project path/to/your-godot-project
+fennara update --project path/to/your-godot-project
+```
+
+Your MCP app can point at the global Fennara launcher from anywhere. It does not
+need config files inside the Godot project. Fennara uses the Godot project you
+open in the editor.
 
 For a C# project:
 
@@ -166,6 +181,10 @@ fennara update
 ```
 
 `fennara update` reads the release manifest, updates the installed CLI when a newer release requires it, then refreshes the project addon, local runtime package, generated Fennara guidance files, and any release-managed shared webview runtime needed by the current platform. On Windows/macOS it also checks the platform webview prerequisite and warns if the built-in chat dock may not start. Rerun the install script only if CLI self-update is not available for the selected release or install location.
+
+When an update has to replace the running CLI before continuing, Fennara prints
+the updater log path so CI and agent runs can inspect the resumed project-update
+output.
 
 ## Tools
 

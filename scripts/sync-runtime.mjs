@@ -1,4 +1,12 @@
-import { copyFileSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,7 +31,19 @@ function copyDir(from, to) {
     if (statSync(sourcePath).isDirectory()) {
       copyDir(sourcePath, targetPath);
     } else {
-      copyFileSync(sourcePath, targetPath);
+      copyFile(sourcePath, targetPath);
     }
   }
+}
+
+function copyFile(sourcePath, targetPath) {
+  if (path.extname(sourcePath) === ".gd") {
+    writeFileSync(targetPath, normalizeLineEndings(readFileSync(sourcePath, "utf8")));
+  } else {
+    copyFileSync(sourcePath, targetPath);
+  }
+}
+
+function normalizeLineEndings(text) {
+  return text.replace(/\r\n?/g, "\n");
 }

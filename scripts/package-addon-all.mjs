@@ -1,7 +1,15 @@
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { copyFile } from "./package-text-assets.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = parseArgs(process.argv.slice(2));
@@ -80,7 +88,7 @@ function copyDir(source, target) {
       copyDir(sourcePath, targetPath);
     } else {
       mkdirSync(path.dirname(targetPath), { recursive: true });
-      copyFileSync(sourcePath, targetPath);
+      copyFile(sourcePath, targetPath);
     }
   }
 }
