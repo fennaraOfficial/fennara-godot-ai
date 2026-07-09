@@ -15,6 +15,7 @@ pub const COMPLETE_COMMAND: &str = "__complete-self-update";
 
 const REPLACE_ATTEMPTS: usize = 150;
 const REPLACE_RETRY_DELAY: Duration = Duration::from_millis(200);
+const SELF_UPDATE_RETAINED_ENTRIES: usize = 20;
 
 pub enum StartResult {
     AlreadyCurrent,
@@ -211,7 +212,12 @@ fn canonicalize_for_compare(path: &Path) -> Result<PathBuf, String> {
 }
 
 fn create_stage_dir(layout: &AppLayout) -> Result<PathBuf, String> {
-    let path = layout.cache_dir.join("self-update").join(unique_suffix());
+    let root = layout.cache_dir.join("self-update");
+    fs::create_dir_all(&root)
+        .map_err(|err| format!("failed to create {}: {err}", display_path(&root)))?;
+    prune_self_update_entries(&root, SELF_UPDATE_RETAINED_ENTRIES);
+
+    let path = root.join(unique_suffix());
     fs::create_dir_all(&path)
         .map_err(|err| format!("failed to create {}: {err}", display_path(&path)))?;
     Ok(path)
@@ -221,6 +227,8 @@ fn create_log_file(layout: &AppLayout) -> Result<(PathBuf, File), String> {
     let log_dir = layout.logs_dir.join("self-update");
     fs::create_dir_all(&log_dir)
         .map_err(|err| format!("failed to create {}: {err}", display_path(&log_dir)))?;
+    prune_self_update_entries(&log_dir, SELF_UPDATE_RETAINED_ENTRIES);
+
     let path = log_dir.join(format!("self-update-{}.log", unique_suffix()));
     let file = OpenOptions::new()
         .create_new(true)
@@ -236,6 +244,48 @@ fn unique_suffix() -> String {
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
     format!("{}-{millis}", std::process::id())
+}
+
+fn prune_self_update_entries(root: &Path, keep_latest: usize) {
+    let Ok(root) = root.canonicalize() else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(&root) else {
+        return;
+    };
+
+    let mut entries: Vec<_> = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            let metadata = fs::symlink_metadata(&path).ok()?;
+            let modified = metadata.modified().unwrap_or(UNIX_EPOCH);
+            Some((path, metadata.file_type(), modified))
+        })
+        .collect();
+    entries.sort_by(|left, right| right.2.cmp(&left.2));
+
+    for (path, file_type, _) in entries.into_iter().skip(keep_latest) {
+        if !path.starts_with(&root) {
+            println!(
+                "warning: skipped self-update cleanup outside {}: {}",
+                display_path(&root),
+                display_path(&path)
+            );
+            continue;
+        }
+        let result = if file_type.is_dir() {
+            fs::remove_dir_all(&path)
+        } else {
+            fs::remove_file(&path)
+        };
+        if let Err(err) = result {
+            println!(
+                "warning: failed to remove old self-update entry {}: {err}",
+                display_path(&path)
+            );
+        }
+    }
 }
 
 fn replace_with_retry(source: &Path, target: &Path) -> Result<(), String> {

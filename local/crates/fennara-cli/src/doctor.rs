@@ -191,14 +191,27 @@ fn report_runtime_process(system: &System, spec: &RuntimeSpec, expected: Option<
             current_count += 1;
             first_current_path.get_or_insert(exe_display);
         } else if let Some(expected) = expected {
-            println!(
-                "warning: running {} may be stale: pid {} at {}",
-                spec.label,
-                process.pid(),
-                exe_display
-            );
-            println!("warning: expected {}", display_path(expected));
-            println!("warning: {}", spec.restart_hint);
+            if expected_for_compare.is_some() {
+                println!(
+                    "warning: running {} may be stale: pid {} at {}",
+                    spec.label,
+                    process.pid(),
+                    exe_display
+                );
+                println!("warning: expected {}", display_path(expected));
+                println!("warning: {}", spec.restart_hint);
+            } else {
+                println!(
+                    "warning: running {} detected, but expected path from current.json is missing or unreadable: {}",
+                    spec.label,
+                    display_path(expected)
+                );
+                println!(
+                    "warning: cannot compare pid {} at {} until the expected runtime path is available",
+                    process.pid(),
+                    exe_display
+                );
+            }
         } else {
             println!(
                 "warning: running {} detected but {} is missing from current.json: pid {} at {}",

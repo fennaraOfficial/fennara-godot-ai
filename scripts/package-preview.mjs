@@ -1,5 +1,4 @@
 import {
-  copyFileSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -10,6 +9,7 @@ import {
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { copyFile } from "./package-text-assets.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = parseArgs(process.argv.slice(2));
@@ -247,43 +247,6 @@ function copyDir(source, target, filter) {
       copyFile(sourcePath, targetPath);
     }
   }
-}
-
-function copyFile(source, target) {
-  mkdirSync(path.dirname(target), { recursive: true });
-  if (isTextAsset(source)) {
-    writeFileSync(target, normalizeLineEndings(readFileSync(source, "utf8")));
-  } else {
-    copyFileSync(source, target);
-  }
-}
-
-function isTextAsset(filePath) {
-  const name = path.basename(filePath);
-  if (name === "VERSION" || name === "LICENSE") {
-    return true;
-  }
-  return new Set([
-    ".cfg",
-    ".css",
-    ".gd",
-    ".gdextension",
-    ".gdshader",
-    ".html",
-    ".import",
-    ".js",
-    ".json",
-    ".md",
-    ".svg",
-    ".toml",
-    ".tres",
-    ".tscn",
-    ".txt",
-  ]).has(path.extname(filePath));
-}
-
-function normalizeLineEndings(text) {
-  return text.replace(/\r\n?/g, "\n");
 }
 
 function run(command, commandArgs) {
