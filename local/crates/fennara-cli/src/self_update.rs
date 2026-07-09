@@ -4,9 +4,10 @@ use crate::release_client::{self, DownloadAsset};
 use crate::release_manifest::{ReleaseManifest, compare_versions};
 use std::cmp::Ordering;
 use std::env;
-use std::fs;
+use std::fs::{self, File, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -94,6 +95,27 @@ pub fn start(version_request: &str, continuation_args: Vec<String>) -> Result<St
     println!("to: {}", selection.version);
     println!("target: {}", display_path(&target));
 
+    let (log_path, mut log_file) = create_log_file(&layout)?;
+    writeln!(log_file, "Fennara CLI self-update").ok();
+    writeln!(log_file, "from: {VERSION}").ok();
+    writeln!(log_file, "to: {}", selection.version).ok();
+    writeln!(log_file, "target: {}", display_path(&target)).ok();
+    if !continuation_args.is_empty() {
+        writeln!(
+            log_file,
+            "continuation: fennara {}",
+            continuation_args.join(" ")
+        )
+        .ok();
+    }
+    writeln!(log_file).ok();
+    log_file.flush().ok();
+
+    println!(
+        "self-update: updater output log: {}",
+        display_path(&log_path)
+    );
+
     let mut command = Command::new(&staged_cli);
     command
         .arg(COMPLETE_COMMAND)
@@ -105,7 +127,12 @@ pub fn start(version_request: &str, continuation_args: Vec<String>) -> Result<St
         println!("continuation: fennara {}", continuation_args.join(" "));
         command.arg("--").args(continuation_args);
     }
+    let stderr_log = log_file
+        .try_clone()
+        .map_err(|err| format!("failed to prepare self-update log: {err}"))?;
     command
+        .stdout(Stdio::from(log_file))
+        .stderr(Stdio::from(stderr_log))
         .spawn()
         .map_err(|err| format!("failed to start staged Fennara CLI updater: {err}"))?;
 
@@ -184,17 +211,31 @@ fn canonicalize_for_compare(path: &Path) -> Result<PathBuf, String> {
 }
 
 fn create_stage_dir(layout: &AppLayout) -> Result<PathBuf, String> {
+    let path = layout.cache_dir.join("self-update").join(unique_suffix());
+    fs::create_dir_all(&path)
+        .map_err(|err| format!("failed to create {}: {err}", display_path(&path)))?;
+    Ok(path)
+}
+
+fn create_log_file(layout: &AppLayout) -> Result<(PathBuf, File), String> {
+    let log_dir = layout.logs_dir.join("self-update");
+    fs::create_dir_all(&log_dir)
+        .map_err(|err| format!("failed to create {}: {err}", display_path(&log_dir)))?;
+    let path = log_dir.join(format!("self-update-{}.log", unique_suffix()));
+    let file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&path)
+        .map_err(|err| format!("failed to create {}: {err}", display_path(&path)))?;
+    Ok((path, file))
+}
+
+fn unique_suffix() -> String {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
-    let path = layout
-        .cache_dir
-        .join("self-update")
-        .join(format!("{}-{millis}", std::process::id()));
-    fs::create_dir_all(&path)
-        .map_err(|err| format!("failed to create {}: {err}", display_path(&path)))?;
-    Ok(path)
+    format!("{}-{millis}", std::process::id())
 }
 
 fn replace_with_retry(source: &Path, target: &Path) -> Result<(), String> {

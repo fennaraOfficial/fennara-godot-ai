@@ -1,4 +1,12 @@
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -80,9 +88,45 @@ function copyDir(source, target) {
       copyDir(sourcePath, targetPath);
     } else {
       mkdirSync(path.dirname(targetPath), { recursive: true });
-      copyFileSync(sourcePath, targetPath);
+      copyFile(sourcePath, targetPath);
     }
   }
+}
+
+function copyFile(source, target) {
+  if (isTextAsset(source)) {
+    writeFileSync(target, normalizeLineEndings(readFileSync(source, "utf8")));
+  } else {
+    copyFileSync(source, target);
+  }
+}
+
+function isTextAsset(filePath) {
+  const name = path.basename(filePath);
+  if (name === "VERSION" || name === "LICENSE") {
+    return true;
+  }
+  return new Set([
+    ".cfg",
+    ".css",
+    ".gd",
+    ".gdextension",
+    ".gdshader",
+    ".html",
+    ".import",
+    ".js",
+    ".json",
+    ".md",
+    ".svg",
+    ".toml",
+    ".tres",
+    ".tscn",
+    ".txt",
+  ]).has(path.extname(filePath));
+}
+
+function normalizeLineEndings(text) {
+  return text.replace(/\r\n?/g, "\n");
 }
 
 function run(command, commandArgs) {

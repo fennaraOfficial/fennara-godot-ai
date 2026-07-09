@@ -56,6 +56,18 @@ cd path/to/your-godot-project
 fennara install
 ```
 
+If you keep MCP or agent config in a separate tooling repo, pass the Godot
+project path explicitly instead:
+
+```bash
+fennara install --project path/to/your-godot-project
+fennara update --project path/to/your-godot-project
+```
+
+Your MCP app can point at the global Fennara launcher from anywhere. It does not
+need config files inside the Godot project. `--project` tells Fennara which
+Godot project to install or update.
+
 For a C# Godot project:
 
 ```bash
@@ -207,6 +219,10 @@ assets needed by your platform, and the generated Fennara guidance files.
 
 If an MCP app is currently running a Fennara launcher, `fennara update` may keep that launcher and continue. That is okay. The versioned runtime package is still updated.
 
+When an update has to replace the running CLI before continuing, Fennara prints
+the updater log path. Use that log to inspect the resumed project-update output
+in CI or agent-driven runs.
+
 ## Troubleshooting
 
 ### `fennara` Is Not Found
@@ -216,6 +232,10 @@ Open a new terminal and try again:
 ```bash
 fennara doctor
 ```
+
+`doctor` also reports when a running Fennara daemon or MCP runtime appears to be
+older than the version selected by `current.json`; restart Godot or the MCP app
+when it prints that warning.
 
 If it still fails, add the Fennara `bin` directory to PATH manually.
 
