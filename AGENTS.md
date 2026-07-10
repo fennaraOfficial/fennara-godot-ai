@@ -48,7 +48,9 @@ When changing Linux webview runtime installation, update the release docs and ke
 
 ## Pull Requests
 
-- Use Conventional Commit style for pull request titles.
+- Use scoped Conventional Commit format for commit and pull request titles: `<type>(<scope>): <description>`.
+- Choose a short ownership scope such as `chat`, `daemon`, `cli`, `mcp`, `gdextension`, `ui`, `runtime`, `release`, `setup`, or `docs`.
+- Examples: `feat(chat): persist project turn checkpoints` and `refactor(gdextension): remove legacy snapshot manager`.
 - Keep descriptions short and specific.
 - Explain how the change was verified.
 - Avoid unrelated cleanup in feature or fix pull requests.

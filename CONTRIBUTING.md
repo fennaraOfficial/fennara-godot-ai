@@ -31,13 +31,17 @@ Open an issue or discussion before starting:
 
 ## Commit And PR Titles
 
-Use Conventional Commit style:
+Use scoped Conventional Commit style for commit and pull request titles:
 
 ```text
-fix: handle missing daemon status
-docs: clarify setup steps
-ci: add public pull request checks
+feat(chat): persist project turn checkpoints
+fix(daemon): handle missing daemon status
+refactor(gdextension): remove legacy snapshot manager
+docs(setup): clarify installation steps
+ci(checks): validate public pull requests
 ```
+
+Format titles as `<type>(<scope>): <description>`. Choose the narrowest stable project area that explains ownership. Common scopes include `chat`, `daemon`, `cli`, `mcp`, `gdextension`, `ui`, `runtime`, `release`, `setup`, and `docs`.
 
 Common types:
 
