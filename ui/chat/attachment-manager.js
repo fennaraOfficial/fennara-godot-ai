@@ -366,6 +366,29 @@
       renderAttachmentPreview();
     }
 
+    async function restoreAttachments(images = [], contextSnippets = []) {
+      clearAttachments();
+      let restoredImages = 0;
+      for (const image of images) {
+        if (await addImagePayload({
+          ...image,
+          size: Number(image?.size || image?.size_bytes || 0),
+        })) {
+          restoredImages += 1;
+        }
+      }
+      let restoredContextSnippets = 0;
+      for (const snippet of contextSnippets) {
+        if (addContextSnippet(snippet)) {
+          restoredContextSnippets += 1;
+        }
+      }
+      return {
+        restoredImages,
+        restoredContextSnippets,
+      };
+    }
+
     function attachmentPayload() {
       return attachedImages.map((image) => ({
         base64: image.base64,
@@ -449,6 +472,7 @@
       languageForScriptPath,
       normalizeContextSnippet,
       requestNativePastedImage,
+      restoreAttachments,
     };
   }
 

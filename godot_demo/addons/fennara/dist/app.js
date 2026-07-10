@@ -81,6 +81,19 @@
   const effortOptions = document.querySelector("[data-effort-options]");
   const effortOptionButtons = document.querySelectorAll("[data-effort-option]");
   const sendButton = document.querySelector("[data-send-button]");
+  const turnRecoveryBar = document.querySelector("[data-turn-recovery]");
+  const turnRecoveryNotice = document.querySelector("[data-turn-recovery-notice]");
+  const turnRecoveryNoticeText = document.querySelector("[data-turn-recovery-notice-text]");
+  const turnRecoverySkipped = document.querySelector("[data-turn-recovery-skipped]");
+  const turnRecoverySkippedList = document.querySelector("[data-turn-recovery-skipped-list]");
+  const turnUndoButton = document.querySelector("[data-turn-undo]");
+  const turnRedoButton = document.querySelector("[data-turn-redo]");
+  const turnRetryButton = document.querySelector("[data-turn-retry]");
+  const turnEditRetryButton = document.querySelector("[data-turn-edit-retry]");
+  const turnResumeButton = document.querySelector("[data-turn-resume]");
+  const turnRecoveryConfirm = document.querySelector("[data-turn-recovery-confirm]");
+  const turnRecoveryConfirmText = document.querySelector("[data-turn-recovery-confirm-text]");
+  const turnRecoveryConflicts = document.querySelector("[data-turn-recovery-conflicts]");
   const saveSettingsButton = document.querySelector("[data-save-settings]");
   const reloadButton = document.querySelector("[data-reload-ui]");
   const appShell = document.querySelector(".app-shell");
@@ -152,16 +165,19 @@
   let catalogRefreshInFlight = false;
   let pendingProviderKeySaves = new Map();
   let chatStreaming = false;
+  let recoveryDraftRestoring = false;
   let sessionCost = 0;
   let activeTurnCost = 0;
   let latestPromptTokens = 0;
   let projectStatusTimer = 0;
+  const checkpointWarnings = new Map();
   let modelPicker = null;
   let providerPopovers = null;
   let projectFileLinks = null;
   let settingsPanel = null;
   let storedTranscript = null;
   let composerActions = null;
+  let turnRecoveryControls = null;
   let effortControls = null;
   const transcriptRenderer = window.FennaraTranscriptRenderer.createTranscriptRenderer({
     transcript,
@@ -189,9 +205,9 @@
   const clearAttachments = attachmentManager.clearAttachments;
   const contextSnippetPayload = attachmentManager.contextSnippetPayload;
   const getAttachedContextSnippets = attachmentManager.getContextSnippets;
-  const hasAttachments = attachmentManager.hasAttachments;
   const normalizeContextSnippet = attachmentManager.normalizeContextSnippet;
   const requestNativePastedImage = attachmentManager.requestNativePastedImage;
+  const restoreAttachments = attachmentManager.restoreAttachments;
 
   modelPicker = window.FennaraModelPicker?.createModelPicker({
     popover: modelPopover,
@@ -231,6 +247,7 @@
     onClose() {
       appShell?.setAttribute("data-connection", "offline");
       stopProjectStatusPolling();
+      turnRecoveryControls?.handleDisconnect();
     },
     onSendUnavailable() {
       appendSystem("Local daemon is not connected yet.");
@@ -394,8 +411,8 @@
     },
     callbacks: {
       isChatStreaming: () => chatStreaming,
+      isSubmissionBlocked: () => recoveryDraftRestoring,
       getAttachedContextSnippets,
-      hasAttachments,
       getCurrentProvider: () => currentProvider,
       getCurrentModel: () => currentModel,
       getCurrentReasoningEffort: () => currentReasoningEffort,
@@ -428,6 +445,56 @@
       addImageFiles,
       requestNativePastedImage,
       chatWsUrl,
+      appendSystem,
+      onMessageSubmitted: () => turnRecoveryControls?.handleReplacementSubmitted(),
+    },
+  });
+
+  turnRecoveryControls = window.FennaraTurnRecoveryControls.createTurnRecoveryControls({
+    elements: {
+      bar: turnRecoveryBar,
+      notice: turnRecoveryNotice,
+      noticeText: turnRecoveryNoticeText,
+      skippedDetails: turnRecoverySkipped,
+      skippedList: turnRecoverySkippedList,
+      undoButton: turnUndoButton,
+      redoButton: turnRedoButton,
+      retryButton: turnRetryButton,
+      editRetryButton: turnEditRetryButton,
+      resumeButton: turnResumeButton,
+      confirmDialog: turnRecoveryConfirm,
+      confirmText: turnRecoveryConfirmText,
+      conflictList: turnRecoveryConflicts,
+    },
+    callbacks: {
+      send,
+      nextRequestId,
+      getActiveChatId: () => activeChatId,
+      isChatStreaming: () => chatStreaming,
+      applyAuthoritativeChat: applyOpenedChat,
+      submitRetryPayload: (payload) => composerActions?.submitMessage(payload) || false,
+      restoreDraftPayload: async (payload) => {
+        if (prompt) {
+          prompt.value = payload.text || "";
+        }
+        const restored = await restoreAttachments(payload.images, payload.contextSnippets);
+        if (
+          restored.restoredImages !== payload.images.length
+          || restored.restoredContextSnippets !== payload.contextSnippets.length
+        ) {
+          appendSystem("Some original attachments could not be restored to the composer.");
+        }
+        resizePrompt();
+        focusComposer();
+      },
+      setDraftRestoring: (restoring) => {
+        recoveryDraftRestoring = restoring;
+        composer?.setAttribute("aria-busy", String(restoring));
+        if (sendButton) {
+          sendButton.disabled = restoring;
+        }
+      },
+      refreshAuthoritativeChat: () => refreshActiveChat("open-chat-after-recovery-error"),
       appendSystem,
     },
   });
@@ -627,6 +694,7 @@
       sendButton.setAttribute("aria-busy", String(nextStreaming));
       sendButton.querySelector(".send-label").textContent = nextStreaming ? "Cancel" : "Send";
     }
+    turnRecoveryControls?.handleStreamingChanged();
   }
 
   function openModelPicker(forceOpen = false) { return providerPopovers?.openModelPicker(forceOpen); }
@@ -1293,6 +1361,12 @@
   }
 
   function handleDaemonMessage(message) {
+    if (turnRecoveryControls?.handleMessage(message)) {
+      return;
+    }
+    if (turnRecoveryControls?.handleError(message)) {
+      return;
+    }
     if (message.type === "settings" || message.type === "settings_saved") {
       const requestId = String(message.request_id || "");
       const isKeySave = requestId.startsWith("save-settings-key");
@@ -1406,16 +1480,7 @@
       return;
     }
     if (message.type === "chat_opened") {
-      activeChatId = message.chat?.id || null;
-      updateChatTitle(message.chat);
-      renderStoredMessages(message.messages || [], message.context_compactions || []);
-      if (!message.request_id) {
-        restorePendingOptimisticUserMessages(activeChatId);
-      }
-      sessionCost = Number(message.chat?.total_cost || 0);
-      latestPromptTokens = Number(message.chat?.latest_prompt_tokens || latestPromptTokens || 0);
-      updateChatSize();
-      updateSessionCost();
+      applyOpenedChat(message);
       return;
     }
     if (message.type === "chat_created") {
@@ -1514,6 +1579,10 @@
       transcriptRenderer.resetActiveAssistant();
       setStreaming(false);
       deleteOptimisticRequest(message.request_id || "");
+      if (message.turn_recovery_warning && activeChatId) {
+        checkpointWarnings.set(activeChatId, String(message.turn_recovery_warning));
+      }
+      refreshActiveChat("open-chat-after-turn");
       return;
     }
     if (message.type === "chat_cancelled") {
@@ -1528,6 +1597,7 @@
       appendSystem("Cancelled.");
       window.setTimeout(clearSystemStatus, 1200);
       deleteOptimisticRequest(message.request_id || "");
+      refreshActiveChat("open-chat-after-cancel");
       return;
     }
     if (message.type === "error") {
@@ -1562,6 +1632,47 @@
         openProviderPicker();
       }
     }
+  }
+
+  function applyOpenedChat(message) {
+    activeChatId = message.chat?.id || null;
+    updateChatTitle(message.chat);
+    const messages = message.messages || [];
+    renderStoredMessages(messages, message.context_compactions || []);
+    if (!message.request_id) {
+      restorePendingOptimisticUserMessages(activeChatId);
+    }
+    sessionCost = Number(message.chat?.total_cost || 0);
+    latestPromptTokens = Number(message.chat?.latest_prompt_tokens || latestPromptTokens || 0);
+    const recoveryAvailable = message.turn_recovery?.can_undo
+      || message.turn_recovery?.can_redo
+      || message.turn_recovery?.operation_state;
+    if (recoveryAvailable) {
+      checkpointWarnings.delete(activeChatId);
+    }
+    turnRecoveryControls?.applyState(
+      messages,
+      message.turn_recovery,
+      checkpointWarnings.get(activeChatId) || "",
+    );
+    if (message.recovery_resume_refresh?.ok === false) {
+      appendSystem(
+        `Recovery completed, but Godot did not refresh restored files: ${message.recovery_resume_refresh.error || "refresh failed"}`,
+      );
+    }
+    updateChatSize();
+    updateSessionCost();
+  }
+
+  function refreshActiveChat(prefix) {
+    if (!activeChatId) {
+      return false;
+    }
+    return send({
+      type: "open_chat",
+      request_id: nextRequestId(prefix),
+      chat_id: activeChatId,
+    });
   }
 
   function handleProjectFileReference(rawReference) {

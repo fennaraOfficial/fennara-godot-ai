@@ -229,6 +229,10 @@ where
     .await?;
     send_project_status(sender, None, state, bound_project).await?;
     let scope = &bound_project.scope;
+    let recovery_resume_refresh = match store::active_chat_id(scope) {
+        Ok(Some(chat_id)) => resume_recovery_on_open(state, bound_project, &chat_id).await,
+        _ => None,
+    };
     match store::open_active_or_create(scope, &settings.model, &settings.reasoning_effort) {
         Ok(opened) => {
             *active_chat_id = Some(opened.chat.id.clone());
@@ -241,6 +245,7 @@ where
                     "messages": opened.messages,
                     "context_compactions": opened.context_compactions,
                     "turn_recovery": opened.turn_recovery,
+                    "recovery_resume_refresh": recovery_resume_refresh,
                     "can_revert": chat_can_revert(state, &opened.chat.id).await
                 }),
             )
@@ -370,6 +375,8 @@ where
                     .map_err(|_| ());
             };
             let scope = &bound_project.scope;
+            let recovery_resume_refresh =
+                resume_recovery_on_open(state, bound_project, chat_id).await;
             match store::open_chat(scope, chat_id) {
                 Ok(opened) => {
                     *active_chat_id = Some(opened.chat.id.clone());
@@ -382,6 +389,7 @@ where
                             "messages": opened.messages,
                             "context_compactions": opened.context_compactions,
                             "turn_recovery": opened.turn_recovery,
+                            "recovery_resume_refresh": recovery_resume_refresh,
                             "can_revert": chat_can_revert(state, &opened.chat.id).await
                         }),
                     )
@@ -627,6 +635,10 @@ where
         "redo_chat_turn" => {
             turn_recovery::handle_redo(sender, active_chat_id, state, bound_project, request).await
         }
+        "resume_chat_turn_recovery" => {
+            turn_recovery::handle_resume(sender, active_chat_id, state, bound_project, request)
+                .await
+        }
         "send_chat" => {
             generation::runner::run_chat(sender, active_chat_id, state, bound_project, request)
                 .await
@@ -642,6 +654,25 @@ where
         }
     }
     .map_err(|_| ())
+}
+
+async fn resume_recovery_on_open(
+    state: &AppState,
+    bound_project: &BoundChatProject,
+    chat_id: &str,
+) -> Option<Value> {
+    let result = checkpoints::resume_chat_turn(chat_id, false).await.ok()?;
+    if !result.project_restored {
+        return None;
+    }
+    Some(
+        godot_bridge::refresh_project_files_for_session(
+            state,
+            Some(&bound_project.session_id),
+            &result.changed_paths,
+        )
+        .await,
+    )
 }
 
 fn parse_tool_approval_review(decision: Option<&str>) -> Option<ToolApprovalReview> {

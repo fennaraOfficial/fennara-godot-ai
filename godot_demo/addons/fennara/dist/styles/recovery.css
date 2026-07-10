@@ -1,0 +1,122 @@
+.turn-recovery-bar {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  max-width: var(--transcript-width);
+  margin: 0 auto 8px;
+}
+
+.turn-recovery-bar[hidden] {
+  display: none;
+}
+
+.turn-recovery-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.turn-recovery-actions button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.turn-recovery-actions button:hover:not(:disabled) {
+  background: var(--surface-raised);
+}
+
+.turn-recovery-actions button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.turn-recovery-notice {
+  display: grid;
+  gap: 5px;
+  padding: 7px 9px;
+  border: 1px solid rgba(208, 173, 102, 0.42);
+  border-radius: 6px;
+  background: rgba(208, 173, 102, 0.08);
+  color: #dbc596;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.turn-recovery-notice[hidden],
+.turn-recovery-skipped[hidden] {
+  display: none;
+}
+
+.turn-recovery-skipped summary {
+  width: max-content;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.turn-recovery-paths {
+  display: grid;
+  gap: 3px;
+  margin: 5px 0 0;
+  padding-left: 18px;
+}
+
+.turn-recovery-paths li {
+  min-width: 0;
+}
+
+.turn-recovery-paths code {
+  overflow-wrap: anywhere;
+}
+
+.turn-recovery-paths span {
+  margin-left: 6px;
+  color: var(--muted);
+}
+
+.turn-recovery-dialog {
+  width: min(440px, calc(100vw - 28px));
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 18px 60px var(--shadow);
+}
+
+.turn-recovery-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.turn-recovery-dialog form {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.turn-recovery-dialog h2,
+.turn-recovery-dialog p {
+  margin: 0;
+}
+
+.turn-recovery-dialog h2 {
+  font-size: 15px;
+}
+
+.turn-recovery-dialog p {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.turn-recovery-dialog menu {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
+}

@@ -105,8 +105,10 @@ turn without changing the project's Git index or history. Turn recovery checks
 only paths changed by that turn, refuses later conflicting edits unless a forced
 restore is explicitly confirmed, and records an applying operation before file
 writes. A rewound transcript tail stays stored behind a durable boundary for
-Redo and is deleted only when a replacement turn starts. Startup reconciliation
-finishes any interrupted path restore before exposing its transcript state.
+Redo and is deleted only when a replacement turn starts. Opening a chat retries
+an interrupted path restore. If it still cannot finish, the built-in chat shows
+Resume recovery and blocks new turns for that project while ordinary checkpoint
+unavailability remains a non-blocking chat-only fallback.
 
 ## Install Layout
 

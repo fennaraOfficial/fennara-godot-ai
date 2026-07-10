@@ -23,3 +23,6 @@ node scripts/sync-chat-ui.mjs
   Godot project.
 - Keep the UI useful without a model connection: status, settings, transcript,
   and composer states should still be visible.
+- Treat daemon recovery payloads as authoritative. Keep interrupted recovery
+  visible and retryable, but allow ordinary chat-only turns when project
+  checkpoint capture is unavailable.

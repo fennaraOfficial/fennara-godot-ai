@@ -125,5 +125,5 @@ impl CheckpointStore {
     }
 }
 
-pub(crate) use recovery::{TurnRecoveryResult, redo_chat_turn, undo_chat_turn};
+pub(crate) use recovery::{TurnRecoveryResult, redo_chat_turn, resume_chat_turn, undo_chat_turn};
 pub(crate) use turn::{PendingTurnCheckpoint, TurnCheckpointIds, begin_project_turn};

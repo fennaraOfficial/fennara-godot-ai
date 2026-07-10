@@ -186,6 +186,22 @@
       </section>
 
       <form class="composer" data-composer>
+        <section class="turn-recovery-bar" aria-label="Turn recovery" aria-live="polite" aria-busy="false" data-turn-recovery hidden>
+          <div class="turn-recovery-notice" data-turn-recovery-notice hidden>
+            <span data-turn-recovery-notice-text></span>
+            <details class="turn-recovery-skipped" data-turn-recovery-skipped hidden>
+              <summary>Show affected paths</summary>
+              <ul class="turn-recovery-paths" data-turn-recovery-skipped-list></ul>
+            </details>
+          </div>
+          <div class="turn-recovery-actions">
+            <button type="button" data-turn-undo hidden>Undo</button>
+            <button type="button" data-turn-redo hidden>Redo</button>
+            <button type="button" data-turn-retry hidden>Retry</button>
+            <button type="button" data-turn-edit-retry hidden>Edit and retry</button>
+            <button type="button" data-turn-resume hidden>Resume recovery</button>
+          </div>
+        </section>
         <div class="composer-card">
           <div class="composer-attachments" data-attachment-preview hidden></div>
           <textarea
@@ -271,6 +287,18 @@
           </div>
         </div>
       </form>
+
+      <dialog class="turn-recovery-dialog" data-turn-recovery-confirm>
+        <form method="dialog">
+          <h2>Overwrite later changes?</h2>
+          <p data-turn-recovery-confirm-text></p>
+          <ul class="turn-recovery-paths" data-turn-recovery-conflicts></ul>
+          <menu>
+            <button class="secondary-button" value="cancel">Cancel</button>
+            <button class="primary-button" value="confirm">Restore anyway</button>
+          </menu>
+        </form>
+      </dialog>
 
       <section class="command-popover" data-command-popover hidden>
         <div class="command-palette" role="listbox" aria-label="Composer commands">
@@ -436,6 +464,7 @@
     <script src="./settings-panel.js"></script>
     <script src="./chat-navigation.js"></script>
     <script src="./composer-actions.js"></script>
+    <script src="./turn-recovery-controls.js"></script>
     <script src="./effort-controls.js"></script>
     <script src="./overlay-manager.js"></script>
     <script src="./shell-bindings.js"></script>

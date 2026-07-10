@@ -46,6 +46,14 @@ pub(crate) struct TurnRecoveryStatus {
     pub(crate) changed_file_count: usize,
     pub(crate) skipped_paths: Vec<SkippedPath>,
     pub(crate) operation_state: Option<String>,
+    pub(crate) rewound_user_message: Option<TurnRecoveryUserMessage>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct TurnRecoveryUserMessage {
+    pub(crate) id: String,
+    pub(crate) content: String,
+    pub(crate) metadata_json: Option<String>,
 }
 
 impl TurnRecoveryStatus {
@@ -58,6 +66,7 @@ impl TurnRecoveryStatus {
             changed_file_count: 0,
             skipped_paths: Vec::new(),
             operation_state: None,
+            rewound_user_message: None,
         }
     }
 }
@@ -87,6 +96,8 @@ pub(super) fn turn_recovery_status_on_connection(
     chat_id: &str,
 ) -> Result<TurnRecoveryStatus, String> {
     if let Some(journal) = recovery_journal_on_connection(conn, chat_id)? {
+        let rewound_user_message =
+            recovery_user_message_on_connection(conn, &journal.user_message_id)?;
         return Ok(TurnRecoveryStatus {
             eligible_user_message_id: Some(journal.user_message_id),
             can_undo: false,
@@ -95,6 +106,7 @@ pub(super) fn turn_recovery_status_on_connection(
             changed_file_count: journal.changed_paths.len(),
             skipped_paths: journal.capture.skipped_paths,
             operation_state: Some(journal.state),
+            rewound_user_message,
         });
     }
     let Some(checkpoint) = latest_recoverable_turn_checkpoint_on_connection(conn, chat_id)? else {
@@ -108,7 +120,29 @@ pub(super) fn turn_recovery_status_on_connection(
         changed_file_count: checkpoint.changed_paths.len(),
         skipped_paths: checkpoint.capture.skipped_paths,
         operation_state: None,
+        rewound_user_message: None,
     })
+}
+
+fn recovery_user_message_on_connection(
+    conn: &Connection,
+    user_message_id: &str,
+) -> Result<Option<TurnRecoveryUserMessage>, String> {
+    conn.query_row(
+        "SELECT id, content, metadata_json
+         FROM chat_messages
+         WHERE id = ?1 AND role = 'user'",
+        [user_message_id],
+        |row| {
+            Ok(TurnRecoveryUserMessage {
+                id: row.get(0)?,
+                content: row.get(1)?,
+                metadata_json: row.get(2)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(to_store_error)
 }
 
 pub(crate) fn pending_recovery_journals() -> Result<Vec<TurnRecoveryJournal>, String> {
@@ -514,6 +548,8 @@ mod tests {
               id TEXT PRIMARY KEY,
               chat_id TEXT,
               role TEXT,
+              content TEXT,
+              metadata_json TEXT,
               sequence INTEGER
             );
             CREATE TABLE chat_generations (
@@ -529,9 +565,9 @@ mod tests {
         conn.execute_batch(
             "
             INSERT INTO chats (id) VALUES ('chat');
-            INSERT INTO chat_messages (id, chat_id, role, sequence)
-              VALUES ('user', 'chat', 'user', 1),
-                     ('assistant', 'chat', 'assistant', 2);
+            INSERT INTO chat_messages (id, chat_id, role, content, sequence)
+              VALUES ('user', 'chat', 'user', 'original prompt', 1),
+                     ('assistant', 'chat', 'assistant', 'answer', 2);
             INSERT INTO chat_generations (id, chat_id, assistant_message_id)
               VALUES ('generation', 'chat', 'assistant');
             ",
@@ -601,6 +637,13 @@ mod tests {
         let undone = turn_recovery_status_on_connection(&conn, "chat").unwrap();
         assert!(!undone.can_undo);
         assert!(undone.can_redo);
+        assert_eq!(
+            undone
+                .rewound_user_message
+                .as_ref()
+                .map(|message| message.content.as_str()),
+            Some("original prompt")
+        );
     }
 
     #[test]

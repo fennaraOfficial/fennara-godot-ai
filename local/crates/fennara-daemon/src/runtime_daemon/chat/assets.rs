@@ -166,6 +166,9 @@ fn asset(path: &str) -> Option<Asset> {
         "transcript-renderer.js" => js(include_bytes!(
             "../../../../../../godot_demo/addons/fennara/dist/transcript-renderer.js"
         )),
+        "turn-recovery-controls.js" => js(include_bytes!(
+            "../../../../../../godot_demo/addons/fennara/dist/turn-recovery-controls.js"
+        )),
         "usage-summary.js" => js(include_bytes!(
             "../../../../../../godot_demo/addons/fennara/dist/usage-summary.js"
         )),
@@ -192,6 +195,9 @@ fn asset(path: &str) -> Option<Asset> {
         )),
         "styles/responsive.css" => css(include_bytes!(
             "../../../../../../godot_demo/addons/fennara/dist/styles/responsive.css"
+        )),
+        "styles/recovery.css" => css(include_bytes!(
+            "../../../../../../godot_demo/addons/fennara/dist/styles/recovery.css"
         )),
         "styles/settings.css" => css(include_bytes!(
             "../../../../../../godot_demo/addons/fennara/dist/styles/settings.css"

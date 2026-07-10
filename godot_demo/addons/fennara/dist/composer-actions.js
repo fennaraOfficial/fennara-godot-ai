@@ -8,8 +8,8 @@
     const commandPopover = elements.commandPopover || null;
     const sendButton = elements.sendButton || null;
     const isChatStreaming = callbacks.isChatStreaming || (() => false);
+    const isSubmissionBlocked = callbacks.isSubmissionBlocked || (() => false);
     const getAttachedContextSnippets = callbacks.getAttachedContextSnippets || (() => []);
-    const hasAttachments = callbacks.hasAttachments || (() => false);
     const getCurrentProvider = callbacks.getCurrentProvider || (() => "");
     const getCurrentModel = callbacks.getCurrentModel || (() => "");
     const getCurrentReasoningEffort = callbacks.getCurrentReasoningEffort || (() => "medium");
@@ -39,30 +39,45 @@
     const requestNativePastedImage = callbacks.requestNativePastedImage || function () {};
     const chatWsUrl = callbacks.chatWsUrl || (() => "");
     const appendSystem = callbacks.appendSystem || function () {};
+    const onMessageSubmitted = callbacks.onMessageSubmitted || function () {};
 
     composer?.addEventListener("submit", (event) => {
       event.preventDefault();
-      if (isChatStreaming()) {
-        return;
+      submitMessage();
+    });
+
+    function submitMessage(options = {}) {
+      if (isChatStreaming() || isSubmissionBlocked()) {
+        return false;
       }
-      const typedText = prompt?.value.trim() || "";
-      const snippets = getAttachedContextSnippets();
-      if (!typedText && !hasAttachments()) {
-        return;
+      const usesComposerPayload = !hasOwn(options, "text")
+        && !hasOwn(options, "images")
+        && !hasOwn(options, "contextSnippets");
+      const typedText = hasOwn(options, "text")
+        ? String(options.text || "").trim()
+        : prompt?.value.trim() || "";
+      const images = hasOwn(options, "images")
+        ? Array.from(options.images || [])
+        : attachmentPayload();
+      const snippets = hasOwn(options, "contextSnippets")
+        ? Array.from(options.contextSnippets || [])
+        : getAttachedContextSnippets();
+      if (!typedText && images.length === 0 && snippets.length === 0) {
+        return false;
       }
       const currentProvider = getCurrentProvider();
       const currentModel = getCurrentModel();
       if (!currentProvider) {
         openProviderPicker();
-        return;
+        return false;
       }
       if (!currentModel) {
         openModelPicker();
-        return;
+        return false;
       }
       if (providerRequiresApiKey(currentProvider) && !providerConnected(currentProvider)) {
         openProviderPicker();
-        return;
+        return false;
       }
       const model = cleanModelId(modelInput?.value || currentModel);
       const text = typedText;
@@ -78,7 +93,6 @@
         model,
         reasoning_effort: reasoningEffort,
       };
-      const images = attachmentPayload();
       if (images.length > 0) {
         payload.images = images;
       }
@@ -97,15 +111,20 @@
           contextSnippets: snippets,
           chatId: getActiveChatId(),
         });
-        if (prompt) {
+        onMessageSubmitted(payload);
+        if (usesComposerPayload && prompt) {
           prompt.value = "";
         }
-        clearAttachments();
-        resizePrompt();
+        if (usesComposerPayload) {
+          clearAttachments();
+          resizePrompt();
+        }
+        return true;
       } else {
         deleteOptimisticRequest(requestId);
+        return false;
       }
-    });
+    }
 
     sendButton?.addEventListener("click", (event) => {
       if (!isChatStreaming()) {
@@ -196,6 +215,10 @@
       });
     }
 
+    function hasOwn(value, key) {
+      return Object.prototype.hasOwnProperty.call(value, key);
+    }
+
     function requestToolApprovalReview(approvalId, decision) {
       const cleanDecision = ["approved", "denied", "cancelled"].includes(decision) ? decision : "denied";
       if (!approvalId) {
@@ -220,6 +243,7 @@
     return {
       requestCancel,
       requestToolApprovalReview,
+      submitMessage,
     };
   }
 

@@ -133,13 +133,29 @@ where
     let pending_turn_checkpoint =
         match checkpoints::begin_project_turn(scope.project_path.as_deref()).await {
             Ok(checkpoint) => checkpoint,
+            Err(error) if error.is_recovery_incomplete() => {
+                trace.error(
+                    "turn.failed",
+                    "recovery_incomplete",
+                    json!({ "code": "turn_recovery_incomplete", "message": error.to_string() }),
+                );
+                return send_error(
+                    sender,
+                    request_id,
+                    "turn_recovery_incomplete",
+                    &format!(
+                        "Turn recovery is incomplete, so a new turn cannot start safely: {error}"
+                    ),
+                )
+                .await;
+            }
             Err(error) => {
                 trace.warn(
                     "checkpoint.start_unavailable",
                     "skipped",
-                    json!({ "message": error }),
+                    json!({ "message": error.to_string() }),
                 );
-                checkpoints::PendingTurnCheckpoint::disabled()
+                checkpoints::PendingTurnCheckpoint::unavailable(error.to_string())
             }
         };
     let active_project = state
@@ -478,6 +494,7 @@ where
             json!({ "message": error }),
         );
     }
+    let mut turn_recovery_warning = turn_checkpoint.warning().map(ToOwned::to_owned);
     let mut current_trace = trace.with_generation(&assistant_generation.id, &assistant_message.id);
     current_trace.event_status(
         "generation.start",
@@ -1038,8 +1055,11 @@ where
         trace.warn(
             "checkpoint.finish_failed",
             "failed",
-            json!({ "message": error }),
+            json!({ "message": error.as_str() }),
         );
+        if turn_recovery_warning.is_none() {
+            turn_recovery_warning = Some(error);
+        }
     }
     trace.event_status(
         "turn.done",
@@ -1067,7 +1087,8 @@ where
             "chat_id": chat_id,
             "message": stored_assistant,
             "response": final_text,
-            "usage": final_usage
+            "usage": final_usage,
+            "turn_recovery_warning": turn_recovery_warning
         }),
     )
     .await?;

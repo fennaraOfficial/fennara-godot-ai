@@ -1,4 +1,7 @@
-use std::{collections::BTreeSet, path::Path};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+};
 
 use serde::Serialize;
 
@@ -111,16 +114,51 @@ pub(crate) async fn redo_chat_turn(
     Ok(journal_result(&journal, "redo", conflicts, false, true))
 }
 
-pub(super) async fn reconcile_pending(store: &CheckpointStore) -> Result<(), String> {
-    let mut first_error = None;
-    for journal in store::pending_recovery_journals()? {
-        if let Err(error) = reconcile_journal(store, journal).await
-            && first_error.is_none()
+pub(crate) async fn resume_chat_turn(
+    chat_id: &str,
+    force: bool,
+) -> Result<TurnRecoveryResult, String> {
+    let initial = store::recovery_journal(chat_id)?
+        .filter(|journal| matches!(journal.state.as_str(), "applying_undo" | "applying_redo"))
+        .ok_or_else(|| "No interrupted turn recovery is available to resume.".to_string())?;
+    let action = if initial.state == "applying_undo" {
+        "undo"
+    } else {
+        "redo"
+    };
+    let store = turn::shared_reconciled_store().await?;
+    let (identity, _lease) = lock_project(&store, &initial.project_path).await?;
+    match (action, store::recovery_journal(chat_id)?) {
+        ("undo", Some(current))
+            if current.state == "undone" && current.operation_id == initial.operation_id => {}
+        ("redo", None) => {}
+        (_, Some(current))
+            if current.state == initial.state && current.operation_id == initial.operation_id =>
         {
-            first_error = Some(error);
+            verify_storage_identity(&identity, &current.storage_key)?;
+            let conflicts = interrupted_recovery_conflicts(&store, &identity, &current).await?;
+            if !conflicts.is_empty() && !force {
+                let mut result = journal_result(&current, action, conflicts, true, false);
+                result.conversation_rewound = action == "redo";
+                return Ok(result);
+            }
+            finish_journal_locked(&store, &identity, &current).await?;
         }
+        _ => return Err("Turn recovery changed before it could be resumed.".to_string()),
     }
-    first_error.map_or(Ok(()), Err)
+    Ok(TurnRecoveryResult {
+        action,
+        chat_id: initial.chat_id,
+        user_message_id: initial.user_message_id,
+        coverage: initial.capture.coverage,
+        changed_paths: initial.changed_paths.clone(),
+        skipped_paths: initial.capture.skipped_paths,
+        conflicts: Vec::new(),
+        confirmation_required: false,
+        project_restored: initial.start_snapshot_id.is_some() && !initial.changed_paths.is_empty(),
+        conversation_rewound: action == "undo",
+        rewind_boundary_sequence: initial.boundary_sequence,
+    })
 }
 
 async fn reconcile_pending_for_chat(
@@ -148,6 +186,25 @@ pub(super) async fn reconcile_pending_for_project_locked(
     Ok(())
 }
 
+pub(super) async fn reconcile_pending_for_project_path(
+    store: &CheckpointStore,
+    project_path: &Path,
+) -> Result<(), String> {
+    let requested = canonical_or_original(project_path).await;
+    for journal in store::pending_recovery_journals()? {
+        if canonical_or_original(Path::new(&journal.project_path)).await == requested {
+            reconcile_journal(store, journal).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn canonical_or_original(path: &Path) -> PathBuf {
+    tokio::fs::canonicalize(path)
+        .await
+        .unwrap_or_else(|_| path.to_path_buf())
+}
+
 async fn reconcile_journal(
     store: &CheckpointStore,
     journal: store::TurnRecoveryJournal,
@@ -162,6 +219,21 @@ async fn reconcile_journal_locked(
     journal: &store::TurnRecoveryJournal,
 ) -> Result<(), String> {
     verify_storage_identity(&identity, &journal.storage_key)?;
+    let conflicts = interrupted_recovery_conflicts(store, identity, journal).await?;
+    if !conflicts.is_empty() {
+        return Err(format!(
+            "Turn recovery needs confirmation before overwriting: {}",
+            conflicts.join(", ")
+        ));
+    }
+    finish_journal_locked(store, identity, journal).await
+}
+
+async fn finish_journal_locked(
+    store: &CheckpointStore,
+    identity: &ProjectIdentity,
+    journal: &store::TurnRecoveryJournal,
+) -> Result<(), String> {
     let action = match journal.state.as_str() {
         "applying_undo" => "undo",
         "applying_redo" => "redo",
@@ -212,26 +284,8 @@ async fn preflight_conflicts(
     let current_snapshot_id = current.snapshot_id.as_deref().ok_or_else(|| {
         "The current project state could not be verified, so files were not restored.".to_string()
     })?;
-    let affected = changed_paths
-        .iter()
-        .map(String::as_str)
-        .collect::<BTreeSet<_>>();
-    if let Some(blocked) = current.skipped_paths.iter().find(|path| {
-        affected
-            .iter()
-            .any(|affected| paths_overlap(affected, &path.path))
-            && matches!(
-                path.reason,
-                SkippedPathReason::NestedGitRepository
-                    | SkippedPathReason::UnverifiedLfsObject
-                    | SkippedPathReason::UnverifiedContentFilter
-            )
-    }) {
-        return Err(format!(
-            "The affected path '{}' cannot be verified for safe restoration.",
-            blocked.path
-        ));
-    }
+    let affected = affected_paths(changed_paths);
+    ensure_safe_skipped_paths(&current.skipped_paths, &affected)?;
     let mut conflicts = store
         .changed_paths(&identity.root, expected_snapshot_id, current_snapshot_id)
         .await?
@@ -250,6 +304,93 @@ async fn preflight_conflicts(
             }),
     );
     Ok(conflicts.into_iter().collect())
+}
+
+async fn interrupted_recovery_conflicts(
+    store: &CheckpointStore,
+    identity: &ProjectIdentity,
+    journal: &store::TurnRecoveryJournal,
+) -> Result<Vec<String>, String> {
+    if journal.changed_paths.is_empty()
+        && journal.start_snapshot_id.is_none()
+        && journal.end_snapshot_id.is_none()
+    {
+        return Ok(Vec::new());
+    }
+    let (Some(start_snapshot_id), Some(end_snapshot_id)) = (
+        journal.start_snapshot_id.as_deref(),
+        journal.end_snapshot_id.as_deref(),
+    ) else {
+        return Err("The checkpoint does not contain both project boundaries.".to_string());
+    };
+    let current = store.capture(&identity.root).await;
+    let current_snapshot_id = current.snapshot_id.as_deref().ok_or_else(|| {
+        "The current project state could not be verified, so files were not restored.".to_string()
+    })?;
+    let affected = affected_paths(&journal.changed_paths);
+    ensure_safe_skipped_paths(&current.skipped_paths, &affected)?;
+    let changed_from_start = store
+        .changed_paths(&identity.root, start_snapshot_id, current_snapshot_id)
+        .await?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let changed_from_end = store
+        .changed_paths(&identity.root, end_snapshot_id, current_snapshot_id)
+        .await?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let mut conflicts = affected
+        .iter()
+        .filter(|path| {
+            overlaps_any(path, &changed_from_start) && overlaps_any(path, &changed_from_end)
+        })
+        .map(|path| (*path).to_string())
+        .collect::<BTreeSet<_>>();
+    conflicts.extend(
+        current
+            .skipped_paths
+            .into_iter()
+            .map(|path| path.path)
+            .filter(|path| {
+                affected
+                    .iter()
+                    .any(|affected| paths_overlap(affected, path))
+            }),
+    );
+    Ok(conflicts.into_iter().collect())
+}
+
+fn affected_paths(changed_paths: &[String]) -> BTreeSet<&str> {
+    changed_paths.iter().map(String::as_str).collect()
+}
+
+fn ensure_safe_skipped_paths(
+    skipped_paths: &[SkippedPath],
+    affected: &BTreeSet<&str>,
+) -> Result<(), String> {
+    if let Some(blocked) = skipped_paths.iter().find(|path| {
+        affected
+            .iter()
+            .any(|affected| paths_overlap(affected, &path.path))
+            && matches!(
+                path.reason,
+                SkippedPathReason::NestedGitRepository
+                    | SkippedPathReason::UnverifiedLfsObject
+                    | SkippedPathReason::UnverifiedContentFilter
+            )
+    }) {
+        return Err(format!(
+            "The affected path '{}' cannot be verified for safe restoration.",
+            blocked.path
+        ));
+    }
+    Ok(())
+}
+
+fn overlaps_any(path: &str, candidates: &BTreeSet<String>) -> bool {
+    candidates
+        .iter()
+        .any(|candidate| paths_overlap(path, candidate))
 }
 
 fn paths_overlap(left: &str, right: &str) -> bool {
@@ -425,6 +566,65 @@ mod tests {
         .await
         .unwrap_err();
         assert!(error.contains("affected.txt"));
+    }
+
+    #[tokio::test]
+    async fn interrupted_recovery_accepts_boundary_mix_but_flags_third_state() {
+        let project = TestDirectory::new("interrupted-project");
+        let storage = TestDirectory::new("interrupted-storage");
+        git(&project.0, ["init", "--quiet"]);
+        git(&project.0, ["config", "user.name", "Fennara Tests"]);
+        git(
+            &project.0,
+            ["config", "user.email", "fennara-tests@example.invalid"],
+        );
+        fs::write(project.0.join("one.txt"), "before\n").unwrap();
+        fs::write(project.0.join("two.txt"), "before\n").unwrap();
+        git(&project.0, ["add", "--all"]);
+        git(
+            &project.0,
+            [
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "--quiet",
+                "-m",
+                "test",
+            ],
+        );
+
+        let store = CheckpointStore::at(storage.0.clone());
+        let start = store.capture(&project.0).await;
+        fs::write(project.0.join("one.txt"), "after\n").unwrap();
+        fs::write(project.0.join("two.txt"), "after\n").unwrap();
+        let end = store.capture(&project.0).await;
+        let identity = store.git.identify(&project.0).await.unwrap();
+        let journal = store::TurnRecoveryJournal {
+            chat_id: "chat".to_string(),
+            checkpoint_id: "checkpoint".to_string(),
+            user_message_id: "message".to_string(),
+            operation_id: "recovery".to_string(),
+            state: "applying_undo".to_string(),
+            boundary_sequence: 1,
+            project_path: project.0.to_string_lossy().into_owned(),
+            storage_key: identity.storage_key.clone(),
+            start_snapshot_id: start.snapshot_id,
+            end_snapshot_id: end.snapshot_id.clone(),
+            changed_paths: vec!["one.txt".to_string(), "two.txt".to_string()],
+            capture: end,
+        };
+
+        fs::write(project.0.join("one.txt"), "before\n").unwrap();
+        let conflicts = interrupted_recovery_conflicts(&store, &identity, &journal)
+            .await
+            .unwrap();
+        assert!(conflicts.is_empty());
+
+        fs::write(project.0.join("one.txt"), "manual\n").unwrap();
+        let conflicts = interrupted_recovery_conflicts(&store, &identity, &journal)
+            .await
+            .unwrap();
+        assert_eq!(conflicts, vec!["one.txt"]);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use std::{collections::HashSet, path::Path, sync::OnceLock};
+use std::{collections::HashSet, fmt, path::Path, sync::OnceLock};
 
 use serde_json::json;
 use tokio::sync::{OnceCell, OwnedMutexGuard};
@@ -11,6 +11,38 @@ const RETAINED_TURN_CHECKPOINTS_PER_PROJECT: usize = 20;
 static SHARED_STORE: OnceLock<Result<CheckpointStore, String>> = OnceLock::new();
 static RECONCILED: OnceCell<()> = OnceCell::const_new();
 
+#[derive(Debug)]
+pub(crate) struct BeginProjectTurnError {
+    message: String,
+    recovery_incomplete: bool,
+}
+
+impl BeginProjectTurnError {
+    fn checkpoint_unavailable(message: String) -> Self {
+        Self {
+            message,
+            recovery_incomplete: false,
+        }
+    }
+
+    fn recovery_incomplete(message: String) -> Self {
+        Self {
+            message,
+            recovery_incomplete: true,
+        }
+    }
+
+    pub(crate) fn is_recovery_incomplete(&self) -> bool {
+        self.recovery_incomplete
+    }
+}
+
+impl fmt::Display for BeginProjectTurnError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
 pub(crate) struct TurnCheckpointIds<'a> {
     pub(crate) chat_id: &'a str,
     pub(crate) user_message_id: &'a str,
@@ -21,6 +53,7 @@ pub(crate) struct TurnCheckpointIds<'a> {
 
 pub(crate) struct PendingTurnCheckpoint {
     inner: Option<PendingInner>,
+    warning: Option<String>,
 }
 
 struct PendingInner {
@@ -33,12 +66,25 @@ struct PendingInner {
 
 impl PendingTurnCheckpoint {
     pub(crate) fn disabled() -> Self {
-        Self { inner: None }
+        Self {
+            inner: None,
+            warning: None,
+        }
+    }
+
+    pub(crate) fn unavailable(warning: String) -> Self {
+        Self {
+            inner: None,
+            warning: Some(warning),
+        }
     }
 
     pub(crate) async fn attach(mut self, ids: TurnCheckpointIds<'_>) -> TurnCheckpoint {
         let Some(inner) = self.inner.take() else {
-            return TurnCheckpoint::disabled();
+            return TurnCheckpoint {
+                state: None,
+                warning: self.warning.take(),
+            };
         };
         attach_turn(inner, ids).await
     }
@@ -64,13 +110,6 @@ struct TurnInner {
 }
 
 impl TurnCheckpoint {
-    pub(crate) fn disabled() -> Self {
-        Self {
-            state: None,
-            warning: None,
-        }
-    }
-
     fn serialized(lease: OwnedMutexGuard<()>, warning: Option<String>) -> Self {
         Self {
             state: Some(TurnState::Serialized(lease)),
@@ -116,11 +155,16 @@ impl Drop for TurnCheckpoint {
 
 pub(crate) async fn begin_project_turn(
     project_path: Option<&str>,
-) -> Result<PendingTurnCheckpoint, String> {
+) -> Result<PendingTurnCheckpoint, BeginProjectTurnError> {
     let Some(project_path) = project_path.filter(|path| !path.trim().is_empty()) else {
         return Ok(PendingTurnCheckpoint::disabled());
     };
-    let store = shared_reconciled_store().await?;
+    let store = shared_reconciled_store()
+        .await
+        .map_err(BeginProjectTurnError::checkpoint_unavailable)?;
+    super::recovery::reconcile_pending_for_project_path(&store, Path::new(project_path))
+        .await
+        .map_err(BeginProjectTurnError::recovery_incomplete)?;
     begin_with_store(store, Path::new(project_path)).await
 }
 
@@ -130,7 +174,6 @@ pub(super) async fn shared_reconciled_store() -> Result<CheckpointStore, String>
         .get_or_try_init(|| reconcile(store.clone()))
         .await
         .map(|_| ())?;
-    let _ = super::recovery::reconcile_pending(&store).await;
     Ok(store)
 }
 
@@ -143,14 +186,16 @@ fn shared_store() -> Result<CheckpointStore, String> {
 async fn begin_with_store(
     store: CheckpointStore,
     project_root: &Path,
-) -> Result<PendingTurnCheckpoint, String> {
+) -> Result<PendingTurnCheckpoint, BeginProjectTurnError> {
     let identity = store
         .git
         .identify(project_root)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| BeginProjectTurnError::checkpoint_unavailable(error.to_string()))?;
     let lease = store.turn_lock(&identity.root).await.lock_owned().await;
-    super::recovery::reconcile_pending_for_project_locked(&store, &identity).await?;
+    super::recovery::reconcile_pending_for_project_locked(&store, &identity)
+        .await
+        .map_err(BeginProjectTurnError::recovery_incomplete)?;
     let start_capture = store.capture(&identity.root).await;
     Ok(PendingTurnCheckpoint {
         inner: Some(PendingInner {
@@ -160,6 +205,7 @@ async fn begin_with_store(
             start_capture,
             _lease: lease,
         }),
+        warning: None,
     })
 }
 
