@@ -15,7 +15,6 @@
     const usageContainer = elements.usageContainer || null;
     const usagePopover = elements.usagePopover || null;
     const sessionCostStatus = elements.sessionCostStatus || null;
-    const revertButton = elements.revertButton || null;
     const setMcpTargetButton = elements.setMcpTargetButton || null;
     const targetPillText = elements.targetPillText || null;
     const showReloadButton = constants.showReloadButton ?? true;
@@ -33,8 +32,6 @@
     const addImageFiles = callbacks.addImageFiles || (() => Promise.resolve());
     const showUsagePopover = callbacks.showUsagePopover || function () {};
     const hideUsagePopoverSoon = callbacks.hideUsagePopoverSoon || function () {};
-    const isChatStreaming = callbacks.isChatStreaming || (() => false);
-    const getActiveChatId = callbacks.getActiveChatId || (() => null);
     const send = callbacks.send || (() => false);
     const nextRequestId = callbacks.nextRequestId || (() => "request");
 
@@ -127,18 +124,6 @@
     usagePopover?.addEventListener("mouseleave", hideUsagePopoverSoon);
     sessionCostStatus?.addEventListener("focus", showUsagePopover);
     sessionCostStatus?.addEventListener("blur", hideUsagePopoverSoon);
-
-    revertButton?.addEventListener("click", () => {
-      const activeChatId = getActiveChatId();
-      if (isChatStreaming() || !activeChatId) {
-        return;
-      }
-      send({
-        type: "revert_chat",
-        request_id: nextRequestId("revert-chat"),
-        chat_id: activeChatId,
-      });
-    });
 
     setMcpTargetButton?.addEventListener("click", () => {
       if (setMcpTargetButton.classList.contains("is-target")) {

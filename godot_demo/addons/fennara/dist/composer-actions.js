@@ -28,8 +28,6 @@
     const contextSnippetPayload = callbacks.contextSnippetPayload || (() => []);
     const setStreaming = callbacks.setStreaming || function () {};
     const setActiveTurnCost = callbacks.setActiveTurnCost || function () {};
-    const setCanRevert = callbacks.setCanRevert || function () {};
-    const updateRevertButton = callbacks.updateRevertButton || function () {};
     const appendMessage = callbacks.appendMessage || function () {};
     const beginStream = callbacks.beginStream || function () {};
     const trackOptimisticRequest = callbacks.trackOptimisticRequest || function () {};
@@ -90,8 +88,6 @@
       if (send(payload)) {
         setStreaming(true);
         setActiveTurnCost(0);
-        setCanRevert(false);
-        updateRevertButton();
         const optimisticNode = appendMessage("user", text, images, snippets);
         beginStream();
         trackOptimisticRequest(requestId, {

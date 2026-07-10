@@ -1308,47 +1308,6 @@ input,
   min-width: 72px;
 }
 
-.revert-button {
-  min-width: 76px;
-}
-
-.revert-maintenance {
-  position: relative;
-  display: inline-flex;
-}
-
-.revert-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
-}
-
-.revert-maintenance-tooltip {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 8px);
-  z-index: 20;
-  width: max-content;
-  max-width: min(220px, 70vw);
-  padding: 7px 9px;
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  background: #1f1f1f;
-  color: var(--text);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
-  font-size: 12px;
-  line-height: 1.25;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(3px);
-  transition: opacity 0.12s ease, transform 0.12s ease;
-}
-
-.revert-maintenance:hover .revert-maintenance-tooltip,
-.revert-maintenance:focus-within .revert-maintenance-tooltip {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 @media (max-width: 620px) {
   .composer-actions {
     align-items: end;

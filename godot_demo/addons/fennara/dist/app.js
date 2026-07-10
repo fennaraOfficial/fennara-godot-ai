@@ -81,7 +81,6 @@
   const effortOptions = document.querySelector("[data-effort-options]");
   const effortOptionButtons = document.querySelectorAll("[data-effort-option]");
   const sendButton = document.querySelector("[data-send-button]");
-  const revertButton = document.querySelector("[data-revert-button]");
   const saveSettingsButton = document.querySelector("[data-save-settings]");
   const reloadButton = document.querySelector("[data-reload-ui]");
   const appShell = document.querySelector(".app-shell");
@@ -157,7 +156,6 @@
   let activeTurnCost = 0;
   let latestPromptTokens = 0;
   let projectStatusTimer = 0;
-  let canRevert = false;
   let modelPicker = null;
   let providerPopovers = null;
   let projectFileLinks = null;
@@ -420,10 +418,6 @@
       setActiveTurnCost: (cost) => {
         activeTurnCost = cost;
       },
-      setCanRevert: (nextCanRevert) => {
-        canRevert = Boolean(nextCanRevert);
-      },
-      updateRevertButton,
       appendMessage,
       beginStream: () => transcriptRenderer.beginStream(),
       trackOptimisticRequest,
@@ -522,7 +516,6 @@
       usageContainer,
       usagePopover,
       sessionCostStatus,
-      revertButton,
       setMcpTargetButton,
       targetPillText,
     },
@@ -565,8 +558,6 @@
       addImageFiles,
       showUsagePopover,
       hideUsagePopoverSoon,
-      isChatStreaming: () => chatStreaming,
-      getActiveChatId: () => activeChatId,
       send,
       nextRequestId,
     },
@@ -636,7 +627,6 @@
       sendButton.setAttribute("aria-busy", String(nextStreaming));
       sendButton.querySelector(".send-label").textContent = nextStreaming ? "Cancel" : "Send";
     }
-    updateRevertButton();
   }
 
   function openModelPicker(forceOpen = false) { return providerPopovers?.openModelPicker(forceOpen); }
@@ -674,8 +664,6 @@
       updateChatSize();
       updateSessionCost();
     });
-    canRevert = false;
-    updateRevertButton();
   }
 
   function appendMessage(role, text, attachments = [], contextSnippets = []) { return storedTranscript?.appendMessage(role, text, attachments, contextSnippets); }
@@ -1424,13 +1412,6 @@
       if (!message.request_id) {
         restorePendingOptimisticUserMessages(activeChatId);
       }
-      if (message.reverted && typeof message.restored_message === "string" && prompt) {
-        prompt.value = message.restored_message;
-        resizePrompt();
-        prompt.focus();
-      }
-      canRevert = Boolean(message.can_revert);
-      updateRevertButton();
       sessionCost = Number(message.chat?.total_cost || 0);
       latestPromptTokens = Number(message.chat?.latest_prompt_tokens || latestPromptTokens || 0);
       updateChatSize();
@@ -1478,8 +1459,6 @@
       }
       transcriptRenderer.beginStream();
       deleteOptimisticRequest(requestKey);
-      canRevert = false;
-      updateRevertButton();
       return;
     }
     if (message.type === "chat_stream_start") {
@@ -1495,8 +1474,6 @@
         }
       }
       transcriptRenderer.beginStream();
-      canRevert = Boolean(message.can_revert);
-      updateRevertButton();
       return;
     }
     if (message.type === "chat_item_update" && message.item?.type === "message") {
@@ -1536,7 +1513,6 @@
       transcriptRenderer.endStream();
       transcriptRenderer.resetActiveAssistant();
       setStreaming(false);
-      updateRevertButton();
       deleteOptimisticRequest(message.request_id || "");
       return;
     }
@@ -1549,8 +1525,6 @@
       transcriptRenderer.endStream();
       transcriptRenderer.resetActiveAssistant();
       setStreaming(false);
-      canRevert = Boolean(message.can_revert ?? true);
-      updateRevertButton();
       appendSystem("Cancelled.");
       window.setTimeout(clearSystemStatus, 1200);
       deleteOptimisticRequest(message.request_id || "");
@@ -1583,21 +1557,11 @@
       transcriptRenderer.endStream();
       transcriptRenderer.resetActiveAssistant();
       setStreaming(false);
-      updateRevertButton();
       deleteOptimisticRequest(message.request_id || "");
       if (message.code === "provider_auth_error" || message.code === "missing_openrouter_key") {
         openProviderPicker();
       }
     }
-  }
-
-  function updateRevertButton() {
-    if (!revertButton) {
-      return;
-    }
-    revertButton.disabled = true;
-    revertButton.setAttribute("aria-disabled", "true");
-    revertButton.title = "Currently under maintenance";
   }
 
   function handleProjectFileReference(rawReference) {
