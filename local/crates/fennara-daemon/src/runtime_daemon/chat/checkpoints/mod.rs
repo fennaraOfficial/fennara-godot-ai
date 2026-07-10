@@ -1,13 +1,19 @@
 mod git;
+mod turn;
 
-use serde::Serialize;
-use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+use tokio::sync::Mutex;
 
 use crate::runtime_daemon::util::fennara_app_dir;
 
 use self::git::GitSnapshotStore;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum CheckpointCoverage {
     Full,
@@ -15,7 +21,7 @@ pub(crate) enum CheckpointCoverage {
     ConversationOnly,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum SkippedPathReason {
     IgnoredPath,
@@ -26,13 +32,13 @@ pub(crate) enum SkippedPathReason {
     UnverifiedContentFilter,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct SkippedPath {
     pub(crate) path: String,
     pub(crate) reason: SkippedPathReason,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum CaptureUnavailableReason {
     NonGitProject,
@@ -41,7 +47,7 @@ pub(crate) enum CaptureUnavailableReason {
     CaptureFailed,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct CaptureResult {
     pub(crate) snapshot_id: Option<String>,
     pub(crate) coverage: CheckpointCoverage,
@@ -77,6 +83,7 @@ impl CaptureResult {
 #[derive(Clone)]
 pub(crate) struct CheckpointStore {
     git: GitSnapshotStore,
+    turn_locks: Arc<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>>,
 }
 
 impl CheckpointStore {
@@ -87,6 +94,7 @@ impl CheckpointStore {
     pub(crate) fn at(storage_root: PathBuf) -> Self {
         Self {
             git: GitSnapshotStore::new(storage_root),
+            turn_locks: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -104,5 +112,54 @@ impl CheckpointStore {
             .changed_paths(project_root, from_snapshot, to_snapshot)
             .await
             .map_err(|error| error.to_string())
+    }
+
+    async fn turn_lock(&self, canonical_project: &Path) -> Arc<Mutex<()>> {
+        let mut locks = self.turn_locks.lock().await;
+        locks.retain(|_, lock| Arc::strong_count(lock) > 1);
+        locks
+            .entry(canonical_project.to_path_buf())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    }
+}
+
+pub(crate) use turn::{
+    PendingTurnCheckpoint, TurnCheckpoint, TurnCheckpointIds, begin_project_turn,
+};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn same_project_turns_share_one_lifecycle_lock() {
+        let store = CheckpointStore::at(PathBuf::from("unused"));
+        let project = PathBuf::from("project");
+        let first = store.turn_lock(&project).await.lock_owned().await;
+        let waiting_store = store.clone();
+        let waiting_project = project.clone();
+        let (attempting_tx, attempting_rx) = tokio::sync::oneshot::channel();
+        let mut waiting = tokio::spawn(async move {
+            let _ = attempting_tx.send(());
+            waiting_store
+                .turn_lock(&waiting_project)
+                .await
+                .lock_owned()
+                .await
+        });
+
+        attempting_rx.await.unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut waiting)
+                .await
+                .is_err()
+        );
+        drop(first);
+        tokio::time::timeout(Duration::from_secs(1), waiting)
+            .await
+            .unwrap()
+            .unwrap();
     }
 }

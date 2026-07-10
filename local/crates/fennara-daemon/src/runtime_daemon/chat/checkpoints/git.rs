@@ -24,6 +24,12 @@ pub(super) struct GitSnapshotStore {
     project_locks: Arc<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>>,
 }
 
+#[derive(Clone, Debug)]
+pub(super) struct ProjectIdentity {
+    pub(super) root: PathBuf,
+    pub(super) storage_key: String,
+}
+
 impl GitSnapshotStore {
     pub(super) fn new(storage_root: PathBuf) -> Self {
         Self {
@@ -50,6 +56,76 @@ impl GitSnapshotStore {
             Ok(Err(error)) => CaptureResult::unavailable(error.unavailable_reason()),
             Err(_) => CaptureResult::unavailable(CaptureUnavailableReason::TimedOut),
         }
+    }
+
+    pub(super) async fn identify(
+        &self,
+        project_root: &Path,
+    ) -> Result<ProjectIdentity, SnapshotError> {
+        let root = canonical_project_root(project_root).await?;
+        let storage_key = project_storage_key(&root)?;
+        Ok(ProjectIdentity { root, storage_key })
+    }
+
+    pub(super) async fn pin_snapshot(
+        &self,
+        identity: &ProjectIdentity,
+        checkpoint_id: &str,
+        boundary: &str,
+        snapshot_id: &str,
+    ) -> Result<(), SnapshotError> {
+        validate_snapshot_id(snapshot_id)?;
+        let reference = checkpoint_ref(checkpoint_id, boundary)?;
+        let repository = self.repository(&identity.root).await?;
+        let output = timeout(
+            CAPTURE_TIMEOUT,
+            snapshot_git(&repository, ["update-ref", reference.as_str(), snapshot_id]),
+        )
+        .await
+        .map_err(|_| SnapshotError::TimedOut)??;
+        ensure_success("pin checkpoint snapshot", output).map(|_| ())
+    }
+
+    pub(super) async fn release_checkpoint(
+        &self,
+        storage_key: &str,
+        checkpoint_id: &str,
+    ) -> Result<(), SnapshotError> {
+        validate_storage_key(storage_key)?;
+        let private_git_dir = self.storage_root.join(storage_key);
+        if !private_git_dir.is_dir() {
+            return Ok(());
+        }
+        for boundary in ["start", "end"] {
+            let reference = checkpoint_ref(checkpoint_id, boundary)?;
+            let mut command = Command::new("git");
+            command.arg("--git-dir").arg(&private_git_dir);
+            let output = timeout(
+                CAPTURE_TIMEOUT,
+                execute_git(&mut command, ["update-ref", "-d", reference.as_str()]),
+            )
+            .await
+            .map_err(|_| SnapshotError::TimedOut)??;
+            ensure_success("release checkpoint snapshot", output)?;
+        }
+        Ok(())
+    }
+
+    pub(super) async fn compact_storage(&self, storage_key: &str) -> Result<(), SnapshotError> {
+        validate_storage_key(storage_key)?;
+        let private_git_dir = self.storage_root.join(storage_key);
+        if !private_git_dir.is_dir() {
+            return Ok(());
+        }
+        let compact = async {
+            let mut command = Command::new("git");
+            command.arg("--git-dir").arg(&private_git_dir);
+            let output = execute_git(&mut command, ["gc", "--prune=now", "--quiet"]).await?;
+            ensure_success("compact checkpoint storage", output).map(|_| ())
+        };
+        timeout(CAPTURE_TIMEOUT, compact)
+            .await
+            .map_err(|_| SnapshotError::TimedOut)?
     }
 
     pub(super) async fn changed_paths(
@@ -764,6 +840,27 @@ fn project_storage_key(project_root: &Path) -> Result<String, SnapshotError> {
     Ok(format!("{:x}", Sha256::digest(path.as_bytes())))
 }
 
+fn validate_storage_key(storage_key: &str) -> Result<(), SnapshotError> {
+    if storage_key.len() == 64 && storage_key.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Ok(())
+    } else {
+        Err(SnapshotError::InvalidCheckpointReference)
+    }
+}
+
+fn checkpoint_ref(checkpoint_id: &str, boundary: &str) -> Result<String, SnapshotError> {
+    let valid_id = !checkpoint_id.is_empty()
+        && checkpoint_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'));
+    if !valid_id || !matches!(boundary, "start" | "end") {
+        return Err(SnapshotError::InvalidCheckpointReference);
+    }
+    Ok(format!(
+        "refs/fennara/checkpoints/{checkpoint_id}/{boundary}"
+    ))
+}
+
 fn path_to_git(path: &Path) -> Result<String, SnapshotError> {
     let path = path
         .to_str()
@@ -912,6 +1009,7 @@ pub(super) enum SnapshotError {
     InvalidRepositoryOutput,
     NonUtf8GitOutput,
     InvalidSnapshotId,
+    InvalidCheckpointReference,
     TooManyCandidates(usize),
     CreateStorage(io::Error),
     SpawnGit(io::Error),
@@ -953,6 +1051,9 @@ impl fmt::Display for SnapshotError {
             }
             Self::NonUtf8GitOutput => write!(formatter, "Git returned a non-UTF-8 path"),
             Self::InvalidSnapshotId => write!(formatter, "snapshot ID is invalid"),
+            Self::InvalidCheckpointReference => {
+                write!(formatter, "checkpoint reference is invalid")
+            }
             Self::TooManyCandidates(count) => {
                 write!(formatter, "checkpoint candidate limit exceeded: {count}")
             }
@@ -1159,6 +1260,41 @@ mod tests {
             vec!["asset.bin", "created.txt", "delete.txt", "keep.txt"]
         );
 
+        let identity = store.identify(&repository.root.path).await.unwrap();
+        let snapshot_id = after.snapshot_id.as_deref().unwrap();
+        store
+            .pin_snapshot(&identity, "checkpoint_1", "end", snapshot_id)
+            .await
+            .unwrap();
+        let reference = checkpoint_ref("checkpoint_1", "end").unwrap();
+        let output = snapshot_git(
+            &private,
+            ["show-ref", "--verify", "--hash", reference.as_str()],
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            String::from_utf8(
+                ensure_success("read checkpoint ref", output)
+                    .unwrap()
+                    .stdout
+            )
+            .unwrap()
+            .trim(),
+            snapshot_id
+        );
+        store
+            .release_checkpoint(&identity.storage_key, "checkpoint_1")
+            .await
+            .unwrap();
+        let output = snapshot_git(
+            &private,
+            ["show-ref", "--verify", "--hash", reference.as_str()],
+        )
+        .await
+        .unwrap();
+        assert!(!output.success);
+
         let object = format!("{}:asset.bin", after.snapshot_id.unwrap());
         let output = snapshot_git(&private, ["show", object.as_str()])
             .await
@@ -1167,6 +1303,7 @@ mod tests {
             ensure_success("read binary", output).unwrap().stdout,
             [255, 0, 17, 9]
         );
+        store.compact_storage(&identity.storage_key).await.unwrap();
     }
 
     #[tokio::test]

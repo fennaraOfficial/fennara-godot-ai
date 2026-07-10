@@ -7,8 +7,9 @@ use tokio::sync::Mutex;
 use crate::runtime_daemon::{godot_bridge, state::AppState};
 
 use super::super::{
-    BoundChatProject, ClientRequest, context, context_compaction, ids, images, prompt, providers,
-    send_chat_list, send_chat_updated, send_error, send_json, settings, store, tools, trace,
+    BoundChatProject, ClientRequest, checkpoints, context, context_compaction, ids, images, prompt,
+    providers, send_chat_list, send_chat_updated, send_error, send_json, settings, store, tools,
+    trace,
 };
 use super::{
     CHAT_ALREADY_RUNNING_MESSAGE, cost, is_chat_cancelled,
@@ -325,6 +326,18 @@ where
             "provider_message_count": provider_messages.len()
         }),
     );
+    let pending_turn_checkpoint =
+        match checkpoints::begin_project_turn(scope.project_path.as_deref()).await {
+            Ok(checkpoint) => checkpoint,
+            Err(error) => {
+                trace.warn(
+                    "checkpoint.start_unavailable",
+                    "skipped",
+                    json!({ "message": error }),
+                );
+                checkpoints::PendingTurnCheckpoint::disabled()
+            }
+        };
     let snapshot_span = trace.start_span("snapshot", json!({ "chat_id": chat_id.as_str() }));
     let snapshot_result = godot_bridge::begin_snapshot_turn_for_session_traced(
         state,
@@ -449,6 +462,25 @@ where
                 return send_error(sender, request_id, "chat_store_failed", &error).await;
             }
         };
+    let turn_checkpoint = match pending_turn_checkpoint
+        .attach(checkpoints::TurnCheckpointIds {
+            chat_id: &chat_id,
+            user_message_id: &user_message.id,
+            assistant_message_id: &assistant_message.id,
+            generation_id: &assistant_generation.id,
+        })
+        .await
+    {
+        Ok(checkpoint) => checkpoint,
+        Err(error) => {
+            trace.warn(
+                "checkpoint.persist_failed",
+                "skipped",
+                json!({ "message": error }),
+            );
+            checkpoints::TurnCheckpoint::disabled()
+        }
+    };
     let mut current_trace = trace.with_generation(&assistant_generation.id, &assistant_message.id);
     current_trace.event_status(
         "generation.start",
@@ -1005,6 +1037,13 @@ where
         );
     };
 
+    if let Err(error) = turn_checkpoint.finish().await {
+        trace.warn(
+            "checkpoint.finish_failed",
+            "failed",
+            json!({ "message": error }),
+        );
+    }
     trace.event_status(
         "turn.done",
         "done",

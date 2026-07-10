@@ -279,6 +279,9 @@ fn migrate(conn: &Connection) -> Result<(), String> {
     run_migration_once(conn, 12, "chat_context_summaries", |conn| {
         create_context_summary_tables(conn)
     })?;
+    run_migration_once(conn, 13, "chat_turn_checkpoints", |conn| {
+        create_turn_checkpoint_tables(conn)
+    })?;
     Ok(())
 }
 
@@ -437,6 +440,41 @@ fn create_context_summary_tables(conn: &Connection) -> Result<(), String> {
           ON chat_context_summaries(chat_id, covered_start_sequence, covered_end_sequence);
         CREATE INDEX IF NOT EXISTS idx_chat_context_summaries_chat_created
           ON chat_context_summaries(chat_id, created_at_ms);
+        ",
+    )
+    .map_err(to_store_error)
+}
+
+pub(super) fn create_turn_checkpoint_tables(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS chat_turn_checkpoints (
+          id TEXT PRIMARY KEY,
+          chat_id TEXT NOT NULL,
+          user_message_id TEXT NOT NULL UNIQUE,
+          assistant_message_id TEXT NOT NULL,
+          generation_id TEXT NOT NULL UNIQUE,
+          project_path TEXT NOT NULL,
+          storage_key TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'capturing',
+          start_snapshot_id TEXT,
+          end_snapshot_id TEXT,
+          start_capture_json TEXT NOT NULL,
+          end_capture_json TEXT,
+          changed_paths_json TEXT NOT NULL DEFAULT '[]',
+          created_at_ms INTEGER NOT NULL,
+          completed_at_ms INTEGER,
+          FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+          FOREIGN KEY (assistant_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+          FOREIGN KEY (generation_id) REFERENCES chat_generations(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_turn_checkpoints_chat_created
+          ON chat_turn_checkpoints(chat_id, created_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_chat_turn_checkpoints_storage_created
+          ON chat_turn_checkpoints(storage_key, created_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_chat_turn_checkpoints_status
+          ON chat_turn_checkpoints(status);
         ",
     )
     .map_err(to_store_error)
@@ -918,6 +956,36 @@ mod tests {
             )
             .unwrap();
         assert_eq!(migration_name, "chat_context_summaries");
+    }
+
+    #[test]
+    fn migration_adds_turn_checkpoint_table() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        migrate(&conn).unwrap();
+
+        assert!(has_column(
+            &conn,
+            "chat_turn_checkpoints",
+            "start_capture_json"
+        ));
+        assert!(has_column(
+            &conn,
+            "chat_turn_checkpoints",
+            "changed_paths_json"
+        ));
+        assert!(has_index(
+            &conn,
+            "idx_chat_turn_checkpoints_storage_created"
+        ));
+        let migration_name: String = conn
+            .query_row(
+                "SELECT name FROM schema_migrations WHERE version = 13",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(migration_name, "chat_turn_checkpoints");
     }
 
     #[test]

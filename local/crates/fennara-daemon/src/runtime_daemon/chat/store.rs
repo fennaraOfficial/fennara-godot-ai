@@ -9,11 +9,18 @@ use super::{
     settings::{self, DEFAULT_MODEL},
 };
 
+mod checkpoints;
 mod generations;
 mod replay;
 mod tool_calls;
 mod usage;
 
+pub(crate) use self::checkpoints::{
+    CompletedTurnCheckpoint, NewTurnCheckpoint, PrunableTurnCheckpoint,
+    claim_prunable_turn_checkpoints, complete_turn_checkpoint, delete_pruning_turn_checkpoint,
+    insert_turn_checkpoint, mark_capturing_checkpoints_interrupted,
+    mark_turn_checkpoint_interrupted, pruning_turn_checkpoints,
+};
 use self::usage::{
     latest_prompt_tokens_for_chat, record_usage_log, total_cost_for_chat, usage_cost,
 };
