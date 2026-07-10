@@ -17,6 +17,9 @@ use crate::runtime_daemon::godot_bridge;
 
 mod assets;
 mod auth;
+// Capture is wired into the generation lifecycle by the next sequential change.
+#[allow(dead_code)]
+pub(crate) mod checkpoints;
 pub(crate) mod context;
 mod context_compaction;
 mod exec_command;
