@@ -91,6 +91,7 @@ impl GitSnapshotStore {
 
     async fn project_lock(&self, canonical_project: &Path) -> Arc<Mutex<()>> {
         let mut locks = self.project_locks.lock().await;
+        locks.retain(|_, lock| Arc::strong_count(lock) > 1);
         locks
             .entry(canonical_project.to_path_buf())
             .or_insert_with(|| Arc::new(Mutex::new(())))
@@ -473,14 +474,9 @@ async fn refresh_index(repository: &Repository) -> Result<Vec<SkippedPath>, Snap
         if !metadata.is_file() {
             continue;
         }
-        if metadata.len() > MAX_UNTRACKED_FILE_BYTES {
+        if let Some(reason) = untracked_skip_reason(metadata.len(), untracked_bytes) {
             remove.insert(path.clone());
-            skipped.push(repository.skipped(path, SkippedPathReason::LargeUntrackedFile));
-            continue;
-        }
-        if untracked_bytes.saturating_add(metadata.len()) > MAX_UNTRACKED_CAPTURE_BYTES {
-            remove.insert(path.clone());
-            skipped.push(repository.skipped(path, SkippedPathReason::UntrackedByteBudgetExceeded));
+            skipped.push(repository.skipped(path, reason));
             continue;
         }
         untracked_bytes += metadata.len();
@@ -495,6 +491,16 @@ async fn refresh_index(repository: &Repository) -> Result<Vec<SkippedPath>, Snap
     add_to_index(repository, &stage).await?;
     skipped.sort_by(|left, right| left.path.cmp(&right.path));
     Ok(skipped)
+}
+
+fn untracked_skip_reason(file_bytes: u64, captured_bytes: u64) -> Option<SkippedPathReason> {
+    if file_bytes > MAX_UNTRACKED_FILE_BYTES {
+        Some(SkippedPathReason::LargeUntrackedFile)
+    } else if captured_bytes.saturating_add(file_bytes) > MAX_UNTRACKED_CAPTURE_BYTES {
+        Some(SkippedPathReason::UntrackedByteBudgetExceeded)
+    } else {
+        None
+    }
 }
 
 async fn private_delta_paths(repository: &Repository) -> Result<Vec<String>, SnapshotError> {
@@ -759,9 +765,13 @@ fn project_storage_key(project_root: &Path) -> Result<String, SnapshotError> {
 }
 
 fn path_to_git(path: &Path) -> Result<String, SnapshotError> {
-    path.to_str()
-        .map(|path| path.replace('\\', "/"))
-        .ok_or(SnapshotError::UnsupportedRepositoryPath)
+    let path = path
+        .to_str()
+        .ok_or(SnapshotError::UnsupportedRepositoryPath)?
+        .to_string();
+    #[cfg(target_os = "windows")]
+    let path = path.replace('\\', "/");
+    Ok(path)
 }
 
 fn parse_nul_paths(bytes: &[u8]) -> Result<Vec<String>, SnapshotError> {
@@ -1051,6 +1061,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn prunes_inactive_project_locks_without_dropping_active_locks() {
+        let storage = TestDirectory::new("project-locks");
+        let store = GitSnapshotStore::new(storage.path.clone());
+        let inactive_path = PathBuf::from("inactive");
+        let active_path = PathBuf::from("active");
+        let next_path = PathBuf::from("next");
+
+        let inactive = store.project_lock(&inactive_path).await;
+        let active = store.project_lock(&active_path).await;
+        drop(inactive);
+        let next = store.project_lock(&next_path).await;
+
+        let locks = store.project_locks.lock().await;
+        assert!(!locks.contains_key(&inactive_path));
+        assert!(locks.contains_key(&active_path));
+        assert!(locks.contains_key(&next_path));
+        drop(locks);
+        drop(active);
+        drop(next);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn normalizes_windows_paths_for_git() {
+        assert_eq!(
+            path_to_git(Path::new(r"folder\script.gd")).unwrap(),
+            "folder/script.gd"
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_os = "windows"))]
+    fn preserves_unix_backslashes_for_git() {
+        assert_eq!(
+            path_to_git(Path::new(r"folder\script.gd")).unwrap(),
+            r"folder\script.gd"
+        );
+    }
+
+    #[tokio::test]
     async fn captures_binary_safe_changes_and_lists_project_paths() {
         let repository = TestRepository::new("binary");
         fs::write(repository.root.path.join("keep.txt"), "before\n").unwrap();
@@ -1129,7 +1179,7 @@ mod tests {
         .unwrap();
         fs::write(
             repository.root.path.join(".gitattributes"),
-            "*.lfs filter=lfs diff=lfs merge=lfs -text\n",
+            "*.lfs filter=lfs diff=lfs merge=lfs -text\n*.filtered filter=custom\n",
         )
         .unwrap();
         repository.commit_all();
@@ -1145,6 +1195,7 @@ mod tests {
         )
         .unwrap();
         fs::write(repository.root.path.join("asset.lfs"), [8_u8; 32]).unwrap();
+        fs::write(repository.root.path.join("asset.filtered"), [10_u8; 32]).unwrap();
         fs::write(repository.root.path.join("script.gd.uid"), "uid://test\n").unwrap();
         fs::write(
             repository.root.path.join("generated.translation"),
@@ -1155,15 +1206,20 @@ mod tests {
         let store = repository.store();
         let capture = store.capture(&repository.root.path).await;
         assert_eq!(capture.coverage, CheckpointCoverage::Partial);
-        assert_eq!(capture.skipped_paths.len(), 2);
-        assert_eq!(capture.skipped_paths[0].path, "asset.lfs");
+        assert_eq!(capture.skipped_paths.len(), 3);
+        assert_eq!(capture.skipped_paths[0].path, "asset.filtered");
         assert_eq!(
             capture.skipped_paths[0].reason,
-            SkippedPathReason::UnverifiedLfsObject
+            SkippedPathReason::UnverifiedContentFilter
         );
-        assert_eq!(capture.skipped_paths[1].path, "large.bin");
+        assert_eq!(capture.skipped_paths[1].path, "asset.lfs");
         assert_eq!(
             capture.skipped_paths[1].reason,
+            SkippedPathReason::UnverifiedLfsObject
+        );
+        assert_eq!(capture.skipped_paths[2].path, "large.bin");
+        assert_eq!(
+            capture.skipped_paths[2].reason,
             SkippedPathReason::LargeUntrackedFile
         );
 
@@ -1171,6 +1227,7 @@ mod tests {
         let private = store.repository(&canonical_root).await.unwrap();
         for path in [
             ".godot/cache.bin",
+            "asset.filtered",
             "asset.lfs",
             "generated.translation",
             "large.bin",
@@ -1191,6 +1248,22 @@ mod tests {
         assert!(
             output.success,
             ".uid sidecars must remain checkpoint-eligible"
+        );
+    }
+
+    #[test]
+    fn reports_untracked_files_over_the_aggregate_byte_budget() {
+        let skipped = SkippedPath {
+            path: "over-budget.bin".to_string(),
+            reason: untracked_skip_reason(MAX_UNTRACKED_FILE_BYTES, MAX_UNTRACKED_CAPTURE_BYTES)
+                .unwrap(),
+        };
+        let capture = CaptureResult::available("snapshot".to_string(), vec![skipped.clone()]);
+        assert_eq!(capture.coverage, CheckpointCoverage::Partial);
+        assert_eq!(capture.skipped_paths, vec![skipped]);
+        assert_eq!(
+            capture.skipped_paths[0].reason,
+            SkippedPathReason::UntrackedByteBudgetExceeded
         );
     }
 
@@ -1279,7 +1352,12 @@ mod tests {
         let store = repository.store();
         let baseline = store.capture(&repository.root.path).await;
         assert_eq!(baseline.coverage, CheckpointCoverage::Full);
-        fs::write(nested.join("addon.gd"), "extends Node2D\n").unwrap();
+        let canonical_root = canonical_project_root(&repository.root.path).await.unwrap();
+        let private = store.repository(&canonical_root).await.unwrap();
+        remove_from_index(&private, &["addons/vendor"])
+            .await
+            .unwrap();
+        fs::remove_dir_all(nested.join(".git")).unwrap();
 
         let capture = store.capture(&repository.root.path).await;
         assert_eq!(capture.coverage, CheckpointCoverage::Partial);
