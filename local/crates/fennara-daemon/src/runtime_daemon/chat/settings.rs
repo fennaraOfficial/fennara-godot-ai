@@ -488,7 +488,7 @@ pub(crate) fn app_dir() -> PathBuf {
 
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        if let Some(path) = env::var_os("XDG_DATA_HOME") {
+        if let Some(path) = env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty()) {
             return PathBuf::from(path).join("fennara");
         }
         if let Some(path) = home_dir() {

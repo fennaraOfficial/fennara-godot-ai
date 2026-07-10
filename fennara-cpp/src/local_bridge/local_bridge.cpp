@@ -141,6 +141,13 @@ godot::String FennaraLocalBridge::get_chat_token() const {
 
 void FennaraLocalBridge::_exit_tree() {
     _close_socket();
+    if (_daemon_auth_cancel) {
+        _daemon_auth_cancel->store(true);
+    }
+    if (_daemon_auth_future.valid()) {
+        _daemon_auth_future.get();
+    }
+    _daemon_auth_cancel.reset();
 }
 
 void FennaraLocalBridge::_connect_socket() {
@@ -152,10 +159,13 @@ void FennaraLocalBridge::_connect_socket() {
     }
 
     if (!_daemon_auth_future.valid()) {
-        _daemon_auth_future = std::async(std::launch::async, []() {
-            const godot::String header = control_auth::verified_daemon_header();
-            if (header.is_empty()) {
-                control_auth::request_legacy_daemon_shutdown();
+        _daemon_auth_cancel = std::make_shared<std::atomic_bool>(false);
+        const std::shared_ptr<std::atomic_bool> cancel = _daemon_auth_cancel;
+        _daemon_auth_future = std::async(std::launch::async, [cancel]() {
+            const godot::String header =
+                control_auth::verified_daemon_header(cancel.get());
+            if (header.is_empty() && !cancel->load()) {
+                control_auth::request_legacy_daemon_shutdown(cancel.get());
             }
             return header;
         });
@@ -169,6 +179,7 @@ void FennaraLocalBridge::_connect_socket() {
     }
 
     const godot::String control_header = _daemon_auth_future.get();
+    _daemon_auth_cancel.reset();
     if (control_header.is_empty()) {
         _daemon_spawn_attempted = false;
         _start_daemon_if_available();

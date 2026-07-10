@@ -38,7 +38,11 @@ godot::PackedByteArray base64_url_decode(godot::String value) {
 }
 
 godot::Dictionary request_json(godot::HTTPClient::Method method,
-                               const godot::String &path) {
+                               const godot::String &path,
+                               const std::atomic_bool *cancelled) {
+    if (cancelled != nullptr && cancelled->load()) {
+        return godot::Dictionary();
+    }
     godot::Ref<godot::HTTPClient> http;
     http.instantiate();
     if (http.is_null() || http->connect_to_host(kDaemonHost, kDaemonPort) != godot::OK) {
@@ -49,6 +53,9 @@ godot::Dictionary request_json(godot::HTTPClient::Method method,
     bool request_sent = false;
     godot::String response_body;
     while (godot::Time::get_singleton()->get_ticks_msec() < deadline) {
+        if (cancelled != nullptr && cancelled->load()) {
+            return godot::Dictionary();
+        }
         http->poll();
         const godot::HTTPClient::Status status = http->get_status();
         if (status == godot::HTTPClient::STATUS_CANT_CONNECT ||
@@ -92,7 +99,8 @@ godot::Dictionary request_json(godot::HTTPClient::Method method,
     return parsed;
 }
 
-bool verify_daemon(const godot::PackedByteArray &key) {
+bool verify_daemon(const godot::PackedByteArray &key,
+                   const std::atomic_bool *cancelled) {
     godot::Ref<godot::Crypto> crypto;
     crypto.instantiate();
     if (crypto.is_null()) {
@@ -104,7 +112,8 @@ bool verify_daemon(const godot::PackedByteArray &key) {
     }
 
     const godot::String path = "/control/challenge?nonce=" + base64_url_encode(nonce);
-    const godot::Dictionary response = request_json(godot::HTTPClient::METHOD_GET, path);
+    const godot::Dictionary response =
+        request_json(godot::HTTPClient::METHOD_GET, path, cancelled);
     const godot::PackedByteArray proof =
         base64_url_decode(godot::String(response.get("proof", "")));
     const godot::PackedByteArray expected = crypto->hmac_digest(
@@ -115,7 +124,10 @@ bool verify_daemon(const godot::PackedByteArray &key) {
 
 } // namespace
 
-godot::String verified_daemon_header() {
+godot::String verified_daemon_header(const std::atomic_bool *cancelled) {
+    if (cancelled != nullptr && cancelled->load()) {
+        return "";
+    }
     const godot::String path = app_paths::daemon_control_token_path();
     godot::Ref<godot::FileAccess> file =
         godot::FileAccess::open(path, godot::FileAccess::READ);
@@ -127,20 +139,25 @@ godot::String verified_daemon_header() {
         return "";
     }
     const godot::PackedByteArray key = base64_url_decode(token);
-    if (key.size() != kChallengeBytes || !verify_daemon(key)) {
+    if (key.size() != kChallengeBytes || !verify_daemon(key, cancelled)) {
         return "";
     }
     return "X-Fennara-Control-Token: " + token;
 }
 
-void request_legacy_daemon_shutdown() {
+void request_legacy_daemon_shutdown(const std::atomic_bool *cancelled) {
     const godot::Dictionary health =
-        request_json(godot::HTTPClient::METHOD_GET, "/health");
+        request_json(godot::HTTPClient::METHOD_GET, "/health", cancelled);
     if (godot::String(health.get("daemon", "")) != "fennara-daemon") {
         return;
     }
-    request_json(godot::HTTPClient::METHOD_POST, "/shutdown");
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    request_json(godot::HTTPClient::METHOD_POST, "/shutdown", cancelled);
+    for (int elapsed_ms = 0; elapsed_ms < 200; elapsed_ms += 5) {
+        if (cancelled != nullptr && cancelled->load()) {
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
 }
 
 bool verify_daemon_and_append_header(godot::PackedStringArray &headers) {

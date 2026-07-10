@@ -16,6 +16,7 @@ use std::{
     path::Path,
     sync::Arc,
 };
+use subtle::ConstantTimeEq;
 
 use super::util::fennara_app_dir;
 
@@ -95,7 +96,9 @@ fn is_authorized(headers: &HeaderMap, expected: &str) -> bool {
     headers
         .get(CONTROL_HEADER)
         .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| value == expected)
+        .is_some_and(|value| {
+            value.len() == expected.len() && bool::from(value.as_bytes().ct_eq(expected.as_bytes()))
+        })
 }
 
 fn load_or_create_at(path: &Path) -> Result<String, String> {
@@ -109,7 +112,7 @@ fn load_or_create_at(path: &Path) -> Result<String, String> {
     }
 
     let token = generate_token()?;
-    let temp_path = path.with_extension(format!("{}.tmp", std::process::id()));
+    let temp_path = path.with_extension(format!("{}.{}.tmp", std::process::id(), &token[..8]));
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -142,6 +145,13 @@ fn load_or_create_at(path: &Path) -> Result<String, String> {
             read_valid_token(path)?
                 .ok_or_else(|| format!("{} does not contain a valid control token", path.display()))
         }
+        Err(error) if error.kind() == ErrorKind::Unsupported => {
+            let _ = fs::remove_file(&temp_path);
+            Err(format!(
+                "cannot publish {} atomically because its filesystem does not support hard links; move the Fennara app-data directory to a filesystem with hard-link support",
+                path.display()
+            ))
+        }
         Err(error) => {
             let _ = fs::remove_file(&temp_path);
             Err(format!("failed to publish {}: {error}", path.display()))
@@ -173,6 +183,7 @@ fn generate_token() -> Result<String, String> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::sync::{Arc, Barrier};
 
     fn test_path(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -207,5 +218,34 @@ mod tests {
 
         headers.insert(CONTROL_HEADER, "expected".parse().unwrap());
         assert!(is_authorized(&headers, "expected"));
+    }
+
+    #[test]
+    fn concurrent_creators_reuse_one_control_token() {
+        const THREADS: usize = 8;
+        let path = test_path("concurrent");
+        let _ = fs::remove_file(&path);
+        let barrier = Arc::new(Barrier::new(THREADS));
+        let handles = (0..THREADS)
+            .map(|_| {
+                let path = path.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    load_or_create_at(&path).expect("concurrent token creation should succeed")
+                })
+            })
+            .collect::<Vec<_>>();
+        let tokens = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("token creator should not panic"))
+            .collect::<Vec<_>>();
+
+        assert!(tokens.iter().all(|token| token == &tokens[0]));
+        assert_eq!(
+            URL_SAFE_NO_PAD.decode(&tokens[0]).unwrap().len(),
+            CONTROL_TOKEN_BYTES
+        );
+        let _ = fs::remove_file(path);
     }
 }
