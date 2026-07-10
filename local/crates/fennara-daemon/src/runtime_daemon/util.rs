@@ -67,9 +67,12 @@ pub(crate) fn fennara_app_dir() -> Result<PathBuf, String> {
 
     #[cfg(all(unix, not(target_os = "macos")))]
     {
+        if let Some(path) = env::var_os("XDG_DATA_HOME") {
+            return Ok(PathBuf::from(path).join("fennara"));
+        }
         home_dir()
             .map(|path| path.join(".local").join("share").join("fennara"))
-            .ok_or_else(|| "HOME is not set".to_string())
+            .ok_or_else(|| "HOME and XDG_DATA_HOME are not set".to_string())
     }
 }
 

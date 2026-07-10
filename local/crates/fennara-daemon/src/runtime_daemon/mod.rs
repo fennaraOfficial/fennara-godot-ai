@@ -1,5 +1,5 @@
 use axum::{
-    Json, Router,
+    Extension, Json, Router, middleware,
     routing::{get, post},
 };
 use serde_json::{Value, json};
@@ -7,6 +7,7 @@ use std::{net::SocketAddr, time::Duration};
 use tokio::sync::oneshot;
 
 pub(crate) mod chat;
+pub(crate) mod control_auth;
 pub(crate) mod docs_cache;
 pub(crate) mod godot_bridge;
 pub(crate) mod permissions;
@@ -26,20 +27,13 @@ pub(crate) const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub async fn run() {
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let state = AppState::new(shutdown_tx);
+    let control_token = control_auth::load_or_create()
+        .expect("failed to initialize local daemon control authentication");
 
-    let app = Router::new()
-        .route("/health", get(health))
+    let privileged = Router::new()
         .route("/status", get(godot_bridge::status))
         .route("/shutdown", post(shutdown))
-        .route("/chat", get(chat::chat_index_redirect))
-        .route("/chat/", get(chat::chat_index))
         .route("/chat/traces", get(chat::chat_traces))
-        .route(
-            "/chat/tool-media/{tool_call_id}/{index}",
-            get(chat::chat_tool_media),
-        )
-        .route("/chat/{*path}", get(chat::chat_asset))
-        .route("/chat/ws", get(chat::chat_ws))
         .route("/tools/call", post(godot_bridge::call_tool))
         .route(
             "/runtime/run-godot-scene",
@@ -66,6 +60,24 @@ pub async fn run() {
             post(runtime_sessions::runtime_session_script),
         )
         .route("/godot/ws", get(godot_bridge::godot_ws))
+        .route_layer(middleware::from_fn_with_state(
+            control_token.clone(),
+            control_auth::require_control_auth,
+        ));
+
+    let app = Router::new()
+        .route("/health", get(health))
+        .route("/control/challenge", get(control_auth::challenge))
+        .route("/chat", get(chat::chat_index_redirect))
+        .route("/chat/", get(chat::chat_index))
+        .route(
+            "/chat/tool-media/{tool_call_id}/{index}",
+            get(chat::chat_tool_media),
+        )
+        .route("/chat/{*path}", get(chat::chat_asset))
+        .route("/chat/ws", get(chat::chat_ws))
+        .merge(privileged)
+        .layer(Extension(control_token))
         .with_state(state);
 
     let addr: SocketAddr = format!("{DAEMON_HOST}:{DAEMON_PORT}")

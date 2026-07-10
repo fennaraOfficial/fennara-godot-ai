@@ -1,12 +1,16 @@
 #include "fennara/local_bridge.hpp"
 
 #include "fennara/app_paths.hpp"
+#include "fennara/control_auth.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/core/class_db.hpp>
+
+#include <chrono>
+#include <future>
 
 namespace fennara {
 
@@ -147,6 +151,31 @@ void FennaraLocalBridge::_connect_socket() {
         }
     }
 
+    if (!_daemon_auth_future.valid()) {
+        _daemon_auth_future = std::async(std::launch::async, []() {
+            const godot::String header = control_auth::verified_daemon_header();
+            if (header.is_empty()) {
+                control_auth::request_legacy_daemon_shutdown();
+            }
+            return header;
+        });
+        _reconnect_timer = 0.05;
+        return;
+    }
+    if (_daemon_auth_future.wait_for(std::chrono::seconds(0)) !=
+        std::future_status::ready) {
+        _reconnect_timer = 0.05;
+        return;
+    }
+
+    const godot::String control_header = _daemon_auth_future.get();
+    if (control_header.is_empty()) {
+        _daemon_spawn_attempted = false;
+        _start_daemon_if_available();
+        _reconnect_timer = _daemon_spawn_attempted ? 0.5 : RECONNECT_DELAY_SECONDS;
+        return;
+    }
+
     _ws.instantiate();
     if (!_ws.is_valid()) {
         FLOG_ERR("Local bridge failed to initialize WebSocketPeer");
@@ -156,6 +185,10 @@ void FennaraLocalBridge::_connect_socket() {
     _intentional_close = false;
     _sent_hello = false;
     _last_state = godot::WebSocketPeer::STATE_CLOSED;
+
+    godot::PackedStringArray headers;
+    headers.append(control_header);
+    _ws->set_handshake_headers(headers);
 
     godot::Error err = _ws->connect_to_url(LOCAL_DAEMON_WS_URL);
     if (err != godot::OK) {

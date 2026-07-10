@@ -10,6 +10,7 @@
 #include <godot_cpp/variant/string.hpp>
 
 #include <cstdint>
+#include <future>
 
 namespace fennara {
 
@@ -59,6 +60,7 @@ private:
     godot::String _active_mcp_target_name;
     godot::String _active_mcp_target_path;
     godot::Ref<FennaraSnapshotManager> _snapshot_mgr;
+    std::future<godot::String> _daemon_auth_future;
 
     void _connect_socket();
     void _close_socket();
