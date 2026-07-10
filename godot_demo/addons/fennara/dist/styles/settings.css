@@ -35,6 +35,10 @@
   color: var(--muted);
 }
 
+.settings-provider-button {
+  justify-self: start;
+}
+
 .settings-note {
   margin: 0;
   color: var(--faint);

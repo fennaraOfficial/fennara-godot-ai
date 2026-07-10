@@ -56,6 +56,7 @@
   const chatSurfaceRestartStatus = document.querySelector("[data-chat-surface-restart]");
   const approvalModeControls = document.querySelectorAll("[data-approval-mode]");
   const settingsSavedToast = document.querySelector("[data-settings-saved-toast]");
+  const openSettingsProvidersButton = document.querySelector("[data-open-settings-providers]");
   const modelInput = document.querySelector("[data-model]");
   const modelStatuses = document.querySelectorAll("[data-model-status]");
   const chatSizeStatus = document.querySelector("[data-chat-size]");
@@ -344,6 +345,7 @@
       approvalModeControls,
       settingsSavedToast,
       saveSettingsButton,
+      openProvidersButton: openSettingsProvidersButton,
     },
     callbacks: {
       ensureDaemonConnected,
@@ -356,6 +358,7 @@
       cleanApprovalMode,
       getCurrentChatSurface: () => currentChatSurface,
       getCurrentApprovalMode: () => currentApprovalMode,
+      openProviderPicker,
       sendIfOpen: daemonClient.sendIfOpen,
       connect,
       appendSystem,
