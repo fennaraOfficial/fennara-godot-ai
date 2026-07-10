@@ -9,6 +9,7 @@
     const approvalModeControls = Array.from(elements.approvalModeControls || []);
     const settingsSavedToast = elements.settingsSavedToast || null;
     const saveSettingsButton = elements.saveSettingsButton || null;
+    const openProvidersButton = elements.openProvidersButton || null;
     const savedNoticeMs = constants.savedNoticeMs || 1800;
     const saveTimeoutMs = constants.saveTimeoutMs || 8000;
     const chatSurfaceBrowser = constants.chatSurfaceBrowser || "browser";
@@ -26,6 +27,7 @@
     const cleanApprovalMode = callbacks.cleanApprovalMode || ((mode) => mode === approvalModeFullAccess ? approvalModeFullAccess : approvalModeAsk);
     const getCurrentChatSurface = callbacks.getCurrentChatSurface || (() => chatSurfaceEmbedded);
     const getCurrentApprovalMode = callbacks.getCurrentApprovalMode || (() => approvalModeAsk);
+    const openProviderPicker = callbacks.openProviderPicker || function () {};
     const buildSavePayload = callbacks.buildSavePayload || (() => null);
     const sendIfOpen = callbacks.sendIfOpen || (() => false);
     const connect = callbacks.connect || function () {};
@@ -65,6 +67,13 @@
       control.addEventListener("change", () => {
         setDirty(true);
       });
+    });
+
+    openProvidersButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      settingsDialog?.close();
+      openProviderPicker();
     });
 
     function openSettings() {

@@ -26,7 +26,7 @@ External MCP apps are different. Claude Code, Claude Desktop, Codex, Cursor, Gem
 
 Cloud providers need your own API key or subscription key. Local providers need the local server running with a model available.
 
-Fennara can store keys from the provider picker in the dock. The key/env names above are the same names Fennara understands if you prefer environment variables. Stored keys live in the daemon's local app data, outside the Godot project.
+Fennara can store keys from the provider picker in the dock. Chat Settings includes an **Open providers** button for discovering the same picker. The key/env names above are the same names Fennara understands if you prefer environment variables. Stored keys live in the daemon's local app data, outside the Godot project.
 
 ## OpenRouter Model Ids
 
@@ -65,11 +65,11 @@ Changing this setting takes effect the next time Godot starts. It only changes w
 
 Inside the Fennara dock:
 
-1. Use `/provider` to open the provider picker.
-2. Add an API key for a cloud provider, or configure a local provider base URL.
-3. Use `/model` to choose a model from the connected provider.
+1. Open **Chat Settings** and click **Open providers**, or use `/provider` directly.
+2. Choose a provider and add the connection details it requires, such as an API key for a cloud provider or a base URL for a local provider.
+3. Use the model picker to choose a model from the connected provider.
 
-You can also open the same provider and model pickers from the dock controls.
+Chat Settings, the dock controls, and `/provider` all open the same registry-backed provider picker. Use `/model` or the dock model control to open the model picker.
 
 See [Built-In Chat Slash Commands](slash-commands.md) for command palette behavior.
 
