@@ -444,6 +444,24 @@ pub(crate) async fn open_project_file_for_session(
     .await
 }
 
+pub(crate) async fn refresh_project_files_for_session(
+    state: &AppState,
+    session_id: Option<&str>,
+    paths: &[String],
+) -> Value {
+    call_plugin_request(
+        state,
+        session_id,
+        json!({
+            "type": "refresh_project_files",
+            "paths": paths
+        }),
+        Duration::from_secs(30),
+        None,
+    )
+    .await
+}
+
 async fn call_plugin_request(
     state: &AppState,
     session_id: Option<&str>,
@@ -642,10 +660,7 @@ async fn handle_godot_socket(socket: WebSocket, state: AppState) {
                             .insert(next_session_id.clone(), project);
                         ensure_active_project_after_connect(&state, &next_session_id).await;
                         broadcast_active_project_changed(&state).await;
-                    } else if matches!(
-                        value.get("type").and_then(Value::as_str),
-                        Some("tool_result" | "snapshot_result" | "project_file_result")
-                    ) {
+                    } else if is_pending_response(&value) {
                         if let Some(request_id) = value.get("request_id").and_then(Value::as_str) {
                             if let Some(pending) =
                                 state.pending_tool_calls.write().await.remove(request_id)
@@ -719,6 +734,13 @@ async fn handle_godot_socket(socket: WebSocket, state: AppState) {
         broadcast_active_project_changed(&state).await;
         schedule_idle_shutdown_if_empty(state.clone()).await;
     }
+}
+
+fn is_pending_response(value: &Value) -> bool {
+    matches!(
+        value.get("type").and_then(Value::as_str),
+        Some("tool_result" | "snapshot_result" | "project_file_result" | "project_files_refreshed")
+    )
 }
 
 async fn current_status(state: &AppState) -> DaemonStatus {
@@ -847,4 +869,20 @@ async fn schedule_idle_shutdown_if_empty(state: AppState) {
             let _ = sender.send(());
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn project_refresh_response_routes_to_the_pending_request() {
+        assert!(is_pending_response(&json!({
+            "type": "project_files_refreshed",
+            "request_id": "refresh-1"
+        })));
+        assert!(!is_pending_response(&json!({
+            "type": "active_project_changed"
+        })));
+    }
 }

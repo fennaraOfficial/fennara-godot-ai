@@ -13,6 +13,7 @@ mod checkpoints;
 mod generations;
 mod replay;
 mod tool_calls;
+mod turn_recovery;
 mod usage;
 
 pub(crate) use self::checkpoints::{
@@ -21,6 +22,10 @@ pub(crate) use self::checkpoints::{
     insert_turn_checkpoint, mark_capturing_checkpoints_interrupted,
     mark_turn_checkpoint_interrupted, pruning_turn_checkpoints,
     pruning_turn_checkpoints_for_storage,
+};
+pub(crate) use self::turn_recovery::{
+    TurnRecoveryJournal, TurnRecoveryStatus, begin_turn_redo, begin_turn_undo, finish_turn_redo,
+    finish_turn_undo, pending_recovery_journals, recoverable_turn_checkpoint, recovery_journal,
 };
 use self::usage::{
     latest_prompt_tokens_for_chat, record_usage_log, total_cost_for_chat, usage_cost,
@@ -94,6 +99,7 @@ pub(crate) struct OpenedChat {
     pub(crate) chat: ChatSummary,
     pub(crate) messages: Vec<StoredMessage>,
     pub(crate) context_compactions: Vec<ContextCompactionMarker>,
+    pub(crate) turn_recovery: TurnRecoveryStatus,
 }
 
 #[derive(Clone, Debug)]
@@ -129,15 +135,19 @@ pub(crate) fn list_chats(scope: &ProjectScope) -> Result<Vec<ChatSummary>, Strin
 
 pub(crate) fn open_chat(scope: &ProjectScope, chat_id: &str) -> Result<OpenedChat, String> {
     let conn = connection()?;
-    let chat = get_chat_for_scope(&conn, scope, chat_id)?
+    let mut chat = get_chat_for_scope(&conn, scope, chat_id)?
         .ok_or_else(|| "Chat not found for this project.".to_string())?;
     let messages = messages_for_chat(&conn, chat_id)?;
+    chat.message_count = messages.len() as i64;
     let context_compactions = context_compactions_for_chat(&conn, chat_id)?;
+    let turn_recovery = turn_recovery::turn_recovery_status_on_connection(&conn, chat_id)
+        .unwrap_or_else(|_| TurnRecoveryStatus::unavailable());
     set_active_chat_id(scope, chat_id)?;
     Ok(OpenedChat {
         chat,
         messages,
         context_compactions,
+        turn_recovery,
     })
 }
 
@@ -199,16 +209,21 @@ pub(crate) fn create_chat(
 }
 
 pub(crate) fn archive_chat(scope: &ProjectScope, chat_id: &str) -> Result<(), String> {
-    let conn = connection()?;
+    let mut conn = connection()?;
     if get_chat_for_scope(&conn, scope, chat_id)?.is_none() {
         return Err("Chat not found for this project.".to_string());
     }
     let now = now_ms();
-    conn.execute(
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(to_store_error)?;
+    turn_recovery::abandon_turn_recovery_on_connection(&tx, chat_id)?;
+    tx.execute(
         "UPDATE chats SET archived_at_ms = ?2, updated_at_ms = ?2 WHERE id = ?1",
         params![chat_id, now],
     )
     .map_err(to_store_error)?;
+    tx.commit().map_err(to_store_error)?;
     if active_chat_id(scope)?.as_deref() == Some(chat_id) {
         set_active_chat_id(scope, "")?;
     }
@@ -336,6 +351,7 @@ pub(crate) fn insert_user_message(
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(to_store_error)?;
+    turn_recovery::discard_rewound_tail_on_connection(&tx, chat_id)?;
     let now = now_ms();
     let metadata_json = metadata
         .map(serde_json::to_string)
@@ -1024,6 +1040,12 @@ fn messages_for_chat(conn: &Connection, chat_id: &str) -> Result<Vec<StoredMessa
             "SELECT id, chat_id, role, status, content, reasoning_content, tool_call_id, tool_name, tool_calls_json, metadata_json, usage_json, cost, sequence, created_at_ms, updated_at_ms
              FROM chat_messages
              WHERE chat_id = ?1
+               AND sequence < COALESCE(
+                 (SELECT boundary_sequence
+                  FROM chat_turn_recovery
+                  WHERE chat_id = ?1 AND state IN ('undone', 'applying_redo')),
+                 9223372036854775807
+               )
              ORDER BY sequence ASC",
         )
         .map_err(to_store_error)?;
@@ -1037,8 +1059,10 @@ fn context_compactions_for_chat(
     conn: &Connection,
     chat_id: &str,
 ) -> Result<Vec<ContextCompactionMarker>, String> {
+    let boundary = turn_recovery::visible_before_sequence(conn, chat_id)?;
     let mut markers: Vec<_> = context_compaction::load_context_summaries_from_conn(conn, chat_id)?
         .into_iter()
+        .filter(|summary| boundary.is_none_or(|boundary| summary.covered_end_sequence < boundary))
         .map(context_compaction_marker)
         .collect();
     markers.sort_by_key(|marker| (marker.created_at_ms, marker.covered_end_sequence));

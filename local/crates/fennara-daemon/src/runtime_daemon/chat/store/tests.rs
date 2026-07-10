@@ -1567,4 +1567,6 @@ fn create_tool_persistence_schema(conn: &Connection) {
         ",
     )
     .unwrap();
+    crate::runtime_daemon::chat::schema::create_turn_checkpoint_tables(conn).unwrap();
+    crate::runtime_daemon::chat::schema::create_turn_recovery_table(conn).unwrap();
 }

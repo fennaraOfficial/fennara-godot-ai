@@ -32,6 +32,7 @@ mod settings;
 mod store;
 mod tools;
 pub(crate) mod trace;
+mod turn_recovery;
 
 pub(crate) use assets::{chat_asset, chat_index, chat_index_redirect, chat_tool_media};
 use settings::{SaveSettingsRequest, load_settings, save_settings};
@@ -47,6 +48,7 @@ struct ClientRequest {
     request_type: String,
     request_id: Option<String>,
     chat_id: Option<String>,
+    user_message_id: Option<String>,
     message: Option<String>,
     images: Option<Vec<images::ClientImage>>,
     context_snippets: Option<Vec<context::ClientContextSnippet>>,
@@ -238,6 +240,7 @@ where
                     "chat": opened.chat,
                     "messages": opened.messages,
                     "context_compactions": opened.context_compactions,
+                    "turn_recovery": opened.turn_recovery,
                     "can_revert": chat_can_revert(state, &opened.chat.id).await
                 }),
             )
@@ -378,6 +381,7 @@ where
                             "chat": opened.chat,
                             "messages": opened.messages,
                             "context_compactions": opened.context_compactions,
+                            "turn_recovery": opened.turn_recovery,
                             "can_revert": chat_can_revert(state, &opened.chat.id).await
                         }),
                     )
@@ -454,6 +458,7 @@ where
                             "chat": opened.chat,
                             "messages": opened.messages,
                             "context_compactions": opened.context_compactions,
+                            "turn_recovery": opened.turn_recovery,
                             "can_revert": false
                         }),
                     )
@@ -600,6 +605,7 @@ where
                             "chat": opened.chat,
                             "messages": opened.messages,
                             "context_compactions": opened.context_compactions,
+                            "turn_recovery": opened.turn_recovery,
                             "can_revert": false,
                             "reverted": true,
                             "restored_message": restored_message
@@ -614,6 +620,12 @@ where
                 }
                 Err(error) => send_error(sender, request_id, "revert_failed", &error).await,
             }
+        }
+        "undo_chat_turn" => {
+            turn_recovery::handle_undo(sender, active_chat_id, state, bound_project, request).await
+        }
+        "redo_chat_turn" => {
+            turn_recovery::handle_redo(sender, active_chat_id, state, bound_project, request).await
         }
         "send_chat" => {
             generation::runner::run_chat(sender, active_chat_id, state, bound_project, request)

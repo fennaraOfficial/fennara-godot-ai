@@ -120,12 +120,18 @@ pub(crate) async fn begin_project_turn(
     let Some(project_path) = project_path.filter(|path| !path.trim().is_empty()) else {
         return Ok(PendingTurnCheckpoint::disabled());
     };
+    let store = shared_reconciled_store().await?;
+    begin_with_store(store, Path::new(project_path)).await
+}
+
+pub(super) async fn shared_reconciled_store() -> Result<CheckpointStore, String> {
     let store = shared_store()?;
     RECONCILED
         .get_or_try_init(|| reconcile(store.clone()))
         .await
         .map(|_| ())?;
-    begin_with_store(store, Path::new(project_path)).await
+    let _ = super::recovery::reconcile_pending(&store).await;
+    Ok(store)
 }
 
 fn shared_store() -> Result<CheckpointStore, String> {
@@ -144,6 +150,7 @@ async fn begin_with_store(
         .await
         .map_err(|error| error.to_string())?;
     let lease = store.turn_lock(&identity.root).await.lock_owned().await;
+    super::recovery::reconcile_pending_for_project_locked(&store, &identity).await?;
     let start_capture = store.capture(&identity.root).await;
     Ok(PendingTurnCheckpoint {
         inner: Some(PendingInner {

@@ -83,6 +83,11 @@ fn replay_messages_with_budgets_before_sequence_from_conn(
     exact_tail_budget_tokens: Option<usize>,
     before_sequence: Option<i64>,
 ) -> Result<Vec<Value>, String> {
+    let recovery_boundary = super::turn_recovery::visible_before_sequence(conn, chat_id)?;
+    let before_sequence = match (before_sequence, recovery_boundary) {
+        (Some(requested), Some(recovery)) => Some(requested.min(recovery)),
+        (requested, recovery) => requested.or(recovery),
+    };
     let mut replay_groups =
         replay_groups_before_sequence_from_conn(conn, chat_id, before_sequence)?;
     if let Some(summary_replay_budget_tokens) = summary_replay_budget_tokens {
@@ -141,6 +146,11 @@ fn raw_summary_groups_before_sequence_optional_from_conn(
     chat_id: &str,
     before_sequence: Option<i64>,
 ) -> Result<Vec<ReplayGroup>, String> {
+    let recovery_boundary = super::turn_recovery::visible_before_sequence(conn, chat_id)?;
+    let before_sequence = match (before_sequence, recovery_boundary) {
+        (Some(requested), Some(recovery)) => Some(requested.min(recovery)),
+        (requested, recovery) => requested.or(recovery),
+    };
     let summary_rows = summary_rows_from_conn(conn, chat_id, before_sequence)?;
     Ok(context_compaction::group_raw_summary_rows(&summary_rows))
 }
@@ -404,6 +414,8 @@ fn image_placeholder_from_value(value: &Value) -> Option<ImagePlaceholder> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime_daemon::chat::schema::create_turn_recovery_table;
+    use rusqlite::Connection;
 
     #[test]
     fn old_image_metadata_replays_as_placeholders() {
@@ -435,5 +447,70 @@ mod tests {
                 .contains("[Attached image/png: old.png]")
         );
         assert!(!content.to_string().contains(&"a".repeat(256)));
+    }
+
+    #[test]
+    fn rewound_tail_is_excluded_from_model_replay() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE chat_messages (
+              id TEXT PRIMARY KEY,
+              chat_id TEXT NOT NULL,
+              sequence INTEGER NOT NULL,
+              role TEXT NOT NULL,
+              status TEXT NOT NULL,
+              content TEXT NOT NULL,
+              tool_call_id TEXT,
+              tool_name TEXT,
+              tool_calls_json TEXT,
+              metadata_json TEXT
+            );
+            CREATE TABLE chat_tool_calls (
+              id TEXT PRIMARY KEY,
+              assistant_message_id TEXT,
+              mcp_markdown TEXT,
+              metadata_json TEXT,
+              raw_result_json TEXT,
+              arguments_json TEXT,
+              target_keys_json TEXT,
+              status TEXT
+            );
+            CREATE TABLE chats (id TEXT PRIMARY KEY);
+            CREATE TABLE chat_turn_checkpoints (id TEXT PRIMARY KEY);
+            INSERT INTO chats (id) VALUES ('chat');
+            INSERT INTO chat_turn_checkpoints (id) VALUES ('checkpoint');
+            INSERT INTO chat_messages
+              (id, chat_id, sequence, role, status, content)
+            VALUES
+              ('user_1', 'chat', 1, 'user', 'done', 'first'),
+              ('assistant_1', 'chat', 2, 'assistant', 'done', 'reply'),
+              ('user_2', 'chat', 3, 'user', 'done', 'hidden'),
+              ('assistant_2', 'chat', 4, 'assistant', 'done', 'hidden reply');
+            ",
+        )
+        .unwrap();
+        create_turn_recovery_table(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO chat_turn_recovery
+             (chat_id, checkpoint_id, user_message_id, operation_id, state,
+              boundary_sequence, project_path, storage_key, start_snapshot_id,
+              end_snapshot_id, changed_paths_json, capture_json,
+              started_at_ms, updated_at_ms)
+             VALUES ('chat', 'checkpoint', 'user_2', 'operation', 'undone', 3,
+                     '/project', 'storage', 'start', 'end', '[]',
+                     '{\"snapshot_id\":\"end\",\"coverage\":\"full\",\"skipped_paths\":[],\"unavailable_reason\":null}',
+                     1, 1)",
+            [],
+        )
+        .unwrap();
+
+        let replay =
+            replay_messages_with_budgets_before_sequence_from_conn(&conn, "chat", None, None, None)
+                .unwrap();
+
+        assert_eq!(replay.len(), 2);
+        assert_eq!(replay[0]["content"], "first");
+        assert_eq!(replay[1]["content"], "reply");
     }
 }

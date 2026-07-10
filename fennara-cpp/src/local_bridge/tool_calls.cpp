@@ -2,6 +2,7 @@
 
 #include "fennara/addon_access.hpp"
 #include "fennara/executor.hpp"
+#include "fennara/helpers.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/snapshot_manager.hpp"
 #include "fennara/tool_call_log.hpp"
@@ -334,6 +335,8 @@ void FennaraLocalBridge::_handle_message(const godot::Dictionary &message) {
         _handle_snapshot_revert(message);
     } else if (type == "open_project_file") {
         _handle_open_project_file(message);
+    } else if (type == "refresh_project_files") {
+        _handle_refresh_project_files(message);
     } else if (type == "active_project_changed") {
         bool active = message.get("is_active", false);
         _active_mcp_target_name = godot::String(message.get("active_project_name", "")).strip_edges();
@@ -343,6 +346,30 @@ void FennaraLocalBridge::_handle_message(const godot::Dictionary &message) {
             emit_signal("mcp_target_state_changed", active);
         }
     }
+}
+
+void FennaraLocalBridge::_handle_refresh_project_files(const godot::Dictionary &message) {
+    godot::Dictionary response;
+    response["type"] = "project_files_refreshed";
+    response["request_id"] = message.get("request_id", "");
+    response["ok"] = false;
+
+    godot::Array paths = message.get("paths", godot::Array());
+    for (int i = 0; i < paths.size(); i++) {
+        godot::String path = godot::String(paths[i]).strip_edges();
+        if (path.is_empty() || path.begins_with("/") || path.ends_with("/") ||
+            path.find("//") >= 0 || path == ".." || path.begins_with("../") ||
+            path.ends_with("/..") || path.find("/../") >= 0) {
+            response["error"] = "Project refresh paths must be normalized project-relative paths.";
+            _send_json(response);
+            return;
+        }
+        fennara::notify_editor_filesystem("res://" + path);
+    }
+
+    response["ok"] = true;
+    response["refreshed_count"] = paths.size();
+    _send_json(response);
 }
 
 void FennaraLocalBridge::_handle_open_project_file(const godot::Dictionary &message) {

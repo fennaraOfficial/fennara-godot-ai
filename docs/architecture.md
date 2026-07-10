@@ -71,8 +71,8 @@ CLI installs the release-managed CEF asset there once per user.
 
 Multiple Godot editors may be open at the same time. Each embedded chat
 websocket is accepted with the owning editor's `chat_token` and remains bound to
-that Godot session for chat storage scope, snapshots, tool execution, cancel,
-and revert. External MCP clients still route through the daemon's active target.
+that Godot session for chat storage scope, turn checkpoints, tool execution,
+cancel, and recovery. External MCP clients still route through the daemon's active target.
 Chat provider settings are global for now, while chats remain project-scoped.
 Cloud chat providers use locally stored API keys; local providers use base URLs
 stored by the daemon. The current built-in chat provider set is OpenAI,
@@ -99,6 +99,14 @@ statuses, counts, and bounded summaries; raw prompts and full tool results are
 not captured by default. The daemon exposes a small local debug read endpoint at
 `/chat/traces` for filtering by `chat_id`, `trace_id`, `turn_id`, or
 `generation_id`.
+
+The daemon captures project-scoped private Git trees around each built-in chat
+turn without changing the project's Git index or history. Turn recovery checks
+only paths changed by that turn, refuses later conflicting edits unless a forced
+restore is explicitly confirmed, and records an applying operation before file
+writes. A rewound transcript tail stays stored behind a durable boundary for
+Redo and is deleted only when a replacement turn starts. Startup reconciliation
+finishes any interrupted path restore before exposing its transcript state.
 
 ## Install Layout
 

@@ -158,6 +158,74 @@ impl GitSnapshotStore {
         .map_err(|_| SnapshotError::TimedOut)?
     }
 
+    pub(super) async fn restore_paths(
+        &self,
+        identity: &ProjectIdentity,
+        snapshot_id: &str,
+        project_paths: &[String],
+    ) -> Result<(), SnapshotError> {
+        validate_snapshot_id(snapshot_id)?;
+        if project_paths.is_empty() {
+            return Ok(());
+        }
+        let canonical_project = canonical_project_root(&identity.root).await?;
+        if canonical_project != identity.root
+            || project_storage_key(&canonical_project)? != identity.storage_key
+        {
+            return Err(SnapshotError::ProjectIdentityChanged);
+        }
+        let project_lock = self.project_lock(&canonical_project).await;
+        timeout(CAPTURE_TIMEOUT, async {
+            let _guard = project_lock.lock().await;
+            let repository = self.repository(&canonical_project).await?;
+            let worktree_paths = project_paths
+                .iter()
+                .map(|path| repository.project_path_to_worktree(path))
+                .collect::<Result<Vec<_>, _>>()?;
+            ensure_no_symlink_ancestors(&repository.worktree, &worktree_paths).await?;
+            let snapshot_paths =
+                snapshot_paths_at(&repository, snapshot_id, &worktree_paths).await?;
+            let affected_paths = worktree_paths.iter().cloned().collect::<HashSet<_>>();
+            let target_paths = worktree_paths
+                .iter()
+                .filter(|path| snapshot_paths.contains(*path))
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            let target_directories = target_directory_paths(&target_paths);
+            let absent = worktree_paths
+                .iter()
+                .filter(|path| !target_paths.contains(*path))
+                .cloned()
+                .collect::<Vec<_>>();
+            remove_from_index(&repository, &absent).await?;
+            let obsolete = absent
+                .iter()
+                .filter(|path| !target_directories.contains(*path))
+                .cloned()
+                .collect::<Vec<_>>();
+            remove_absent_worktree_paths(&repository, &obsolete).await?;
+            prepare_target_directories(&repository, &target_directories, &affected_paths).await?;
+            prepare_target_files(&repository, &target_paths).await?;
+            let target_paths = target_paths.into_iter().collect::<Vec<_>>();
+            for batch in target_paths.chunks(SOURCE_PATH_BATCH_SIZE) {
+                let mut args = vec![
+                    OsString::from("restore"),
+                    OsString::from("--source"),
+                    OsString::from(snapshot_id),
+                    OsString::from("--staged"),
+                    OsString::from("--worktree"),
+                    OsString::from("--"),
+                ];
+                args.extend(batch.iter().map(OsString::from));
+                let output = snapshot_git(&repository, args).await?;
+                ensure_success("restore checkpoint paths", output)?;
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|_| SnapshotError::TimedOut)?
+    }
+
     async fn project_lock(&self, canonical_project: &Path) -> Arc<Mutex<()>> {
         let mut locks = self.project_locks.lock().await;
         locks.retain(|_, lock| Arc::strong_count(lock) > 1);
@@ -189,6 +257,144 @@ impl GitSnapshotStore {
         ensure_private_repository(&repository).await?;
         Ok(repository)
     }
+}
+
+async fn snapshot_paths_at(
+    repository: &Repository,
+    snapshot_id: &str,
+    paths: &[String],
+) -> Result<HashSet<String>, SnapshotError> {
+    let mut present = HashSet::new();
+    for batch in paths.chunks(SOURCE_PATH_BATCH_SIZE) {
+        let mut args = vec![
+            OsString::from("ls-tree"),
+            OsString::from("-r"),
+            OsString::from("--name-only"),
+            OsString::from("-z"),
+            OsString::from(snapshot_id),
+            OsString::from("--"),
+        ];
+        args.extend(batch.iter().map(OsString::from));
+        let output = snapshot_git(repository, args).await?;
+        let output = ensure_success("inspect checkpoint restore paths", output)?;
+        present.extend(parse_nul_paths(&output.stdout)?);
+    }
+    Ok(present)
+}
+
+fn target_directory_paths(paths: &BTreeSet<String>) -> BTreeSet<String> {
+    let mut directories = BTreeSet::new();
+    for path in paths {
+        let mut directory = String::new();
+        for component in path.split('/').take(path.matches('/').count()) {
+            if !directory.is_empty() {
+                directory.push('/');
+            }
+            directory.push_str(component);
+            directories.insert(directory.clone());
+        }
+    }
+    directories
+}
+
+async fn prepare_target_directories(
+    repository: &Repository,
+    directories: &BTreeSet<String>,
+    affected_paths: &HashSet<String>,
+) -> Result<(), SnapshotError> {
+    for path in directories {
+        let absolute = repository.absolute_worktree_path(path);
+        let metadata = match tokio::fs::symlink_metadata(&absolute).await {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(SnapshotError::InspectRestorePath(error)),
+        };
+        if metadata.is_dir() {
+            continue;
+        }
+        if !affected_paths.contains(path) {
+            return Err(SnapshotError::InvalidRestorePath);
+        }
+        remove_file_or_symlink(&absolute).await?;
+    }
+    Ok(())
+}
+
+async fn prepare_target_files(
+    repository: &Repository,
+    paths: &BTreeSet<String>,
+) -> Result<(), SnapshotError> {
+    for path in paths {
+        let absolute = repository.absolute_worktree_path(path);
+        let metadata = match tokio::fs::symlink_metadata(&absolute).await {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(SnapshotError::InspectRestorePath(error)),
+        };
+        if metadata.is_dir() {
+            tokio::fs::remove_dir(&absolute)
+                .await
+                .map_err(|error| SnapshotError::RemoveRestorePath(error.to_string()))?;
+        }
+    }
+    Ok(())
+}
+
+async fn remove_absent_worktree_paths(
+    repository: &Repository,
+    paths: &[String],
+) -> Result<(), SnapshotError> {
+    let mut paths = paths.iter().collect::<Vec<_>>();
+    paths.sort_by_key(|path| std::cmp::Reverse(path.matches('/').count()));
+    for path in paths {
+        let absolute = repository.absolute_worktree_path(path);
+        let metadata = match tokio::fs::symlink_metadata(&absolute).await {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(SnapshotError::InspectRestorePath(error)),
+        };
+        if metadata.is_dir() {
+            tokio::fs::remove_dir(&absolute)
+                .await
+                .map_err(|error| SnapshotError::RemoveRestorePath(error.to_string()))?;
+        } else {
+            remove_file_or_symlink(&absolute).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn remove_file_or_symlink(path: &Path) -> Result<(), SnapshotError> {
+    if let Err(file_error) = tokio::fs::remove_file(path).await
+        && let Err(directory_error) = tokio::fs::remove_dir(path).await
+    {
+        return Err(SnapshotError::RemoveRestorePath(format!(
+            "{file_error}; {directory_error}"
+        )));
+    }
+    Ok(())
+}
+
+async fn ensure_no_symlink_ancestors(
+    worktree: &Path,
+    paths: &[String],
+) -> Result<(), SnapshotError> {
+    for path in paths {
+        let components = path.split('/').collect::<Vec<_>>();
+        let mut ancestor = worktree.to_path_buf();
+        for component in components.iter().take(components.len().saturating_sub(1)) {
+            ancestor.push(component);
+            match tokio::fs::symlink_metadata(&ancestor).await {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    return Err(SnapshotError::SymlinkedRestoreAncestor);
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => break,
+                Err(error) => return Err(SnapshotError::InspectRestorePath(error)),
+            }
+        }
+    }
+    Ok(())
 }
 
 async fn materialize_snapshot(
@@ -294,6 +500,27 @@ impl Repository {
             .strip_prefix(&self.scope)
             .and_then(|path| path.strip_prefix('/'))
             .map(ToOwned::to_owned)
+    }
+
+    fn project_path_to_worktree(&self, project_path: &str) -> Result<String, SnapshotError> {
+        if project_path.is_empty()
+            || project_path.starts_with('/')
+            || project_path.ends_with('/')
+            || project_path
+                .split('/')
+                .any(|component| component.is_empty() || matches!(component, "." | ".."))
+        {
+            return Err(SnapshotError::InvalidRestorePath);
+        }
+        let path = if self.scope == "." {
+            project_path.to_string()
+        } else {
+            format!("{}/{project_path}", self.scope)
+        };
+        if self.is_generated_path(&path) {
+            return Err(SnapshotError::InvalidRestorePath);
+        }
+        Ok(path)
     }
 
     fn absolute_worktree_path(&self, git_path: &str) -> PathBuf {
@@ -1136,6 +1363,11 @@ pub(super) enum SnapshotError {
     NonUtf8GitOutput,
     InvalidSnapshotId,
     InvalidCheckpointReference,
+    InvalidRestorePath,
+    ProjectIdentityChanged,
+    SymlinkedRestoreAncestor,
+    InspectRestorePath(io::Error),
+    RemoveRestorePath(String),
     TooManyCandidates(usize),
     CreateStorage(io::Error),
     SpawnGit(io::Error),
@@ -1180,6 +1412,25 @@ impl fmt::Display for SnapshotError {
             Self::InvalidSnapshotId => write!(formatter, "snapshot ID is invalid"),
             Self::InvalidCheckpointReference => {
                 write!(formatter, "checkpoint reference is invalid")
+            }
+            Self::InvalidRestorePath => write!(formatter, "checkpoint restore path is invalid"),
+            Self::ProjectIdentityChanged => {
+                write!(
+                    formatter,
+                    "project identity changed after checkpoint capture"
+                )
+            }
+            Self::SymlinkedRestoreAncestor => {
+                write!(formatter, "checkpoint restore path crosses a symbolic link")
+            }
+            Self::InspectRestorePath(error) => {
+                write!(
+                    formatter,
+                    "failed to inspect checkpoint restore path: {error}"
+                )
+            }
+            Self::RemoveRestorePath(error) => {
+                write!(formatter, "failed to remove restored path: {error}")
             }
             Self::TooManyCandidates(count) => {
                 write!(formatter, "checkpoint candidate limit exceeded: {count}")
@@ -1434,6 +1685,115 @@ mod tests {
             [255, 0, 17, 9]
         );
         store.compact_storage(&identity.storage_key).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn restores_only_selected_paths_in_both_directions() {
+        let repository = TestRepository::new("restore");
+        fs::write(repository.root.path.join("changed.txt"), "before\n").unwrap();
+        fs::write(repository.root.path.join("deleted.bin"), [0_u8, 1, 255]).unwrap();
+        fs::create_dir(repository.root.path.join("folder")).unwrap();
+        fs::write(
+            repository.root.path.join("folder").join("inside.bin"),
+            [1_u8, 0, 255],
+        )
+        .unwrap();
+        fs::write(repository.root.path.join("unrelated.txt"), "keep\n").unwrap();
+        repository.commit_all();
+
+        let store = repository.store();
+        let source_index = repository.root.path.join(".git").join("index");
+        let source_index_before = fs::read(&source_index).unwrap();
+        let before = store.capture(&repository.root.path).await;
+        fs::write(repository.root.path.join("changed.txt"), "after\n").unwrap();
+        fs::remove_file(repository.root.path.join("deleted.bin")).unwrap();
+        fs::write(repository.root.path.join("created.bin"), [255_u8, 7, 0]).unwrap();
+        fs::remove_dir_all(repository.root.path.join("folder")).unwrap();
+        fs::write(repository.root.path.join("folder"), [9_u8, 8, 7]).unwrap();
+        let after = store.capture(&repository.root.path).await;
+        let identity = store.identify(&repository.root.path).await.unwrap();
+        let paths = vec![
+            "changed.txt".to_string(),
+            "created.bin".to_string(),
+            "deleted.bin".to_string(),
+            "folder".to_string(),
+            "folder/inside.bin".to_string(),
+        ];
+
+        store
+            .restore_paths(&identity, before.snapshot_id.as_deref().unwrap(), &paths)
+            .await
+            .unwrap();
+        store
+            .restore_paths(&identity, before.snapshot_id.as_deref().unwrap(), &paths)
+            .await
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(repository.root.path.join("changed.txt")).unwrap(),
+            "before\n"
+        );
+        assert_eq!(
+            fs::read(repository.root.path.join("deleted.bin")).unwrap(),
+            [0, 1, 255]
+        );
+        assert!(!repository.root.path.join("created.bin").exists());
+        assert_eq!(
+            fs::read(repository.root.path.join("folder").join("inside.bin")).unwrap(),
+            [1, 0, 255]
+        );
+        assert_eq!(
+            fs::read_to_string(repository.root.path.join("unrelated.txt")).unwrap(),
+            "keep\n"
+        );
+        assert_eq!(fs::read(&source_index).unwrap(), source_index_before);
+
+        store
+            .restore_paths(&identity, after.snapshot_id.as_deref().unwrap(), &paths)
+            .await
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(repository.root.path.join("changed.txt")).unwrap(),
+            "after\n"
+        );
+        assert_eq!(
+            fs::read(repository.root.path.join("created.bin")).unwrap(),
+            [255, 7, 0]
+        );
+        assert!(!repository.root.path.join("deleted.bin").exists());
+        assert_eq!(
+            fs::read(repository.root.path.join("folder")).unwrap(),
+            [9, 8, 7]
+        );
+        assert!(
+            !repository
+                .root
+                .path
+                .join("folder")
+                .join("inside.bin")
+                .exists()
+        );
+        assert_eq!(
+            fs::read_to_string(repository.root.path.join("unrelated.txt")).unwrap(),
+            "keep\n"
+        );
+        assert_eq!(fs::read(&source_index).unwrap(), source_index_before);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn refuses_restore_paths_through_symlinked_directories() {
+        use std::os::unix::fs::symlink;
+
+        let worktree = TestDirectory::new("symlink-worktree");
+        let outside = TestDirectory::new("symlink-outside");
+        symlink(&outside.path, worktree.path.join("linked")).unwrap();
+
+        let error =
+            ensure_no_symlink_ancestors(&worktree.path, &["linked/outside.txt".to_string()])
+                .await
+                .unwrap_err();
+
+        assert!(matches!(error, SnapshotError::SymlinkedRestoreAncestor));
     }
 
     #[tokio::test]

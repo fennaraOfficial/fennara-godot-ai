@@ -285,6 +285,9 @@ fn migrate(conn: &Connection) -> Result<(), String> {
     run_immediate_migration_once(conn, 14, "checkpoint_pruning_tombstones", |conn| {
         rebuild_turn_checkpoint_table_without_cascades(conn)
     })?;
+    run_migration_once(conn, 15, "chat_turn_recovery", |conn| {
+        create_turn_recovery_table(conn)
+    })?;
     Ok(())
 }
 
@@ -498,6 +501,43 @@ pub(super) fn create_turn_checkpoint_tables(conn: &Connection) -> Result<(), Str
           SET status = 'pruning',
               completed_at_ms = COALESCE(completed_at_ms, strftime('%s','now') * 1000)
           WHERE generation_id = OLD.id AND status != 'pruning';
+        END;
+        ",
+    )
+    .map_err(to_store_error)
+}
+
+pub(super) fn create_turn_recovery_table(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS chat_turn_recovery (
+          chat_id TEXT PRIMARY KEY,
+          checkpoint_id TEXT NOT NULL UNIQUE,
+          user_message_id TEXT NOT NULL,
+          operation_id TEXT NOT NULL,
+          state TEXT NOT NULL CHECK(state IN ('applying_undo', 'undone', 'applying_redo')),
+          boundary_sequence INTEGER NOT NULL CHECK(boundary_sequence > 0),
+          project_path TEXT NOT NULL,
+          storage_key TEXT NOT NULL,
+          start_snapshot_id TEXT,
+          end_snapshot_id TEXT,
+          changed_paths_json TEXT NOT NULL,
+          capture_json TEXT NOT NULL,
+          started_at_ms INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL,
+          CHECK((start_snapshot_id IS NULL) = (end_snapshot_id IS NULL))
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_turn_recovery_state
+          ON chat_turn_recovery(state);
+        CREATE TRIGGER IF NOT EXISTS trg_turn_recovery_chat_delete
+        AFTER DELETE ON chats
+        BEGIN
+          DELETE FROM chat_turn_recovery WHERE chat_id = OLD.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_turn_recovery_checkpoint_delete
+        AFTER DELETE ON chat_turn_checkpoints
+        BEGIN
+          DELETE FROM chat_turn_recovery WHERE checkpoint_id = OLD.id;
         END;
         ",
     )
@@ -1082,6 +1122,29 @@ mod tests {
             )
             .unwrap();
         assert_eq!(foreign_key_count, 0);
+    }
+
+    #[test]
+    fn migration_adds_durable_turn_recovery_journal() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        migrate(&conn).unwrap();
+
+        assert!(has_column(&conn, "chat_turn_recovery", "boundary_sequence"));
+        assert!(has_column(
+            &conn,
+            "chat_turn_recovery",
+            "changed_paths_json"
+        ));
+        assert!(has_index(&conn, "idx_chat_turn_recovery_state"));
+        let migration_name: String = conn
+            .query_row(
+                "SELECT name FROM schema_migrations WHERE version = 15",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(migration_name, "chat_turn_recovery");
     }
 
     #[test]

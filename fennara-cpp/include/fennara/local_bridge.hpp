@@ -74,6 +74,7 @@ private:
     void _handle_snapshot_begin_turn(const godot::Dictionary &message);
     void _handle_snapshot_revert(const godot::Dictionary &message);
     void _handle_open_project_file(const godot::Dictionary &message);
+    void _handle_refresh_project_files(const godot::Dictionary &message);
     godot::Dictionary _open_project_file_reference(const godot::String &path,
                                                    int32_t start_line,
                                                    int32_t end_line);

@@ -130,6 +130,18 @@ where
     }
     state.cancelled_chats.write().await.remove(&chat_id);
     *active_chat_id = Some(chat_id.clone());
+    let pending_turn_checkpoint =
+        match checkpoints::begin_project_turn(scope.project_path.as_deref()).await {
+            Ok(checkpoint) => checkpoint,
+            Err(error) => {
+                trace.warn(
+                    "checkpoint.start_unavailable",
+                    "skipped",
+                    json!({ "message": error }),
+                );
+                checkpoints::PendingTurnCheckpoint::disabled()
+            }
+        };
     let active_project = state
         .projects
         .read()
@@ -326,18 +338,6 @@ where
             "provider_message_count": provider_messages.len()
         }),
     );
-    let pending_turn_checkpoint =
-        match checkpoints::begin_project_turn(scope.project_path.as_deref()).await {
-            Ok(checkpoint) => checkpoint,
-            Err(error) => {
-                trace.warn(
-                    "checkpoint.start_unavailable",
-                    "skipped",
-                    json!({ "message": error }),
-                );
-                checkpoints::PendingTurnCheckpoint::disabled()
-            }
-        };
     let snapshot_span = trace.start_span("snapshot", json!({ "chat_id": chat_id.as_str() }));
     let snapshot_result = godot_bridge::begin_snapshot_turn_for_session_traced(
         state,
