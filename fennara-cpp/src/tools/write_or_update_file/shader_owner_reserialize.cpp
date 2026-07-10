@@ -1,7 +1,6 @@
 #include "fennara/tools/write_or_update_file.hpp"
 
 #include "fennara/helpers.hpp"
-#include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
@@ -121,13 +120,6 @@ bool text_has_inherited_root_node(const godot::String &text) {
     return false;
 }
 
-void snapshot_before_resave(const godot::String &path) {
-    auto *snap = FennaraSnapshotManager::get_active();
-    if (snap) {
-        snap->snapshot_file(path);
-    }
-}
-
 godot::Dictionary make_status(const godot::String &path,
                               const godot::String &status) {
     godot::Dictionary item;
@@ -173,7 +165,6 @@ void resave_scene_owner(const godot::String &path, godot::Array &resaved,
         return;
     }
 
-    snapshot_before_resave(path);
     godot::Error save_err =
         godot::ResourceSaver::get_singleton()->save(repacked, path);
     root->queue_free();
@@ -216,7 +207,6 @@ void resave_resource_owner(const godot::String &path, godot::Array &resaved,
         return;
     }
 
-    snapshot_before_resave(path);
     godot::Error save_err =
         godot::ResourceSaver::get_singleton()->save(resource, path);
     if (save_err != godot::OK) {

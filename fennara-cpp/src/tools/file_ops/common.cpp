@@ -1,7 +1,6 @@
 #include "fennara/tools/file_ops/common.hpp"
 
 #include "fennara/helpers.hpp"
-#include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
@@ -51,11 +50,6 @@ bool delete_directory_recursive(const godot::String &path) {
                     return false;
                 }
             } else {
-                // Snapshot file before deletion for revert support
-                auto *snap = FennaraSnapshotManager::get_active();
-                if (snap) {
-                    snap->snapshot_deleted(full_path);
-                }
                 if (godot::DirAccess::remove_absolute(full_path) != godot::OK) {
                     return false;
                 }

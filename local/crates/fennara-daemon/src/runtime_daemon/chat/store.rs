@@ -230,69 +230,6 @@ pub(crate) fn archive_chat(scope: &ProjectScope, chat_id: &str) -> Result<(), St
     Ok(())
 }
 
-pub(crate) fn revert_last_turn(scope: &ProjectScope, chat_id: &str) -> Result<OpenedChat, String> {
-    let mut conn = connection()?;
-    if get_chat_for_scope(&conn, scope, chat_id)?.is_none() {
-        return Err("Chat not found for this project.".to_string());
-    }
-    let start_sequence: Option<i64> = conn
-        .query_row(
-            "SELECT sequence FROM chat_messages
-             WHERE chat_id = ?1 AND role = 'user'
-             ORDER BY sequence DESC
-             LIMIT 1",
-            [chat_id],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(to_store_error)?;
-    let Some(start_sequence) = start_sequence else {
-        return open_chat(scope, chat_id);
-    };
-
-    let tx = conn.transaction().map_err(to_store_error)?;
-    tx.execute(
-        "DELETE FROM chat_usage_logs
-         WHERE chat_id = ?1
-           AND assistant_message_id IN (
-             SELECT id FROM chat_messages WHERE chat_id = ?1 AND sequence >= ?2
-           )",
-        params![chat_id, start_sequence],
-    )
-    .map_err(to_store_error)?;
-    tx.execute(
-        "DELETE FROM chat_tool_calls
-         WHERE chat_id = ?1
-           AND assistant_message_id IN (
-             SELECT id FROM chat_messages WHERE chat_id = ?1 AND sequence >= ?2
-           )",
-        params![chat_id, start_sequence],
-    )
-    .map_err(to_store_error)?;
-    tx.execute(
-        "DELETE FROM chat_messages WHERE chat_id = ?1 AND sequence >= ?2",
-        params![chat_id, start_sequence],
-    )
-    .map_err(to_store_error)?;
-    refresh_chat_rollups(&tx, chat_id)?;
-    tx.commit().map_err(to_store_error)?;
-    open_chat(scope, chat_id)
-}
-
-pub(crate) fn last_user_message_content(chat_id: &str) -> Result<Option<String>, String> {
-    let conn = connection()?;
-    conn.query_row(
-        "SELECT content FROM chat_messages
-         WHERE chat_id = ?1 AND role = 'user'
-         ORDER BY sequence DESC
-         LIMIT 1",
-        [chat_id],
-        |row| row.get(0),
-    )
-    .optional()
-    .map_err(to_store_error)
-}
-
 pub(crate) fn ensure_chat_in_scope(scope: &ProjectScope, chat_id: &str) -> Result<(), String> {
     let conn = connection()?;
     get_chat_for_scope(&conn, scope, chat_id)?

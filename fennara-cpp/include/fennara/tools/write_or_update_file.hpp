@@ -29,8 +29,6 @@ private:
                                             const godot::String &content,
                                             const godot::String &input_path,
                                             bool file_exists);
-    static void _snapshot_before_write(const godot::String &path,
-                                       bool file_exists);
     static void _refresh_cached_shader_resource(const godot::String &path,
                                                 const godot::String &content);
     static void _reserialize_shader_owners(const godot::String &shader_path,

@@ -2,7 +2,6 @@
 
 #include "fennara/addon_access.hpp"
 #include "fennara/helpers.hpp"
-#include "fennara/snapshot_manager.hpp"
 #include "fennara/tools/file_ops/common.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
@@ -183,17 +182,6 @@ godot::Dictionary copy(const godot::Dictionary &op, godot::Array &warnings,
                 result["error"] = msg;
                 return result;
             }
-        }
-    }
-
-    // Snapshot destination before copy
-    auto *snap = FennaraSnapshotManager::get_active();
-    if (snap) {
-        if (is_dir) {
-            // For directory copies, individual files will be handled by copy_directory_recursive
-        } else {
-            if (godot::FileAccess::file_exists(destination)) snap->snapshot_file(destination);
-            else snap->snapshot_created(destination);
         }
     }
 

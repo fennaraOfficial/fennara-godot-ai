@@ -2,7 +2,6 @@
 
 #include "fennara/addon_access.hpp"
 #include "fennara/helpers.hpp"
-#include "fennara/snapshot_manager.hpp"
 #include "fennara/tools/file_ops/common.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
@@ -189,14 +188,6 @@ godot::Dictionary move(const godot::Dictionary &op, godot::Array &warnings,
                 return result;
             }
         }
-    }
-
-    // Snapshot before move
-    auto *snap = FennaraSnapshotManager::get_active();
-    if (snap) {
-        snap->snapshot_deleted(source);
-        if (godot::FileAccess::file_exists(destination)) snap->snapshot_file(destination);
-        else snap->snapshot_created(destination);
     }
 
     if (destination_exists) {

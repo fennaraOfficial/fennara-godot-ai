@@ -47,8 +47,6 @@ godot::Dictionary FennaraWriteOrUpdateFileTool::_execute_write(
         return result;
     }
 
-    _snapshot_before_write(normalized_path, file_exists);
-
     godot::Dictionary write_result =
         _write_content(normalized_path, content, file_path, file_exists);
     if (!(bool)write_result.get("success", false)) {

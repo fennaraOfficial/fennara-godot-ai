@@ -1,5 +1,4 @@
 #include "fennara/executor.hpp"
-#include "fennara/snapshot_manager.hpp"
 #include "fennara/warning_capture.hpp"
 
 #include <godot_cpp/classes/camera3d.hpp>
@@ -377,7 +376,6 @@ void FennaraExecutor::_scrape_configuration_warnings() {
     complete_context["total"] = static_cast<int64_t>(_async_results.size());
     _log_tool_event("Batch complete", complete_context);
     _active_async_tools.clear();
-    FennaraSnapshotManager::set_active(nullptr);
     emit_signal("all_tools_completed", _async_results);
     _clear_execution_context();
 }

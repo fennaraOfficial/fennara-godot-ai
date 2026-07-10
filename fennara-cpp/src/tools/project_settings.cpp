@@ -1,7 +1,6 @@
 #include "fennara/tools/project_settings.hpp"
 #include "fennara/helpers.hpp"
 #include "fennara/logger.hpp"
-#include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/input_event.hpp>
@@ -21,20 +20,6 @@ namespace {
 
 constexpr int kFindSettingMaxResults = 100;
 constexpr int kRawValueMaxChars = 1200;
-
-void snapshot_project_settings_file() {
-    auto *snap = FennaraSnapshotManager::get_active();
-    if (!snap) {
-        return;
-    }
-
-    const godot::String path = "res://project.godot";
-    if (godot::FileAccess::file_exists(path)) {
-        snap->snapshot_file(path);
-    } else {
-        snap->snapshot_created(path);
-    }
-}
 
 godot::String unquote_project_setting_part(const godot::String &value) {
     godot::String stripped = value.strip_edges();
@@ -186,7 +171,6 @@ godot::Dictionary FennaraProjectSettingsTool::_action_set(const godot::String &k
     auto *ps = godot::ProjectSettings::get_singleton();
     godot::Dictionary result;
 
-    snapshot_project_settings_file();
     ps->set_setting(key, value);
     ps->save();
 
@@ -208,7 +192,6 @@ godot::Dictionary FennaraProjectSettingsTool::_action_remove(const godot::String
         return result;
     }
 
-    snapshot_project_settings_file();
     ps->set_setting(key, godot::Variant());
     ps->save();
 
@@ -479,7 +462,6 @@ godot::Dictionary FennaraProjectSettingsTool::_set_input_action(const godot::Str
     action_dict["deadzone"] = deadzone;
     action_dict["events"] = built_events;
 
-    snapshot_project_settings_file();
     godot::String setting_key = "input/" + action_name;
     ps->set_setting(setting_key, action_dict);
     ps->save();

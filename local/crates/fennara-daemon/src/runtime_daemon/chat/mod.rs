@@ -245,8 +245,7 @@ where
                     "messages": opened.messages,
                     "context_compactions": opened.context_compactions,
                     "turn_recovery": opened.turn_recovery,
-                    "recovery_resume_refresh": recovery_resume_refresh,
-                    "can_revert": chat_can_revert(state, &opened.chat.id).await
+                    "recovery_resume_refresh": recovery_resume_refresh
                 }),
             )
             .await?;
@@ -389,8 +388,7 @@ where
                             "messages": opened.messages,
                             "context_compactions": opened.context_compactions,
                             "turn_recovery": opened.turn_recovery,
-                            "recovery_resume_refresh": recovery_resume_refresh,
-                            "can_revert": chat_can_revert(state, &opened.chat.id).await
+                            "recovery_resume_refresh": recovery_resume_refresh
                         }),
                     )
                     .await
@@ -466,8 +464,7 @@ where
                             "chat": opened.chat,
                             "messages": opened.messages,
                             "context_compactions": opened.context_compactions,
-                            "turn_recovery": opened.turn_recovery,
-                            "can_revert": false
+                            "turn_recovery": opened.turn_recovery
                         }),
                     )
                     .await
@@ -492,7 +489,6 @@ where
                     if active_chat_id.as_deref() == Some(chat_id) {
                         *active_chat_id = None;
                     }
-                    state.revertable_chats.write().await.remove(chat_id);
                     send_chat_list(sender, request_id, scope).await
                 }
                 Err(error) => send_error(sender, request_id, "chat_delete_failed", &error).await,
@@ -553,80 +549,6 @@ where
                 Err(error) => {
                     send_error(sender, request_id, "approval_review_failed", &error).await
                 }
-            }
-        }
-        "revert_chat" => {
-            let Some(chat_id) = request.chat_id.or_else(|| active_chat_id.clone()) else {
-                return send_error(sender, request_id, "bad_request", "chat_id is required.")
-                    .await
-                    .map_err(|_| ());
-            };
-            let scope = &bound_project.scope;
-            if let Err(error) = store::ensure_chat_in_scope(scope, &chat_id) {
-                return send_error(sender, request_id, "chat_scope_mismatch", &error)
-                    .await
-                    .map_err(|_| ());
-            }
-            if !chat_can_revert(state, &chat_id).await {
-                return send_error(
-                    sender,
-                    request_id,
-                    "revert_unavailable",
-                    "No active live revert snapshot is available for this chat.",
-                )
-                .await
-                .map_err(|_| ());
-            }
-            let fallback_restored_message = store::last_user_message_content(&chat_id)
-                .ok()
-                .flatten()
-                .unwrap_or_default();
-            let snapshot_result = godot_bridge::revert_snapshot_turn_for_session(
-                state,
-                Some(&bound_project.session_id),
-                &chat_id,
-            )
-            .await;
-            if snapshot_result.get("ok").and_then(Value::as_bool) == Some(false) {
-                let error = snapshot_result
-                    .get("error")
-                    .and_then(Value::as_str)
-                    .unwrap_or("Failed to revert the last file snapshot.");
-                return send_error(sender, request_id, "revert_failed", error)
-                    .await
-                    .map_err(|_| ());
-            }
-            match store::revert_last_turn(scope, &chat_id) {
-                Ok(opened) => {
-                    state.revertable_chats.write().await.remove(&chat_id);
-                    let restored_message = snapshot_result
-                        .get("restored_message")
-                        .and_then(Value::as_str)
-                        .filter(|message| !message.is_empty())
-                        .unwrap_or(&fallback_restored_message);
-                    *active_chat_id = Some(opened.chat.id.clone());
-                    if send_json(
-                        sender,
-                        json!({
-                            "type": "chat_opened",
-                            "request_id": request_id.clone(),
-                            "chat": opened.chat,
-                            "messages": opened.messages,
-                            "context_compactions": opened.context_compactions,
-                            "turn_recovery": opened.turn_recovery,
-                            "can_revert": false,
-                            "reverted": true,
-                            "restored_message": restored_message
-                        }),
-                    )
-                    .await
-                    .is_err()
-                    {
-                        return Err(());
-                    }
-                    send_chat_list(sender, None, scope).await
-                }
-                Err(error) => send_error(sender, request_id, "revert_failed", &error).await,
             }
         }
         "undo_chat_turn" => {
@@ -759,10 +681,6 @@ where
         }),
     )
     .await
-}
-
-async fn chat_can_revert(state: &AppState, chat_id: &str) -> bool {
-    state.revertable_chats.read().await.contains(chat_id)
 }
 
 async fn send_chat_list<S>(

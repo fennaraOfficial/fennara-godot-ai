@@ -2,7 +2,6 @@
 #include "fennara/addon_access.hpp"
 #include "fennara/file_utils.hpp"
 #include "fennara/logger.hpp"
-#include "fennara/snapshot_manager.hpp"
 #include "fennara/tool_results/formatters.hpp"
 
 #include "fennara/tools/script_diagnostics.hpp"
@@ -133,8 +132,6 @@ void FennaraExecutor::execute_tool_calls_async(const godot::Array &tool_calls) {
     _runtime_session_running = false;
     _runtime_script_running = false;
     _modified_scenes.clear();
-
-    FennaraSnapshotManager::set_active(_snapshot_mgr);
 
     if (_batch_diag_thread.joinable()) {
         _batch_diag_thread.join();
@@ -329,7 +326,6 @@ void FennaraExecutor::cancel() {
     _runtime_script_thread_done = false;
     _runtime_script_thread_result = godot::Dictionary();
     _async_results = godot::Array();
-    FennaraSnapshotManager::set_active(nullptr);
     _clear_execution_context();
 }
 
@@ -409,7 +405,6 @@ void FennaraExecutor::_check_completion() {
         _log_tool_event("Batch complete", complete_context);
         _print_fennara_activity("Actions complete.");
         _active_async_tools.clear();
-        FennaraSnapshotManager::set_active(nullptr);
         emit_signal("all_tools_completed", _async_results);
         _clear_execution_context();
     }

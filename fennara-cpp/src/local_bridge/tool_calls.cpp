@@ -4,7 +4,6 @@
 #include "fennara/executor.hpp"
 #include "fennara/helpers.hpp"
 #include "fennara/logger.hpp"
-#include "fennara/snapshot_manager.hpp"
 #include "fennara/tool_call_log.hpp"
 #include "fennara/tool_results/formatters.hpp"
 #include "fennara/ui/dock.hpp"
@@ -329,10 +328,6 @@ void FennaraLocalBridge::_handle_message(const godot::Dictionary &message) {
     godot::String type = message.get("type", "");
     if (type == "tool_call") {
         _handle_tool_call(message);
-    } else if (type == "snapshot_begin_turn") {
-        _handle_snapshot_begin_turn(message);
-    } else if (type == "snapshot_revert") {
-        _handle_snapshot_revert(message);
     } else if (type == "open_project_file") {
         _handle_open_project_file(message);
     } else if (type == "refresh_project_files") {
@@ -598,9 +593,6 @@ void FennaraLocalBridge::_handle_tool_call(const godot::Dictionary &message) {
         }
         executor->set_name("FennaraLocalBridgeExecutor");
         executor->set_execution_context("mcp:" + request_id, -1);
-        if (_snapshot_mgr.is_valid()) {
-            executor->set_snapshot_manager(_snapshot_mgr.ptr());
-        }
         add_child(executor);
 
         godot::Array tool_calls;
@@ -627,9 +619,7 @@ void FennaraLocalBridge::_handle_tool_call(const godot::Dictionary &message) {
     }
 
     _log_mcp_tool_start(tool, args);
-    FennaraSnapshotManager::set_active(_snapshot_mgr.is_valid() ? _snapshot_mgr.ptr() : nullptr);
     godot::Dictionary raw_result = FennaraExecutor::execute_tool(tool, args);
-    FennaraSnapshotManager::set_active(nullptr);
     _log_mcp_tool_complete();
     godot::Dictionary result = tool_results::format_for_model(tool, args, raw_result);
     godot::Array model_images;
@@ -651,56 +641,6 @@ void FennaraLocalBridge::_handle_tool_call(const godot::Dictionary &message) {
     godot::Dictionary done_details = start_details;
     done_details["ok"] = response["ok"];
     FLOG_CTX("TOOL", "Local bridge sync tool completed", done_details);
-    _send_json(response);
-}
-
-void FennaraLocalBridge::_handle_snapshot_begin_turn(const godot::Dictionary &message) {
-    godot::Dictionary response;
-    response["type"] = "snapshot_result";
-    response["request_id"] = message.get("request_id", "");
-    if (!_snapshot_mgr.is_valid()) {
-        _snapshot_mgr.instantiate();
-    }
-    if (!_snapshot_mgr.is_valid()) {
-        response["ok"] = false;
-        response["error"] = "Snapshot manager is unavailable.";
-        _send_json(response);
-        return;
-    }
-    _snapshot_mgr->begin_turn(message.get("user_message", ""),
-                              message.get("chat_id", ""));
-    response["ok"] = true;
-    response["action"] = "begin_turn";
-    response["revert_count"] = _snapshot_mgr->revert_count();
-    _send_json(response);
-}
-
-void FennaraLocalBridge::_handle_snapshot_revert(const godot::Dictionary &message) {
-    godot::Dictionary response;
-    response["type"] = "snapshot_result";
-    response["request_id"] = message.get("request_id", "");
-    godot::String chat_id = message.get("chat_id", "");
-    if (!_snapshot_mgr.is_valid() || _snapshot_mgr->revert_count() <= 0) {
-        response["ok"] = true;
-        response["action"] = "revert";
-        response["restored_message"] = "";
-        response["revert_count"] = 0;
-        _send_json(response);
-        return;
-    }
-    if (!_snapshot_mgr->can_revert_chat(chat_id)) {
-        response["ok"] = false;
-        response["error"] = "Latest revert snapshot belongs to a different chat.";
-        response["action"] = "revert";
-        response["revert_count"] = _snapshot_mgr->revert_count();
-        _send_json(response);
-        return;
-    }
-    godot::String restored_message = _snapshot_mgr->revert(chat_id);
-    response["ok"] = true;
-    response["action"] = "revert";
-    response["restored_message"] = restored_message;
-    response["revert_count"] = _snapshot_mgr->revert_count();
     _send_json(response);
 }
 

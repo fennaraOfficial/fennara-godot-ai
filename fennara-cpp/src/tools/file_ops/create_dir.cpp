@@ -2,7 +2,6 @@
 
 #include "fennara/addon_access.hpp"
 #include "fennara/helpers.hpp"
-#include "fennara/snapshot_manager.hpp"
 #include "fennara/tools/file_ops/common.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
@@ -91,10 +90,6 @@ godot::Dictionary create_dir(const godot::Dictionary &op,
         result["already_exists"] = true;
         return result;
     }
-
-    // Snapshot before creating — on revert, this directory gets removed
-    auto *snap = fennara::FennaraSnapshotManager::get_active();
-    if (snap) snap->snapshot_created(path);
 
     godot::Error err = godot::DirAccess::make_dir_recursive_absolute(path);
     if (err != godot::OK) {

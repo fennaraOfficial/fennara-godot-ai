@@ -17,7 +17,6 @@
 #include "fennara/tools/runtime_script.hpp"
 #include "fennara/tools/runtime_session.hpp"
 #include "fennara/tools/scrape_editor.hpp"
-#include "fennara/snapshot_manager.hpp"
 #include "fennara/warning_capture.hpp"
 
 #include "fennara/ui/dock.hpp"
@@ -50,7 +49,6 @@ void initialize_fennara(godot::ModuleInitializationLevel p_level) {
         godot::ClassDB::register_class<fennara::FennaraRuntimeScriptTool>();
         godot::ClassDB::register_class<fennara::FennaraScrapeEditorTool>();
         godot::ClassDB::register_class<fennara::FennaraLocalBridge>();
-        godot::ClassDB::register_class<fennara::FennaraSnapshotManager>();
         godot::ClassDB::register_class<fennara::FennaraWarningCapture>();
 
         godot::ClassDB::register_class<fennara::FennaraDock>();

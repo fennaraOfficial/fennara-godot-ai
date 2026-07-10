@@ -1,5 +1,4 @@
 #include "fennara/executor.hpp"
-#include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/core/class_db.hpp>
 
@@ -21,9 +20,6 @@ void FennaraExecutor::_bind_methods() {
         &FennaraExecutor::execute_tool_calls_async);
     godot::ClassDB::bind_method(godot::D_METHOD("cancel"),
                                 &FennaraExecutor::cancel);
-    godot::ClassDB::bind_method(
-        godot::D_METHOD("set_snapshot_manager", "manager"),
-        &FennaraExecutor::set_snapshot_manager);
     godot::ClassDB::bind_method(
         godot::D_METHOD("set_execution_context", "request_id", "session_index"),
         &FennaraExecutor::set_execution_context);
@@ -69,10 +65,6 @@ FennaraExecutor::~FennaraExecutor() {
     if (_runtime_session_thread.joinable()) {
         _runtime_session_thread.join();
     }
-}
-
-void FennaraExecutor::set_snapshot_manager(FennaraSnapshotManager *mgr) {
-    _snapshot_mgr = mgr;
 }
 
 void FennaraExecutor::set_execution_context(const godot::String &request_id,

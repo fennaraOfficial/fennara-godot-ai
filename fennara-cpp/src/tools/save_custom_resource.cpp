@@ -1,7 +1,6 @@
 #include "fennara/tools/save_custom_resource.hpp"
 #include "fennara/helpers.hpp"
 #include "fennara/logger.hpp"
-#include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/classes/class_db_singleton.hpp>
 #include <godot_cpp/classes/dir_access.hpp>
@@ -159,13 +158,6 @@ FennaraSaveCustomResourceTool::execute(const godot::Dictionary &args) {
             r["error"] = "Failed to create directory: " + dir_path;
             return _stamp_result(r, args);
         }
-    }
-
-    // Snapshot before saving resource
-    auto *snap = FennaraSnapshotManager::get_active();
-    if (snap) {
-        if (godot::FileAccess::file_exists(resource_path)) snap->snapshot_file(resource_path);
-        else snap->snapshot_created(resource_path);
     }
 
     // Save the resource

@@ -1,7 +1,6 @@
 #include "fennara/tools/run_scene_edit_script/internal.hpp"
 
 #include "fennara/helpers.hpp"
-#include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
@@ -143,15 +142,6 @@ bool save_scene(godot::Node *root_node,
         result["success"] = false;
         result["error"] = "Failed to pack generated scene.";
         return false;
-    }
-
-    auto *snap = FennaraSnapshotManager::get_active();
-    if (snap) {
-        if (created_new_scene) {
-            snap->snapshot_created(normalized_scene);
-        } else {
-            snap->snapshot_file(normalized_scene);
-        }
     }
 
     godot::Error save_err =

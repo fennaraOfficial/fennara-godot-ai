@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use std::{sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 
-use crate::runtime_daemon::{godot_bridge, state::AppState};
+use crate::runtime_daemon::state::AppState;
 
 use super::super::{
     BoundChatProject, ClientRequest, checkpoints, context, context_compaction, ids, images, prompt,
@@ -354,36 +354,6 @@ where
             "provider_message_count": provider_messages.len()
         }),
     );
-    let snapshot_span = trace.start_span("snapshot", json!({ "chat_id": chat_id.as_str() }));
-    let snapshot_result = godot_bridge::begin_snapshot_turn_for_session_traced(
-        state,
-        Some(&bound_project.session_id),
-        &chat_id,
-        message,
-        Some(&trace),
-    )
-    .await;
-    if snapshot_result.get("ok").and_then(Value::as_bool) == Some(false) {
-        let error = snapshot_result
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap_or("Failed to begin a local revert snapshot.");
-        snapshot_span.fail(json!({ "message": error }));
-        trace.error(
-            "turn.failed",
-            "failed",
-            json!({ "code": "snapshot_failed", "message": error }),
-        );
-        return send_error(sender, request_id, "snapshot_failed", error).await;
-    }
-    snapshot_span.finish(
-        "ok",
-        json!({
-            "response_bytes": trace::value_size(&snapshot_result)
-        }),
-    );
-    state.revertable_chats.write().await.insert(chat_id.clone());
-
     let user_write_span = trace.start_span(
         "db.write",
         json!({
@@ -513,8 +483,7 @@ where
             "chat_id": chat_id,
             "assistant_message": assistant_message,
             "model": model,
-            "reasoning_effort": reasoning_effort,
-            "can_revert": true
+            "reasoning_effort": reasoning_effort
         }),
     )
     .await?;

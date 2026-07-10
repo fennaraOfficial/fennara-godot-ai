@@ -84,8 +84,6 @@ godot::Dictionary FennaraWriteOrUpdateFileTool::_execute_update(
         return result;
     }
 
-    _snapshot_before_write(normalized_path, true);
-
     godot::String new_content;
     if (replace_all) {
         new_content = current_content.replace(old_string, new_string);

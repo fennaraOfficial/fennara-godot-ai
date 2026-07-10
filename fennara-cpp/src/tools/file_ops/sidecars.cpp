@@ -1,7 +1,6 @@
 #include "fennara/tools/file_ops/common.hpp"
 
 #include "fennara/helpers.hpp"
-#include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
@@ -10,25 +9,8 @@ namespace fennara::file_ops {
 
 namespace {
 
-void snapshot_destination(const godot::String &path) {
-    auto *snap = FennaraSnapshotManager::get_active();
-    if (!snap) {
-        return;
-    }
-    if (godot::FileAccess::file_exists(path)) {
-        snap->snapshot_file(path);
-    } else {
-        snap->snapshot_created(path);
-    }
-}
-
 bool delete_stale_sidecar(const godot::String &path, godot::Array &warnings,
                           godot::Array &errors) {
-    auto *snap = FennaraSnapshotManager::get_active();
-    if (snap) {
-        snap->snapshot_deleted(path);
-    }
-
     if (godot::DirAccess::remove_absolute(path) != godot::OK) {
         errors.append(godot::String("Failed to delete stale sidecar: ") +
                       path);
@@ -79,7 +61,6 @@ bool copy_godot_sidecars(const godot::String &source,
             return false;
         }
 
-        snapshot_destination(sidecar_destination);
         if (godot::DirAccess::copy_absolute(sidecar_source,
                                             sidecar_destination) != godot::OK) {
             errors.append(godot::String("Failed to copy sidecar: ") +
@@ -119,12 +100,6 @@ bool move_godot_sidecars(const godot::String &source,
             return false;
         }
 
-        auto *snap = FennaraSnapshotManager::get_active();
-        if (snap) {
-            snap->snapshot_deleted(sidecar_source);
-            snapshot_destination(sidecar_destination);
-        }
-
         if (godot::FileAccess::file_exists(sidecar_destination) &&
             godot::DirAccess::remove_absolute(sidecar_destination) !=
                 godot::OK) {
@@ -156,11 +131,6 @@ bool delete_godot_sidecars(const godot::String &path, godot::Array &warnings,
         godot::String sidecar = sidecars[i];
         if (!godot::FileAccess::file_exists(sidecar)) {
             continue;
-        }
-
-        auto *snap = FennaraSnapshotManager::get_active();
-        if (snap) {
-            snap->snapshot_deleted(sidecar);
         }
 
         if (godot::DirAccess::remove_absolute(sidecar) != godot::OK) {

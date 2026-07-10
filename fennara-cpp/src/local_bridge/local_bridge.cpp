@@ -3,7 +3,6 @@
 #include "fennara/app_paths.hpp"
 #include "fennara/control_auth.hpp"
 #include "fennara/logger.hpp"
-#include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/os.hpp>
@@ -32,7 +31,6 @@ void FennaraLocalBridge::_bind_methods() {
 void FennaraLocalBridge::_ready() {
     _session_id = _make_session_id();
     _chat_token = _make_chat_token();
-    _snapshot_mgr.instantiate();
     set_process(true);
     _start_daemon_if_available();
     _connect_socket();

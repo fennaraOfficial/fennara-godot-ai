@@ -12,8 +12,6 @@
 
 namespace fennara {
 
-class FennaraSnapshotManager;
-
 class FennaraExecutor : public godot::Node {
     GDCLASS(FennaraExecutor, godot::Node)
 
@@ -165,11 +163,7 @@ public:
     void _check_completion();
     void set_execution_context(const godot::String &request_id, int session_index);
 
-    // Snapshot manager for revert system
-    void set_snapshot_manager(FennaraSnapshotManager *mgr);
-
 private:
-    FennaraSnapshotManager *_snapshot_mgr = nullptr;
     godot::String _execution_request_id;
     godot::String _execution_batch_id;
     int _execution_session_index = -1;

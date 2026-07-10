@@ -1,7 +1,5 @@
 #pragma once
 
-#include "fennara/snapshot_manager.hpp"
-
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/classes/ref.hpp>
@@ -61,7 +59,6 @@ private:
     godot::String _chat_token;
     godot::String _active_mcp_target_name;
     godot::String _active_mcp_target_path;
-    godot::Ref<FennaraSnapshotManager> _snapshot_mgr;
     std::future<godot::String> _daemon_auth_future;
     std::shared_ptr<std::atomic_bool> _daemon_auth_cancel;
 
@@ -71,8 +68,6 @@ private:
     void _send_hello();
     void _handle_message(const godot::Dictionary &message);
     void _handle_tool_call(const godot::Dictionary &message);
-    void _handle_snapshot_begin_turn(const godot::Dictionary &message);
-    void _handle_snapshot_revert(const godot::Dictionary &message);
     void _handle_open_project_file(const godot::Dictionary &message);
     void _handle_refresh_project_files(const godot::Dictionary &message);
     godot::Dictionary _open_project_file_reference(const godot::String &path,

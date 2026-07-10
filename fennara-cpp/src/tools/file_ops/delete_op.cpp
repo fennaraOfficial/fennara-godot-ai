@@ -2,7 +2,6 @@
 
 #include "fennara/addon_access.hpp"
 #include "fennara/helpers.hpp"
-#include "fennara/snapshot_manager.hpp"
 #include "fennara/tools/file_ops/common.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
@@ -124,15 +123,6 @@ godot::Dictionary delete_op(const godot::Dictionary &op,
                 return result;
             }
         }
-    }
-
-    // Snapshot before delete
-    auto *snap = FennaraSnapshotManager::get_active();
-    if (snap) {
-        if (!is_dir) {
-            snap->snapshot_deleted(path);
-        }
-        // For recursive dir delete, individual files are snapshotted in delete_directory_recursive
     }
 
     if (file_ops::delete_path(path, recursive)) {

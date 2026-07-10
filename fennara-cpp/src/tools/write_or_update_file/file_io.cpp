@@ -1,7 +1,6 @@
 #include "fennara/tools/write_or_update_file.hpp"
 
 #include "fennara/helpers.hpp"
-#include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/engine.hpp>
@@ -37,20 +36,6 @@ bool FennaraWriteOrUpdateFileTool::_ensure_parent_dir(
     result["success"] = false;
     result["error"] = "Failed to create directory: " + dir_path;
     return false;
-}
-
-void FennaraWriteOrUpdateFileTool::_snapshot_before_write(
-    const godot::String &path, bool file_exists) {
-    auto *snap = FennaraSnapshotManager::get_active();
-    if (!snap) {
-        return;
-    }
-
-    if (file_exists) {
-        snap->snapshot_file(path);
-    } else {
-        snap->snapshot_created(path);
-    }
 }
 
 godot::Dictionary FennaraWriteOrUpdateFileTool::_read_content(

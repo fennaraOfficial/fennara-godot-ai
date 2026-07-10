@@ -383,45 +383,6 @@ fn is_fennara_media_path(path: &Path) -> bool {
     })
 }
 
-pub(crate) async fn begin_snapshot_turn_for_session_traced(
-    state: &AppState,
-    session_id: Option<&str>,
-    chat_id: &str,
-    user_message: &str,
-    trace: Option<&TraceRecorder>,
-) -> Value {
-    call_plugin_request(
-        state,
-        session_id,
-        json!({
-            "type": "snapshot_begin_turn",
-            "chat_id": chat_id,
-            "user_message": user_message
-        }),
-        Duration::from_secs(10),
-        trace,
-    )
-    .await
-}
-
-pub(crate) async fn revert_snapshot_turn_for_session(
-    state: &AppState,
-    session_id: Option<&str>,
-    chat_id: &str,
-) -> Value {
-    call_plugin_request(
-        state,
-        session_id,
-        json!({
-            "type": "snapshot_revert",
-            "chat_id": chat_id
-        }),
-        Duration::from_secs(30),
-        None,
-    )
-    .await
-}
-
 pub(crate) async fn open_project_file_for_session(
     state: &AppState,
     session_id: Option<&str>,
@@ -739,7 +700,7 @@ async fn handle_godot_socket(socket: WebSocket, state: AppState) {
 fn is_pending_response(value: &Value) -> bool {
     matches!(
         value.get("type").and_then(Value::as_str),
-        Some("tool_result" | "snapshot_result" | "project_file_result" | "project_files_refreshed")
+        Some("tool_result" | "project_file_result" | "project_files_refreshed")
     )
 }
 
