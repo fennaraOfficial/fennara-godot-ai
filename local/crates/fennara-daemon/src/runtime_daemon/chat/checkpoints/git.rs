@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::{process::Command, sync::Mutex, time::timeout};
+use tokio::{io::AsyncWriteExt, process::Command, sync::Mutex, time::timeout};
 
 use super::{CaptureResult, CaptureUnavailableReason, SkippedPath, SkippedPathReason};
 
@@ -76,14 +76,11 @@ impl GitSnapshotStore {
     ) -> Result<(), SnapshotError> {
         validate_snapshot_id(snapshot_id)?;
         let reference = checkpoint_ref(checkpoint_id, boundary)?;
+        let materialized = materialized_ref(checkpoint_id, boundary)?;
         let repository = self.repository(&identity.root).await?;
-        let output = timeout(
-            CAPTURE_TIMEOUT,
-            snapshot_git(&repository, ["update-ref", reference.as_str(), snapshot_id]),
-        )
-        .await
-        .map_err(|_| SnapshotError::TimedOut)??;
-        ensure_success("pin checkpoint snapshot", output).map(|_| ())
+        materialize_snapshot(&repository, snapshot_id).await?;
+        update_snapshot_ref(&repository, &materialized, snapshot_id).await?;
+        update_snapshot_ref(&repository, &reference, snapshot_id).await
     }
 
     pub(super) async fn release_checkpoint(
@@ -97,16 +94,12 @@ impl GitSnapshotStore {
             return Ok(());
         }
         for boundary in ["start", "end"] {
-            let reference = checkpoint_ref(checkpoint_id, boundary)?;
-            let mut command = Command::new("git");
-            command.arg("--git-dir").arg(&private_git_dir);
-            let output = timeout(
-                CAPTURE_TIMEOUT,
-                execute_git(&mut command, ["update-ref", "-d", reference.as_str()]),
-            )
-            .await
-            .map_err(|_| SnapshotError::TimedOut)??;
-            ensure_success("release checkpoint snapshot", output)?;
+            for reference in [
+                checkpoint_ref(checkpoint_id, boundary)?,
+                materialized_ref(checkpoint_id, boundary)?,
+            ] {
+                delete_snapshot_ref(&private_git_dir, &reference).await?;
+            }
         }
         Ok(())
     }
@@ -196,6 +189,75 @@ impl GitSnapshotStore {
         ensure_private_repository(&repository).await?;
         Ok(repository)
     }
+}
+
+async fn materialize_snapshot(
+    repository: &Repository,
+    snapshot_id: &str,
+) -> Result<(), SnapshotError> {
+    let output = snapshot_git(
+        repository,
+        [
+            "for-each-ref",
+            "--format=%(objectname)",
+            "refs/fennara/materialized/",
+        ],
+    )
+    .await?;
+    let output = ensure_success("list materialized checkpoint snapshots", output)?;
+    let materialized = parse_line_paths(&output.stdout)?;
+    for snapshot in &materialized {
+        validate_snapshot_id(snapshot)?;
+    }
+    let pack_dir = repository.private_git_dir.join("objects").join("pack");
+    tokio::fs::create_dir_all(&pack_dir)
+        .await
+        .map_err(SnapshotError::CreateStorage)?;
+    let pack_prefix = pack_dir.join("fennara-checkpoint");
+    let mut input = format!("{snapshot_id}\n").into_bytes();
+    for snapshot in materialized {
+        input.extend_from_slice(format!("^{snapshot}\n").as_bytes());
+    }
+    let args = vec![
+        OsString::from("pack-objects"),
+        OsString::from("--quiet"),
+        OsString::from("--revs"),
+        OsString::from("--non-empty"),
+        pack_prefix.into_os_string(),
+    ];
+    let output = timeout(
+        CAPTURE_TIMEOUT,
+        snapshot_git_with_input(repository, args, &input),
+    )
+    .await
+    .map_err(|_| SnapshotError::TimedOut)??;
+    ensure_success("materialize checkpoint snapshot", output).map(|_| ())
+}
+
+async fn update_snapshot_ref(
+    repository: &Repository,
+    reference: &str,
+    snapshot_id: &str,
+) -> Result<(), SnapshotError> {
+    let output = timeout(
+        CAPTURE_TIMEOUT,
+        snapshot_git(repository, ["update-ref", reference, snapshot_id]),
+    )
+    .await
+    .map_err(|_| SnapshotError::TimedOut)??;
+    ensure_success("pin checkpoint snapshot", output).map(|_| ())
+}
+
+async fn delete_snapshot_ref(private_git_dir: &Path, reference: &str) -> Result<(), SnapshotError> {
+    let mut command = Command::new("git");
+    command.arg("--git-dir").arg(private_git_dir);
+    let output = timeout(
+        CAPTURE_TIMEOUT,
+        execute_git(&mut command, ["update-ref", "-d", reference]),
+    )
+    .await
+    .map_err(|_| SnapshotError::TimedOut)??;
+    ensure_success("release checkpoint snapshot", output).map(|_| ())
 }
 
 #[derive(Debug)]
@@ -861,6 +923,12 @@ fn checkpoint_ref(checkpoint_id: &str, boundary: &str) -> Result<String, Snapsho
     ))
 }
 
+fn materialized_ref(checkpoint_id: &str, boundary: &str) -> Result<String, SnapshotError> {
+    checkpoint_ref(checkpoint_id, boundary).map(|reference| {
+        reference.replacen("refs/fennara/checkpoints/", "refs/fennara/materialized/", 1)
+    })
+}
+
 fn path_to_git(path: &Path) -> Result<String, SnapshotError> {
     let path = path
         .to_str()
@@ -910,6 +978,26 @@ where
     execute_git(&mut command, args).await
 }
 
+async fn snapshot_git_with_input<I, S>(
+    repository: &Repository,
+    args: I,
+    input: &[u8],
+) -> Result<GitOutput, SnapshotError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut command = Command::new("git");
+    command
+        .arg("--literal-pathspecs")
+        .arg("--git-dir")
+        .arg(&repository.private_git_dir)
+        .arg("--work-tree")
+        .arg(&repository.worktree)
+        .current_dir(&repository.worktree);
+    execute_git_with_input(&mut command, args, input).await
+}
+
 async fn source_git<I, S>(repository: &Repository, args: I) -> Result<GitOutput, SnapshotError>
 where
     I: IntoIterator<Item = S>,
@@ -945,19 +1033,57 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    execute_git_optional_input(command, args, None).await
+}
+
+async fn execute_git_with_input<I, S>(
+    command: &mut Command,
+    args: I,
+    input: &[u8],
+) -> Result<GitOutput, SnapshotError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    execute_git_optional_input(command, args, Some(input)).await
+}
+
+async fn execute_git_optional_input<I, S>(
+    command: &mut Command,
+    args: I,
+    input: Option<&[u8]>,
+) -> Result<GitOutput, SnapshotError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     command
         .args(args)
-        .stdin(Stdio::null())
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
-    let child = command.spawn().map_err(|error| {
+    let mut child = command.spawn().map_err(|error| {
         if error.kind() == io::ErrorKind::NotFound {
             SnapshotError::GitUnavailable
         } else {
             SnapshotError::SpawnGit(error)
         }
     })?;
+    if let Some(input) = input {
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or(SnapshotError::InvalidRepositoryOutput)?;
+        stdin
+            .write_all(input)
+            .await
+            .map_err(SnapshotError::WriteGitStdin)?;
+    }
     let output = child
         .wait_with_output()
         .await
@@ -1014,6 +1140,7 @@ pub(super) enum SnapshotError {
     CreateStorage(io::Error),
     SpawnGit(io::Error),
     WaitForGit(io::Error),
+    WriteGitStdin(io::Error),
     GitCommand {
         operation: &'static str,
         message: String,
@@ -1062,6 +1189,9 @@ impl fmt::Display for SnapshotError {
             }
             Self::SpawnGit(error) => write!(formatter, "failed to start Git: {error}"),
             Self::WaitForGit(error) => write!(formatter, "failed while waiting for Git: {error}"),
+            Self::WriteGitStdin(error) => {
+                write!(formatter, "failed to send checkpoint input to Git: {error}")
+            }
             Self::GitCommand { operation, message } => write!(formatter, "{operation}: {message}"),
         }
     }
@@ -1304,6 +1434,65 @@ mod tests {
             [255, 0, 17, 9]
         );
         store.compact_storage(&identity.storage_key).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn pinned_snapshot_survives_source_object_pruning() {
+        let repository = TestRepository::new("durable-pin");
+        git(
+            &repository.root.path,
+            ["symbolic-ref", "HEAD", "refs/heads/fennara-test-main"],
+        );
+        fs::write(
+            repository.root.path.join("persistent.txt"),
+            "private checkpoint content\n",
+        )
+        .unwrap();
+        repository.commit_all();
+
+        let store = repository.store();
+        let capture = store.capture(&repository.root.path).await;
+        let snapshot_id = capture.snapshot_id.as_deref().unwrap();
+        let identity = store.identify(&repository.root.path).await.unwrap();
+        store
+            .pin_snapshot(&identity, "checkpoint_durable", "start", snapshot_id)
+            .await
+            .unwrap();
+        store
+            .pin_snapshot(&identity, "checkpoint_durable", "end", snapshot_id)
+            .await
+            .unwrap();
+
+        git(&repository.root.path, ["read-tree", "--empty"]);
+        git(
+            &repository.root.path,
+            ["update-ref", "-d", "refs/heads/fennara-test-main"],
+        );
+        git(
+            &repository.root.path,
+            ["reflog", "expire", "--expire=now", "--all"],
+        );
+        git(&repository.root.path, ["gc", "--prune=now", "--quiet"]);
+
+        let object = format!("{snapshot_id}:persistent.txt");
+        let source = StdCommand::new("git")
+            .arg("-C")
+            .arg(&repository.root.path)
+            .args(["cat-file", "-e", object.as_str()])
+            .output()
+            .unwrap();
+        assert!(!source.status.success());
+
+        let private = store.repository(&identity.root).await.unwrap();
+        let output = snapshot_git(&private, ["show", object.as_str()])
+            .await
+            .unwrap();
+        assert_eq!(
+            ensure_success("read durable checkpoint", output)
+                .unwrap()
+                .stdout,
+            b"private checkpoint content\n"
+        );
     }
 
     #[tokio::test]

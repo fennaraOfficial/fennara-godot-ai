@@ -20,6 +20,7 @@ pub(crate) use self::checkpoints::{
     claim_prunable_turn_checkpoints, complete_turn_checkpoint, delete_pruning_turn_checkpoint,
     insert_turn_checkpoint, mark_capturing_checkpoints_interrupted,
     mark_turn_checkpoint_interrupted, pruning_turn_checkpoints,
+    pruning_turn_checkpoints_for_storage,
 };
 use self::usage::{
     latest_prompt_tokens_for_chat, record_usage_log, total_cost_for_chat, usage_cost,

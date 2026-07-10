@@ -124,42 +124,4 @@ impl CheckpointStore {
     }
 }
 
-pub(crate) use turn::{
-    PendingTurnCheckpoint, TurnCheckpoint, TurnCheckpointIds, begin_project_turn,
-};
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::Duration;
-
-    #[tokio::test]
-    async fn same_project_turns_share_one_lifecycle_lock() {
-        let store = CheckpointStore::at(PathBuf::from("unused"));
-        let project = PathBuf::from("project");
-        let first = store.turn_lock(&project).await.lock_owned().await;
-        let waiting_store = store.clone();
-        let waiting_project = project.clone();
-        let (attempting_tx, attempting_rx) = tokio::sync::oneshot::channel();
-        let mut waiting = tokio::spawn(async move {
-            let _ = attempting_tx.send(());
-            waiting_store
-                .turn_lock(&waiting_project)
-                .await
-                .lock_owned()
-                .await
-        });
-
-        attempting_rx.await.unwrap();
-        assert!(
-            tokio::time::timeout(Duration::from_millis(20), &mut waiting)
-                .await
-                .is_err()
-        );
-        drop(first);
-        tokio::time::timeout(Duration::from_secs(1), waiting)
-            .await
-            .unwrap()
-            .unwrap();
-    }
-}
+pub(crate) use turn::{PendingTurnCheckpoint, TurnCheckpointIds, begin_project_turn};

@@ -462,25 +462,22 @@ where
                 return send_error(sender, request_id, "chat_store_failed", &error).await;
             }
         };
-    let turn_checkpoint = match pending_turn_checkpoint
+    let turn_checkpoint = pending_turn_checkpoint
         .attach(checkpoints::TurnCheckpointIds {
             chat_id: &chat_id,
             user_message_id: &user_message.id,
             assistant_message_id: &assistant_message.id,
             generation_id: &assistant_generation.id,
+            trace: &trace,
         })
-        .await
-    {
-        Ok(checkpoint) => checkpoint,
-        Err(error) => {
-            trace.warn(
-                "checkpoint.persist_failed",
-                "skipped",
-                json!({ "message": error }),
-            );
-            checkpoints::TurnCheckpoint::disabled()
-        }
-    };
+        .await;
+    if let Some(error) = turn_checkpoint.warning() {
+        trace.warn(
+            "checkpoint.persist_failed",
+            "skipped",
+            json!({ "message": error }),
+        );
+    }
     let mut current_trace = trace.with_generation(&assistant_generation.id, &assistant_message.id);
     current_trace.event_status(
         "generation.start",

@@ -208,6 +208,29 @@ pub(crate) fn pruning_turn_checkpoints() -> Result<Vec<PrunableTurnCheckpoint>, 
     rows.collect::<Result<Vec<_>, _>>().map_err(to_store_error)
 }
 
+pub(crate) fn pruning_turn_checkpoints_for_storage(
+    storage_key: &str,
+) -> Result<Vec<PrunableTurnCheckpoint>, String> {
+    let conn = connection()?;
+    let mut statement = conn
+        .prepare(
+            "SELECT id, storage_key
+             FROM chat_turn_checkpoints
+             WHERE status = 'pruning' AND storage_key = ?1
+             ORDER BY created_at_ms, id",
+        )
+        .map_err(to_store_error)?;
+    let rows = statement
+        .query_map([storage_key], |row| {
+            Ok(PrunableTurnCheckpoint {
+                id: row.get(0)?,
+                storage_key: row.get(1)?,
+            })
+        })
+        .map_err(to_store_error)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(to_store_error)
+}
+
 pub(crate) fn delete_pruning_turn_checkpoint(id: &str) -> Result<(), String> {
     connection()?
         .execute(

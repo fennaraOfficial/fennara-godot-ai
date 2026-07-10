@@ -282,6 +282,9 @@ fn migrate(conn: &Connection) -> Result<(), String> {
     run_migration_once(conn, 13, "chat_turn_checkpoints", |conn| {
         create_turn_checkpoint_tables(conn)
     })?;
+    run_immediate_migration_once(conn, 14, "checkpoint_pruning_tombstones", |conn| {
+        rebuild_turn_checkpoint_table_without_cascades(conn)
+    })?;
     Ok(())
 }
 
@@ -463,11 +466,7 @@ pub(super) fn create_turn_checkpoint_tables(conn: &Connection) -> Result<(), Str
           end_capture_json TEXT,
           changed_paths_json TEXT NOT NULL DEFAULT '[]',
           created_at_ms INTEGER NOT NULL,
-          completed_at_ms INTEGER,
-          FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
-          FOREIGN KEY (user_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
-          FOREIGN KEY (assistant_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
-          FOREIGN KEY (generation_id) REFERENCES chat_generations(id) ON DELETE CASCADE
+          completed_at_ms INTEGER
         );
         CREATE INDEX IF NOT EXISTS idx_chat_turn_checkpoints_chat_created
           ON chat_turn_checkpoints(chat_id, created_at_ms DESC);
@@ -475,6 +474,63 @@ pub(super) fn create_turn_checkpoint_tables(conn: &Connection) -> Result<(), Str
           ON chat_turn_checkpoints(storage_key, created_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_chat_turn_checkpoints_status
           ON chat_turn_checkpoints(status);
+        CREATE TRIGGER IF NOT EXISTS trg_turn_checkpoints_prune_chat_delete
+        AFTER DELETE ON chats
+        BEGIN
+          UPDATE chat_turn_checkpoints
+          SET status = 'pruning',
+              completed_at_ms = COALESCE(completed_at_ms, strftime('%s','now') * 1000)
+          WHERE chat_id = OLD.id AND status != 'pruning';
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_turn_checkpoints_prune_message_delete
+        AFTER DELETE ON chat_messages
+        BEGIN
+          UPDATE chat_turn_checkpoints
+          SET status = 'pruning',
+              completed_at_ms = COALESCE(completed_at_ms, strftime('%s','now') * 1000)
+          WHERE (user_message_id = OLD.id OR assistant_message_id = OLD.id)
+            AND status != 'pruning';
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_turn_checkpoints_prune_generation_delete
+        AFTER DELETE ON chat_generations
+        BEGIN
+          UPDATE chat_turn_checkpoints
+          SET status = 'pruning',
+              completed_at_ms = COALESCE(completed_at_ms, strftime('%s','now') * 1000)
+          WHERE generation_id = OLD.id AND status != 'pruning';
+        END;
+        ",
+    )
+    .map_err(to_store_error)
+}
+
+fn rebuild_turn_checkpoint_table_without_cascades(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "
+        DROP TRIGGER IF EXISTS trg_turn_checkpoints_prune_chat_delete;
+        DROP TRIGGER IF EXISTS trg_turn_checkpoints_prune_message_delete;
+        DROP TRIGGER IF EXISTS trg_turn_checkpoints_prune_generation_delete;
+        DROP INDEX IF EXISTS idx_chat_turn_checkpoints_chat_created;
+        DROP INDEX IF EXISTS idx_chat_turn_checkpoints_storage_created;
+        DROP INDEX IF EXISTS idx_chat_turn_checkpoints_status;
+        ALTER TABLE chat_turn_checkpoints RENAME TO chat_turn_checkpoints_with_cascades;
+        ",
+    )
+    .map_err(to_store_error)?;
+    create_turn_checkpoint_tables(conn)?;
+    conn.execute_batch(
+        "
+        INSERT INTO chat_turn_checkpoints
+          (id, chat_id, user_message_id, assistant_message_id, generation_id,
+           project_path, storage_key, status, start_snapshot_id, end_snapshot_id,
+           start_capture_json, end_capture_json, changed_paths_json,
+           created_at_ms, completed_at_ms)
+        SELECT id, chat_id, user_message_id, assistant_message_id, generation_id,
+               project_path, storage_key, status, start_snapshot_id, end_snapshot_id,
+               start_capture_json, end_capture_json, changed_paths_json,
+               created_at_ms, completed_at_ms
+        FROM chat_turn_checkpoints_with_cascades;
+        DROP TABLE chat_turn_checkpoints_with_cascades;
         ",
     )
     .map_err(to_store_error)
@@ -980,12 +1036,52 @@ mod tests {
         ));
         let migration_name: String = conn
             .query_row(
-                "SELECT name FROM schema_migrations WHERE version = 13",
+                "SELECT name FROM schema_migrations WHERE version = 14",
                 [],
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(migration_name, "chat_turn_checkpoints");
+        assert_eq!(migration_name, "checkpoint_pruning_tombstones");
+
+        conn.execute_batch(
+            "
+            INSERT INTO chats
+              (id, title, model, reasoning_effort, created_at_ms, updated_at_ms)
+              VALUES ('chat_1', 'Chat', 'model', 'medium', 1, 1);
+            INSERT INTO chat_messages
+              (id, chat_id, role, status, content, sequence, created_at_ms, updated_at_ms)
+              VALUES
+              ('user_1', 'chat_1', 'user', 'done', 'hello', 1, 1, 1),
+              ('assistant_1', 'chat_1', 'assistant', 'done', 'hi', 2, 1, 1);
+            INSERT INTO chat_generations
+              (id, chat_id, assistant_message_id, status, started_at_ms)
+              VALUES ('generation_1', 'chat_1', 'assistant_1', 'done', 1);
+            INSERT INTO chat_turn_checkpoints
+              (id, chat_id, user_message_id, assistant_message_id, generation_id,
+               project_path, storage_key, status, start_capture_json, created_at_ms)
+              VALUES
+              ('checkpoint_1', 'chat_1', 'user_1', 'assistant_1', 'generation_1',
+               '/project', 'storage', 'complete', '{}', 1);
+            DELETE FROM chat_messages WHERE id = 'user_1';
+            ",
+        )
+        .unwrap();
+        let checkpoint_status: String = conn
+            .query_row(
+                "SELECT status FROM chat_turn_checkpoints WHERE id = 'checkpoint_1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(checkpoint_status, "pruning");
+        let foreign_key_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_foreign_key_list('chat_turn_checkpoints')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(foreign_key_count, 0);
     }
 
     #[test]
