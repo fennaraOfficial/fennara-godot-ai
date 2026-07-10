@@ -1,5 +1,6 @@
 #include "fennara/tools/validate_scene.hpp"
 
+#include "fennara/control_auth.hpp"
 #include "fennara/helpers.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/tools/scene_io.hpp"
@@ -107,6 +108,11 @@ godot::Dictionary post_local_daemon_json(const godot::String &path,
     godot::PackedStringArray headers;
     headers.append("Content-Type: application/json");
     headers.append("Accept: application/json");
+    if (!control_auth::verify_daemon_and_append_header(headers)) {
+        result["success"] = false;
+        result["error"] = "Local daemon control token is unavailable.";
+        return result;
+    }
     godot::PackedByteArray body = godot::JSON::stringify(payload).to_utf8_buffer();
     uint64_t deadline = now_ms() + static_cast<uint64_t>(timeout_ms);
     bool request_sent = false;

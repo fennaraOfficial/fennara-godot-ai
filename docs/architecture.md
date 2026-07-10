@@ -117,6 +117,7 @@ Fennara/
     fennara
     fennara-mcp
     fennara-daemon
+  daemon-control-token
   current.json
   versions/
     <version>/
@@ -132,6 +133,17 @@ Fennara/
 ```
 
 On Windows, executables use `.exe`.
+
+The daemon creates `daemon-control-token` with secure random bytes on first
+start. Privileged local HTTP routes and the Godot bridge websocket require this
+token through the `X-Fennara-Control-Token` header. The MCP runtime and Godot
+addon read the token from the same per-user Fennara app-data directory. Before
+sending the token, each client sends a random nonce to the public control
+challenge endpoint and requires a valid HMAC-SHA256 proof. This prevents a
+different process that owns the fixed port from collecting the reusable token.
+Static chat assets and the minimal health endpoint remain public on loopback;
+project chat websocket and media requests continue to use the owning editor's
+separate project chat token.
 
 The `webview/cef/...` directory is for read-only browser engine payloads shared
 by every Godot project/editor using that Fennara install. Per-process writable

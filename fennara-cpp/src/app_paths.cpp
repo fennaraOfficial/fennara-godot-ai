@@ -151,6 +151,11 @@ godot::String daemon_binary_path() {
     return paths.is_empty() ? godot::String() : paths[0].path_join("bin").path_join(name);
 }
 
+godot::String daemon_control_token_path() {
+    const godot::String dir = app_dir();
+    return dir.is_empty() ? godot::String() : dir.path_join("daemon-control-token");
+}
+
 godot::String chat_settings_path() {
     const godot::String dir = app_dir();
     return dir.is_empty() ? godot::String() : dir.path_join("chat_settings.json");
