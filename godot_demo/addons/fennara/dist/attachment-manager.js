@@ -370,11 +370,15 @@
       clearAttachments();
       let restoredImages = 0;
       for (const image of images) {
-        if (await addImagePayload({
-          ...image,
-          size: Number(image?.size || image?.size_bytes || 0),
-        })) {
-          restoredImages += 1;
+        try {
+          if (await addImagePayload({
+            ...image,
+            size: Number(image?.size || image?.size_bytes || 0),
+          })) {
+            restoredImages += 1;
+          }
+        } catch {
+          // Continue restoring the remaining payload.
         }
       }
       let restoredContextSnippets = 0;
