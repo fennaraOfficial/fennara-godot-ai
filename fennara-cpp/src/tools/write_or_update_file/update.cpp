@@ -2,7 +2,7 @@
 
 #include "fennara/addon_access.hpp"
 #include "fennara/helpers.hpp"
-#include "fennara/lsp/csharp_build.hpp"
+#include "fennara/csharp/build.hpp"
 #include "fennara/logger.hpp"
 
 #include <godot_cpp/classes/file_access.hpp>

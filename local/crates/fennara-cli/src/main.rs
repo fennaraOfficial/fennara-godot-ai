@@ -1,5 +1,4 @@
 mod app_layout;
-mod csharp_support;
 mod doctor;
 mod mcp_setup;
 mod project_guidance;
@@ -57,7 +56,7 @@ Fennara CLI {VERSION}
 
 Usage:
   fennara doctor [--repair]
-  fennara install [--project <path>] [--version <version>] [--csharp]
+  fennara install [--project <path>] [--version <version>]
   fennara mcp-setup <target flags>
   fennara update [--version <version>] [--project <path>] [--no-self-update]
   fennara self-update [--version <version>]

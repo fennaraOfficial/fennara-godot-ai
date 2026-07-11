@@ -12,7 +12,6 @@ godot::String app_dir();
 godot::String webview_dir();
 godot::String webview_profile_dir();
 godot::String webview_log_dir();
-godot::String csharp_ls_binary_path();
 godot::String daemon_binary_path();
 godot::String daemon_control_token_path();
 godot::String chat_settings_path();

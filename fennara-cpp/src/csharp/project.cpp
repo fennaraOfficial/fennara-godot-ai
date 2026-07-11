@@ -1,9 +1,6 @@
-#include "fennara/lsp/csharp_support.hpp"
-
-#include "fennara/app_paths.hpp"
+#include "fennara/csharp/project.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
-#include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 
 namespace fennara::csharp_support {
@@ -209,8 +206,6 @@ godot::Dictionary select_project(const godot::Array &projects,
 
 godot::Dictionary inspect_project() {
     godot::Dictionary status;
-    godot::String lsp_path = app_paths::csharp_ls_binary_path();
-    bool lsp_installed = !lsp_path.is_empty() && godot::FileAccess::file_exists(lsp_path);
     godot::String root = project_root();
     godot::Array projects;
 
@@ -218,8 +213,6 @@ godot::Dictionary inspect_project() {
         scan_dir(root, root, 0, projects);
     }
 
-    status["lsp_path"] = lsp_path;
-    status["lsp_installed"] = lsp_installed;
     status["project_root"] = root;
     status["projects"] = projects;
     status["project_count"] = projects.size();
@@ -232,10 +225,7 @@ godot::Dictionary inspect_project() {
         status["selected_project"] = selected;
     }
 
-    if (!lsp_installed) {
-        status["state"] = "lsp_not_installed";
-        status["message"] = "C# LSP not available. Run `fennara install --csharp` inside this Godot project or pass `--project <path>`.";
-    } else if (projects.is_empty()) {
+    if (projects.is_empty()) {
         status["state"] = "no_csharp_project";
         status["message"] = "No .csproj, .sln, or .slnx file found in this Godot project.";
     } else {
@@ -251,20 +241,12 @@ godot::Dictionary inspect_project() {
             status["state"] = "ready";
             status["message"] =
                 projects.size() == 1
-                    ? "C# LSP is installed and one C# project was found."
-                    : "C# LSP is installed and the main C# project was selected.";
+                    ? "One C# project was found and selected."
+                    : "The main C# project or solution was selected.";
         }
     }
 
     return status;
-}
-
-godot::String diagnostics_unavailable_message(const godot::Dictionary &status) {
-    godot::String state = status.get("state", "");
-    if (state == "ready") {
-        return "C# LSP is available.";
-    }
-    return status.get("message", "C# LSP not available.");
 }
 
 } // namespace fennara::csharp_support

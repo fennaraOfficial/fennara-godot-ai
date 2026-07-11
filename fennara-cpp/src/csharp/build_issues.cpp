@@ -1,4 +1,4 @@
-#include "fennara/lsp/csharp_build_issues.hpp"
+#include "fennara/csharp/build_issues.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>

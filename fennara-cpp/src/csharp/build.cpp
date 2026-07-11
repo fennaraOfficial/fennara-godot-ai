@@ -1,9 +1,9 @@
-#include "fennara/lsp/csharp_build.hpp"
+#include "fennara/csharp/build.hpp"
 
-#include "fennara/lsp/csharp_build_issues.hpp"
-#include "fennara/lsp/csharp_lsp.hpp"
-#include "fennara/lsp/csharp_support.hpp"
+#include "fennara/csharp/build_issues.hpp"
+#include "fennara/csharp/project.hpp"
 #include "fennara/file_utils.hpp"
+#include "fennara/logger.hpp"
 #include "fennara/process_tree.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
@@ -14,6 +14,7 @@
 #include <godot_cpp/variant/packed_string_array.hpp>
 
 #include <chrono>
+#include <condition_variable>
 #include <mutex>
 #include <thread>
 
@@ -35,6 +36,36 @@ std::atomic_bool &force_next_explicit_build() {
 std::atomic_bool &build_shutdown_requested() {
     static std::atomic_bool *value = new std::atomic_bool(false);
     return *value;
+}
+
+std::atomic_bool &preparation_in_progress() {
+    static std::atomic_bool *value = new std::atomic_bool(false);
+    return *value;
+}
+
+std::atomic_bool &preparation_reserved() {
+    static std::atomic_bool *value = new std::atomic_bool(false);
+    return *value;
+}
+
+std::mutex &preparation_wait_mutex() {
+    static std::mutex *mutex = new std::mutex();
+    return *mutex;
+}
+
+std::condition_variable &preparation_wait_condition() {
+    static std::condition_variable *condition = new std::condition_variable();
+    return *condition;
+}
+
+std::thread &preparation_thread() {
+    static std::thread *thread = new std::thread();
+    return *thread;
+}
+
+std::mutex &preparation_thread_mutex() {
+    static std::mutex *mutex = new std::mutex();
+    return *mutex;
 }
 
 std::mutex &build_coordinator_mutex() {
@@ -439,6 +470,118 @@ void request_build_shutdown() {
     build_shutdown_requested().store(true);
 }
 
+void reserve_background_preparation() {
+    if (build_shutdown_requested().load()) {
+        return;
+    }
+    preparation_reserved().store(true);
+    preparation_in_progress().store(true);
+}
+
+void cancel_reserved_background_preparation() {
+    if (!preparation_reserved().exchange(false)) {
+        return;
+    }
+    preparation_in_progress().store(false);
+    preparation_wait_condition().notify_all();
+}
+
+void start_background_preparation_async() {
+    if (build_shutdown_requested().load()) {
+        return;
+    }
+    bool was_reserved = preparation_reserved().exchange(false);
+    if (!was_reserved) {
+        bool expected = false;
+        if (!preparation_in_progress().compare_exchange_strong(expected, true)) {
+            return;
+        }
+    }
+
+    std::lock_guard<std::mutex> thread_lock(preparation_thread_mutex());
+    if (build_shutdown_requested().load()) {
+        return;
+    }
+    if (preparation_thread().joinable()) {
+        preparation_thread().join();
+    }
+    preparation_thread() = std::thread([]() {
+        Logger::log_activity("C# background preparation started");
+        godot::Dictionary support = csharp_support::inspect_project();
+        godot::Dictionary selected =
+            support.get("selected_project", godot::Dictionary());
+        godot::String selected_type = selected.get("type", "");
+        bool build_ready =
+            !godot::String(selected.get("absolute_path", "")).is_empty() &&
+            (selected_type == "project" || selected_type == "solution");
+
+        if (build_ready) {
+            godot::Dictionary build =
+                run_background_diagnostics(&build_shutdown_requested());
+            double duration = build.get("duration_seconds", 0.0);
+            if ((bool)build.get("success", false) &&
+                (bool)build.get("build_succeeded", false)) {
+                Logger::log_activity(
+                    "C# background isolated build ready in " +
+                    godot::String::num(duration, 3) + "s");
+            } else if ((bool)build.get("cancelled", false)) {
+                Logger::log_activity(
+                    "C# background isolated build cancelled after " +
+                    godot::String::num(duration, 3) + "s");
+            } else {
+                Logger::log_activity(
+                    "C# background isolated build completed with diagnostics in " +
+                    godot::String::num(duration, 3) + "s");
+            }
+        } else {
+            Logger::log_activity(
+                "C# background isolated build skipped: " +
+                godot::String(support.get(
+                    "message", "no unambiguous C# project")));
+        }
+
+        preparation_in_progress().store(false);
+        preparation_wait_condition().notify_all();
+        Logger::log_activity("C# background preparation complete");
+    });
+}
+
+bool wait_for_background_preparation(
+    const godot::String &activity,
+    const std::atomic_bool *cancelled) {
+    if (!preparation_in_progress().load()) {
+        return true;
+    }
+    Logger::log_activity(
+        activity + godot::String(" waiting for C# background preparation"));
+    std::unique_lock<std::mutex> lock(preparation_wait_mutex());
+    while (preparation_in_progress().load()) {
+        if ((cancelled != nullptr && cancelled->load()) ||
+            build_shutdown_requested().load()) {
+            return false;
+        }
+        preparation_wait_condition().wait_for(
+            lock, std::chrono::milliseconds(50));
+    }
+    Logger::log_activity(
+        activity + godot::String(" continuing after C# background preparation"));
+    return true;
+}
+
+void shutdown_background_preparation() {
+    preparation_reserved().store(false);
+    {
+        std::lock_guard<std::mutex> thread_lock(preparation_thread_mutex());
+        if (preparation_thread().joinable() &&
+            preparation_thread().get_id() != std::this_thread::get_id()) {
+            preparation_thread().join();
+            preparation_thread() = std::thread();
+        }
+    }
+    preparation_in_progress().store(false);
+    preparation_wait_condition().notify_all();
+}
+
 godot::String find_root_csproj() {
     godot::Dictionary resolved = resolve_godot_csproj();
     return (bool)resolved.get("success", false)
@@ -447,7 +590,7 @@ godot::String find_root_csproj() {
 }
 
 godot::Dictionary run_dotnet_build_if_needed() {
-    if (!csharp_lsp::wait_for_background_preparation("C# runtime build")) {
+    if (!wait_for_background_preparation("C# runtime build")) {
         godot::Dictionary cancelled_result;
         cancelled_result["needed"] = true;
         cancelled_result["status"] = "failed";
@@ -524,7 +667,7 @@ godot::Dictionary run_dotnet_build_if_needed() {
 
 godot::Dictionary run_diagnostics_impl(const std::atomic_bool *cancelled,
                                        bool background) {
-    if (!background && !csharp_lsp::wait_for_background_preparation(
+    if (!background && !wait_for_background_preparation(
                            "C# project diagnostics", cancelled)) {
         godot::Dictionary cancelled_result;
         cancelled_result["success"] = false;

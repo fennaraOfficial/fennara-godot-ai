@@ -178,32 +178,20 @@ the CLI copies the release addon into:
         guidelines.md
 ```
 
-For C# projects:
-
-```bash
-fennara install --csharp
-```
-
-adds the same addon plus Fennara's managed `csharp-ls` language server support.
 After Godot's editor filesystem scan completes, the addon immediately starts a
 plugin-owned worker that prepares C# support. The worker runs one isolated
-incremental build and warms one project-scoped `csharp-ls` server without
-blocking the Godot main thread. C# tool workers wait on the same preparation
-barrier. The daemon only transports tool calls and does not own either process.
-The isolated build still prepares a valid selected C# project when `csharp-ls`
-is unavailable; only targeted LSP warmup is skipped. All plugin-owned C# builds
-share one coordinator because diagnostic and runtime builds reuse Godot's
-intermediate MSBuild tree.
+incremental build without blocking the Godot main thread. C# tool workers wait
+on the same preparation barrier. The daemon only transports tool calls and does
+not own the build process. All plugin-owned C# builds share one coordinator
+because diagnostic and runtime builds reuse Godot's intermediate MSBuild tree.
 
-Targeted `.cs` diagnostics are temporarily unavailable. Whole-project C#
-diagnostics use one cancellable
-`dotnet build` with Godot's structured build logger instead of per-file LSP
-requests. Its final assemblies are redirected to isolated per-project diagnostic
+Targeted `.cs` diagnostics are not supported. Whole-project C# diagnostics use
+one cancellable `dotnet build` with Godot's structured build logger. Its final
+assemblies are redirected to isolated per-project diagnostic
 output so the open editor does not reload them. If C# source changes while the
 initial background build is running, that build finishes normally and the next
-explicit project scan performs one forced refresh. An unhealthy `csharp-ls`
-session is terminated and replaced on a worker; later C# calls wait for that
-recovery warmup. Runtime session preflight uses an explicit root `.csproj` Debug
+explicit project scan performs one forced refresh. Runtime session preflight
+uses an explicit root `.csproj` Debug
 build, matching Godot's pre-Play build shape, and writes the real
 `.godot/mono/temp/bin/Debug` assembly before launch.
 

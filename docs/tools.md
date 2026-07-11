@@ -24,7 +24,7 @@ source of truth for arguments, limits, and result fields.
 | `write_or_update_file` | Create, rewrite, or exact-replace project files. `.gd` and `.gdshader` edits run diagnostics automatically; C# validation is deferred until related edits are complete. |
 | `run_scene_edit_script` | Run one editor-time Godot worker script against exactly one scene/resource graph and save through Godot serialization. |
 | `project_settings` | Read or change `project.godot` settings, autoloads, and input actions through structured operations. |
-| `script_diagnostics` | Check targeted `.gd` and `.gdshader` files using Godot diagnostics and scene-load checks. C# validation temporarily requires a project scan, which uses an isolated `dotnet build`. |
+| `script_diagnostics` | Check targeted `.gd` and `.gdshader` files using Godot diagnostics and scene-load checks. Targeted C# diagnostics are not supported; C# validation uses a project scan with an isolated `dotnet build`. |
 | `validate_scene` | Validate scene structure and, when structural checks pass, run a brief headless startup pass. |
 | `screenshot_scene` | Capture a scene image for layout, camera, rendering, material, and UI feedback. |
 | `runtime_session` | Start, inspect, or stop one daemon-managed running Godot scene with live logs and runtime artifacts. |
@@ -291,26 +291,23 @@ project scan rather than checking every intermediate edit.
 
 Targeted calls support at most 5 files. `scan_project: true` scans project
 GDScript and shaders, then runs one incremental `dotnet build` for the selected
-C# project or solution instead of issuing one C# language-server request per
-file. The build writes final assemblies to isolated per-project diagnostic
-output under `.godot/fennara/diagnostic_build`; it does not replace
+C# project or solution. The build writes final assemblies to isolated
+per-project diagnostic output under `.godot/fennara/diagnostic_build`; it does not replace
 `.godot/mono/temp/bin/Debug` or trigger Godot editor assembly reload.
 
 After the editor filesystem finishes its initial scan, the Godot plugin starts
-one worker-thread C# preparation immediately. It warms `csharp-ls` and runs the
-isolated build in the background. C# tools called before preparation completes
-wait on that worker without blocking the editor main thread. If source changes
+one worker-thread C# preparation immediately. It runs the isolated build in the
+background. C# tools called before preparation completes wait on that worker
+without blocking the editor main thread. If source changes
 during the background build, the build is allowed to finish and the next
-explicit project scan forces one refresh. If the LSP session becomes unhealthy,
-the plugin starts a recovery warmup and later C# calls wait for it.
-The isolated background build still runs when `csharp-ls` is unavailable, but
-targeted C# diagnostics are temporarily unavailable. Runtime and diagnostic
-builds are serialized because they share Godot's intermediate MSBuild output.
+explicit project scan forces one refresh. Targeted C# diagnostics are not
+supported. Runtime and diagnostic builds are serialized because they share
+Godot's intermediate MSBuild output.
 
 The diagnostic sources are language-specific:
 
 - `.gd`: Godot's GDScript diagnostics.
-- `.cs`: targeted diagnostics are temporarily unavailable. Use
+- `.cs`: targeted diagnostics are not supported. Use
   `scan_project: true`, which uses Godot's structured build logger with one
   cancellable, isolated `dotnet build` for the selected project or solution.
 - `.gdshader`: Godot shader parser diagnostics.

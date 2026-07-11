@@ -1,5 +1,4 @@
 use crate::app_layout::display_path;
-use crate::csharp_support;
 use crate::project_guidance;
 use crate::release_package;
 use crate::webview_prereq;
@@ -36,18 +35,10 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     install_addon(&project_dir, &source)?;
     println!("guidance: writing AGENTS.md and addons/fennara/ai/guidelines.md");
     project_guidance::write(&project_dir)?;
-    if options.csharp {
-        println!("csharp: installing language server support");
-        csharp_support::install()?;
-    }
-
     println!("Installed Fennara");
     println!("version: {version}");
     println!("project: {}", display_path(&project_dir));
     println!("guidance: wrote AGENTS.md and addons/fennara/ai/guidelines.md");
-    if options.csharp {
-        println!("csharp: installed");
-    }
     webview_prereq::warn_for_current_platform()?;
     println!("next: run `fennara update` inside this project when a new release is available");
     Ok(())
@@ -114,7 +105,6 @@ struct InstallOptions {
     project_dir: Option<PathBuf>,
     source_dir: Option<PathBuf>,
     version: String,
-    csharp: bool,
 }
 
 impl InstallOptions {
@@ -122,7 +112,6 @@ impl InstallOptions {
         let mut project_dir = None;
         let mut source_dir = None;
         let mut version = "latest".to_string();
-        let mut csharp = false;
         let mut index = 0;
 
         while index < args.len() {
@@ -148,9 +137,6 @@ impl InstallOptions {
                 arg if arg.starts_with("--version=") => {
                     version = arg.trim_start_matches("--version=").to_string();
                 }
-                "--csharp" => {
-                    csharp = true;
-                }
                 "-h" | "--help" => {
                     print_help();
                     return Err("".to_string());
@@ -164,7 +150,6 @@ impl InstallOptions {
             project_dir,
             source_dir,
             version,
-            csharp,
         })
     }
 }
@@ -183,7 +168,6 @@ Install Fennara into a Godot project.
 Usage:
   fennara install
   fennara install --project <path>
-  fennara install --csharp
   fennara install --version 0.2.8 --project <path>
 "
     );

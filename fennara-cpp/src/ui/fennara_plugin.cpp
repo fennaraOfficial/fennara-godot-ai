@@ -1,6 +1,5 @@
 #include "fennara/ui/fennara_plugin.hpp"
-#include "fennara/lsp/csharp_build.hpp"
-#include "fennara/lsp/csharp_lsp.hpp"
+#include "fennara/csharp/build.hpp"
 #include "fennara/local_bridge.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/update_notice.hpp"
@@ -35,12 +34,11 @@ FennaraPlugin::FennaraPlugin() {
 void FennaraPlugin::_enter_tree() {
     Logger::init();
     csharp_build::begin_build_lifecycle();
-    csharp_lsp::begin_session_lifecycle();
     FLOG_SYS(godot::String("Plugin started, Godot ") + godot::String(godot::Engine::get_singleton()->get_version_info()["string"]));
 
     csharp_preparation_pending = true;
     initial_filesystem_scan_completed = false;
-    csharp_lsp::reserve_background_preparation();
+    csharp_build::reserve_background_preparation();
     godot::EditorFileSystem *filesystem =
         godot::EditorInterface::get_singleton()->get_resource_filesystem();
     if (filesystem != nullptr) {
@@ -83,16 +81,12 @@ void FennaraPlugin::_start_csharp_preparation() {
         (os != nullptr && os->has_feature("headless")) ||
         (display != nullptr && display->get_name().to_lower() == "headless");
     if (is_headless) {
-        csharp_lsp::cancel_reserved_background_preparation();
+        csharp_build::cancel_reserved_background_preparation();
         FLOG_SYS("C# background preparation skipped: headless editor");
         return;
     }
 
-    csharp_lsp::warmup_async(
-        "",
-        "",
-        "",
-        "fennara-csharp-warmup");
+    csharp_build::start_background_preparation_async();
 }
 
 void FennaraPlugin::_on_editor_filesystem_changed() {
@@ -282,7 +276,7 @@ void FennaraPlugin::_exit_tree() {
             filesystem->disconnect("filesystem_changed", callback);
         }
     }
-    csharp_lsp::shutdown_warm_server();
+    csharp_build::shutdown_background_preparation();
     if (script_context_menu_plugin.is_valid()) {
         remove_context_menu_plugin(script_context_menu_plugin);
         script_context_menu_plugin->set_local_bridge(nullptr);

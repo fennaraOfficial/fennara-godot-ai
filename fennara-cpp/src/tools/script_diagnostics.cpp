@@ -1,8 +1,7 @@
 #include "fennara/tools/script_diagnostics.hpp"
 #include "fennara/addon_access.hpp"
-#include "fennara/lsp/csharp_build.hpp"
-#include "fennara/lsp/csharp_lsp.hpp"
-#include "fennara/lsp/csharp_support.hpp"
+#include "fennara/csharp/build.hpp"
+#include "fennara/csharp/project.hpp"
 #include "fennara/helpers.hpp"
 #include "fennara/lsp/gdscript_lsp.hpp"
 #include "fennara/logger.hpp"
@@ -904,7 +903,6 @@ void FennaraScriptDiagnosticsTool::_worker() {
     godot::Variant file_paths_var;
     godot::Array file_paths;
     godot::Array gd_files_to_check;
-    godot::Array cs_files_to_check;
     godot::Array valid_requests;
     godot::Array item_results;
     godot::Dictionary csharp_build_result;
@@ -999,7 +997,7 @@ void FennaraScriptDiagnosticsTool::_worker() {
             }
             item_results.append(make_failed_file(
                 file_path,
-                "Targeted C# diagnostics are temporarily unavailable. "
+                "Targeted C# diagnostics are not supported. "
                 "Run script_diagnostics with scan_project:true to validate the "
                 "selected C# project or solution with an isolated dotnet build."));
             continue;
@@ -1048,31 +1046,6 @@ void FennaraScriptDiagnosticsTool::_worker() {
                 godot::Array keys = gd_per_file.keys();
                 for (int i = 0; i < keys.size(); i++) {
                     per_file[keys[i]] = gd_per_file[keys[i]];
-                }
-            }
-        }
-
-        if (!cs_files_to_check.is_empty()) {
-            if (_is_cancelled()) {
-                return;
-            }
-
-            godot::Dictionary cs_diag_result =
-                csharp_lsp::diagnose_files(
-                    cs_files_to_check,
-                    "fennara-csharp-diagnostics",
-                    &_cancelled);
-            if (!(bool)cs_diag_result.get("success", false)) {
-                godot::String diag_error =
-                    cs_diag_result.get("error", "C# diagnostics failed");
-                language_errors["csharp"] = diag_error;
-                FLOG_ERR(godot::String("Diag: C# LSP diagnostics failed: ") + diag_error);
-            } else {
-                godot::Dictionary cs_per_file =
-                    cs_diag_result.get("per_file", godot::Dictionary());
-                godot::Array keys = cs_per_file.keys();
-                for (int i = 0; i < keys.size(); i++) {
-                    per_file[keys[i]] = cs_per_file[keys[i]];
                 }
             }
         }

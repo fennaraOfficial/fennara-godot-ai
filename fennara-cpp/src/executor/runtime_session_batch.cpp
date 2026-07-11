@@ -1,6 +1,6 @@
 #include "fennara/executor.hpp"
 
-#include "fennara/lsp/csharp_build.hpp"
+#include "fennara/csharp/build.hpp"
 #include "fennara/runtime/runtime_scene_preflight.hpp"
 #include "fennara/tools/runtime_session.hpp"
 #include "fennara/tools/validate_scene.hpp"

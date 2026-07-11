@@ -2,11 +2,11 @@
     "name": "script_diagnostics",
     "description_lines": [
       "Fetch script and shader errors, warnings, info, and hints from the active Godot diagnostics sources.",
-      "Targeted file_paths support .gd and .gdshader files. Targeted C# diagnostics are temporarily unavailable; use scan_project: true for C# validation.",
+      "Targeted file_paths support .gd and .gdshader files. Targeted C# diagnostics are not supported; use scan_project: true for C# validation.",
       "scan_project: true scans project .gd and .gdshader files and runs one cancellable incremental dotnet build for the selected C# project or solution graph.",
       "The project C# build writes final assemblies to Fennara's isolated per-project diagnostic output. It does not replace .godot/mono/temp/bin/Debug, update Godot's loaded runtime assembly, or trigger an editor assembly reload.",
-      "After Godot's initial editor filesystem scan, the plugin prepares the isolated C# build and warms csharp-ls on a worker thread. C# diagnostic calls wait for this preparation or an LSP recovery warmup without blocking the editor main thread.",
-      "The isolated background build still runs for a valid selected C# project when csharp-ls is unavailable; only targeted LSP warmup is skipped. Plugin-owned runtime and diagnostic builds are serialized because they share Godot's intermediate MSBuild output.",
+      "After Godot's initial editor filesystem scan, the plugin prepares the isolated C# build on a worker thread. C# diagnostic calls wait for this preparation without blocking the editor main thread.",
+      "Plugin-owned runtime and diagnostic builds are serialized because they share Godot's intermediate MSBuild output.",
       "If C# source changes while the initial background build is running, that build finishes normally and the next explicit project scan performs one forced refresh.",
       "For targeted .gd files, this also loads and instantiates project .tscn scenes in memory on the Godot main thread with Godot logging captured, then attaches script-related scene-load errors back to the script file with source=scene_load and scene_path.",
       "This scene-load pass is diagnostic only: it does not open the editor UI, run gameplay, or validate arbitrary scene/resource state.",
@@ -21,7 +21,7 @@
         "properties": {
             "file_paths": {
                 "type": "array",
-                "description": "Specific .gd or .gdshader file paths to check in one call. Targeted .cs paths are temporarily unavailable; use scan_project:true for C# validation. Hard limit: at most 5 files per targeted call. Omit when using scan_project. Required unless scan_project is true.",
+                "description": "Specific .gd or .gdshader file paths to check in one call. Targeted .cs paths are not supported; use scan_project:true for C# validation. Hard limit: at most 5 files per targeted call. Omit when using scan_project. Required unless scan_project is true.",
                 "items": {
                     "type": "string",
                     "description": "Path to a .gd or .gdshader file (e.g., 'scripts/player.gd', 'shaders/water.gdshader', or 'res://scripts/player.gd')."

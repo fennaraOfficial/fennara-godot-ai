@@ -8,8 +8,6 @@
 namespace fennara::app_paths {
 namespace {
 
-constexpr const char *kCSharpLsVersion = "0.20.0";
-
 void append_if_present(godot::PackedStringArray &paths, const godot::String &path) {
     if (!path.is_empty() && !paths.has(path)) {
         paths.append(path);
@@ -115,28 +113,6 @@ godot::String webview_log_dir() {
     return dir.is_empty()
                ? godot::String()
                : dir.path_join("logs").path_join("webview");
-}
-
-godot::String csharp_ls_binary_path() {
-    const godot::PackedStringArray paths = app_dir_candidates();
-    const godot::String name = binary_name("csharp-ls");
-    for (int i = 0; i < paths.size(); i++) {
-        const godot::String candidate = paths[i]
-                                            .path_join("tools")
-                                            .path_join("csharp-ls")
-                                            .path_join(kCSharpLsVersion)
-                                            .path_join(name);
-        if (godot::FileAccess::file_exists(candidate)) {
-            return candidate;
-        }
-    }
-    return paths.is_empty()
-               ? godot::String()
-               : paths[0]
-                     .path_join("tools")
-                     .path_join("csharp-ls")
-                     .path_join(kCSharpLsVersion)
-                     .path_join(name);
 }
 
 godot::String daemon_binary_path() {
