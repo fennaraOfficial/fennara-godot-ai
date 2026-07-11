@@ -256,6 +256,8 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
     godot::Dictionary script_preflight =
         raw_result.get("script_preflight", godot::Dictionary());
     if (!script_preflight.is_empty()) {
+        bool script_preflight_succeeded =
+            script_preflight.get("success", false);
         int script_errors =
             static_cast<int>(script_preflight.get("error_count", 0));
         int script_warnings =
@@ -263,12 +265,18 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
         int checked_scripts =
             static_cast<int>(script_preflight.get("checked_script_count", 0));
         lines.append("");
-        lines.append("Script preflight:");
+        lines.append("GDScript preflight:");
         lines.append("- Checked scripts: " +
                      godot::String::num_int64(checked_scripts));
         lines.append("- Errors: " + godot::String::num_int64(script_errors) +
                      ", warnings: " +
                      godot::String::num_int64(script_warnings));
+        if (!script_preflight_succeeded) {
+            godot::String error = script_preflight.get("error", "");
+            if (!error.is_empty()) {
+                lines.append("- Failure: " + error);
+            }
+        }
         if (script_errors > 0) {
             godot::Array diagnostics =
                 script_preflight.get("diagnostics", godot::Array());
@@ -374,7 +382,7 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
         lines.append(
             "Next step: ask the user to stop the running scene in Godot, then call `runtime_session` with action `start` again.");
     }
-    if (status == "blocked" || status == "managed_stale") {
+    if (status == "managed_stale") {
         lines.append("");
         lines.append(
             "Resolve the active or stale runtime state before starting another scene.");

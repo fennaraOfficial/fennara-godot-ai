@@ -2,7 +2,7 @@
   "name": "runtime_session",
   "description_lines": [
     "Start, inspect, or stop a daemon-managed Godot runtime session.",
-    "`start` first runs scene-execution gates: C# projects run the same kind of explicit root .csproj Debug build Godot performs before Play, the scene runs structural validate_scene preflight without a headless runtime pass, and Fennara checks autoload plus scene-attached scripts with targeted diagnostics.",
+    "`start` first runs scene-execution gates: C# projects run the same kind of explicit root .csproj Debug build Godot performs before Play, the scene runs structural validate_scene preflight without a headless runtime pass, and Fennara checks GDScript autoloads plus scene-attached GDScripts with targeted diagnostics.",
     "Unlike the isolated compile-only build used by script_diagnostics scan_project:true, this runtime build updates .godot/mono/temp/bin/Debug so the launched scene uses the latest C# code. An already-open Godot editor may detect that assembly change and attempt its normal hot reload; Fennara does not close the editor.",
     "For C# projects, start waits for any plugin-owned background C# preparation before running its authoritative runtime build. The wait occurs on a tool worker and does not block the Godot editor main thread.",
     "If those gates fail, the scene is not opened.",

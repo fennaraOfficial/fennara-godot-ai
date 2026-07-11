@@ -9,6 +9,7 @@
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
+#include <godot_cpp/classes/script.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string_name.hpp>
@@ -206,6 +207,44 @@ godot::Vector<ScriptExportInfo> parse_script_exports(
     return exports;
 }
 
+godot::Vector<ScriptExportInfo> inspect_script_exports(
+    const godot::Ref<godot::Script> &script) {
+    godot::Vector<ScriptExportInfo> exports;
+    if (!script.is_valid()) return exports;
+
+    godot::TypedArray<godot::Dictionary> properties =
+        script->get_script_property_list();
+    for (int i = 0; i < properties.size(); i++) {
+        godot::Dictionary property = properties[i];
+        int usage = property.get("usage", 0);
+        if (usage & godot::PROPERTY_USAGE_CATEGORY) continue;
+
+        godot::String name = property.get("name", "");
+        if (name.is_empty()) continue;
+
+        ScriptExportInfo info;
+        info.name = name;
+        godot::Variant::Type property_type =
+            static_cast<godot::Variant::Type>(
+                static_cast<int>(property.get("type", 0)));
+        info.type_hint = godot::Variant::get_type_name(property_type);
+        godot::String hint_string = property.get("hint_string", "");
+        if (property_type == godot::Variant::OBJECT &&
+            !hint_string.is_empty()) {
+            info.type_hint = hint_string;
+        }
+
+        godot::Variant default_value =
+            script->get_property_default_value(godot::StringName(name));
+        if (default_value.get_type() != godot::Variant::NIL) {
+            info.default_value = default_value.stringify();
+            info.has_default = true;
+        }
+        exports.push_back(info);
+    }
+    return exports;
+}
+
 godot::HashMap<godot::String, godot::String> build_node_property_map(
     const godot::Vector<godot::String> &node_lines) {
     godot::HashMap<godot::String, godot::String> props;
@@ -240,21 +279,38 @@ godot::String get_script_path_from_node_lines(
     return godot::String();
 }
 
-godot::String format_script_exports(const godot::String &script_path) {
+godot::String format_script_exports(
+    const godot::String &script_path,
+    const godot::Ref<godot::Script> &script) {
     if (script_path.is_empty() || script_path == "<embedded>") {
         return godot::String();
     }
 
-    godot::Vector<ScriptExportInfo> exports = parse_script_exports(script_path);
+    godot::String extension = script_path.get_extension().to_lower();
+    bool source_declarations = extension == "gd";
+    if (!source_declarations && !script.is_valid()) {
+        return "script_exports: unavailable (script metadata is not loaded)\n";
+    }
+    if (extension == "cs" &&
+        script->get_instance_base_type() == godot::StringName()) {
+        return "script_exports: unavailable (C# assembly metadata is not loaded)\n";
+    }
+
+    godot::Vector<ScriptExportInfo> exports = source_declarations
+        ? parse_script_exports(script_path)
+        : inspect_script_exports(script);
     if (exports.is_empty()) return godot::String();
 
     godot::String out = "script_exports:\n";
-    out += "  <!-- declarations copied from script; if a value is overridden, it appears in properties below -->\n";
+    out += source_declarations
+        ? "  <!-- declarations copied from script; if a value is overridden, it appears in properties below -->\n"
+        : "  <!-- export metadata reported by Godot; overridden values appear in properties below -->\n";
     for (int i = 0; i < (int)exports.size(); i++) {
         const ScriptExportInfo &info = exports[i];
         godot::String decl = info.declaration_text;
         if (decl.is_empty()) {
-            decl = "@export var " + info.name;
+            decl = source_declarations ? "@export var " + info.name
+                                       : info.name;
             if (!info.type_hint.is_empty()) {
                 decl += ": " + info.type_hint;
             }
@@ -398,8 +454,9 @@ godot::Dictionary get_node_properties_single(const godot::Dictionary &args) {
 
     // Script path comes from the parsed node block, not instantiation.
     if (!script_path.is_empty()) {
+        godot::Ref<godot::Script> attached_script = target->get_script();
         out += "script: " + script_path + "\n";
-        out += format_script_exports(script_path);
+        out += format_script_exports(script_path, attached_script);
     }
 
     out += get_node_properties::format_inherited_theme_note(

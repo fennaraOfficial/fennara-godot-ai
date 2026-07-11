@@ -38,8 +38,6 @@ private:
     // Individual check functions — each appends to `issues` Array
     static void _check_missing_ext_resources(
         const godot::String &scene_path, godot::Array &issues);
-    static void _check_script_extends_mismatch(
-        const godot::Ref<godot::SceneState> &state, godot::Array &issues);
     static void _check_unset_export_vars(
         const godot::Ref<godot::SceneState> &state, godot::Array &issues);
     static void _check_duplicate_siblings(
@@ -54,8 +52,6 @@ private:
     // Helpers
     static godot::String _build_node_path(
         const godot::Ref<godot::SceneState> &state, int node_idx);
-    static bool _inherits_class(const godot::StringName &class_name,
-                                const godot::StringName &base_class);
     static void _add_issue(godot::Array &issues,
                            const godot::String &node_path,
                            const godot::String &check_name,

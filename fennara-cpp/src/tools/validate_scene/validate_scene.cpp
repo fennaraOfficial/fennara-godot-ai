@@ -357,7 +357,6 @@ godot::Dictionary FennaraValidateSceneTool::validate_scene_item(
         return item_result;
     }
 
-    FennaraValidateSceneTool::_check_script_extends_mismatch(state, issues);
     FennaraValidateSceneTool::_check_unset_export_vars(state, issues);
     FennaraValidateSceneTool::_check_invalid_node_paths(scene_path, issues);
     FennaraValidateSceneTool::_check_script_node_references(scene_path, issues);
@@ -647,7 +646,6 @@ godot::Dictionary FennaraValidateSceneTool::execute(const godot::Dictionary &arg
             return item_result;
         }
 
-        FennaraValidateSceneTool::_check_script_extends_mismatch(state, issues);
         FennaraValidateSceneTool::_check_unset_export_vars(state, issues);
         FennaraValidateSceneTool::_check_invalid_node_paths(scene_path, issues);
         FennaraValidateSceneTool::_check_script_node_references(scene_path, issues);
@@ -722,13 +720,6 @@ godot::String FennaraValidateSceneTool::_build_node_path(
         return godot::String(state->get_node_name(0));
     }
     return godot::String(state->get_node_path(node_idx, false));
-}
-
-bool FennaraValidateSceneTool::_inherits_class(
-    const godot::StringName &class_name,
-    const godot::StringName &base_class) {
-    if (class_name == base_class) return true;
-    return godot::ClassDB::is_parent_class(class_name, base_class);
 }
 
 void FennaraValidateSceneTool::_add_issue(

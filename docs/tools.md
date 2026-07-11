@@ -160,6 +160,10 @@ Use this after `get_scene_tree` when you need to understand existing node or
 resource configuration. It shows properties changed from defaults and expands
 embedded SubResources recursively.
 
+Attached GDScript exports are shown from their source declarations. Attached C#
+exports are shown from Godot's loaded generic `Script` metadata, including
+property names, types, and defaults when available.
+
 Large or opaque resources are summarized into readable API-oriented output,
 including TileSet, TileMapLayer data, GridMap data, MeshLibrary resources,
 Theme resources, AnimationTree graphs, AnimationLibrary, Animation, and
@@ -336,10 +340,10 @@ Use script_diagnostics on res://scripts/player.gd and res://scripts/enemy.gd.
 Use this after scene edits or when checking scene/resource integrity. It accepts
 1 to 10 scene paths.
 
-Structural checks include missing scripts/resources, script extends mismatch,
-invalid NodePath properties, invalid script `$Node`/`get_node()` references,
-duplicate sibling names, cyclic scene dependencies, and unset exported
-Resource/Object variables.
+Structural checks include missing scripts/resources, invalid NodePath properties,
+invalid GDScript `$Node`/`get_node()` references, duplicate sibling names,
+cyclic scene dependencies, and unset exported Resource/Object variables. Export
+metadata is read through Godot's generic `Script` API for both GDScript and C#.
 
 Unset exported Resource/Object variables are reported as structural notes because
 they may be optional or assigned at runtime. Repeated unset exports are grouped
