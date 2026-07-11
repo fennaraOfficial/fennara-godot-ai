@@ -2,6 +2,7 @@
 
 #include "fennara/addon_access.hpp"
 #include "fennara/helpers.hpp"
+#include "fennara/lsp/csharp_build.hpp"
 #include "fennara/logger.hpp"
 
 #include <godot_cpp/classes/file_access.hpp>
@@ -102,6 +103,9 @@ godot::Dictionary FennaraWriteOrUpdateFileTool::_execute_update(
     }
 
     fennara::notify_editor_filesystem(normalized_path);
+    if (normalized_path.to_lower().ends_with(".cs")) {
+        csharp_build::note_csharp_source_changed();
+    }
     if (normalized_path.ends_with(".gdshader")) {
         _refresh_cached_shader_resource(normalized_path, new_content);
         _reserialize_shader_owners(normalized_path, result);

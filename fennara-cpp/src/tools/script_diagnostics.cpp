@@ -1,5 +1,6 @@
 #include "fennara/tools/script_diagnostics.hpp"
 #include "fennara/addon_access.hpp"
+#include "fennara/lsp/csharp_build.hpp"
 #include "fennara/lsp/csharp_lsp.hpp"
 #include "fennara/lsp/csharp_support.hpp"
 #include "fennara/helpers.hpp"
@@ -33,6 +34,16 @@ constexpr int kMaxBatchFiles = 5;
 constexpr int kSceneLoadScenesPerTick = 2;
 constexpr uint64_t kSceneLoadBudgetMs = 8;
 constexpr const char *kResultVersion = "script-diagnostics-result-v1";
+constexpr int kBuildFailureOutputTailChars = 4000;
+
+godot::String build_failure_output_tail(const godot::String &output) {
+    godot::String clean = output.strip_edges();
+    if (clean.length() <= kBuildFailureOutputTailChars) {
+        return clean;
+    }
+    return "[Earlier dotnet output omitted]\n" + clean.right(
+        kBuildFailureOutputTailChars);
+}
 
 std::mutex &diagnostic_logger_capture_mutex() {
     static std::mutex *mutex = new std::mutex;
@@ -458,6 +469,12 @@ godot::Dictionary build_script_diagnostics_result(
 
         godot::Dictionary file_result =
             per_file.get(resolved_path, empty_file_result());
+        if (godot::String(file_result.get("status", "")) == "failed") {
+            item_results.append(make_failed_file(
+                file_path,
+                file_result.get("error", "Diagnostics failed")));
+            continue;
+        }
         godot::String match_path =
             normalize_script_path_for_match(resolved_path);
         if (scene_load_per_file.has(match_path)) {
@@ -744,6 +761,9 @@ void FennaraScriptDiagnosticsTool::_finish_on_main_thread() {
             godot::Dictionary(),
             scene_load_skip_summary(),
             scan_project);
+        if (state.has("csharp_build")) {
+            result["csharp_build"] = state["csharp_build"];
+        }
         _finish_with_result(result);
         return;
     }
@@ -887,11 +907,20 @@ void FennaraScriptDiagnosticsTool::_worker() {
     godot::Array cs_files_to_check;
     godot::Array valid_requests;
     godot::Array item_results;
+    godot::Dictionary csharp_build_result;
     bool scan_project = _args.get("scan_project", false);
+    bool scan_csharp_project = false;
 
     if (scan_project) {
+        godot::Dictionary csharp_status = csharp_support::inspect_project();
+        godot::Dictionary selected_project =
+            csharp_status.get("selected_project", godot::Dictionary());
+        godot::String selected_type = selected_project.get("type", "");
+        godot::String selected_path = selected_project.get("absolute_path", "");
+        scan_csharp_project = !selected_path.is_empty() &&
+            (selected_type == "project" || selected_type == "solution");
         file_paths = file_utils::find_all_diagnostic_files();
-        if (file_paths.is_empty()) {
+        if (file_paths.is_empty() && !scan_csharp_project) {
             result = make_argument_error("No .gd, .cs, or .gdshader files found under res://");
             result["scan_project"] = true;
             goto done;
@@ -964,7 +993,16 @@ void FennaraScriptDiagnosticsTool::_worker() {
         }
 
         if (resolved.ends_with(".cs")) {
-            cs_files_to_check.append(resolved);
+            if (scan_project) {
+                scan_csharp_project = true;
+                continue;
+            }
+            item_results.append(make_failed_file(
+                file_path,
+                "Targeted C# diagnostics are temporarily unavailable. "
+                "Run script_diagnostics with scan_project:true to validate the "
+                "selected C# project or solution with an isolated dotnet build."));
+            continue;
         } else if (resolved.ends_with(".gd")) {
             gd_files_to_check.append(resolved);
         }
@@ -976,7 +1014,7 @@ void FennaraScriptDiagnosticsTool::_worker() {
         valid_requests.append(request);
     }
 
-    if (valid_requests.is_empty()) {
+    if (valid_requests.is_empty() && !scan_csharp_project) {
         godot::Dictionary summary = make_summary(item_results, scan_project, 0, 0, 0, 0, 0);
         result["success"] = false;
         result["tool_name"] = "script_diagnostics";
@@ -1020,7 +1058,10 @@ void FennaraScriptDiagnosticsTool::_worker() {
             }
 
             godot::Dictionary cs_diag_result =
-                csharp_lsp::diagnose_files(cs_files_to_check, "fennara-csharp-diagnostics");
+                csharp_lsp::diagnose_files(
+                    cs_files_to_check,
+                    "fennara-csharp-diagnostics",
+                    &_cancelled);
             if (!(bool)cs_diag_result.get("success", false)) {
                 godot::String diag_error =
                     cs_diag_result.get("error", "C# diagnostics failed");
@@ -1033,6 +1074,67 @@ void FennaraScriptDiagnosticsTool::_worker() {
                 for (int i = 0; i < keys.size(); i++) {
                     per_file[keys[i]] = cs_per_file[keys[i]];
                 }
+            }
+        }
+
+        if (scan_csharp_project) {
+            if (_is_cancelled()) {
+                return;
+            }
+
+            godot::Dictionary cs_build =
+                csharp_build::run_diagnostics(&_cancelled);
+            csharp_build_result = cs_build;
+            if (_is_cancelled()) {
+                return;
+            }
+            godot::Dictionary cs_per_file =
+                cs_build.get("per_file", godot::Dictionary());
+            godot::Array keys = cs_per_file.keys();
+            for (int i = 0; i < keys.size(); i++) {
+                godot::String resolved_path = keys[i];
+                per_file[resolved_path] = cs_per_file[resolved_path];
+
+                godot::Dictionary request;
+                request["file_path"] = file_utils::uri_to_res_path(
+                    file_utils::path_to_uri(resolved_path));
+                request["resolved_path"] = resolved_path;
+                request["language"] = "csharp";
+                valid_requests.append(request);
+            }
+
+            if (!(bool)cs_build.get("success", false)) {
+                godot::String error =
+                    cs_build.get("error", "C# project diagnostics failed");
+                language_errors["csharp"] = error;
+                godot::String project_path = cs_build.get("project_path", "");
+                if (project_path.is_empty()) {
+                    godot::Dictionary status = csharp_support::inspect_project();
+                    godot::Dictionary selected =
+                        status.get("selected_project", godot::Dictionary());
+                    project_path = selected.get("absolute_path", "C# project");
+                }
+                godot::Dictionary request;
+                request["file_path"] = project_path;
+                request["resolved_path"] = project_path;
+                request["language"] = "csharp";
+                valid_requests.append(request);
+                FLOG_ERR(godot::String("Diag: C# project build failed: ") + error);
+            } else if (!(bool)cs_build.get("build_succeeded", true) && keys.is_empty()) {
+                godot::String project_path = cs_build.get("project_path", "C# project");
+                godot::Dictionary request;
+                request["file_path"] = project_path;
+                request["resolved_path"] = project_path;
+                request["language"] = "csharp";
+                valid_requests.append(request);
+                godot::String error =
+                    "dotnet build failed without structured compiler diagnostics.";
+                godot::String output_tail = build_failure_output_tail(
+                    cs_build.get("output", ""));
+                if (!output_tail.is_empty()) {
+                    error += "\n\nDotnet output tail:\n" + output_tail;
+                }
+                language_errors["csharp"] = error;
             }
         }
 
@@ -1066,6 +1168,9 @@ void FennaraScriptDiagnosticsTool::_worker() {
         state["language_errors"] = language_errors;
         state["scene_paths"] = scene_paths;
         state["scan_project"] = scan_project;
+        if (!csharp_build_result.is_empty()) {
+            state["csharp_build"] = csharp_build_result;
+        }
 
         _mutex->lock();
         _pending_state = state;

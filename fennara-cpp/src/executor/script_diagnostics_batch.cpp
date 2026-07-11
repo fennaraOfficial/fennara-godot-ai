@@ -1,5 +1,4 @@
 #include "fennara/executor.hpp"
-#include "fennara/lsp/csharp_lsp.hpp"
 #include "fennara/file_utils.hpp"
 #include "fennara/lsp/gdscript_lsp.hpp"
 
@@ -20,13 +19,10 @@ void merge_per_file(godot::Dictionary &into, const godot::Dictionary &from) {
 
 godot::Dictionary run_mixed_script_diagnostics(const godot::Array &files_to_check) {
     godot::Array gd_files;
-    godot::Array cs_files;
     for (int i = 0; i < files_to_check.size(); i++) {
         godot::String path = files_to_check[i];
         if (path.ends_with(".gd")) {
             gd_files.append(path);
-        } else if (path.ends_with(".cs")) {
-            cs_files.append(path);
         }
     }
 
@@ -38,15 +34,6 @@ godot::Dictionary run_mixed_script_diagnostics(const godot::Array &files_to_chec
             return gd_result;
         }
         merge_per_file(per_file, gd_result.get("per_file", godot::Dictionary()));
-    }
-
-    if (!cs_files.is_empty()) {
-        godot::Dictionary cs_result =
-            csharp_lsp::diagnose_files(cs_files, "fennara-csharp-batch-diagnostics");
-        if (!(bool)cs_result.get("success", false)) {
-            return cs_result;
-        }
-        merge_per_file(per_file, cs_result.get("per_file", godot::Dictionary()));
     }
 
     godot::Dictionary result;

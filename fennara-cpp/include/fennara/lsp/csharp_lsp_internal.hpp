@@ -5,9 +5,12 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
 
+#include <atomic>
+
 namespace fennara::csharp_lsp::internal {
 
 constexpr int kDiagnosticsTimeoutMs = 30000;
+constexpr int kWorkspaceReadyTimeoutMs = 120000;
 constexpr int kSymbolsTimeoutMs = 15000;
 constexpr int kShutdownTimeoutMs = 1000;
 
@@ -18,24 +21,34 @@ godot::Dictionary failure(const godot::String &error);
 godot::Dictionary initialize(const godot::Ref<godot::FileAccess> &stdio,
                              const godot::String &client_name,
                              const godot::String &root_uri,
-                             const godot::String &workspace_name);
-void pump_until_workspace_ready(const godot::Ref<godot::FileAccess> &stdio,
-                                int timeout_ms);
+                             const godot::String &workspace_name,
+                             const std::atomic_bool *cancelled = nullptr);
+bool pump_until_workspace_ready(const godot::Ref<godot::FileAccess> &stdio,
+                                int timeout_ms,
+                                const std::atomic_bool *cancelled = nullptr);
 void notify_file_changed(const godot::Ref<godot::FileAccess> &stdio,
                          const godot::String &abs_path);
 void open_document(const godot::Ref<godot::FileAccess> &stdio,
                    const godot::String &abs_path);
+void close_document(const godot::Ref<godot::FileAccess> &stdio,
+                    const godot::String &abs_path);
 godot::Dictionary request_document_diagnostics(
     const godot::Ref<godot::FileAccess> &stdio,
     const godot::String &abs_path,
-    int request_id);
+    const std::atomic_bool *cancelled = nullptr);
 godot::Dictionary request_document_symbols(
     const godot::Ref<godot::FileAccess> &stdio,
     const godot::String &abs_path,
-    int request_id);
+    const std::atomic_bool *cancelled = nullptr);
 godot::Dictionary file_result_from_document_diagnostics(
     const godot::Dictionary &response);
 void shutdown(const godot::Ref<godot::FileAccess> &stdio, int pid);
 void clear_open_documents();
+void request_abort();
+void clear_abort();
+void set_server_pid(int pid);
+void set_stderr_pipe(const godot::Ref<godot::FileAccess> &stderr_pipe);
+godot::String timeout_context();
+void set_request_cancellation(const std::atomic_bool *cancelled);
 
 } // namespace fennara::csharp_lsp::internal

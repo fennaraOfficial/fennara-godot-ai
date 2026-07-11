@@ -265,4 +265,17 @@ godot::Dictionary latest_snapshot(uint64_t window_start_unix_ms,
     return result;
 }
 
+godot::Dictionary snapshot_from_directory(const godot::String &logs_dir) {
+    godot::Dictionary result;
+    godot::String issues_path = logs_dir.path_join("msbuild_issues.csv");
+    godot::String log_path = logs_dir.path_join("msbuild_log.txt");
+    godot::Array issues = parse_issues(issues_path, project_root(), false);
+    result["source"] = "godot_build_logger";
+    result["issues"] = issues;
+    result["issue_count"] = issues.size();
+    result["issues_path"] = issues_path;
+    result["log_path"] = log_path;
+    return result;
+}
+
 } // namespace fennara::csharp_build_issues

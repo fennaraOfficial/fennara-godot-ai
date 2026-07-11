@@ -202,12 +202,6 @@ godot::Dictionary select_project(const godot::Array &projects,
         return selected;
     }
 
-    if (projects.size() == 1) {
-        selected = projects[0];
-        selected["selection_reason"] = "single_candidate";
-        return selected;
-    }
-
     return godot::Dictionary();
 }
 
@@ -233,6 +227,11 @@ godot::Dictionary inspect_project() {
     status["dotnet_solution_directory"] = setting_string("dotnet/project/solution_directory");
     status["dotnet_assembly_name"] = setting_string("dotnet/project/assembly_name");
 
+    godot::Dictionary selected = select_project(projects, root);
+    if (!selected.is_empty()) {
+        status["selected_project"] = selected;
+    }
+
     if (!lsp_installed) {
         status["state"] = "lsp_not_installed";
         status["message"] = "C# LSP not available. Run `fennara install --csharp` inside this Godot project or pass `--project <path>`.";
@@ -240,13 +239,11 @@ godot::Dictionary inspect_project() {
         status["state"] = "no_csharp_project";
         status["message"] = "No .csproj, .sln, or .slnx file found in this Godot project.";
     } else {
-        godot::Dictionary selected = select_project(projects, root);
         if (selected.is_empty()) {
             status["state"] = "multiple_csharp_projects";
             status["message"] = "Multiple C# projects found, need selection.";
         } else {
             status["state"] = "ready";
-            status["selected_project"] = selected;
             status["message"] =
                 projects.size() == 1
                     ? "C# LSP is installed and one C# project was found."

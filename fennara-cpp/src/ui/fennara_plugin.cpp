@@ -1,6 +1,6 @@
 #include "fennara/ui/fennara_plugin.hpp"
+#include "fennara/lsp/csharp_build.hpp"
 #include "fennara/lsp/csharp_lsp.hpp"
-#include "fennara/lsp/csharp_support.hpp"
 #include "fennara/local_bridge.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/update_notice.hpp"
@@ -11,6 +11,7 @@
 #include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
+#include <godot_cpp/classes/editor_file_system.hpp>
 #include <godot_cpp/classes/editor_settings.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/os.hpp>
@@ -21,8 +22,11 @@ namespace fennara {
 
 void FennaraPlugin::_bind_methods() {
     godot::ClassDB::bind_method(
-        godot::D_METHOD("_warm_csharp_lsp"),
-        &FennaraPlugin::_warm_csharp_lsp);
+        godot::D_METHOD("_start_csharp_preparation"),
+        &FennaraPlugin::_start_csharp_preparation);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("_on_editor_filesystem_changed"),
+        &FennaraPlugin::_on_editor_filesystem_changed);
 }
 
 FennaraPlugin::FennaraPlugin() {
@@ -30,7 +34,23 @@ FennaraPlugin::FennaraPlugin() {
 
 void FennaraPlugin::_enter_tree() {
     Logger::init();
+    csharp_build::begin_build_lifecycle();
+    csharp_lsp::begin_session_lifecycle();
     FLOG_SYS(godot::String("Plugin started, Godot ") + godot::String(godot::Engine::get_singleton()->get_version_info()["string"]));
+
+    csharp_preparation_pending = true;
+    initial_filesystem_scan_completed = false;
+    csharp_lsp::reserve_background_preparation();
+    godot::EditorFileSystem *filesystem =
+        godot::EditorInterface::get_singleton()->get_resource_filesystem();
+    if (filesystem != nullptr) {
+        filesystem->connect(
+            "filesystem_changed",
+            callable_mp(this, &FennaraPlugin::_on_editor_filesystem_changed));
+        initial_filesystem_scan_completed =
+            !filesystem->is_scanning() &&
+            filesystem->get_scanning_progress() >= 0.999f;
+    }
 
     dock_instance = memnew(FennaraDock);
     dock_instance->set_name("Fennara");
@@ -53,43 +73,35 @@ void FennaraPlugin::_enter_tree() {
 
     _configure_editor_settings();
     _ensure_export_presets_exclude_fennara();
-    _inspect_csharp_support();
-    call_deferred("_warm_csharp_lsp");
     local_bridge->request_get_class_info_warmup();
 }
 
-void FennaraPlugin::_inspect_csharp_support() {
-    godot::Dictionary status = csharp_support::inspect_project();
-    FLOG_SYS(godot::String("C# support: ") +
-             godot::String(status.get("state", "")) + " - " +
-             godot::String(status.get("message", "")));
-}
-
-void FennaraPlugin::_warm_csharp_lsp() {
+void FennaraPlugin::_start_csharp_preparation() {
     godot::OS *os = godot::OS::get_singleton();
     godot::DisplayServer *display = godot::DisplayServer::get_singleton();
     bool is_headless =
         (os != nullptr && os->has_feature("headless")) ||
         (display != nullptr && display->get_name().to_lower() == "headless");
     if (is_headless) {
-        FLOG_SYS("C# LSP background warmup skipped: headless editor");
+        csharp_lsp::cancel_reserved_background_preparation();
+        FLOG_SYS("C# background preparation skipped: headless editor");
         return;
     }
 
-    godot::Dictionary status = csharp_support::inspect_project();
-    if (godot::String(status.get("state", "")) != "ready") {
-        FLOG_SYS(godot::String("C# LSP background warmup skipped: ") +
-                 godot::String(status.get("message", "")));
-        return;
-    }
-
-    godot::Dictionary selected_project =
-        status.get("selected_project", godot::Dictionary());
     csharp_lsp::warmup_async(
-        status.get("lsp_path", ""),
-        selected_project.get("absolute_path", ""),
-        status.get("project_root", ""),
+        "",
+        "",
+        "",
         "fennara-csharp-warmup");
+}
+
+void FennaraPlugin::_on_editor_filesystem_changed() {
+    godot::EditorFileSystem *filesystem =
+        godot::EditorInterface::get_singleton()->get_resource_filesystem();
+    if (filesystem != nullptr && !filesystem->is_scanning()) {
+        initial_filesystem_scan_completed = true;
+    }
+    csharp_build::note_csharp_source_changed();
 }
 
 void FennaraPlugin::_ensure_runtime_helper_autoload() {
@@ -258,6 +270,18 @@ void FennaraPlugin::_ensure_export_presets_exclude_fennara() {
 
 void FennaraPlugin::_exit_tree() {
     set_process(false);
+    csharp_preparation_pending = false;
+    initial_filesystem_scan_completed = false;
+    csharp_build::request_build_shutdown();
+    godot::EditorFileSystem *filesystem =
+        godot::EditorInterface::get_singleton()->get_resource_filesystem();
+    if (filesystem != nullptr) {
+        godot::Callable callback =
+            callable_mp(this, &FennaraPlugin::_on_editor_filesystem_changed);
+        if (filesystem->is_connected("filesystem_changed", callback)) {
+            filesystem->disconnect("filesystem_changed", callback);
+        }
+    }
     csharp_lsp::shutdown_warm_server();
     if (script_context_menu_plugin.is_valid()) {
         remove_context_menu_plugin(script_context_menu_plugin);
@@ -279,6 +303,19 @@ void FennaraPlugin::_exit_tree() {
 
 void FennaraPlugin::_process(double delta) {
     (void)delta;
+    if (!csharp_preparation_pending) {
+        return;
+    }
+    if (!initial_filesystem_scan_completed) {
+        return;
+    }
+    godot::EditorFileSystem *filesystem =
+        godot::EditorInterface::get_singleton()->get_resource_filesystem();
+    if (filesystem != nullptr && filesystem->is_scanning()) {
+        return;
+    }
+    csharp_preparation_pending = false;
+    _start_csharp_preparation();
 }
 
 } // namespace fennara

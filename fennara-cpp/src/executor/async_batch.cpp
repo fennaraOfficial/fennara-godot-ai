@@ -184,7 +184,12 @@ void FennaraExecutor::execute_tool_calls_async(const godot::Array &tool_calls) {
             if (is_success && (file_path.ends_with(".gd") || file_path.ends_with(".cs"))) {
                 godot::String resolved = write_res.get("file_path", file_path);
                 _track_edited_script(resolved);
-                _pending_script_writes.push_back({i, resolved, args, write_res});
+                if (file_path.ends_with(".gd")) {
+                    _pending_script_writes.push_back({i, resolved, args, write_res});
+                } else {
+                    _on_async_tool_complete(
+                        write_res, i, name, args, batch_generation);
+                }
             } else {
                 _on_async_tool_complete(write_res, i, name, args, batch_generation);
             }

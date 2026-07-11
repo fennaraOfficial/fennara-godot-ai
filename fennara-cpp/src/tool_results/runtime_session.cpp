@@ -199,6 +199,13 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
         lines.append("C# build:");
         lines.append("- Status: " + godot::String(csharp_build.get("status", "")));
         lines.append("- Command: " + godot::String(csharp_build.get("command", "dotnet build")));
+        if (godot::String(csharp_build.get("output_mode", "")) ==
+            "godot_runtime") {
+            lines.append(
+                "- Output: Godot Debug assembly for the runtime session");
+            lines.append(
+                "- Editor reload: an open Godot editor may detect and reload this assembly");
+        }
         lines.append("- Duration: " +
                      godot::String::num((double)csharp_build.get("duration_seconds", 0.0)) +
                      "s");

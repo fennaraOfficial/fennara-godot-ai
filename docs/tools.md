@@ -21,10 +21,10 @@ source of truth for arguments, limits, and result fields.
 | `get_scene_tree` | Inspect real scene node structure, node types, scripts, and instanced subscenes before using node paths. |
 | `get_node_properties` | Read properties changed from defaults for up to 5 scene nodes, including recursive SubResource summaries. |
 | `get_class_info` | Look up real Godot class methods, properties, signals, enums, constants, inheritance, and docs before writing Godot API code. |
-| `write_or_update_file` | Create, rewrite, or exact-replace project files. `.gd`, `.cs`, and `.gdshader` edits automatically run diagnostics. |
+| `write_or_update_file` | Create, rewrite, or exact-replace project files. `.gd` and `.gdshader` edits run diagnostics automatically; C# validation is deferred until related edits are complete. |
 | `run_scene_edit_script` | Run one editor-time Godot worker script against exactly one scene/resource graph and save through Godot serialization. |
 | `project_settings` | Read or change `project.godot` settings, autoloads, and input actions through structured operations. |
-| `script_diagnostics` | Check `.gd`, `.cs`, and `.gdshader` files using Godot diagnostics, Godot scene-load checks, and `csharp-ls` for C#. |
+| `script_diagnostics` | Check targeted `.gd` and `.gdshader` files using Godot diagnostics and scene-load checks. C# validation temporarily requires a project scan, which uses an isolated `dotnet build`. |
 | `validate_scene` | Validate scene structure and, when structural checks pass, run a brief headless startup pass. |
 | `screenshot_scene` | Capture a scene image for layout, camera, rendering, material, and UI feedback. |
 | `runtime_session` | Start, inspect, or stop one daemon-managed running Godot scene with live logs and runtime artifacts. |
@@ -202,10 +202,11 @@ It supports two modes:
 - `update`: replace an exact `old_string` with `new_string`; include enough
   surrounding text to make the match unique.
 
-For `.gd`, `.cs`, and `.gdshader` files, Fennara automatically runs diagnostics
-after the edit and returns syntax/type/reference or shader parser feedback.
-C# diagnostics use the `csharp-ls` language server installed by
-`fennara install --csharp`.
+For `.gd` and `.gdshader` files, Fennara automatically runs diagnostics after
+the edit and returns syntax/type/reference or shader parser feedback. Successful
+C# writes deliberately defer diagnostics so a temporarily incomplete multi-file
+change is not checked after every write. Finish the related C# edits, then run
+one `script_diagnostics` call with `scan_project: true`.
 
 For `.gdshader` edits, Fennara also scans referencing `.tscn` and `.tres` owners
 and reserializes them through Godot when possible so stale embedded
@@ -284,20 +285,37 @@ Use project_settings to inspect existing input actions, then add a jump action b
 
 ### `script_diagnostics`
 
-Use this after editing `.gd`, `.cs`, or `.gdshader` files, especially when the
-edit did not go through `write_or_update_file`.
+Use this after editing `.gd` or `.gdshader` files outside
+`write_or_update_file`. For C#, finish all related writes and then use one
+project scan rather than checking every intermediate edit.
 
-Targeted calls support at most 5 files. `scan_project: true` scans all `.gd`,
-`.cs`, and `.gdshader` files under `res://`.
+Targeted calls support at most 5 files. `scan_project: true` scans project
+GDScript and shaders, then runs one incremental `dotnet build` for the selected
+C# project or solution instead of issuing one C# language-server request per
+file. The build writes final assemblies to isolated per-project diagnostic
+output under `.godot/fennara/diagnostic_build`; it does not replace
+`.godot/mono/temp/bin/Debug` or trigger Godot editor assembly reload.
+
+After the editor filesystem finishes its initial scan, the Godot plugin starts
+one worker-thread C# preparation immediately. It warms `csharp-ls` and runs the
+isolated build in the background. C# tools called before preparation completes
+wait on that worker without blocking the editor main thread. If source changes
+during the background build, the build is allowed to finish and the next
+explicit project scan forces one refresh. If the LSP session becomes unhealthy,
+the plugin starts a recovery warmup and later C# calls wait for it.
+The isolated background build still runs when `csharp-ls` is unavailable, but
+targeted C# diagnostics are temporarily unavailable. Runtime and diagnostic
+builds are serialized because they share Godot's intermediate MSBuild output.
 
 The diagnostic sources are language-specific:
 
 - `.gd`: Godot's GDScript diagnostics.
-- `.cs`: the managed `csharp-ls` language server installed by
-  `fennara install --csharp`, with C# project support checked by the addon.
+- `.cs`: targeted diagnostics are temporarily unavailable. Use
+  `scan_project: true`, which uses Godot's structured build logger with one
+  cancellable, isolated `dotnet build` for the selected project or solution.
 - `.gdshader`: Godot shader parser diagnostics.
 
-For targeted `.gd` and `.cs` files, Fennara also loads and instantiates project
+For targeted `.gd` files, Fennara also loads and instantiates project
 `.tscn` scenes in memory on the Godot main thread with Godot logging captured.
 Script-related scene-load errors are attached back to the matching script with
 `source="scene_load"` and `scene_path`, so agents can see which scene triggered
@@ -392,6 +410,13 @@ Godot's local debugger with error breaks ignored or auto-continued so
 debugger-aware addons can send debugger messages without requiring an attached
 editor session; normal errors and warnings are still captured in
 `runtime_session.log`.
+
+For C# projects, `start` first performs the same kind of explicit root `.csproj`
+Debug build Godot performs before Play. This is a real runtime build into
+`.godot/mono/temp/bin/Debug`, unlike the isolated compile-only build used by
+`script_diagnostics`. It ensures the launched process uses the latest C# code.
+An open editor may detect this real assembly update and attempt normal hot
+reload; Fennara does not close the editor.
 
 Actions:
 

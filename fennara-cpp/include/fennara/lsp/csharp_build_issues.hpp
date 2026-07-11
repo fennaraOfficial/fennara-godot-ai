@@ -9,5 +9,6 @@ namespace fennara::csharp_build_issues {
 
 godot::Dictionary latest_snapshot(uint64_t window_start_unix_ms = 0,
                                   uint64_t window_end_unix_ms = 0);
+godot::Dictionary snapshot_from_directory(const godot::String &logs_dir);
 
 } // namespace fennara::csharp_build_issues

@@ -9,7 +9,23 @@
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#include <mutex>
+#include <thread>
+
 namespace fennara {
+namespace {
+
+std::recursive_mutex &logger_mutex() {
+    static std::recursive_mutex *mutex = new std::recursive_mutex();
+    return *mutex;
+}
+
+std::thread::id &logger_main_thread_id() {
+    static std::thread::id *id = new std::thread::id();
+    return *id;
+}
+
+} // namespace
 
 const char *Logger::LOG_DIR = "user://.fennara/logs";
 const char *Logger::LEGACY_LOG_PATH = "user://.fennara/fennara.log";
@@ -19,6 +35,8 @@ uint64_t Logger::_incident_counter = 0;
 int Logger::_activity_output_log_count = 0;
 
 void Logger::init() {
+    std::lock_guard<std::recursive_mutex> lock(logger_mutex());
+    logger_main_thread_id() = std::this_thread::get_id();
     rotate_if_needed();
 
     if (_session_log_path == nullptr) {
@@ -39,6 +57,7 @@ void Logger::init() {
 }
 
 void Logger::log(const char *category, const godot::String &message) {
+    std::lock_guard<std::recursive_mutex> lock(logger_mutex());
     godot::String path = _session_log_path == nullptr || _session_log_path->is_empty() ? current_log_path() : *_session_log_path;
     auto file = godot::FileAccess::open(path, godot::FileAccess::READ_WRITE);
     if (file.is_null() && !godot::FileAccess::file_exists(path)) {
@@ -70,13 +89,16 @@ void Logger::log_context(const char *category, const godot::String &message, con
 }
 
 void Logger::log_activity(const godot::String &message) {
+    std::lock_guard<std::recursive_mutex> lock(logger_mutex());
     godot::String clean_message = message.strip_edges();
     if (clean_message.is_empty()) {
         return;
     }
 
     log("ACTIVITY", clean_message);
-    compact_activity_output_if_needed();
+    if (std::this_thread::get_id() == logger_main_thread_id()) {
+        compact_activity_output_if_needed();
+    }
     godot::UtilityFunctions::print(godot::String("[Fennara] ") + clean_message);
     _activity_output_log_count++;
 }
@@ -86,6 +108,7 @@ godot::String Logger::record_incident(const godot::String &stage,
                                       const godot::String &message,
                                       const godot::Dictionary &fields,
                                       const godot::String &severity) {
+    std::lock_guard<std::recursive_mutex> lock(logger_mutex());
     godot::String incident_id = generate_incident_id();
 
     godot::Dictionary entry = fields;
