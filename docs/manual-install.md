@@ -252,15 +252,9 @@ cd path/to/your-godot-project
 fennara install
 ```
 
-For C# projects:
-
-```bash
-cd path/to/your-godot-project
-fennara install --csharp
-```
-
-`--csharp` installs Fennara's managed `csharp-ls` language server support, which
-the addon uses for `.cs` diagnostics and runtime preflight checks.
+For C# projects, use the same `fennara install` command and ensure the required
+.NET SDK is available through `dotnet`. Fennara uses project builds for C#
+diagnostics and runtime preflight checks.
 
 The CLI also writes project guidance for AI coding agents:
 

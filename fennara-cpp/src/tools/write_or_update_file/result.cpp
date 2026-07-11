@@ -24,6 +24,21 @@ godot::Dictionary FennaraWriteOrUpdateFileTool::_stamp_result(
         result["file_path"] = file_path;
     }
 
+    if (success && file_path.to_lower().ends_with(".cs")) {
+        godot::Dictionary validation_args;
+        validation_args["scan_project"] = true;
+        result["diagnostics_deferred"] = true;
+        result["validation_required"] = true;
+        result["validation_scope"] = "csharp_project";
+        result["diagnostic_mode"] = "deferred_csharp_project_build";
+        result["recommended_validation_tool"] = "script_diagnostics";
+        result["recommended_validation_args"] = validation_args;
+        result["validation_message"] =
+            "C# diagnostics are deferred. Finish related C# edits, then run "
+            "script_diagnostics with scan_project:true for one isolated incremental "
+            "dotnet build that does not reload the Godot editor assembly.";
+    }
+
     godot::Dictionary summary;
     summary["status"] = result.get("status", "failed");
     summary["mode"] = result.get("mode", args.get("mode", ""));
@@ -32,6 +47,12 @@ godot::Dictionary FennaraWriteOrUpdateFileTool::_stamp_result(
     summary["created"] = result.get("created", false);
     summary["replacements_made"] = result.get("replacements_made", 0);
     summary["diagnostic_success"] = result.get("diagnostic_success", false);
+    summary["diagnostics_deferred"] =
+        result.get("diagnostics_deferred", false);
+    summary["validation_required"] =
+        result.get("validation_required", false);
+    summary["validation_scope"] = result.get("validation_scope", "");
+    summary["diagnostic_mode"] = result.get("diagnostic_mode", "");
     summary["total_errors"] = result.get("total_errors", 0);
     summary["total_warnings"] = result.get("total_warnings", 0);
     summary["diagnostic_count"] =

@@ -165,6 +165,8 @@ If a Fennara tool call takes unusually long or times out, do not immediately ret
 
 `runtime_session` starts, checks, or stops one daemon-managed windowed Godot runtime session. Runtime sessions enable Godot's local debugger with error breaks ignored or auto-continued so debugger-aware addons can send debugger messages without requiring an attached editor session; normal errors and warnings are still captured in `runtime_session.log`. At startup, the tool waits up to its startup budget for the runtime-ready marker and the startup orientation tail marker before returning the first log excerpt. A successful `start` saves one startup viewport capture and may return it as image context when the caller/model supports images. Use the `runtime_session` tool schema for exact actions, arguments, startup wait behavior, log excerpt behavior, and result fields.
 
+For C# projects, `runtime_session.start` performs an explicit root `.csproj` Debug build like Godot does before Play. This real runtime build updates `.godot/mono/temp/bin/Debug` so the separately launched scene uses the latest C# code. It is intentionally different from the isolated compile-only build used by `script_diagnostics` with `scan_project: true`. If a Godot editor is already open, it may detect the runtime assembly update and attempt normal hot reload; Fennara does not close the editor.
+
 If a session starts, the returned `runtime_session.log` is the full source of truth for scene startup output, raw Godot stdout/stderr, runtime errors, `FENNARA_SCRIPT_*` markers, `ctx.log(...)` messages, captures, close/stop events, and completion/failure events. Tool receipts include capped log excerpts for convenience, but inspect/search the full log when older history, omitted text, or exact failure context matters.
 
 `runtime_script` sends one bounded `RefCounted` GDScript inspector/input-driver probe into that running scene through Fennara's runtime helper. A script may complete without closing the scene; that is the normal incremental workflow when you want to submit another `runtime_script` against the same live scene. `await ctx.capture(label)` saves a viewport image under the session captures folder and may return authored captures as image context when the caller/model supports images. Use the `runtime_script` tool schema for the script contract, ctx helper names, await rules, helper options, and result fields.
@@ -275,12 +277,12 @@ Use `write_or_update_file` for `.gd`, `.cs`, and `.gdshader` edits and other God
 
 Important behavior:
 
-- `write_or_update_file` automatically runs diagnostics for `.gd`, `.cs`, and `.gdshader` files.
+- `write_or_update_file` automatically runs diagnostics for `.gd` and `.gdshader` files. Successful `.cs` writes defer diagnostics until the related C# edit set is complete.
 - For `.gdshader` edits, `write_or_update_file` also scans `.tscn` and `.tres` files that reference the shader and reserializes those owners through Godot when possible, so stale embedded `ShaderMaterial` data can be rewritten.
 - Check `reserialized_resources`, `reserialize_warnings`, and `reserialize_skipped` in `.gdshader` edit results. Skipped owners may still need a targeted scene/resource save.
 - If it reports diagnostics, treat them as part of the tool result and fix them before claiming the script edit is complete.
 - For other file types, use appropriate follow-up validation when the file affects Godot behavior.
-- Do not use the MCP app's generic write/edit tool for `.gd`, `.cs`, or `.gdshader` files. Use `write_or_update_file` so diagnostics run automatically.
+- Do not use the MCP app's generic write/edit tool for `.gd`, `.cs`, or `.gdshader` files. Use `write_or_update_file` so Godot-aware edit behavior and required follow-up validation remain explicit.
 - Do not use `write_or_update_file` or generic text editing for `.tscn`, `.tres`, or `.res` scene/resource surgery. Use `run_scene_edit_script`, `project_settings`, or another Godot-aware structured tool instead.
 
 For ordinary text reading, use the MCP app's own file tools.
@@ -339,19 +341,20 @@ Temporary edit scripts:
 Use `script_diagnostics` when:
 
 - investigating script errors
-- editing GDScript, C#, or Godot shader code outside a tool path that already ran diagnostics
+- editing GDScript or Godot shader code outside a tool path that already ran diagnostics
+- validating C# after finishing a related multi-file edit set
 - checking multiple scripts
 - checking project-level GDScript, C#, and shader health
 - confirming a suspected parse/type/reference issue
 - errors only appear when opening scenes in Godot, such as invalid calls emitted by attached scripts while a scene is constructed
 
-Targeted `script_diagnostics` calls support `.gd`, `.cs`, and `.gdshader` files. `scan_project: true` scans `.gd`, `.cs`, and `.gdshader` files under `res://`.
+Targeted `script_diagnostics` calls support `.gd` and `.gdshader` files. Targeted C# diagnostics are not supported. To validate C#, finish the related edit set and call `script_diagnostics` once with `scan_project: true`; do not pass individual `.cs` paths. After Godot's initial editor filesystem scan completes, the plugin immediately starts worker-thread C# preparation with one isolated incremental build. C# tools wait for preparation without blocking the editor, and plugin-owned C# builds are serialized because they share Godot's intermediate MSBuild output. If C# source changes during the background build, it finishes normally and the next explicit project scan forces one refresh. `scan_project: true` scans project GDScript and shaders, then runs one cancellable incremental `dotnet build` for the selected C# project or solution. The C# build writes final assemblies to isolated per-project output under `.godot/fennara/diagnostic_build`, so it does not update `.godot/mono/temp/bin/Debug` or trigger Godot editor assembly reload.
 
-For targeted `.gd` and `.cs` files, `script_diagnostics` also loads and instantiates project `.tscn` scenes in memory on the Godot main thread with Godot logger capture enabled. Script-related scene-load errors are attached to the matching script file with `source: "scene_load"` and `scene_path`, so the result says which scene triggered the script error. This is an in-memory diagnostic pass, not opening the editor UI or running the game scene.
+For targeted `.gd` files, `script_diagnostics` also loads and instantiates project `.tscn` scenes in memory on the Godot main thread with Godot logger capture enabled. Script-related scene-load errors are attached to the matching script file with `source: "scene_load"` and `scene_path`, so the result says which scene triggered the script error. This is an in-memory diagnostic pass, not opening the editor UI or running the game scene.
 
 For `scan_project: true`, `script_diagnostics` skips scene instantiation and reports `scene_load_skipped: true`. This project-wide mode can miss errors that only occur when scripts are attached to or loaded through scenes, such as missing unique-node references, invalid `NodePath` wiring, broken exported scene/resource assignments, or script initialization side effects.
 
-If `write_or_update_file` edited a `.gd`, `.cs`, or `.gdshader` file, it already ran diagnostics. For `.gdshader`, it also attempted to reserialize referencing `.tscn` and `.tres` owners. You may still run `script_diagnostics` separately for broader checks or if the task requires extra confidence.
+If `write_or_update_file` edited a `.gd` or `.gdshader` file, it already ran diagnostics. For `.gdshader`, it also attempted to reserialize referencing `.tscn` and `.tres` owners. Successful `.cs` writes instead report deferred validation. Finish all related C# writes, then run `script_diagnostics` once with `scan_project: true`; do not build after every C# write.
 
 Do not consider a GDScript, C#, or Godot shader change complete until diagnostics have been checked.
 
@@ -434,7 +437,7 @@ Use `run_scene_edit_script` for standalone `.tres` resources when a structured G
 1. Read the file with the MCP app's file tools.
 2. Use `get_class_info` for any uncertain Godot API.
 3. Edit `.gd`, `.cs`, and `.gdshader` files with `write_or_update_file`. Do not use the MCP app's normal write/edit tool for GDScript, C#, or Godot shader files.
-4. Ensure diagnostics are checked. `write_or_update_file` does this automatically for `.gd`, `.cs`, and `.gdshader` files.
+4. Ensure diagnostics are checked. `write_or_update_file` does this automatically for `.gd` and `.gdshader`. For C#, finish the related edit set and then run one `script_diagnostics` project scan.
 5. Fix diagnostics before finishing.
 
 ### Editing Scenes
@@ -458,7 +461,7 @@ Use `run_scene_edit_script` for standalone `.tres` resources when a structured G
 2. If a session is already running, use `runtime_session.status` and inspect/search the same live `runtime_session.log`.
 3. If the scene was started manually in the Godot editor or the user asks what the editor debugger currently shows, use `scrape_editor` with `target: "debugger"`.
 4. Use stack frames and error lines from the runtime log or debugger snapshot to read the relevant scripts directly.
-5. Use `script_diagnostics` only if the runtime error suggests script/shader parse/type/reference issues or after editing `.gd`, `.cs`, or `.gdshader` files.
+5. Use `script_diagnostics` only if the runtime error suggests script/shader parse/type/reference issues, after editing `.gd` or `.gdshader` files, or once after completing a related C# edit set.
 6. Fix the smallest relevant issue and validate with a fresh runtime session, another runtime script, `scrape_editor`, or suitable diagnostics.
 
 ### Visual/UI Work
@@ -484,7 +487,7 @@ Before finishing:
 For GDScript, C#, or Godot shaders:
 
 - Diagnostics must be checked.
-- `write_or_update_file` automatically checks diagnostics for `.gd`, `.cs`, and `.gdshader` files.
+- `write_or_update_file` automatically checks diagnostics for `.gd` and `.gdshader` files. C# writes require one deferred `script_diagnostics` project scan after related edits are complete.
 - `.gdshader` edits also report referencing owner reserialization fields: `reserialized_resources`, `reserialize_warnings`, and `reserialize_skipped`.
 
 For scene/resource edits:

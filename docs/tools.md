@@ -21,10 +21,10 @@ source of truth for arguments, limits, and result fields.
 | `get_scene_tree` | Inspect real scene node structure, node types, scripts, and instanced subscenes before using node paths. |
 | `get_node_properties` | Read properties changed from defaults for up to 5 scene nodes, including recursive SubResource summaries. |
 | `get_class_info` | Look up real Godot class methods, properties, signals, enums, constants, inheritance, and docs before writing Godot API code. |
-| `write_or_update_file` | Create, rewrite, or exact-replace project files. `.gd`, `.cs`, and `.gdshader` edits automatically run diagnostics. |
+| `write_or_update_file` | Create, rewrite, or exact-replace project files. `.gd` and `.gdshader` edits run diagnostics automatically; C# validation is deferred until related edits are complete. |
 | `run_scene_edit_script` | Run one editor-time Godot worker script against exactly one scene/resource graph and save through Godot serialization. |
 | `project_settings` | Read or change `project.godot` settings, autoloads, and input actions through structured operations. |
-| `script_diagnostics` | Check `.gd`, `.cs`, and `.gdshader` files using Godot diagnostics, Godot scene-load checks, and `csharp-ls` for C#. |
+| `script_diagnostics` | Check targeted `.gd` and `.gdshader` files using Godot diagnostics and scene-load checks. Targeted C# diagnostics are not supported; C# validation uses a project scan with an isolated `dotnet build`. |
 | `validate_scene` | Validate scene structure and, when structural checks pass, run a brief headless startup pass. |
 | `screenshot_scene` | Capture a scene image for layout, camera, rendering, material, and UI feedback. |
 | `runtime_session` | Start, inspect, or stop one daemon-managed running Godot scene with live logs and runtime artifacts. |
@@ -160,6 +160,10 @@ Use this after `get_scene_tree` when you need to understand existing node or
 resource configuration. It shows properties changed from defaults and expands
 embedded SubResources recursively.
 
+Attached GDScript exports are shown from their source declarations. Attached C#
+exports are shown from Godot's loaded generic `Script` metadata, including
+property names, types, and defaults when available.
+
 Large or opaque resources are summarized into readable API-oriented output,
 including TileSet, TileMapLayer data, GridMap data, MeshLibrary resources,
 Theme resources, AnimationTree graphs, AnimationLibrary, Animation, and
@@ -202,10 +206,11 @@ It supports two modes:
 - `update`: replace an exact `old_string` with `new_string`; include enough
   surrounding text to make the match unique.
 
-For `.gd`, `.cs`, and `.gdshader` files, Fennara automatically runs diagnostics
-after the edit and returns syntax/type/reference or shader parser feedback.
-C# diagnostics use the `csharp-ls` language server installed by
-`fennara install --csharp`.
+For `.gd` and `.gdshader` files, Fennara automatically runs diagnostics after
+the edit and returns syntax/type/reference or shader parser feedback. Successful
+C# writes deliberately defer diagnostics so a temporarily incomplete multi-file
+change is not checked after every write. Finish the related C# edits, then run
+one `script_diagnostics` call with `scan_project: true`.
 
 For `.gdshader` edits, Fennara also scans referencing `.tscn` and `.tres` owners
 and reserializes them through Godot when possible so stale embedded
@@ -284,20 +289,34 @@ Use project_settings to inspect existing input actions, then add a jump action b
 
 ### `script_diagnostics`
 
-Use this after editing `.gd`, `.cs`, or `.gdshader` files, especially when the
-edit did not go through `write_or_update_file`.
+Use this after editing `.gd` or `.gdshader` files outside
+`write_or_update_file`. For C#, finish all related writes and then use one
+project scan rather than checking every intermediate edit.
 
-Targeted calls support at most 5 files. `scan_project: true` scans all `.gd`,
-`.cs`, and `.gdshader` files under `res://`.
+Targeted calls support at most 5 files. `scan_project: true` scans project
+GDScript and shaders, then runs one incremental `dotnet build` for the selected
+C# project or solution. The build writes final assemblies to isolated
+per-project diagnostic output under `.godot/fennara/diagnostic_build`; it does not replace
+`.godot/mono/temp/bin/Debug` or trigger Godot editor assembly reload.
+
+After the editor filesystem finishes its initial scan, the Godot plugin starts
+one worker-thread C# preparation immediately. It runs the isolated build in the
+background. C# tools called before preparation completes wait on that worker
+without blocking the editor main thread. If source changes
+during the background build, the build is allowed to finish and the next
+explicit project scan forces one refresh. Targeted C# diagnostics are not
+supported. Runtime and diagnostic builds are serialized because they share
+Godot's intermediate MSBuild output.
 
 The diagnostic sources are language-specific:
 
 - `.gd`: Godot's GDScript diagnostics.
-- `.cs`: the managed `csharp-ls` language server installed by
-  `fennara install --csharp`, with C# project support checked by the addon.
+- `.cs`: targeted diagnostics are not supported. Use
+  `scan_project: true`, which uses Godot's structured build logger with one
+  cancellable, isolated `dotnet build` for the selected project or solution.
 - `.gdshader`: Godot shader parser diagnostics.
 
-For targeted `.gd` and `.cs` files, Fennara also loads and instantiates project
+For targeted `.gd` files, Fennara also loads and instantiates project
 `.tscn` scenes in memory on the Godot main thread with Godot logging captured.
 Script-related scene-load errors are attached back to the matching script with
 `source="scene_load"` and `scene_path`, so agents can see which scene triggered
@@ -321,10 +340,10 @@ Use script_diagnostics on res://scripts/player.gd and res://scripts/enemy.gd.
 Use this after scene edits or when checking scene/resource integrity. It accepts
 1 to 10 scene paths.
 
-Structural checks include missing scripts/resources, script extends mismatch,
-invalid NodePath properties, invalid script `$Node`/`get_node()` references,
-duplicate sibling names, cyclic scene dependencies, and unset exported
-Resource/Object variables.
+Structural checks include missing scripts/resources, invalid NodePath properties,
+invalid GDScript `$Node`/`get_node()` references, duplicate sibling names,
+cyclic scene dependencies, and unset exported Resource/Object variables. Export
+metadata is read through Godot's generic `Script` API for both GDScript and C#.
 
 Unset exported Resource/Object variables are reported as structural notes because
 they may be optional or assigned at runtime. Repeated unset exports are grouped
@@ -392,6 +411,13 @@ Godot's local debugger with error breaks ignored or auto-continued so
 debugger-aware addons can send debugger messages without requiring an attached
 editor session; normal errors and warnings are still captured in
 `runtime_session.log`.
+
+For C# projects, `start` first performs the same kind of explicit root `.csproj`
+Debug build Godot performs before Play. This is a real runtime build into
+`.godot/mono/temp/bin/Debug`, unlike the isolated compile-only build used by
+`script_diagnostics`. It ensures the launched process uses the latest C# code.
+An open editor may detect this real assembly update and attempt normal hot
+reload; Fennara does not close the editor.
 
 Actions:
 

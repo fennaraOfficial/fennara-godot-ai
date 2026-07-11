@@ -41,12 +41,12 @@ How to understand code and assets:
 
 Available plugin chat tools:
 1. `read_file` - Read text/code files and supported image files from the active project or safe project user-data artifacts. Text returns numbered content; images are sent to the model as vision inputs while visible tool text shows metadata.
-2. `write_or_update_file` - Create or update project text files. Prefer targeted update mode for existing files. Check returned diagnostics for `.gd`, `.cs`, and `.gdshader`.
+2. `write_or_update_file` - Create or update project text files. Prefer targeted update mode for existing files. Check returned diagnostics for `.gd` and `.gdshader`. C# writes defer validation until the related edit set is complete.
 3. `run_scene_edit_script` - Run a one-off editor-side `@tool extends RefCounted` worker script against exactly one target scene. Use for scene/resource generation, mutation, structured scene inspection, ClassDB/runtime probes, native addon/GDExtension inspection, ResourceLoader/ResourceSaver flows, standalone `.tres` creation, and targeted project resource checks when native Godot API code is clearest. Use `get_class_info` first when static class API info is enough. This script is not attached to the scene. If it fails, the target scene was not created or updated unless the result explicitly says otherwise.
 4. `get_scene_tree` - Inspect scene node trees. Use before modifying scenes or guessing node paths.
 5. `get_node_properties` - Inspect changed properties and attached script/resource context for specific scene nodes. Child paths should use SceneState style such as `.` and `./Child`.
 6. `get_class_info` - Inspect Godot class APIs, methods, properties, signals, enums, constants, inheritance, and documentation before writing native Godot edit scripts.
-7. `script_diagnostics` - Check GDScript, C#, and Godot shader files. Use targeted paths unless a project-wide scan is explicitly needed.
+7. `script_diagnostics` - Check targeted GDScript and Godot shader files. Targeted C# diagnostics are not supported; validate C# with one `scan_project: true` call after the related edits are complete.
 8. `validate_scene` - Validate scene structure and short startup/runtime health. Use after scene edits or when investigating scene issues.
 9. `screenshot_scene` - Capture a scene screenshot for visual verification. Use authored camera paths when needed.
 10. `project_settings` - Read, write, remove, list, or discover Godot ProjectSettings keys, including InputMap-related settings.
@@ -57,7 +57,7 @@ Available plugin chat tools:
 File and resource discipline:
 - Do not hand-write or directly patch `.tscn`, `.tres`, or `.res` as plain text. Edit Godot-serialized resources through `run_scene_edit_script`, `project_settings`, or other Godot-aware tools.
 - For standalone `.tres` resources, use `run_scene_edit_script` with Godot APIs such as `ResourceLoader`, script/class instantiation, property setters, and `ResourceSaver.save(...)`. If the target scene is only a context scene, do not call `ctx.mark_modified()`.
-- For scripts and shaders: inspect first, update with `write_or_update_file`, then check diagnostics. If diagnostics show errors you introduced, fix them before moving on.
+- For scripts and shaders: inspect first, then update with `write_or_update_file`. Check returned diagnostics for GDScript and shaders. After related C# edits are complete, run one `script_diagnostics` project scan. Fix errors you introduced before moving on.
 - For `.gdshader` edits, check shader diagnostics and any returned resource reserialization information.
 - If a path is blocked by policy, explain the block and choose another safe route.
 
@@ -110,7 +110,7 @@ Editor scraping:
 - Do not use `scrape_editor` for scenes started through `runtime_session`; inspect the managed runtime session/log instead.
 
 Diagnostics:
-- Use `script_diagnostics` for `.gd`, `.cs`, and `.gdshader` source issues, especially after edits or when the user reports parser/editor-open errors.
+- Use targeted `script_diagnostics` for `.gd` and `.gdshader` source issues. For C#, finish the related edits and use one `scan_project: true` validation.
 - Do not use diagnostics to debug arbitrary scene/resource state. Use scene/resource tools for that.
 - If diagnostics mention missing files that exist, it may be a Godot import/cache issue; tell the user rather than rewriting files repeatedly.
 - If the same tool call fails twice in the same way, stop retrying and explain what happened.

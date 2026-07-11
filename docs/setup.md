@@ -68,16 +68,9 @@ Your MCP app can point at the global Fennara launcher from anywhere. It does not
 need config files inside the Godot project. `--project` tells Fennara which
 Godot project to install or update.
 
-For a C# Godot project:
-
-```bash
-cd path/to/your-godot-project
-fennara install --csharp
-```
-
-`--csharp` installs Fennara's managed `csharp-ls` language server support. The
-addon uses it for `.cs` results from `script_diagnostics` and for runtime
-preflight checks before managed scenes are launched.
+For a C# Godot project, use the same `fennara install` command. Ensure the .NET
+SDK required by the project is available through `dotnet`; Fennara uses project
+builds for C# diagnostics and runtime preflight.
 
 `fennara install` copies the Godot addon into:
 
@@ -291,15 +284,8 @@ Open the intended Godot project and use the Fennara dock to set it as the MCP ta
 
 ### C# Diagnostics Are Missing
 
-Install C# support. This installs the managed `csharp-ls` language server used
-by Fennara's C# diagnostics:
-
-```bash
-cd path/to/your-godot-project
-fennara install --csharp
-```
-
-Make sure `dotnet` works from your terminal:
+Make sure the project contains an unambiguous `.csproj`, `.sln`, or `.slnx` and
+that `dotnet` works from your terminal:
 
 ```bash
 dotnet --version

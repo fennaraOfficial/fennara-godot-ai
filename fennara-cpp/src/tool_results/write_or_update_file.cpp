@@ -90,6 +90,8 @@ godot::Dictionary format_write_or_update_file(
     bool raw_success = raw_result.get("success", false);
     godot::String status = raw_result.get("status", raw_success ? "success" : "failed");
     bool diagnostic_success = raw_result.get("diagnostic_success", false);
+    bool diagnostics_deferred =
+        raw_result.get("diagnostics_deferred", false);
     godot::Array diagnostics = raw_result.get("diagnostics", godot::Array());
     int total_errors = static_cast<int>(raw_result.get("total_errors", 0));
     int total_warnings = static_cast<int>(raw_result.get("total_warnings", 0));
@@ -136,6 +138,13 @@ godot::Dictionary format_write_or_update_file(
     }
     if (raw_result.has("resolution")) {
         lines.append("Resolution: " + godot::String(raw_result.get("resolution", "")));
+    }
+
+    if (diagnostics_deferred) {
+        lines.append("C# validation: deferred");
+        lines.append(godot::String(raw_result.get(
+            "validation_message",
+            "Finish related C# edits, then run script_diagnostics with scan_project:true.")));
     }
 
     if (diagnostic_success || raw_result.has("diagnostics")) {
@@ -186,6 +195,17 @@ godot::Dictionary format_write_or_update_file(
     metadata["created"] = raw_result.get("created", false);
     metadata["replacements_made"] = raw_result.get("replacements_made", 0);
     metadata["diagnostic_success"] = diagnostic_success;
+    metadata["diagnostics_deferred"] = diagnostics_deferred;
+    metadata["validation_required"] =
+        raw_result.get("validation_required", false);
+    metadata["validation_scope"] =
+        raw_result.get("validation_scope", "");
+    metadata["diagnostic_mode"] =
+        raw_result.get("diagnostic_mode", "");
+    metadata["recommended_validation_tool"] =
+        raw_result.get("recommended_validation_tool", "");
+    metadata["recommended_validation_args"] =
+        raw_result.get("recommended_validation_args", godot::Dictionary());
     metadata["total_errors"] = total_errors;
     metadata["total_warnings"] = total_warnings;
     metadata["total_info"] = total_info;

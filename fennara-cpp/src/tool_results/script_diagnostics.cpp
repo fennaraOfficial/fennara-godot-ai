@@ -161,6 +161,8 @@ godot::Dictionary format_script_diagnostics(const godot::Dictionary &args,
     bool raw_success = raw_result.get("success", false);
     godot::Array files = raw_result.get("files", godot::Array());
     godot::Dictionary summary = raw_result.get("summary", godot::Dictionary());
+    godot::Dictionary csharp_build =
+        raw_result.get("csharp_build", godot::Dictionary());
     bool scan_project = raw_result.get("scan_project", args.get("scan_project", false));
     int budget_tokens = diagnostics_budget_tokens(args, files.size());
 
@@ -214,6 +216,18 @@ godot::Dictionary format_script_diagnostics(const godot::Dictionary &args,
                       godot::String(", ").join(paths));
     }
     header.append("Totals: " + totals_text(summary));
+    if (godot::String(csharp_build.get("output_mode", "")) ==
+        "isolated_diagnostics") {
+        header.append("C# build: isolated compile validation");
+        header.append("C# build duration: " + godot::String::num(
+            (double)csharp_build.get("duration_seconds", 0.0)) + "s");
+        if ((bool)csharp_build.get("forced_refresh", false)) {
+            header.append(
+                "C# build refresh: forced because source changed during background preparation");
+        }
+        header.append("Godot runtime assembly updated: no");
+        header.append("Godot editor reload triggered: no");
+    }
     if ((bool)summary.get("scene_load_skipped", false)) {
         header.append("Scene-load diagnostics: skipped");
         header.append("Skip reason: " + godot::String(summary.get(
@@ -312,6 +326,27 @@ godot::Dictionary format_script_diagnostics(const godot::Dictionary &args,
     metadata["budget_tokens"] = budget_tokens;
     metadata["previewed"] = previewed;
     metadata["targets"] = targets;
+    if (!csharp_build.is_empty()) {
+        godot::Dictionary build_metadata;
+        build_metadata["build_succeeded"] =
+            csharp_build.get("build_succeeded", false);
+        build_metadata["exit_code"] = csharp_build.get("exit_code", -1);
+        build_metadata["project_path"] =
+            csharp_build.get("project_path", "");
+        build_metadata["duration_seconds"] =
+            csharp_build.get("duration_seconds", 0.0);
+        build_metadata["output_mode"] =
+            csharp_build.get("output_mode", "");
+        build_metadata["diagnostic_output_root"] =
+            csharp_build.get("diagnostic_output_root", "");
+        build_metadata["updates_godot_assembly"] =
+            csharp_build.get("updates_godot_assembly", false);
+        build_metadata["triggers_editor_reload"] =
+            csharp_build.get("triggers_editor_reload", false);
+        build_metadata["forced_refresh"] =
+            csharp_build.get("forced_refresh", false);
+        metadata["csharp_build"] = build_metadata;
+    }
     return make_envelope(godot::String("\n\n").join(sections), metadata, raw_success);
 }
 

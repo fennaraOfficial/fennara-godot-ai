@@ -1,5 +1,4 @@
 #include "fennara/executor.hpp"
-#include "fennara/lsp/csharp_lsp.hpp"
 #include "fennara/file_utils.hpp"
 #include "fennara/lsp/gdscript_lsp.hpp"
 
@@ -51,35 +50,25 @@ godot::Dictionary empty_diagnostics() {
     return file_result;
 }
 
-godot::Dictionary run_mixed_script_diagnostics(const godot::Array &files_to_check) {
+godot::Dictionary run_gdscript_diagnostics(const godot::Array &files_to_check) {
     godot::Array gd_files;
-    godot::Array cs_files;
     for (int i = 0; i < files_to_check.size(); i++) {
         godot::String path = files_to_check[i];
         if (path.ends_with(".gd")) {
             gd_files.append(path);
-        } else if (path.ends_with(".cs")) {
-            cs_files.append(path);
         }
     }
 
     godot::Dictionary per_file;
     if (!gd_files.is_empty()) {
-        godot::Dictionary gd_result =
+        godot::Dictionary gdscript_result =
             gdscript_lsp::diagnose_files(gd_files, "fennara-sync-batch-diagnostics");
-        if (!(bool)gd_result.get("success", false)) {
-            return gd_result;
+        if (!(bool)gdscript_result.get("success", false)) {
+            return gdscript_result;
         }
-        merge_per_file(per_file, gd_result.get("per_file", godot::Dictionary()));
-    }
-
-    if (!cs_files.is_empty()) {
-        godot::Dictionary cs_result =
-            csharp_lsp::diagnose_files(cs_files, "fennara-csharp-sync-batch-diagnostics");
-        if (!(bool)cs_result.get("success", false)) {
-            return cs_result;
-        }
-        merge_per_file(per_file, cs_result.get("per_file", godot::Dictionary()));
+        merge_per_file(
+            per_file,
+            gdscript_result.get("per_file", godot::Dictionary()));
     }
 
     godot::Dictionary result;
@@ -134,7 +123,7 @@ void append_sync_write_diagnostics(const godot::Array &tool_calls,
         }
 
         godot::String path = result.get("file_path", tool_args_from_call(tool_calls[i]).get("file_path", ""));
-        if (!(path.ends_with(".gd") || path.ends_with(".cs"))) {
+        if (!path.ends_with(".gd")) {
             continue;
         }
 
@@ -151,7 +140,7 @@ void append_sync_write_diagnostics(const godot::Array &tool_calls,
         return;
     }
 
-    godot::Dictionary diag_result = run_mixed_script_diagnostics(files_to_check);
+    godot::Dictionary diag_result = run_gdscript_diagnostics(files_to_check);
     bool diagnostic_success = diag_result.get("success", false);
     godot::Dictionary per_file = diag_result.get("per_file", godot::Dictionary());
     godot::Array indices = index_to_path.keys();

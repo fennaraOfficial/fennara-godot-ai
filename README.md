@@ -99,15 +99,8 @@ Your MCP app can point at the global Fennara launcher from anywhere. It does not
 need config files inside the Godot project. Fennara uses the Godot project you
 open in the editor.
 
-For a C# project:
-
-```bash
-fennara install --csharp
-```
-
-`--csharp` installs Fennara's managed `csharp-ls` language server support so
-`script_diagnostics`, runtime preflight checks, and C# feedback can report real
-C# parser/type issues.
+For a C# project, use the same `fennara install` command. C# project scans and
+runtime preflight checks use the project's installed .NET SDK.
 
 Then open the project in Godot.
 

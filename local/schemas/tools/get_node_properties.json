@@ -3,6 +3,7 @@
   "description_lines": [
     "Get changed properties of one or more specific nodes in scene files.",
     "Only shows properties that differ from defaults.",
+    "For attached scripts, GDScript export declarations are shown from source and C# exports are shown from Godot's loaded Script metadata.",
     "Embedded SubResources are expanded recursively.",
     "Large or opaque resources such as TileSet, TileMapLayer data, GridMap data, MeshLibrary resources, Theme resources, AnimationTree graphs, AnimationLibrary, Animation, and SpriteFrames are summarized into readable API-oriented output.",
     "Use get_scene_tree first to find node paths.",

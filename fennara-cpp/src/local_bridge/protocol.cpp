@@ -1,6 +1,6 @@
 #include "fennara/local_bridge.hpp"
 
-#include "fennara/lsp/csharp_support.hpp"
+#include "fennara/csharp/project.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/tools/get_class_info/docs_branch.hpp"
 

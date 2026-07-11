@@ -1,5 +1,6 @@
 #include "fennara/executor.hpp"
 #include "fennara/addon_access.hpp"
+#include "fennara/csharp/build.hpp"
 #include "fennara/file_utils.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/snapshot_manager.hpp"
@@ -184,7 +185,12 @@ void FennaraExecutor::execute_tool_calls_async(const godot::Array &tool_calls) {
             if (is_success && (file_path.ends_with(".gd") || file_path.ends_with(".cs"))) {
                 godot::String resolved = write_res.get("file_path", file_path);
                 _track_edited_script(resolved);
-                _pending_script_writes.push_back({i, resolved, args, write_res});
+                if (file_path.ends_with(".gd")) {
+                    _pending_script_writes.push_back({i, resolved, args, write_res});
+                } else {
+                    _on_async_tool_complete(
+                        write_res, i, name, args, batch_generation);
+                }
             } else {
                 _on_async_tool_complete(write_res, i, name, args, batch_generation);
             }
@@ -309,9 +315,12 @@ void FennaraExecutor::cancel() {
     _runtime_session_running = false;
     _runtime_session_tool_index = -1;
     _runtime_session_args = godot::Dictionary();
+    _runtime_session_cancelled.store(true);
+    csharp_build::notify_build_waiters();
     if (_runtime_session_thread.joinable()) {
         _runtime_session_thread.join();
     }
+    _runtime_session_cancelled.store(false);
     _runtime_session_thread_done = false;
     _runtime_session_thread_result = godot::Dictionary();
     _runtime_session_phase = "";
