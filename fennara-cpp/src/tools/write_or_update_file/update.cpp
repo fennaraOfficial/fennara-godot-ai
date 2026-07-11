@@ -14,13 +14,13 @@ godot::Dictionary FennaraWriteOrUpdateFileTool::_execute_update(
     godot::Dictionary result;
 
     godot::String file_path = args.get("file_path", "");
-    godot::String old_string = args.get("old_string", "");
-    godot::String new_string = args.get("new_string", "");
+    godot::String old_content = args.get("old_content", "");
+    godot::String replacement_content = args.get("new_content", "");
     bool replace_all = args.get("replace_all", false);
 
-    if (old_string.is_empty()) {
+    if (old_content.is_empty()) {
         result["success"] = false;
-        result["error"] = "old_string required for update mode";
+        result["error"] = "old_content required for update mode";
         return result;
     }
 
@@ -58,27 +58,27 @@ godot::Dictionary FennaraWriteOrUpdateFileTool::_execute_update(
     }
 
     godot::String current_content = read_result.get("content", "");
-    int occurrence_count = current_content.count(old_string);
+    int occurrence_count = current_content.count(old_content);
     if (occurrence_count == 0) {
-        godot::String old_preview = old_string.length() > 80
-            ? old_string.substr(0, 80) + "..."
-            : old_string;
-        FLOG_ERR(godot::String("Write: old_string not found in ") +
-                 normalized_path + " old_string=\"" + old_preview + "\"");
+        godot::String old_preview = old_content.length() > 80
+            ? old_content.substr(0, 80) + "..."
+            : old_content;
+        FLOG_ERR(godot::String("Write: old_content not found in ") +
+                 normalized_path + " old_content=\"" + old_preview + "\"");
         result["success"] = false;
         result["error"] =
-            "YOU MUST READ THIS FILE FIRST BEFORE EDITING! OLD_STRING NOT "
+            "YOU MUST READ THIS FILE FIRST BEFORE EDITING! OLD_CONTENT NOT "
             "FOUND IN FILE: " +
             file_path;
         return result;
     }
     if (occurrence_count > 1 && !replace_all) {
-        FLOG_ERR(godot::String("Write: old_string found ") +
+        FLOG_ERR(godot::String("Write: old_content found ") +
                  godot::String::num_int64(occurrence_count) + " times in " +
                  normalized_path);
         result["success"] = false;
         result["error"] =
-            "YOU MUST READ THIS FILE FIRST BEFORE EDITING! OLD_STRING APPEARS "
+            "YOU MUST READ THIS FILE FIRST BEFORE EDITING! OLD_CONTENT APPEARS "
             + godot::String::num_int64(occurrence_count) +
             " TIMES IN FILE. PROVIDE MORE SURROUNDING CODE TO MAKE IT UNIQUE, "
             "OR SET REPLACE_ALL=TRUE";
@@ -87,17 +87,18 @@ godot::Dictionary FennaraWriteOrUpdateFileTool::_execute_update(
 
     _snapshot_before_write(normalized_path, true);
 
-    godot::String new_content;
+    godot::String updated_content;
     if (replace_all) {
-        new_content = current_content.replace(old_string, new_string);
+        updated_content = current_content.replace(
+            old_content, replacement_content);
     } else {
-        int pos = current_content.find(old_string);
-        new_content = current_content.substr(0, pos) + new_string +
-                      current_content.substr(pos + old_string.length());
+        int pos = current_content.find(old_content);
+        updated_content = current_content.substr(0, pos) + replacement_content +
+                          current_content.substr(pos + old_content.length());
     }
 
     godot::Dictionary write_result =
-        _write_content(normalized_path, new_content, file_path, true);
+        _write_content(normalized_path, updated_content, file_path, true);
     if (!(bool)write_result.get("success", false)) {
         return write_result;
     }
@@ -107,20 +108,20 @@ godot::Dictionary FennaraWriteOrUpdateFileTool::_execute_update(
         csharp_build::note_csharp_source_changed();
     }
     if (normalized_path.ends_with(".gdshader")) {
-        _refresh_cached_shader_resource(normalized_path, new_content);
+        _refresh_cached_shader_resource(normalized_path, updated_content);
         _reserialize_shader_owners(normalized_path, result);
     }
 
     FLOG_TOOL(godot::String("Write: done, replacements=") +
               godot::String::num_int64(replace_all ? occurrence_count : 1) +
               " lines=" +
-              godot::String::num_int64(new_content.split("\n").size()));
+              godot::String::num_int64(updated_content.split("\n").size()));
     result["success"] = true;
     result["mode"] = "update";
     result["file_path"] = normalized_path;
-    result["line_count"] = new_content.split("\n").size();
+    result["line_count"] = updated_content.split("\n").size();
     result["replacements_made"] = replace_all ? occurrence_count : 1;
-    _append_shader_diagnostics(result, normalized_path, new_content);
+    _append_shader_diagnostics(result, normalized_path, updated_content);
     return result;
 }
 

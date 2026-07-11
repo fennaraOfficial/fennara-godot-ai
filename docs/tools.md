@@ -202,8 +202,8 @@ Use get_class_info for CharacterBody2D and AnimationPlayer before writing the sc
 Use this for normal project text files when a Fennara-aware edit is appropriate.
 It supports two modes:
 
-- `write`: create or completely rewrite a file.
-- `update`: replace an exact `old_string` with `new_string`; include enough
+- `write`: create or completely rewrite a file with `new_content`.
+- `update`: replace exact `old_content` with `new_content`; include enough
   surrounding text to make the match unique.
 
 For `.gd` and `.gdshader` files, Fennara automatically runs diagnostics after

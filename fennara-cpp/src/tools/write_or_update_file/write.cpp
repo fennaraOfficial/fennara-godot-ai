@@ -14,13 +14,13 @@ godot::Dictionary FennaraWriteOrUpdateFileTool::_execute_write(
     godot::Dictionary result;
 
     godot::String file_path = args.get("file_path", "");
-    godot::String content = args.get("content", "");
+    godot::String new_content = args.get("new_content", "");
     godot::String attach_to_scene = args.get("attach_to_scene", "");
     godot::String attach_to_node = args.get("attach_to_node", "");
 
-    if (content.is_empty()) {
+    if (new_content.is_empty()) {
         result["success"] = false;
-        result["error"] = "content required for write mode";
+        result["error"] = "new_content required for write mode";
         return result;
     }
 
@@ -51,7 +51,7 @@ godot::Dictionary FennaraWriteOrUpdateFileTool::_execute_write(
     _snapshot_before_write(normalized_path, file_exists);
 
     godot::Dictionary write_result =
-        _write_content(normalized_path, content, file_path, file_exists);
+        _write_content(normalized_path, new_content, file_path, file_exists);
     if (!(bool)write_result.get("success", false)) {
         return write_result;
     }
@@ -61,19 +61,19 @@ godot::Dictionary FennaraWriteOrUpdateFileTool::_execute_write(
         csharp_build::note_csharp_source_changed();
     }
     if (normalized_path.ends_with(".gdshader")) {
-        _refresh_cached_shader_resource(normalized_path, content);
+        _refresh_cached_shader_resource(normalized_path, new_content);
         _reserialize_shader_owners(normalized_path, result);
     }
 
     FLOG_TOOL(godot::String("Write: done, lines=") +
-              godot::String::num_int64(content.split("\n").size()) +
+              godot::String::num_int64(new_content.split("\n").size()) +
               " created=" + (!file_exists ? "true" : "false"));
     result["success"] = true;
     result["mode"] = "write";
     result["file_path"] = normalized_path;
-    result["line_count"] = content.split("\n").size();
+    result["line_count"] = new_content.split("\n").size();
     result["created"] = !file_exists;
-    _append_shader_diagnostics(result, normalized_path, content);
+    _append_shader_diagnostics(result, normalized_path, new_content);
 
     if (!attach_to_scene.is_empty() && !attach_to_node.is_empty()) {
         if (!normalized_path.ends_with(".gd")) {
