@@ -17,7 +17,7 @@ void merge_per_file(godot::Dictionary &into, const godot::Dictionary &from) {
     }
 }
 
-godot::Dictionary run_mixed_script_diagnostics(const godot::Array &files_to_check) {
+godot::Dictionary run_gdscript_diagnostics(const godot::Array &files_to_check) {
     godot::Array gd_files;
     for (int i = 0; i < files_to_check.size(); i++) {
         godot::String path = files_to_check[i];
@@ -28,12 +28,14 @@ godot::Dictionary run_mixed_script_diagnostics(const godot::Array &files_to_chec
 
     godot::Dictionary per_file;
     if (!gd_files.is_empty()) {
-        godot::Dictionary gd_result =
+        godot::Dictionary gdscript_result =
             gdscript_lsp::diagnose_files(gd_files, "fennara-batch-diagnostics");
-        if (!(bool)gd_result.get("success", false)) {
-            return gd_result;
+        if (!(bool)gdscript_result.get("success", false)) {
+            return gdscript_result;
         }
-        merge_per_file(per_file, gd_result.get("per_file", godot::Dictionary()));
+        merge_per_file(
+            per_file,
+            gdscript_result.get("per_file", godot::Dictionary()));
     }
 
     godot::Dictionary result;
@@ -130,7 +132,7 @@ void FennaraExecutor::_run_batch_diagnostics(uint64_t batch_generation) {
 
     {
         godot::Dictionary diag_result =
-            run_mixed_script_diagnostics(files_to_check);
+            run_gdscript_diagnostics(files_to_check);
         if (!(bool)diag_result.get("success", false)) {
             batch_success = false;
             batch_error = diag_result.get("error", "Diagnostics failed");

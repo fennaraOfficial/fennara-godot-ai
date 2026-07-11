@@ -188,6 +188,49 @@ godot::String s_omitted_label(int total, int shown) {
     return ", " + s_count_label(omitted, "omitted", "omitted");
 }
 
+godot::String s_script_cache_key(
+    const godot::Ref<godot::Script> &script,
+    const godot::String &script_path) {
+    if (!script_path.is_empty()) {
+        return "path:" + script_path;
+    }
+    return "instance:" +
+           godot::String::num_uint64(script->get_instance_id());
+}
+
+godot::Array s_unset_export_candidates(
+    const godot::Ref<godot::Script> &script) {
+    godot::Array candidates;
+    godot::TypedArray<godot::Dictionary> prop_list =
+        script->get_script_property_list();
+    for (int p = 0; p < prop_list.size(); p++) {
+        godot::Dictionary prop_info = prop_list[p];
+        int usage = prop_info.get("usage", 0);
+        if (!(usage & godot::PROPERTY_USAGE_STORAGE)) continue;
+
+        int type = prop_info.get("type", 0);
+        int hint = prop_info.get("hint", 0);
+        bool is_resource_export =
+            (hint == 17) || (type == godot::Variant::OBJECT);
+        if (!is_resource_export) continue;
+
+        godot::String prop_name = prop_info.get("name", "");
+        if (prop_name.is_empty()) continue;
+
+        godot::Variant default_val =
+            script->get_property_default_value(godot::StringName(prop_name));
+        if (default_val.get_type() != godot::Variant::NIL) continue;
+
+        godot::String hint_string = prop_info.get("hint_string", "");
+        godot::Dictionary candidate;
+        candidate["name"] = prop_name;
+        candidate["type"] =
+            hint_string.is_empty() ? "Object" : hint_string;
+        candidates.append(candidate);
+    }
+    return candidates;
+}
+
 } // namespace
 
 void FennaraValidateSceneTool::_check_unset_export_vars(
@@ -195,6 +238,7 @@ void FennaraValidateSceneTool::_check_unset_export_vars(
     int count = state->get_node_count();
     godot::Dictionary groups;
     godot::Array group_order;
+    godot::Dictionary candidate_cache;
 
     for (int i = 0; i < count; i++) {
         godot::String script_path;
@@ -208,38 +252,24 @@ void FennaraValidateSceneTool::_check_unset_export_vars(
 
         if (!script.is_valid()) continue;
 
+        godot::String cache_key = s_script_cache_key(script, script_path);
+        godot::Array candidates;
+        if (candidate_cache.has(cache_key)) {
+            candidates = candidate_cache[cache_key];
+        } else {
+            candidates = s_unset_export_candidates(script);
+            candidate_cache[cache_key] = candidates;
+        }
+        if (candidates.is_empty()) continue;
+
         godot::Dictionary scene_props = s_scene_props_for_node(state, i);
-
-        godot::TypedArray<godot::Dictionary> prop_list =
-            script->get_script_property_list();
-        for (int p = 0; p < prop_list.size(); p++) {
-            godot::Dictionary prop_info = prop_list[p];
-            int usage = prop_info.get("usage", 0);
-            if (!(usage & godot::PROPERTY_USAGE_STORAGE)) continue;
-
-            int type = prop_info.get("type", 0);
-            int hint = prop_info.get("hint", 0);
-            bool is_resource_export =
-                (hint == 17) || (type == godot::Variant::OBJECT);
-            if (!is_resource_export) continue;
-
-            godot::String prop_name = prop_info.get("name", "");
-            if (prop_name.is_empty()) continue;
-
+        for (int p = 0; p < candidates.size(); p++) {
+            godot::Dictionary candidate = candidates[p];
+            godot::String prop_name = candidate.get("name", "");
             if (scene_props.has(prop_name)) {
                 godot::Variant val = scene_props[prop_name];
                 if (val.get_type() != godot::Variant::NIL) continue;
             }
-
-            godot::Variant default_val =
-                script->get_property_default_value(godot::StringName(prop_name));
-            if (default_val.get_type() != godot::Variant::NIL) {
-                continue;
-            }
-
-            godot::String hint_string = prop_info.get("hint_string", "");
-            godot::String type_label =
-                hint_string.is_empty() ? "Object" : hint_string;
 
             s_record_unset_export_group(
                 groups,
@@ -248,7 +278,7 @@ void FennaraValidateSceneTool::_check_unset_export_vars(
                 script_path,
                 instance_scene_path,
                 prop_name,
-                type_label);
+                candidate.get("type", "Object"));
         }
     }
 

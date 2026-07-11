@@ -48,6 +48,11 @@ void FennaraPlugin::_enter_tree() {
         initial_filesystem_scan_completed =
             !filesystem->is_scanning() &&
             filesystem->get_scanning_progress() >= 0.999f;
+    } else {
+        csharp_preparation_pending = false;
+        csharp_build::cancel_reserved_background_preparation();
+        FLOG_SYS(
+            "C# background preparation skipped: EditorFileSystem unavailable");
     }
 
     dock_instance = memnew(FennaraDock);

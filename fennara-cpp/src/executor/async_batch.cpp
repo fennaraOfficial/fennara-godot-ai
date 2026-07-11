@@ -1,5 +1,6 @@
 #include "fennara/executor.hpp"
 #include "fennara/addon_access.hpp"
+#include "fennara/csharp/build.hpp"
 #include "fennara/file_utils.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/snapshot_manager.hpp"
@@ -314,9 +315,12 @@ void FennaraExecutor::cancel() {
     _runtime_session_running = false;
     _runtime_session_tool_index = -1;
     _runtime_session_args = godot::Dictionary();
+    _runtime_session_cancelled.store(true);
+    csharp_build::notify_build_waiters();
     if (_runtime_session_thread.joinable()) {
         _runtime_session_thread.join();
     }
+    _runtime_session_cancelled.store(false);
     _runtime_session_thread_done = false;
     _runtime_session_thread_result = godot::Dictionary();
     _runtime_session_phase = "";

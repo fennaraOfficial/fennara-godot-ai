@@ -9,6 +9,7 @@ namespace fennara::csharp_build {
 
 void begin_build_lifecycle();
 void request_build_shutdown();
+void notify_build_waiters();
 void reserve_background_preparation();
 void cancel_reserved_background_preparation();
 void start_background_preparation_async();
@@ -17,7 +18,8 @@ bool wait_for_background_preparation(
     const std::atomic_bool *cancelled = nullptr);
 void shutdown_background_preparation();
 godot::String find_root_csproj();
-godot::Dictionary run_dotnet_build_if_needed();
+godot::Dictionary run_dotnet_build_if_needed(
+    const std::atomic_bool *cancelled = nullptr);
 godot::Dictionary run_diagnostics(const std::atomic_bool *cancelled = nullptr);
 godot::Dictionary run_background_diagnostics(
     const std::atomic_bool *cancelled = nullptr);

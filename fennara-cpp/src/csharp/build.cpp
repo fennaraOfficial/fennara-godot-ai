@@ -73,6 +73,16 @@ std::mutex &build_coordinator_mutex() {
     return *mutex;
 }
 
+std::condition_variable &build_coordinator_condition() {
+    static std::condition_variable *condition = new std::condition_variable();
+    return *condition;
+}
+
+bool &build_coordinator_busy() {
+    static bool *busy = new bool(false);
+    return *busy;
+}
+
 std::atomic_uint64_t &build_log_sequence() {
     static std::atomic_uint64_t *sequence = new std::atomic_uint64_t(0);
     return *sequence;
@@ -129,18 +139,43 @@ void prune_build_log_runs(const godot::String &root, int retain_count) {
     }
 }
 
-bool acquire_build_coordinator(
-    std::unique_lock<std::mutex> &lock,
-    const std::atomic_bool *cancelled) {
-    while (!lock.try_lock()) {
+class BuildCoordinatorLease {
+public:
+    ~BuildCoordinatorLease() {
+        release();
+    }
+
+    bool acquire(const std::atomic_bool *cancelled) {
+        std::unique_lock<std::mutex> lock(build_coordinator_mutex());
+        build_coordinator_condition().wait(lock, [cancelled]() {
+            return !build_coordinator_busy() ||
+                   build_shutdown_requested().load() ||
+                   (cancelled != nullptr && cancelled->load());
+        });
         if (build_shutdown_requested().load() ||
             (cancelled != nullptr && cancelled->load())) {
             return false;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        build_coordinator_busy() = true;
+        acquired = true;
+        return true;
     }
-    return true;
-}
+
+private:
+    void release() {
+        if (!acquired) {
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lock(build_coordinator_mutex());
+            build_coordinator_busy() = false;
+            acquired = false;
+        }
+        build_coordinator_condition().notify_one();
+    }
+
+    bool acquired = false;
+};
 
 godot::Dictionary csharp_source_fingerprints() {
     godot::Dictionary fingerprints;
@@ -153,12 +188,7 @@ godot::Dictionary csharp_source_fingerprints() {
         godot::Dictionary fingerprint;
         fingerprint["modified"] = static_cast<int64_t>(
             godot::FileAccess::get_modified_time(path));
-        godot::Ref<godot::FileAccess> file = godot::FileAccess::open(
-            path, godot::FileAccess::READ);
-        fingerprint["size"] = file.is_valid() ? file->get_length() : -1;
-        fingerprint["sha256"] = file.is_valid()
-            ? godot::FileAccess::get_file_as_string(path).sha256_text()
-            : godot::String();
+        fingerprint["size"] = godot::FileAccess::get_size(path);
         fingerprints[path.replace("\\", "/").simplify_path()] = fingerprint;
     }
     return fingerprints;
@@ -374,34 +404,9 @@ godot::Dictionary group_issues_by_file(const godot::Array &issues,
     return per_file;
 }
 
-godot::String absolute_under_root(const godot::String &root,
-                                  const godot::String &relative) {
-    godot::String clean = relative.strip_edges().replace("\\", "/");
-    if (clean.is_empty() || clean == ".") {
-        return root;
-    }
-    if (clean.begins_with("res://")) {
-        godot::ProjectSettings *settings =
-            godot::ProjectSettings::get_singleton();
-        return settings == nullptr ? clean : settings->globalize_path(clean);
-    }
-    if (clean.is_absolute_path()) {
-        return clean;
-    }
-    return root.path_join(clean);
-}
-
 godot::Dictionary resolve_godot_csproj() {
     godot::Dictionary status = csharp_support::inspect_project();
-    godot::String root = status.get("project_root", project_root());
-    godot::String configured_dir = absolute_under_root(
-        root, status.get("dotnet_project_directory", ""));
-    configured_dir = configured_dir.replace("\\", "/").trim_suffix("/");
-    godot::String assembly_name =
-        godot::String(status.get("dotnet_assembly_name", "")).strip_edges();
     godot::Array projects = status.get("projects", godot::Array());
-    godot::Array directory_matches;
-    godot::Array named_matches;
     godot::Array all_csproj;
 
     for (int i = 0; i < projects.size(); i++) {
@@ -415,40 +420,16 @@ godot::Dictionary resolve_godot_csproj() {
         godot::String path = godot::String(
             project.get("absolute_path", "")).replace("\\", "/");
         all_csproj.append(path);
-        if (path.get_base_dir().trim_suffix("/").to_lower() ==
-            configured_dir.to_lower()) {
-            directory_matches.append(path);
-        }
-        if (!assembly_name.is_empty() &&
-            path.get_file().get_basename().to_lower() ==
-                assembly_name.to_lower()) {
-            named_matches.append(path);
-        }
     }
 
     godot::Dictionary result;
-    for (int i = 0; i < directory_matches.size(); i++) {
-        godot::String path = directory_matches[i];
-        if (!assembly_name.is_empty() &&
-            path.get_file().get_basename().to_lower() ==
-                assembly_name.to_lower()) {
-            result["success"] = true;
-            result["path"] = path;
-            result["selection_reason"] =
-                "dotnet_project_directory_and_assembly_name";
-            return result;
-        }
-    }
-    if (directory_matches.size() == 1) {
+    godot::Dictionary selected =
+        status.get("selected_project", godot::Dictionary());
+    if (godot::String(selected.get("type", "")) == "project") {
         result["success"] = true;
-        result["path"] = directory_matches[0];
-        result["selection_reason"] = "dotnet_project_directory";
-        return result;
-    }
-    if (named_matches.size() == 1) {
-        result["success"] = true;
-        result["path"] = named_matches[0];
-        result["selection_reason"] = "dotnet_assembly_name";
+        result["path"] = selected.get("absolute_path", "");
+        result["selection_reason"] =
+            selected.get("selection_reason", "selected_project");
         return result;
     }
     result["success"] = false;
@@ -468,6 +449,13 @@ void begin_build_lifecycle() {
 
 void request_build_shutdown() {
     build_shutdown_requested().store(true);
+    preparation_wait_condition().notify_all();
+    build_coordinator_condition().notify_all();
+}
+
+void notify_build_waiters() {
+    preparation_wait_condition().notify_all();
+    build_coordinator_condition().notify_all();
 }
 
 void reserve_background_preparation() {
@@ -589,8 +577,9 @@ godot::String find_root_csproj() {
         : godot::String();
 }
 
-godot::Dictionary run_dotnet_build_if_needed() {
-    if (!wait_for_background_preparation("C# runtime build")) {
+godot::Dictionary run_dotnet_build_if_needed(
+    const std::atomic_bool *cancelled) {
+    if (!wait_for_background_preparation("C# runtime build", cancelled)) {
         godot::Dictionary cancelled_result;
         cancelled_result["needed"] = true;
         cancelled_result["status"] = "failed";
@@ -599,9 +588,8 @@ godot::Dictionary run_dotnet_build_if_needed() {
         cancelled_result["updates_godot_assembly"] = false;
         return cancelled_result;
     }
-    std::unique_lock<std::mutex> build_lock(
-        build_coordinator_mutex(), std::defer_lock);
-    if (!acquire_build_coordinator(build_lock, nullptr)) {
+    BuildCoordinatorLease build_lease;
+    if (!build_lease.acquire(cancelled)) {
         godot::Dictionary cancelled_result;
         cancelled_result["needed"] = true;
         cancelled_result["status"] = "failed";
@@ -648,7 +636,7 @@ godot::Dictionary run_dotnet_build_if_needed() {
     result = run_command_blocking(
         "dotnet", args,
         "dotnet build " + shell_quote(csproj_path) + " -c Debug", root,
-        &build_shutdown_requested());
+        cancelled);
     result["needed"] = true;
     result["project"] = csproj_path;
     result["project_selection_reason"] =
@@ -676,9 +664,8 @@ godot::Dictionary run_diagnostics_impl(const std::atomic_bool *cancelled,
             "C# project diagnostics cancelled while waiting for background preparation.";
         return cancelled_result;
     }
-    std::unique_lock<std::mutex> build_lock(
-        build_coordinator_mutex(), std::defer_lock);
-    if (!acquire_build_coordinator(build_lock, cancelled)) {
+    BuildCoordinatorLease build_lease;
+    if (!build_lease.acquire(cancelled)) {
         godot::Dictionary cancelled_result;
         cancelled_result["success"] = false;
         cancelled_result["cancelled"] = true;

@@ -142,6 +142,7 @@ private:
     godot::Dictionary _runtime_session_args;
     std::thread _runtime_session_thread;
     std::mutex _runtime_session_mutex;
+    std::atomic_bool _runtime_session_cancelled{false};
     bool _runtime_session_thread_done = false;
     godot::Dictionary _runtime_session_thread_result;
     godot::String _runtime_session_phase;

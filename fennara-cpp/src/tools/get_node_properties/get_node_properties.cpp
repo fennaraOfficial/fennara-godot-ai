@@ -218,6 +218,7 @@ godot::Vector<ScriptExportInfo> inspect_script_exports(
         godot::Dictionary property = properties[i];
         int usage = property.get("usage", 0);
         if (usage & godot::PROPERTY_USAGE_CATEGORY) continue;
+        if (!(usage & godot::PROPERTY_USAGE_STORAGE)) continue;
 
         godot::String name = property.get("name", "");
         if (name.is_empty()) continue;

@@ -41,6 +41,7 @@ void FennaraExecutor::_start_next_runtime_session() {
     _runtime_session_running = true;
     _runtime_session_tool_index = pending.tool_index;
     _runtime_session_args = pending.args;
+    _runtime_session_cancelled.store(false);
     _runtime_session_thread_done = false;
     _runtime_session_thread_result = godot::Dictionary();
     _runtime_session_build_result = godot::Dictionary();
@@ -72,7 +73,9 @@ void FennaraExecutor::_start_next_runtime_session() {
         }
         _runtime_session_phase = "build";
         _runtime_session_thread = std::thread([this]() {
-            godot::Dictionary result = csharp_build::run_dotnet_build_if_needed();
+            godot::Dictionary result =
+                csharp_build::run_dotnet_build_if_needed(
+                    &_runtime_session_cancelled);
             {
                 std::lock_guard<std::mutex> lock(_runtime_session_mutex);
                 _runtime_session_thread_result = result;

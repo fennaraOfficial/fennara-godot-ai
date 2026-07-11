@@ -683,6 +683,7 @@ void FennaraScriptDiagnosticsTool::execute(const godot::Dictionary &args) {
 
 void FennaraScriptDiagnosticsTool::cancel() {
     _cancelled.store(true);
+    csharp_build::notify_build_waiters();
 }
 
 godot::Dictionary FennaraScriptDiagnosticsTool::get_result() const {
