@@ -28,21 +28,17 @@
         "type": "string",
         "description": "Path to the file relative to project root (e.g., 'scripts/enemy.gd') or absolute path (e.g., 'res://scripts/enemy.gd')"
       },
-      "content": {
+      "new_content": {
         "type": "string",
-        "description": "WRITE MODE ONLY: Full content of the file to write. Required when mode='write'."
+        "description": "Full replacement content. In write mode, this is the complete file content. In update mode, this replaces old_content and may be empty to delete the matched text. Required in both modes."
       },
-      "old_string": {
+      "old_content": {
         "type": "string",
         "description": "UPDATE MODE ONLY: Exact code to find and replace. Must match exactly including whitespace and indentation. Required when mode='update'. If this appears multiple times in the file, include more surrounding code to make it unique."
       },
-      "new_string": {
-        "type": "string",
-        "description": "UPDATE MODE ONLY: Code to insert in place of old_string. Can be empty string to delete code. Required when mode='update'."
-      },
       "replace_all": {
         "type": "boolean",
-        "description": "UPDATE MODE ONLY: Whether to replace all occurrences of old_string (default: false). If false and multiple matches exist, tool will return an error asking for more context."
+        "description": "UPDATE MODE ONLY: Whether to replace all occurrences of old_content (default: false). If false and multiple matches exist, tool will return an error asking for more context."
       },
       "attach_to_scene": {
         "type": "string",
@@ -55,7 +51,8 @@
     },
     "required": [
       "mode",
-      "file_path"
+      "file_path",
+      "new_content"
     ]
   }
 }

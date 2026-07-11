@@ -47,7 +47,7 @@ godot::String write_or_resolve_script_path(const godot::String &normalized_scene
         godot::Dictionary write_args;
         write_args["mode"] = "write";
         write_args["file_path"] = effective_script_path;
-        write_args["content"] = code;
+        write_args["new_content"] = code;
 
         godot::Dictionary write_result = FennaraWriteOrUpdateFileTool::execute(write_args);
         if (!(bool)write_result.get("success", false)) {
