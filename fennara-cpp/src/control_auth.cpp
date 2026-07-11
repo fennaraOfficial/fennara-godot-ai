@@ -148,7 +148,8 @@ godot::String verified_daemon_header(const std::atomic_bool *cancelled) {
 void request_legacy_daemon_shutdown(const std::atomic_bool *cancelled) {
     const godot::Dictionary health =
         request_json(godot::HTTPClient::METHOD_GET, "/health", cancelled);
-    if (godot::String(health.get("daemon", "")) != "fennara-daemon") {
+    if (godot::String(health.get("daemon", "")) != "fennara-daemon" ||
+        (bool)health.get("control_auth", false)) {
         return;
     }
     request_json(godot::HTTPClient::METHOD_POST, "/shutdown", cancelled);

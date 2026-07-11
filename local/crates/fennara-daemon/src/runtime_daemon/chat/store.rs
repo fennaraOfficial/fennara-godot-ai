@@ -119,7 +119,11 @@ pub(crate) fn list_chats(scope: &ProjectScope) -> Result<Vec<ChatSummary>, Strin
         .prepare(
             "SELECT id, title, project_path, project_name, model, reasoning_effort, total_cost, latest_prompt_tokens, message_count, created_at_ms, updated_at_ms
              FROM chats
-             WHERE archived_at_ms IS NULL AND project_path IS ?1
+             WHERE archived_at_ms IS NULL
+               AND project_path IS ?1
+               AND EXISTS (
+                 SELECT 1 FROM chat_messages WHERE chat_messages.chat_id = chats.id
+               )
              ORDER BY updated_at_ms DESC
              LIMIT ?2",
         )
@@ -154,19 +158,6 @@ pub(crate) fn open_chat(scope: &ProjectScope, chat_id: &str) -> Result<OpenedCha
 pub(crate) fn chat_summary(chat_id: &str) -> Result<ChatSummary, String> {
     let conn = connection()?;
     get_chat(&conn, chat_id)?.ok_or_else(|| "Chat not found.".to_string())
-}
-
-pub(crate) fn open_active_or_create(
-    scope: &ProjectScope,
-    model: &str,
-    reasoning_effort: &str,
-) -> Result<OpenedChat, String> {
-    if let Some(chat_id) = active_chat_id(scope)? {
-        if let Ok(opened) = open_chat(scope, &chat_id) {
-            return Ok(opened);
-        }
-    }
-    create_chat(scope, model, reasoning_effort)
 }
 
 pub(crate) fn create_chat(

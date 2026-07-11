@@ -229,26 +229,37 @@ where
     .await?;
     send_project_status(sender, None, state, bound_project).await?;
     let scope = &bound_project.scope;
-    let recovery_resume_refresh = match store::active_chat_id(scope) {
-        Ok(Some(chat_id)) => resume_recovery_on_open(state, bound_project, &chat_id).await,
-        _ => None,
-    };
-    match store::open_active_or_create(scope, &settings.model, &settings.reasoning_effort) {
-        Ok(opened) => {
-            *active_chat_id = Some(opened.chat.id.clone());
-            send_json(
-                sender,
-                json!({
-                    "type": "chat_opened",
-                    "request_id": null,
-                    "chat": opened.chat,
-                    "messages": opened.messages,
-                    "context_compactions": opened.context_compactions,
-                    "turn_recovery": opened.turn_recovery,
-                    "recovery_resume_refresh": recovery_resume_refresh
-                }),
-            )
-            .await?;
+    match store::active_chat_id(scope) {
+        Ok(Some(chat_id)) => match store::open_chat(scope, &chat_id) {
+            Ok(opened) => {
+                let recovery_resume_refresh =
+                    resume_recovery_on_open(state, bound_project, &chat_id).await;
+                *active_chat_id = Some(opened.chat.id.clone());
+                send_json(
+                    sender,
+                    json!({
+                        "type": "chat_opened",
+                        "request_id": null,
+                        "chat": opened.chat,
+                        "messages": opened.messages,
+                        "context_compactions": opened.context_compactions,
+                        "turn_recovery": opened.turn_recovery,
+                        "recovery_resume_refresh": recovery_resume_refresh
+                    }),
+                )
+                .await?;
+            }
+            Err(_) => {
+                if let Err(error) = store::set_active_chat_id(scope, "") {
+                    eprintln!("failed to clear missing active chat: {error}");
+                }
+                *active_chat_id = None;
+                send_chat_reset(sender, None).await?;
+            }
+        },
+        Ok(None) => {
+            *active_chat_id = None;
+            send_chat_reset(sender, None).await?;
         }
         Err(error) => {
             send_error(sender, None, "chat_store_failed", &error).await?;
@@ -426,55 +437,16 @@ where
             }
         }
         "new_chat" => {
-            let settings = load_settings();
-            let model = request
-                .model
-                .as_deref()
-                .and_then(settings::clean_model)
-                .unwrap_or_else(|| settings.model.clone());
-            let reasoning_effort = settings::clean_reasoning_effort(
-                request
-                    .reasoning_effort
-                    .as_deref()
-                    .unwrap_or(&settings.reasoning_effort),
-            )
-            .to_string();
             let scope = &bound_project.scope;
-            match store::create_chat(scope, &model, &reasoning_effort) {
-                Ok(opened) => {
-                    *active_chat_id = Some(opened.chat.id.clone());
-                    if send_json(
-                        sender,
-                        json!({
-                            "type": "chat_created",
-                            "request_id": request_id.clone(),
-                            "chat": opened.chat
-                        }),
-                    )
-                    .await
-                    .is_err()
-                    {
-                        return Err(());
-                    }
-                    if send_json(
-                        sender,
-                        json!({
-                            "type": "chat_opened",
-                            "request_id": request_id,
-                            "chat": opened.chat,
-                            "messages": opened.messages,
-                            "context_compactions": opened.context_compactions,
-                            "turn_recovery": opened.turn_recovery
-                        }),
-                    )
-                    .await
-                    .is_err()
-                    {
+            match store::set_active_chat_id(scope, "") {
+                Ok(()) => {
+                    *active_chat_id = None;
+                    if send_chat_reset(sender, request_id).await.is_err() {
                         return Err(());
                     }
                     send_chat_list(sender, None, scope).await
                 }
-                Err(error) => send_error(sender, request_id, "chat_create_failed", &error).await,
+                Err(error) => send_error(sender, request_id, "chat_store_failed", &error).await,
             }
         }
         "delete_chat" => {
@@ -592,6 +564,7 @@ async fn resume_recovery_on_open(
             state,
             Some(&bound_project.session_id),
             &result.changed_paths,
+            result.action,
         )
         .await,
     )
@@ -706,6 +679,20 @@ where
         }
         Err(error) => send_error(sender, request_id, "chat_list_failed", &error).await,
     }
+}
+
+async fn send_chat_reset<S>(sender: &mut S, request_id: Option<String>) -> Result<(), S::Error>
+where
+    S: Sink<Message> + Unpin,
+{
+    send_json(
+        sender,
+        json!({
+            "type": "chat_reset",
+            "request_id": request_id
+        }),
+    )
+    .await
 }
 
 async fn send_chat_updated<S>(

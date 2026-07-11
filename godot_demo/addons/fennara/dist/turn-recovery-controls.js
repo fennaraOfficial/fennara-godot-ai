@@ -341,10 +341,26 @@
       recoveryLog("chat_refresh_sent", { reason, request: requestId });
     }
 
+    function clearForNewChat() {
+      recovery = unavailableRecovery();
+      retryPayload = null;
+      pending = null;
+      confirmation = null;
+      replacementPending = false;
+      checkpointWarning = "";
+      draftRestoring = false;
+      generationSettledAt = 0;
+      render();
+    }
+
     function handleDebugEvent(message) {
       recoveryLog(`daemon_${message.event || "event"}`, {
         request: message.request_id,
         duration_ms: message.duration_ms,
+        capture_ms: message.capture_ms,
+        pin_ms: message.pin_ms,
+        diff_ms: message.diff_ms,
+        prune_ms: message.prune_ms,
         ok: message.ok,
         coverage: message.coverage,
         unavailable_reason: message.unavailable_reason,
@@ -429,6 +445,7 @@
 
     return {
       applyState,
+      clearForNewChat,
       handleDisconnect,
       handleDebugEvent,
       handleError,

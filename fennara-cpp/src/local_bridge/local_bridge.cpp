@@ -37,6 +37,12 @@ void FennaraLocalBridge::_ready() {
 }
 
 void FennaraLocalBridge::_process(double delta) {
+    if (_daemon_spawn_attempted) {
+        _daemon_spawn_retry_timer -= delta;
+        if (_daemon_spawn_retry_timer <= 0.0) {
+            _daemon_spawn_attempted = false;
+        }
+    }
     if (!_ws.is_valid()) {
         _reconnect_timer -= delta;
         if (!_intentional_close && _reconnect_timer <= 0.0) {
@@ -81,6 +87,7 @@ void FennaraLocalBridge::_process(double delta) {
             _ws->set_outbound_buffer_size(LOCAL_BRIDGE_WS_BUFFER_SIZE_BYTES);
             _sent_hello = false;
             _daemon_spawn_attempted = false;
+            _daemon_spawn_retry_timer = 0.0;
             FLOG_NET("Local bridge connected");
         }
         _last_state = state;
@@ -179,7 +186,6 @@ void FennaraLocalBridge::_connect_socket() {
     const godot::String control_header = _daemon_auth_future.get();
     _daemon_auth_cancel.reset();
     if (control_header.is_empty()) {
-        _daemon_spawn_attempted = false;
         _start_daemon_if_available();
         _reconnect_timer = _daemon_spawn_attempted ? 0.5 : RECONNECT_DELAY_SECONDS;
         return;

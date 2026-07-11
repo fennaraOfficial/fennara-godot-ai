@@ -1057,6 +1057,7 @@ where
     .await;
     let checkpoint_finish_result = turn_checkpoint.finish().await;
     let checkpoint_finish_duration_ms = checkpoint_finish_started_at.elapsed().as_millis() as i64;
+    let checkpoint_finish_timings = checkpoint_finish_result.as_ref().ok();
     let _ = send_json(
         sender,
         json!({
@@ -1064,7 +1065,11 @@ where
             "request_id": request_id.clone(),
             "event": "checkpoint_finish_finished",
             "duration_ms": checkpoint_finish_duration_ms,
-            "ok": checkpoint_finish_result.is_ok()
+            "ok": checkpoint_finish_result.is_ok(),
+            "capture_ms": checkpoint_finish_timings.map(|timings| timings.capture_ms),
+            "pin_ms": checkpoint_finish_timings.map(|timings| timings.pin_ms),
+            "diff_ms": checkpoint_finish_timings.map(|timings| timings.diff_ms),
+            "prune_ms": checkpoint_finish_timings.map(|timings| timings.prune_ms)
         }),
     )
     .await;

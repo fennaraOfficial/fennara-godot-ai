@@ -5,6 +5,7 @@
 #include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/classes/web_socket_peer.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
 #include <cstdint>
@@ -44,11 +45,13 @@ public:
 private:
     static constexpr const char *LOCAL_DAEMON_WS_URL = "ws://127.0.0.1:41287/godot/ws";
     static constexpr double RECONNECT_DELAY_SECONDS = 2.0;
+    static constexpr double DAEMON_SPAWN_RETRY_SECONDS = 5.0;
     static constexpr int LOCAL_BRIDGE_WS_BUFFER_SIZE_BYTES = 16 * 1024 * 1024;
 
     godot::Ref<godot::WebSocketPeer> _ws;
     godot::WebSocketPeer::State _last_state = godot::WebSocketPeer::STATE_CLOSED;
     double _reconnect_timer = 0.0;
+    double _daemon_spawn_retry_timer = 0.0;
     bool _sent_hello = false;
     bool _intentional_close = false;
     bool _daemon_spawn_attempted = false;
@@ -59,6 +62,7 @@ private:
     godot::String _chat_token;
     godot::String _active_mcp_target_name;
     godot::String _active_mcp_target_path;
+    godot::PackedStringArray _recovery_closed_scenes;
     std::future<godot::String> _daemon_auth_future;
     std::shared_ptr<std::atomic_bool> _daemon_auth_cancel;
 

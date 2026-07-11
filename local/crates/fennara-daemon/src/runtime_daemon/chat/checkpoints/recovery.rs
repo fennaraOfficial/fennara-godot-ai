@@ -280,15 +280,15 @@ async fn preflight_conflicts(
     if changed_paths.is_empty() {
         return Ok(Vec::new());
     }
-    let current = store.capture(&identity.root).await;
-    let current_snapshot_id = current.snapshot_id.as_deref().ok_or_else(|| {
-        "The current project state could not be verified, so files were not restored.".to_string()
-    })?;
+    let current = store
+        .git
+        .verify_paths(identity, expected_snapshot_id, changed_paths)
+        .await
+        .map_err(|error| error.to_string())?;
     let affected = affected_paths(changed_paths);
     ensure_safe_skipped_paths(&current.skipped_paths, &affected)?;
-    let mut conflicts = store
-        .changed_paths(&identity.root, expected_snapshot_id, current_snapshot_id)
-        .await?
+    let mut conflicts = current
+        .changed_paths
         .into_iter()
         .filter(|path| affected.contains(path.as_str()))
         .collect::<BTreeSet<_>>();
@@ -323,20 +323,25 @@ async fn interrupted_recovery_conflicts(
     ) else {
         return Err("The checkpoint does not contain both project boundaries.".to_string());
     };
-    let current = store.capture(&identity.root).await;
-    let current_snapshot_id = current.snapshot_id.as_deref().ok_or_else(|| {
-        "The current project state could not be verified, so files were not restored.".to_string()
-    })?;
     let affected = affected_paths(&journal.changed_paths);
-    ensure_safe_skipped_paths(&current.skipped_paths, &affected)?;
-    let changed_from_start = store
-        .changed_paths(&identity.root, start_snapshot_id, current_snapshot_id)
-        .await?
+    let current_from_start = store
+        .git
+        .verify_paths(identity, start_snapshot_id, &journal.changed_paths)
+        .await
+        .map_err(|error| error.to_string())?;
+    let current_from_end = store
+        .git
+        .verify_paths(identity, end_snapshot_id, &journal.changed_paths)
+        .await
+        .map_err(|error| error.to_string())?;
+    ensure_safe_skipped_paths(&current_from_start.skipped_paths, &affected)?;
+    ensure_safe_skipped_paths(&current_from_end.skipped_paths, &affected)?;
+    let changed_from_start = current_from_start
+        .changed_paths
         .into_iter()
         .collect::<BTreeSet<_>>();
-    let changed_from_end = store
-        .changed_paths(&identity.root, end_snapshot_id, current_snapshot_id)
-        .await?
+    let changed_from_end = current_from_end
+        .changed_paths
         .into_iter()
         .collect::<BTreeSet<_>>();
     let mut conflicts = affected
@@ -347,9 +352,10 @@ async fn interrupted_recovery_conflicts(
         .map(|path| (*path).to_string())
         .collect::<BTreeSet<_>>();
     conflicts.extend(
-        current
+        current_from_start
             .skipped_paths
             .into_iter()
+            .chain(current_from_end.skipped_paths)
             .map(|path| path.path)
             .filter(|path| {
                 affected

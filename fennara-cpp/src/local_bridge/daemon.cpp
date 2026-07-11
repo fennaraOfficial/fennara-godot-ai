@@ -23,6 +23,7 @@ void FennaraLocalBridge::_start_daemon_if_available() {
     int32_t pid = godot::OS::get_singleton()->create_process(daemon_path, args, false);
     if (pid > 0) {
         _daemon_spawn_attempted = true;
+        _daemon_spawn_retry_timer = DAEMON_SPAWN_RETRY_SECONDS;
         FLOG_NET("Local bridge started daemon");
     } else {
         FLOG_ERR("Local bridge failed to start daemon");

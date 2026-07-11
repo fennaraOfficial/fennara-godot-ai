@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt, path::Path, sync::OnceLock};
+use std::{collections::HashSet, fmt, path::Path, sync::OnceLock, time::Instant};
 
 use serde_json::json;
 use tokio::sync::{OnceCell, OwnedMutexGuard};
@@ -99,6 +99,14 @@ pub(crate) struct TurnCheckpoint {
     warning: Option<String>,
 }
 
+#[derive(Default)]
+pub(crate) struct FinishTurnTimings {
+    pub(crate) capture_ms: u128,
+    pub(crate) pin_ms: u128,
+    pub(crate) diff_ms: u128,
+    pub(crate) prune_ms: u128,
+}
+
 enum TurnState {
     Active(Box<TurnInner>),
     Serialized(OwnedMutexGuard<()>),
@@ -125,14 +133,14 @@ impl TurnCheckpoint {
         self.warning.as_deref()
     }
 
-    pub(crate) async fn finish(mut self) -> Result<(), String> {
+    pub(crate) async fn finish(mut self) -> Result<FinishTurnTimings, String> {
         match self.state.take() {
             Some(TurnState::Active(inner)) => finish_turn(*inner).await,
             Some(TurnState::Serialized(lease)) => {
                 drop(lease);
-                Ok(())
+                Ok(FinishTurnTimings::default())
             }
-            None => Ok(()),
+            None => Ok(FinishTurnTimings::default()),
         }
     }
 }
@@ -267,8 +275,32 @@ async fn attach_turn(inner: PendingInner, ids: TurnCheckpointIds<'_>) -> TurnChe
     }
 }
 
-async fn finish_turn(inner: TurnInner) -> Result<(), String> {
+async fn finish_turn(inner: TurnInner) -> Result<FinishTurnTimings, String> {
+    let mut timings = FinishTurnTimings::default();
+    let capture_span = inner.trace.start_span(
+        "checkpoint.finish.capture",
+        json!({ "checkpoint_id": inner.checkpoint_id.as_str() }),
+    );
+    let stage_started_at = Instant::now();
     let mut end_capture = inner.store.capture(&inner.identity.root).await;
+    timings.capture_ms = stage_started_at.elapsed().as_millis();
+    capture_span.finish(
+        if end_capture.snapshot_id.is_some() {
+            "ok"
+        } else {
+            "unavailable"
+        },
+        json!({
+            "checkpoint_id": inner.checkpoint_id.as_str(),
+            "candidate_coverage": end_capture.coverage,
+        }),
+    );
+    let pin_span = inner.trace.start_span(
+        "checkpoint.finish.pin",
+        json!({ "checkpoint_id": inner.checkpoint_id.as_str() }),
+    );
+    let stage_started_at = Instant::now();
+    let mut pin_ok = true;
     if let Some(snapshot_id) = end_capture.snapshot_id.as_deref()
         && inner
             .store
@@ -277,8 +309,19 @@ async fn finish_turn(inner: TurnInner) -> Result<(), String> {
             .await
             .is_err()
     {
+        pin_ok = false;
         end_capture = CaptureResult::unavailable(CaptureUnavailableReason::CaptureFailed);
     }
+    timings.pin_ms = stage_started_at.elapsed().as_millis();
+    pin_span.finish(
+        if pin_ok { "ok" } else { "failed" },
+        json!({ "checkpoint_id": inner.checkpoint_id.as_str() }),
+    );
+    let diff_span = inner.trace.start_span(
+        "checkpoint.finish.diff",
+        json!({ "checkpoint_id": inner.checkpoint_id.as_str() }),
+    );
+    let stage_started_at = Instant::now();
     let changed_paths = match (
         inner.start_capture.snapshot_id.as_deref(),
         end_capture.snapshot_id.as_deref(),
@@ -296,13 +339,31 @@ async fn finish_turn(inner: TurnInner) -> Result<(), String> {
         },
         _ => Vec::new(),
     };
+    timings.diff_ms = stage_started_at.elapsed().as_millis();
+    diff_span.finish(
+        "ok",
+        json!({
+            "checkpoint_id": inner.checkpoint_id.as_str(),
+            "changed_path_count": changed_paths.len(),
+        }),
+    );
     store::complete_turn_checkpoint(store::CompletedTurnCheckpoint {
         id: &inner.checkpoint_id,
         end_capture: &end_capture,
         changed_paths: &changed_paths,
     })?;
+    let prune_span = inner.trace.start_span(
+        "checkpoint.finish.prune",
+        json!({ "checkpoint_id": inner.checkpoint_id.as_str() }),
+    );
+    let stage_started_at = Instant::now();
     let _ = prune_for_project(&inner.store, &inner.identity.storage_key).await;
-    Ok(())
+    timings.prune_ms = stage_started_at.elapsed().as_millis();
+    prune_span.finish(
+        "ok",
+        json!({ "checkpoint_id": inner.checkpoint_id.as_str() }),
+    );
+    Ok(timings)
 }
 
 async fn reconcile(store: CheckpointStore) -> Result<(), String> {

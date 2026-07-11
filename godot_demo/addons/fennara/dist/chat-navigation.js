@@ -4,16 +4,14 @@
     const chatList = options.chatList || null;
     const chatTitle = options.chatTitle || null;
     const prompt = options.prompt || null;
-    const modelInput = options.modelInput || null;
     const send = options.send || (() => false);
     const nextRequestId = options.nextRequestId || ((prefix) => prefix);
     const clearTranscript = options.clearTranscript || function () {};
+    const clearRecovery = options.clearRecovery || function () {};
     const clearAttachments = options.clearAttachments || function () {};
     const resizePrompt = options.resizePrompt || function () {};
-    const cleanModelId = options.cleanModelId || ((value) => String(value || "").trim());
     const getActiveChatId = options.getActiveChatId || (() => null);
-    const getCurrentModel = options.getCurrentModel || (() => "");
-    const getCurrentReasoningEffort = options.getCurrentReasoningEffort || (() => "medium");
+    const setActiveChatId = options.setActiveChatId || function () {};
 
     function updateChatTitle(chat) {
       if (!chatTitle) {
@@ -103,11 +101,12 @@
     function startNewChat() {
       closeDrawer();
       clearTranscript(true);
+      clearRecovery();
+      setActiveChatId(null);
+      updateChatTitle({ title: "New chat" });
       send({
         type: "new_chat",
         request_id: nextRequestId("new-chat"),
-        model: cleanModelId(modelInput?.value || getCurrentModel()),
-        reasoning_effort: getCurrentReasoningEffort(),
       });
       if (prompt) {
         prompt.value = "";

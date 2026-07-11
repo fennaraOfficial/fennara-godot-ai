@@ -527,16 +527,16 @@
     chatList,
     chatTitle,
     prompt,
-    modelInput,
     send,
     nextRequestId,
     clearTranscript,
+    clearRecovery: () => turnRecoveryControls?.clearForNewChat(),
     clearAttachments,
     resizePrompt,
-    cleanModelId: cleanUiModelId,
     getActiveChatId: () => activeChatId,
-    getCurrentModel: () => currentModel,
-    getCurrentReasoningEffort: () => currentReasoningEffort,
+    setActiveChatId: (chatId) => {
+      activeChatId = chatId;
+    },
   });
   const closeDrawer = chatNavigation.closeDrawer;
   const closeDrawerFromOutsideClick = chatNavigation.closeDrawerFromOutsideClick;
@@ -1439,11 +1439,6 @@
       }
       return;
     }
-    if (message.type === "chat_reset") {
-      clearTranscript();
-      setStreaming(false);
-      return;
-    }
     if (message.type === "chat_list") {
       renderChatList(message.chats || []);
       return;
@@ -1490,6 +1485,17 @@
     }
     if (message.type === "chat_opened") {
       applyOpenedChat(message);
+      return;
+    }
+    if (message.type === "chat_reset") {
+      activeChatId = null;
+      clearTranscript(true);
+      turnRecoveryControls?.clearForNewChat();
+      updateChatTitle({ title: "New chat" });
+      sessionCost = 0;
+      latestPromptTokens = 0;
+      updateChatSize();
+      updateSessionCost();
       return;
     }
     if (message.type === "chat_created") {

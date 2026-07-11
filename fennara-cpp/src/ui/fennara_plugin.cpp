@@ -13,6 +13,7 @@
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/editor_settings.hpp>
 #include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/http_request.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/core/class_db.hpp>
@@ -23,6 +24,9 @@ void FennaraPlugin::_bind_methods() {
     godot::ClassDB::bind_method(
         godot::D_METHOD("_warm_csharp_lsp"),
         &FennaraPlugin::_warm_csharp_lsp);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("_on_update_check_completed", "result", "response_code", "headers", "body"),
+        &FennaraPlugin::_on_update_check_completed);
 }
 
 FennaraPlugin::FennaraPlugin() {
@@ -45,8 +49,7 @@ void FennaraPlugin::_enter_tree() {
     script_context_menu_plugin->set_local_bridge(local_bridge);
     add_context_menu_plugin(godot::EditorContextMenuPlugin::CONTEXT_SLOT_SCRIPT_EDITOR_CODE,
                             script_context_menu_plugin);
-    update_notice::check_once();
-
+    _start_update_check();
     _ensure_runtime_helper_autoload();
 
     set_process(true);
@@ -56,6 +59,57 @@ void FennaraPlugin::_enter_tree() {
     _inspect_csharp_support();
     call_deferred("_warm_csharp_lsp");
     local_bridge->request_get_class_info_warmup();
+}
+
+void FennaraPlugin::_start_update_check() {
+    if (!update_notice::begin_check()) {
+        return;
+    }
+    update_request = memnew(godot::HTTPRequest);
+    if (update_request == nullptr) {
+        update_notice::complete_check(false, 0, godot::PackedByteArray(),
+                                      "Could not create the update request.");
+        return;
+    }
+    update_request->set_name("FennaraUpdateCheck");
+    update_request->set_timeout(5.0);
+    update_request->set_use_threads(true);
+    add_child(update_request);
+    update_request->connect(
+        "request_completed",
+        callable_mp(this, &FennaraPlugin::_on_update_check_completed),
+        godot::Object::CONNECT_ONE_SHOT);
+    godot::PackedStringArray headers;
+    headers.append("Accept: application/vnd.github+json");
+    headers.append("User-Agent: fennara-godot-ai");
+    godot::Error error = update_request->request(
+        "https://api.github.com/repos/fennaraOfficial/fennara-godot-ai/releases/latest",
+        headers);
+    if (error != godot::OK) {
+        update_notice::complete_check(false, 0, godot::PackedByteArray(),
+                                      "Failed to start the GitHub update request.");
+        update_request->queue_free();
+        update_request = nullptr;
+    }
+}
+
+void FennaraPlugin::_on_update_check_completed(
+    int64_t result,
+    int64_t response_code,
+    const godot::PackedStringArray &headers,
+    const godot::PackedByteArray &body) {
+    (void)headers;
+    const bool success =
+        result == godot::HTTPRequest::RESULT_SUCCESS && response_code == 200;
+    update_notice::complete_check(
+        success,
+        static_cast<int>(response_code),
+        body,
+        success ? godot::String() : godot::String("GitHub update request failed."));
+    if (update_request != nullptr) {
+        update_request->queue_free();
+        update_request = nullptr;
+    }
 }
 
 void FennaraPlugin::_inspect_csharp_support() {
@@ -258,6 +312,11 @@ void FennaraPlugin::_ensure_export_presets_exclude_fennara() {
 
 void FennaraPlugin::_exit_tree() {
     set_process(false);
+    if (update_request != nullptr) {
+        update_request->cancel_request();
+        update_request->queue_free();
+        update_request = nullptr;
+    }
     csharp_lsp::shutdown_warm_server();
     if (script_context_menu_plugin.is_valid()) {
         remove_context_menu_plugin(script_context_menu_plugin);

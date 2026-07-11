@@ -155,6 +155,7 @@ where
             state,
             Some(&bound_project.session_id),
             &result.changed_paths,
+            result.action,
         )
         .await
     } else {

@@ -4,11 +4,7 @@
 #include "fennara/logger.hpp"
 
 #include <godot_cpp/classes/file_access.hpp>
-#include <godot_cpp/classes/http_client.hpp>
 #include <godot_cpp/classes/json.hpp>
-#include <godot_cpp/classes/os.hpp>
-#include <godot_cpp/classes/time.hpp>
-#include <godot_cpp/classes/tls_options.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
 
@@ -16,9 +12,6 @@
 
 namespace fennara::update_notice {
 namespace {
-
-constexpr const char *kLatestReleasePath =
-    "/repos/fennaraOfficial/fennara-godot-ai/releases/latest";
 
 bool g_checked = false;
 bool g_update_available = false;
@@ -165,83 +158,6 @@ godot::String read_addon_version() {
     return version.is_empty() ? godot::String(FennaraLocalBridge::PLUGIN_VERSION) : version;
 }
 
-godot::Dictionary get_github_latest_release(int timeout_ms) {
-    godot::Dictionary result;
-    godot::Ref<godot::HTTPClient> http;
-    http.instantiate();
-
-    godot::Error err = http->connect_to_host(
-        "https://api.github.com",
-        443,
-        godot::TLSOptions::client());
-    if (err != godot::OK) {
-        result["success"] = false;
-        result["error"] = "Failed to connect to GitHub.";
-        return result;
-    }
-
-    godot::PackedStringArray headers;
-    headers.append("Accept: application/vnd.github+json");
-    headers.append("User-Agent: fennara-godot-ai");
-
-    uint64_t deadline = godot::Time::get_singleton()->get_ticks_msec() + timeout_ms;
-    bool request_sent = false;
-    godot::String response_body;
-
-    while (godot::Time::get_singleton()->get_ticks_msec() < deadline) {
-        http->poll();
-        godot::HTTPClient::Status status = http->get_status();
-
-        if (status == godot::HTTPClient::STATUS_CANT_CONNECT ||
-            status == godot::HTTPClient::STATUS_TLS_HANDSHAKE_ERROR ||
-            status == godot::HTTPClient::STATUS_CONNECTION_ERROR) {
-            result["success"] = false;
-            result["error"] = "Failed to connect to GitHub.";
-            return result;
-        }
-
-        if (status == godot::HTTPClient::STATUS_CONNECTED && !request_sent) {
-            err = http->request(godot::HTTPClient::METHOD_GET, kLatestReleasePath, headers);
-            if (err != godot::OK) {
-                result["success"] = false;
-                result["error"] = "Failed to send GitHub request.";
-                return result;
-            }
-            request_sent = true;
-        }
-
-        if (status == godot::HTTPClient::STATUS_BODY) {
-            godot::PackedByteArray chunk = http->read_response_body_chunk();
-            if (!chunk.is_empty()) {
-                response_body += chunk.get_string_from_utf8();
-            }
-            if (http->get_response_body_length() >= 0 &&
-                response_body.to_utf8_buffer().size() >= http->get_response_body_length()) {
-                break;
-            }
-        }
-
-        godot::OS::get_singleton()->delay_usec(10000);
-    }
-
-    if (!http->has_response()) {
-        result["success"] = false;
-        result["error"] = "Timed out waiting for GitHub.";
-        return result;
-    }
-
-    godot::Variant parsed = godot::JSON::parse_string(response_body);
-    if (parsed.get_type() != godot::Variant::DICTIONARY) {
-        result["success"] = false;
-        result["error"] = "GitHub response was not JSON.";
-        return result;
-    }
-
-    result = parsed;
-    result["success"] = true;
-    return result;
-}
-
 void set_error(const godot::String &message) {
     g_check_failed = true;
     g_error = message.utf8().get_data();
@@ -249,21 +165,36 @@ void set_error(const godot::String &message) {
 
 } // namespace
 
-void check_once() {
+bool begin_check() {
     if (g_checked) {
-        return;
+        return false;
     }
     g_checked = true;
 
     godot::String current = normalize_version(read_addon_version());
     g_current_version = current.utf8().get_data();
+    return true;
+}
 
-    godot::Dictionary response = get_github_latest_release(5000);
-    if (!(bool)response.get("success", false)) {
-        set_error(response.get("error", "Latest version request failed."));
+void complete_check(bool success,
+                    int response_code,
+                    const godot::PackedByteArray &body,
+                    const godot::String &error) {
+    if (!success) {
+        set_error(error.is_empty()
+                      ? godot::String("Latest version request failed with HTTP status ") +
+                            godot::String::num_int64(response_code)
+                      : error);
         FLOG_TOOL("Update check skipped: latest release request failed");
         return;
     }
+
+    const godot::Variant parsed = godot::JSON::parse_string(body.get_string_from_utf8());
+    if (parsed.get_type() != godot::Variant::DICTIONARY) {
+        set_error("GitHub response was not JSON.");
+        return;
+    }
+    godot::Dictionary response = parsed;
 
     godot::String latest = latest_version_from_release(response);
     if (latest.is_empty()) {
@@ -272,7 +203,8 @@ void check_once() {
     }
 
     g_latest_version = latest.utf8().get_data();
-    g_update_available = version_is_newer(latest, current);
+    g_update_available =
+        version_is_newer(latest, godot::String(g_current_version.c_str()));
 }
 
 bool is_update_available() {

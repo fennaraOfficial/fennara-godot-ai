@@ -1,3 +1,5 @@
+mod verification;
+
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
@@ -16,7 +18,9 @@ const CAPTURE_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_CAPTURE_CANDIDATES: usize = 20_000;
 const MAX_UNTRACKED_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_UNTRACKED_CAPTURE_BYTES: u64 = 32 * 1024 * 1024;
-const SOURCE_PATH_BATCH_SIZE: usize = 64;
+const SOURCE_PATH_BATCH_SIZE: usize = 512;
+const MAX_PATH_BATCH_UTF16_UNITS: usize = 8 * 1024;
+const MAX_PATH_STDIN_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Clone)]
 pub(super) struct GitSnapshotStore {
@@ -207,7 +211,7 @@ impl GitSnapshotStore {
             prepare_target_directories(&repository, &target_directories, &affected_paths).await?;
             prepare_target_files(&repository, &target_paths).await?;
             let target_paths = target_paths.into_iter().collect::<Vec<_>>();
-            for batch in target_paths.chunks(SOURCE_PATH_BATCH_SIZE) {
+            for batch in path_batches(&target_paths) {
                 let mut args = vec![
                     OsString::from("restore"),
                     OsString::from("--source"),
@@ -224,6 +228,15 @@ impl GitSnapshotStore {
         })
         .await
         .map_err(|_| SnapshotError::TimedOut)?
+    }
+
+    pub(super) async fn verify_paths(
+        &self,
+        identity: &ProjectIdentity,
+        expected_snapshot_id: &str,
+        project_paths: &[String],
+    ) -> Result<verification::PathVerification, SnapshotError> {
+        verification::verify_paths(self, identity, expected_snapshot_id, project_paths).await
     }
 
     async fn project_lock(&self, canonical_project: &Path) -> Arc<Mutex<()>> {
@@ -251,6 +264,7 @@ impl GitSnapshotStore {
         let repository = Repository {
             worktree: source.worktree,
             source_common_dir: source.common_dir,
+            source_index: source.index,
             private_git_dir,
             scope,
         };
@@ -265,7 +279,7 @@ async fn snapshot_paths_at(
     paths: &[String],
 ) -> Result<HashSet<String>, SnapshotError> {
     let mut present = HashSet::new();
-    for batch in paths.chunks(SOURCE_PATH_BATCH_SIZE) {
+    for batch in path_batches(paths) {
         let mut args = vec![
             OsString::from("ls-tree"),
             OsString::from("-r"),
@@ -280,6 +294,49 @@ async fn snapshot_paths_at(
         present.extend(parse_nul_paths(&output.stdout)?);
     }
     Ok(present)
+}
+
+fn path_batches(paths: &[String]) -> Vec<&[String]> {
+    let mut batches = Vec::new();
+    let mut start = 0;
+    let mut units = 0;
+    for (index, path) in paths.iter().enumerate() {
+        let path_units = path.encode_utf16().count() + 3;
+        if index > start
+            && (index - start >= SOURCE_PATH_BATCH_SIZE
+                || units + path_units > MAX_PATH_BATCH_UTF16_UNITS)
+        {
+            batches.push(&paths[start..index]);
+            start = index;
+            units = 0;
+        }
+        units += path_units;
+    }
+    if start < paths.len() {
+        batches.push(&paths[start..]);
+    }
+    batches
+}
+
+fn nul_path_input(paths: &[String], protect_leading_colon: bool) -> Option<Vec<u8>> {
+    let mut input = Vec::new();
+    for path in paths {
+        let extra = if protect_leading_colon { 2 } else { 0 };
+        if input
+            .len()
+            .saturating_add(path.len())
+            .saturating_add(extra + 1)
+            > MAX_PATH_STDIN_BYTES
+        {
+            return None;
+        }
+        if protect_leading_colon {
+            input.extend_from_slice(b"./");
+        }
+        input.extend_from_slice(path.as_bytes());
+        input.push(0);
+    }
+    Some(input)
 }
 
 fn target_directory_paths(paths: &BTreeSet<String>) -> BTreeSet<String> {
@@ -470,6 +527,7 @@ async fn delete_snapshot_ref(private_git_dir: &Path, reference: &str) -> Result<
 struct Repository {
     worktree: PathBuf,
     source_common_dir: PathBuf,
+    source_index: PathBuf,
     private_git_dir: PathBuf,
     scope: String,
 }
@@ -536,6 +594,7 @@ impl Repository {
 struct SourceRepository {
     worktree: PathBuf,
     common_dir: PathBuf,
+    index: PathBuf,
 }
 
 async fn canonical_project_root(project_root: &Path) -> Result<PathBuf, SnapshotError> {
@@ -554,6 +613,7 @@ async fn canonical_project_root(project_root: &Path) -> Result<PathBuf, Snapshot
 async fn discover_repository(project_root: &Path) -> Result<SourceRepository, SnapshotError> {
     let worktree = rev_parse_path(project_root, "--show-toplevel").await?;
     let common_dir = rev_parse_path_with_absolute_format(project_root, "--git-common-dir").await?;
+    let index = rev_parse_git_path(project_root, "index").await?;
     Ok(SourceRepository {
         worktree: tokio::fs::canonicalize(worktree)
             .await
@@ -561,7 +621,27 @@ async fn discover_repository(project_root: &Path) -> Result<SourceRepository, Sn
         common_dir: tokio::fs::canonicalize(common_dir)
             .await
             .map_err(SnapshotError::InvalidRepositoryPath)?,
+        index,
     })
+}
+
+async fn rev_parse_git_path(project_root: &Path, git_path: &str) -> Result<PathBuf, SnapshotError> {
+    let mut command = Command::new("git");
+    command.arg("-C").arg(project_root);
+    let output = execute_git(
+        &mut command,
+        [
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-path",
+            git_path,
+        ],
+    )
+    .await?;
+    if !output.success {
+        return Err(SnapshotError::NonGitProject);
+    }
+    output_path(output.stdout)
 }
 
 async fn rev_parse_path(project_root: &Path, argument: &str) -> Result<PathBuf, SnapshotError> {
@@ -627,15 +707,19 @@ async fn ensure_private_repository(repository: &Repository) -> Result<(), Snapsh
             ensure_success("configure private checkpoint repository", output)?;
         }
         configure_alternates(repository).await?;
-        if !repository.private_git_dir.join("index").is_file() {
-            seed_private_index(repository).await?;
-        }
-        refresh_private_index_stat_cache(repository).await?;
         tokio::fs::write(&initialization_marker, b"1\n")
             .await
             .map_err(SnapshotError::CreateStorage)?;
     }
     configure_alternates(repository).await?;
+    let source_index_marker = repository.private_git_dir.join("fennara-source-index-v1");
+    if !source_index_marker.is_file() {
+        seed_private_index(repository).await?;
+        refresh_private_index_stat_cache(repository).await?;
+        tokio::fs::write(&source_index_marker, b"1\n")
+            .await
+            .map_err(SnapshotError::CreateStorage)?;
+    }
     configure_generated_excludes(repository).await?;
     remove_from_index(repository, &repository.generated_paths()).await?;
     Ok(())
@@ -656,6 +740,16 @@ async fn restrict_storage_permissions(_path: &Path) -> Result<(), SnapshotError>
 }
 
 async fn seed_private_index(repository: &Repository) -> Result<(), SnapshotError> {
+    if repository.source_index.is_file()
+        && tokio::fs::copy(
+            &repository.source_index,
+            repository.private_git_dir.join("index"),
+        )
+        .await
+        .is_ok()
+    {
+        return Ok(());
+    }
     let head = source_head(repository).await?;
     let args = if let Some(head) = head.as_deref() {
         ["read-tree", head]
@@ -721,42 +815,41 @@ async fn configure_generated_excludes(repository: &Repository) -> Result<(), Sna
 }
 
 async fn refresh_index(repository: &Repository) -> Result<Vec<SkippedPath>, SnapshotError> {
-    let tracked = list_snapshot_paths(
-        repository,
-        [
-            "diff-files",
-            "--name-only",
-            "-z",
-            "--",
-            repository.scope.as_str(),
-        ],
-    )
-    .await?;
-    let private_untracked = list_snapshot_paths(
-        repository,
-        [
-            "ls-files",
-            "--others",
-            "--exclude-standard",
-            "-z",
-            "--",
-            repository.scope.as_str(),
-        ],
-    )
-    .await?;
-    let private_delta = private_delta_paths(repository).await?;
-    let source_untracked = list_source_paths(
-        repository,
-        [
-            "ls-files",
-            "--others",
-            "--exclude-standard",
-            "-z",
-            "--",
-            repository.scope.as_str(),
-        ],
-    )
-    .await?;
+    let (tracked, private_untracked, private_delta, source_untracked) = tokio::try_join!(
+        list_snapshot_paths(
+            repository,
+            [
+                "diff-files",
+                "--name-only",
+                "-z",
+                "--",
+                repository.scope.as_str(),
+            ],
+        ),
+        list_snapshot_paths(
+            repository,
+            [
+                "ls-files",
+                "--others",
+                "--exclude-standard",
+                "-z",
+                "--",
+                repository.scope.as_str(),
+            ],
+        ),
+        private_delta_paths(repository),
+        list_source_paths(
+            repository,
+            [
+                "ls-files",
+                "--others",
+                "--exclude-standard",
+                "-z",
+                "--",
+                repository.scope.as_str(),
+            ],
+        ),
+    )?;
     let mut candidates = tracked
         .into_iter()
         .chain(private_untracked)
@@ -776,7 +869,11 @@ async fn refresh_index(repository: &Repository) -> Result<Vec<SkippedPath>, Snap
         .collect::<BTreeSet<_>>();
     candidates.retain(|path| !generated.contains(path));
     let candidate_list = candidates.iter().cloned().collect::<Vec<_>>();
-    let ignored = source_ignored_paths(repository, &candidate_list).await?;
+    let (ignored, mut nested_repositories, filters) = tokio::try_join!(
+        source_ignored_paths(repository, &candidate_list),
+        source_gitlink_paths(repository, &candidate_list),
+        source_content_filters(repository, &candidate_list),
+    )?;
     let source_tracked =
         source_tracked_paths(repository, &ignored.iter().cloned().collect::<Vec<_>>()).await?;
     let ignored_untracked = ignored
@@ -785,7 +882,6 @@ async fn refresh_index(repository: &Repository) -> Result<Vec<SkippedPath>, Snap
         .collect::<BTreeSet<_>>();
     candidates.retain(|path| !ignored_untracked.contains(path));
     let candidate_list = candidates.iter().cloned().collect::<Vec<_>>();
-    let mut nested_repositories = source_gitlink_paths(repository, &candidate_list).await?;
     for path in &candidate_list {
         let absolute = repository.absolute_worktree_path(path);
         if tokio::fs::symlink_metadata(&absolute)
@@ -799,8 +895,6 @@ async fn refresh_index(repository: &Repository) -> Result<Vec<SkippedPath>, Snap
         }
     }
     candidates.retain(|path| !nested_repositories.contains(path));
-    let candidate_list = candidates.iter().cloned().collect::<Vec<_>>();
-    let filters = source_content_filters(repository, &candidate_list).await?;
 
     let source_untracked = source_untracked.into_iter().collect::<HashSet<_>>();
     let mut skipped = ignored_untracked
@@ -916,7 +1010,7 @@ async fn source_tracked_paths(
     paths: &[String],
 ) -> Result<HashSet<String>, SnapshotError> {
     let mut tracked = HashSet::new();
-    for batch in paths.chunks(SOURCE_PATH_BATCH_SIZE) {
+    for batch in path_batches(paths) {
         let mut args = vec![
             OsString::from("ls-files"),
             OsString::from("--cached"),
@@ -936,7 +1030,7 @@ async fn source_gitlink_paths(
     paths: &[String],
 ) -> Result<HashSet<String>, SnapshotError> {
     let mut gitlinks = HashSet::new();
-    for batch in paths.chunks(SOURCE_PATH_BATCH_SIZE) {
+    for batch in path_batches(paths) {
         let mut args = vec![
             OsString::from("ls-files"),
             OsString::from("--stage"),
@@ -962,13 +1056,35 @@ async fn source_ignored_paths(
     repository: &Repository,
     paths: &[String],
 ) -> Result<HashSet<String>, SnapshotError> {
+    if let Some(input) = nul_path_input(paths, true) {
+        let output = source_git_with_input(
+            repository,
+            [
+                "-c",
+                "core.quotepath=false",
+                "check-ignore",
+                "--no-index",
+                "-z",
+                "--stdin",
+            ],
+            &input,
+        )
+        .await?;
+        if !output.success && output.code != Some(1) {
+            return Err(command_failed("check source ignore rules", &output));
+        }
+        return Ok(parse_nul_paths(&output.stdout)?
+            .into_iter()
+            .map(unprotect_check_path)
+            .collect());
+    }
     let mut ignored = HashSet::new();
-    let (ordinary, control): (Vec<_>, Vec<_>) = paths.iter().partition(|path| {
+    let (ordinary, control): (Vec<_>, Vec<_>) = paths.iter().cloned().partition(|path| {
         !path
             .chars()
             .any(|character| character.is_control() || matches!(character, '"' | '\\'))
     });
-    for batch in ordinary.chunks(SOURCE_PATH_BATCH_SIZE) {
+    for batch in path_batches(&ordinary) {
         let mut args = vec![
             OsString::from("-c"),
             OsString::from("core.quotepath=false"),
@@ -1009,8 +1125,28 @@ async fn source_content_filters(
     repository: &Repository,
     paths: &[String],
 ) -> Result<HashMap<String, String>, SnapshotError> {
+    if let Some(input) = nul_path_input(paths, true) {
+        let output = source_git_with_input(
+            repository,
+            ["check-attr", "-z", "--stdin", "filter"],
+            &input,
+        )
+        .await?;
+        let output = ensure_success("check content filter attributes", output)?;
+        let fields = parse_nul_paths(&output.stdout)?;
+        if fields.len() % 3 != 0 {
+            return Err(SnapshotError::InvalidRepositoryOutput);
+        }
+        return Ok(fields
+            .chunks_exact(3)
+            .filter(|entry| {
+                entry[1] == "filter" && !matches!(entry[2].as_str(), "unspecified" | "unset")
+            })
+            .map(|entry| (unprotect_check_path(entry[0].clone()), entry[2].clone()))
+            .collect());
+    }
     let mut filters = HashMap::new();
-    for batch in paths.chunks(SOURCE_PATH_BATCH_SIZE) {
+    for batch in path_batches(paths) {
         let mut args = vec![
             OsString::from("check-attr"),
             OsString::from("-z"),
@@ -1068,7 +1204,25 @@ where
     if paths.is_empty() {
         return Ok(());
     }
-    for batch in paths.chunks(SOURCE_PATH_BATCH_SIZE) {
+    if let Some(input) = nul_path_input(&paths, false) {
+        let output = snapshot_git_with_input(
+            repository,
+            [
+                "rm",
+                "--cached",
+                "-r",
+                "-f",
+                "--ignore-unmatch",
+                "--pathspec-from-file=-",
+                "--pathspec-file-nul",
+            ],
+            &input,
+        )
+        .await?;
+        ensure_success("remove paths from checkpoint index", output)?;
+        return Ok(());
+    }
+    for batch in path_batches(&paths) {
         let mut args = vec![
             OsString::from("rm"),
             OsString::from("--cached"),
@@ -1088,7 +1242,23 @@ async fn add_to_index(repository: &Repository, paths: &[String]) -> Result<(), S
     if paths.is_empty() {
         return Ok(());
     }
-    for batch in paths.chunks(SOURCE_PATH_BATCH_SIZE) {
+    if let Some(input) = nul_path_input(paths, false) {
+        let output = snapshot_git_with_input(
+            repository,
+            [
+                "add",
+                "--all",
+                "--sparse",
+                "--pathspec-from-file=-",
+                "--pathspec-file-nul",
+            ],
+            &input,
+        )
+        .await?;
+        ensure_success("update checkpoint index", output)?;
+        return Ok(());
+    }
+    for batch in path_batches(paths) {
         let mut args = vec![
             OsString::from("add"),
             OsString::from("--all"),
@@ -1238,6 +1408,23 @@ where
     execute_git(&mut command, args).await
 }
 
+async fn source_git_with_input<I, S>(
+    repository: &Repository,
+    args: I,
+    input: &[u8],
+) -> Result<GitOutput, SnapshotError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut command = Command::new("git");
+    command
+        .arg("-C")
+        .arg(&repository.worktree)
+        .env("GIT_OPTIONAL_LOCKS", "0");
+    execute_git_with_input(&mut command, args, input).await
+}
+
 async fn source_git_literal<I, S>(
     repository: &Repository,
     args: I,
@@ -1301,20 +1488,24 @@ where
             SnapshotError::SpawnGit(error)
         }
     })?;
-    if let Some(input) = input {
+    let output = if let Some(input) = input {
         let mut stdin = child
             .stdin
             .take()
             .ok_or(SnapshotError::InvalidRepositoryOutput)?;
-        stdin
-            .write_all(input)
+        let write_input = async move {
+            stdin.write_all(input).await?;
+            stdin.shutdown().await
+        };
+        let (write_result, output_result) = tokio::join!(write_input, child.wait_with_output());
+        write_result.map_err(SnapshotError::WriteGitStdin)?;
+        output_result.map_err(SnapshotError::WaitForGit)?
+    } else {
+        child
+            .wait_with_output()
             .await
-            .map_err(SnapshotError::WriteGitStdin)?;
-    }
-    let output = child
-        .wait_with_output()
-        .await
-        .map_err(SnapshotError::WaitForGit)?;
+            .map_err(SnapshotError::WaitForGit)?
+    };
     Ok(GitOutput {
         success: output.status.success(),
         code: output.status.code(),
@@ -1461,8 +1652,8 @@ mod tests {
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-    struct TestDirectory {
-        path: PathBuf,
+    pub(super) struct TestDirectory {
+        pub(super) path: PathBuf,
     }
 
     impl TestDirectory {
@@ -1486,13 +1677,13 @@ mod tests {
         }
     }
 
-    struct TestRepository {
-        root: TestDirectory,
-        storage: TestDirectory,
+    pub(super) struct TestRepository {
+        pub(super) root: TestDirectory,
+        pub(super) storage: TestDirectory,
     }
 
     impl TestRepository {
-        fn new(name: &str) -> Self {
+        pub(super) fn new(name: &str) -> Self {
             let root = TestDirectory::new(name);
             let storage = TestDirectory::new(&format!("{name}-storage"));
             git(&root.path, ["init", "--quiet"]);
@@ -1504,11 +1695,11 @@ mod tests {
             Self { root, storage }
         }
 
-        fn store(&self) -> GitSnapshotStore {
+        pub(super) fn store(&self) -> GitSnapshotStore {
             GitSnapshotStore::new(self.storage.path.clone())
         }
 
-        fn commit_all(&self) {
+        pub(super) fn commit_all(&self) {
             git(&self.root.path, ["add", "--all"]);
             git(
                 &self.root.path,
@@ -1579,6 +1770,29 @@ mod tests {
         assert_eq!(
             path_to_git(Path::new(r"folder\script.gd")).unwrap(),
             r"folder\script.gd"
+        );
+    }
+
+    #[test]
+    fn bounds_path_batches_by_count_and_windows_command_units() {
+        let short = (0..513)
+            .map(|index| format!("path-{index}.txt"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            path_batches(&short)
+                .into_iter()
+                .map(<[String]>::len)
+                .collect::<Vec<_>>(),
+            [512, 1]
+        );
+
+        let long = vec!["a".repeat(5_000), "b".repeat(5_000)];
+        assert_eq!(
+            path_batches(&long)
+                .into_iter()
+                .map(<[String]>::len)
+                .collect::<Vec<_>>(),
+            [1, 1]
         );
     }
 

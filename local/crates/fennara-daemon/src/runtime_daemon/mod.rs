@@ -100,6 +100,7 @@ async fn health() -> Json<Value> {
     Json(json!({
         "ok": true,
         "daemon": "fennara-daemon",
+        "control_auth": true,
         "version": DAEMON_VERSION
     }))
 }

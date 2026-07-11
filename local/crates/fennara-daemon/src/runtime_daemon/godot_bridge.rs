@@ -409,13 +409,15 @@ pub(crate) async fn refresh_project_files_for_session(
     state: &AppState,
     session_id: Option<&str>,
     paths: &[String],
+    recovery_action: &str,
 ) -> Value {
     call_plugin_request(
         state,
         session_id,
         json!({
             "type": "refresh_project_files",
-            "paths": paths
+            "paths": paths,
+            "recovery_action": recovery_action
         }),
         Duration::from_secs(30),
         None,

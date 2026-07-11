@@ -13,6 +13,7 @@
 #include <godot_cpp/classes/control.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/file_system_dock.hpp>
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
@@ -322,6 +323,20 @@ int32_t display_line_to_editor_index(int32_t line) {
     return line > 0 ? line - 1 : -1;
 }
 
+bool is_scene_path(const godot::String &path) {
+    return path.ends_with(".tscn") || path.ends_with(".scn");
+}
+
+int32_t find_path(const godot::PackedStringArray &paths,
+                  const godot::String &path) {
+    for (int32_t index = 0; index < paths.size(); index++) {
+        if (paths[index] == path) {
+            return index;
+        }
+    }
+    return -1;
+}
+
 } // namespace
 
 void FennaraLocalBridge::_handle_message(const godot::Dictionary &message) {
@@ -349,6 +364,14 @@ void FennaraLocalBridge::_handle_refresh_project_files(const godot::Dictionary &
     response["request_id"] = message.get("request_id", "");
     response["ok"] = false;
 
+    godot::String recovery_action =
+        godot::String(message.get("recovery_action", "")).strip_edges();
+    if (recovery_action == "undo") {
+        _recovery_closed_scenes.clear();
+    }
+    int32_t closed_scene_count = 0;
+    int32_t closed_file_count = 0;
+    int32_t reopened_scene_count = 0;
     godot::Array paths = message.get("paths", godot::Array());
     for (int i = 0; i < paths.size(); i++) {
         godot::String path = godot::String(paths[i]).strip_edges();
@@ -359,11 +382,91 @@ void FennaraLocalBridge::_handle_refresh_project_files(const godot::Dictionary &
             _send_json(response);
             return;
         }
-        fennara::notify_editor_filesystem("res://" + path);
+        godot::String resource_path = "res://" + path;
+        fennara::notify_editor_filesystem(resource_path);
+        godot::EditorInterface *editor =
+            godot::EditorInterface::get_singleton();
+        if (recovery_action == "undo" &&
+            !godot::FileAccess::file_exists(resource_path) &&
+            !is_scene_path(resource_path) && editor != nullptr) {
+            godot::FileSystemDock *filesystem_dock =
+                editor->get_file_system_dock();
+            if (filesystem_dock != nullptr) {
+                filesystem_dock->emit_signal("file_removed", resource_path);
+                closed_file_count++;
+                FLOG_TOOL(godot::String(
+                              "Recovery notified editor of deleted file path=") +
+                          resource_path);
+            }
+        }
+        if (!is_scene_path(resource_path)) {
+            continue;
+        }
+
+        if (editor == nullptr) {
+            continue;
+        }
+        if (recovery_action == "undo" &&
+            !godot::FileAccess::file_exists(resource_path)) {
+            godot::PackedStringArray open = editor->get_open_scenes();
+            godot::TypedArray<godot::Node> roots =
+                editor->get_open_scene_roots();
+            int32_t count = std::min(open.size(), roots.size());
+            for (int32_t scene_index = 0; scene_index < count;
+                 scene_index++) {
+                if (open[scene_index] != resource_path) {
+                    continue;
+                }
+                godot::Node *root = godot::Object::cast_to<godot::Node>(
+                    (godot::Object *)roots[scene_index]);
+                if (root == nullptr) {
+                    break;
+                }
+                editor->edit_node(root);
+                if (editor->get_edited_scene_root() != root) {
+                    FLOG_TOOL(godot::String(
+                                  "Recovery could not activate deleted scene path=") +
+                              resource_path);
+                    break;
+                }
+                if (editor->close_scene() == godot::OK) {
+                    if (find_path(_recovery_closed_scenes, resource_path) < 0) {
+                        _recovery_closed_scenes.append(resource_path);
+                    }
+                    closed_scene_count++;
+                    FLOG_TOOL(godot::String(
+                                  "Recovery closed deleted open scene path=") +
+                              resource_path);
+                }
+                break;
+            }
+        } else if (recovery_action == "redo" &&
+                   godot::FileAccess::file_exists(resource_path)) {
+            int32_t closed_index =
+                find_path(_recovery_closed_scenes, resource_path);
+            if (closed_index < 0) {
+                continue;
+            }
+            godot::PackedStringArray open = editor->get_open_scenes();
+            if (find_path(open, resource_path) < 0) {
+                editor->open_scene_from_path(resource_path);
+                open = editor->get_open_scenes();
+            }
+            if (find_path(open, resource_path) >= 0) {
+                _recovery_closed_scenes.remove_at(closed_index);
+                reopened_scene_count++;
+                FLOG_TOOL(godot::String(
+                              "Recovery reopened restored scene path=") +
+                          resource_path);
+            }
+        }
     }
 
     response["ok"] = true;
     response["refreshed_count"] = paths.size();
+    response["closed_scene_count"] = closed_scene_count;
+    response["closed_file_count"] = closed_file_count;
+    response["reopened_scene_count"] = reopened_scene_count;
     _send_json(response);
 }
 
