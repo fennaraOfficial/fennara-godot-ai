@@ -13,11 +13,18 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     println!("Installing Fennara");
     println!("project: {}", display_path(&project_dir));
 
-    if project_addon_dir(&project_dir).exists() {
+    let addon_dir = project_addon_dir(&project_dir);
+    if has_fennara_addon(&project_dir) {
         return Err(format!(
             "Fennara is already installed in this project. Run `fennara update` from {} instead.",
             display_path(&project_dir)
         ));
+    }
+    if addon_dir.exists() {
+        println!(
+            "addon: replacing incomplete installation at {}",
+            display_path(&addon_dir)
+        );
     }
 
     let (version, source) = match options.source_dir {
@@ -86,6 +93,7 @@ pub fn install_addon(project_dir: &Path, source: &Path) -> Result<(), String> {
     ensure_addon_source(source)?;
 
     let target = project_addon_dir(project_dir);
+    ensure_target_within_project(project_dir, &target)?;
     if target.exists() {
         fs::remove_dir_all(&target).map_err(|err| {
             format!(
@@ -99,6 +107,39 @@ pub fn install_addon(project_dir: &Path, source: &Path) -> Result<(), String> {
 
 pub fn project_addon_dir(project_dir: &Path) -> PathBuf {
     project_dir.join("addons").join("fennara")
+}
+
+fn ensure_target_within_project(project_dir: &Path, target: &Path) -> Result<(), String> {
+    let project_root = fs::canonicalize(project_dir).map_err(|err| {
+        format!(
+            "failed to resolve project path {}: {err}",
+            display_path(project_dir)
+        )
+    })?;
+    let mut existing = target;
+    while fs::symlink_metadata(existing).is_err() {
+        existing = existing.parent().ok_or_else(|| {
+            format!(
+                "failed to find an existing parent for addon path {}",
+                display_path(target)
+            )
+        })?;
+    }
+    let resolved = fs::canonicalize(existing).map_err(|err| {
+        format!(
+            "failed to resolve addon path {}: {err}",
+            display_path(existing)
+        )
+    })?;
+    if resolved.starts_with(&project_root) {
+        Ok(())
+    } else {
+        Err(format!(
+            "refusing to install Fennara because {} resolves outside the selected project {}",
+            display_path(target),
+            display_path(&project_root)
+        ))
+    }
 }
 
 struct InstallOptions {
@@ -214,4 +255,70 @@ fn copy_dir(source: &Path, target: &Path) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_dir(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        env::temp_dir().join(format!(
+            "fennara-project-install-{name}-{}-{nonce}",
+            std::process::id()
+        ))
+    }
+
+    #[test]
+    fn incomplete_addon_is_replaced_by_install() {
+        let root = test_dir("incomplete-addon");
+        let project = root.join("project");
+        let source = root.join("source");
+        let addon = project_addon_dir(&project);
+
+        fs::create_dir_all(&addon).expect("create incomplete addon");
+        fs::write(project.join("project.godot"), "[application]\n").expect("write project file");
+        fs::write(addon.join("partial.txt"), "stale").expect("write partial addon file");
+        fs::create_dir_all(&source).expect("create addon source");
+        fs::write(source.join("fennara.gdextension"), "[configuration]\n")
+            .expect("write addon manifest");
+
+        assert!(!has_fennara_addon(&project));
+        install_addon(&project, &source).expect("replace incomplete addon");
+        assert!(has_fennara_addon(&project));
+        assert!(!addon.join("partial.txt").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn addon_parent_symlink_cannot_escape_project() {
+        use std::os::unix::fs::symlink;
+
+        let root = test_dir("symlink-escape");
+        let project = root.join("project");
+        let outside_addons = root.join("outside-addons");
+        let outside_addon = outside_addons.join("fennara");
+        let source = root.join("source");
+
+        fs::create_dir_all(&project).expect("create project");
+        fs::write(project.join("project.godot"), "[application]\n").expect("write project file");
+        fs::create_dir_all(&outside_addon).expect("create outside addon");
+        fs::write(outside_addon.join("keep.txt"), "keep").expect("write outside marker");
+        symlink(&outside_addons, project.join("addons")).expect("link addons outside project");
+        fs::create_dir_all(&source).expect("create addon source");
+        fs::write(source.join("fennara.gdextension"), "[configuration]\n")
+            .expect("write addon manifest");
+
+        let error = install_addon(&project, &source).expect_err("reject escaped addon path");
+        assert!(error.contains("outside the selected project"));
+        assert!(outside_addon.join("keep.txt").is_file());
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

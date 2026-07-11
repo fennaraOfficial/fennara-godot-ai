@@ -78,6 +78,11 @@ builds for C# diagnostics and runtime preflight.
 addons/fennara
 ```
 
+If that directory exists from a failed or partial installation but does not
+contain `fennara.gdextension`, `fennara install` treats it as incomplete and
+replaces it with the selected addon package. A complete installation still
+directs you to `fennara update`.
+
 It also reads the release manifest, downloads and verifies the local Fennara
 runtime package into your user app-data folder, and writes project guidance for
 AI coding agents:
