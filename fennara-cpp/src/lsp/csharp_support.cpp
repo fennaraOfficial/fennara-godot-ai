@@ -240,8 +240,13 @@ godot::Dictionary inspect_project() {
         status["message"] = "No .csproj, .sln, or .slnx file found in this Godot project.";
     } else {
         if (selected.is_empty()) {
-            status["state"] = "multiple_csharp_projects";
-            status["message"] = "Multiple C# projects found, need selection.";
+            bool single_project = projects.size() == 1;
+            status["state"] = single_project
+                ? "unanchored_csharp_project"
+                : "multiple_csharp_projects";
+            status["message"] = single_project
+                ? "A C# project was found but could not be anchored to the Godot project; set `dotnet/project/project_directory` or place the project at the project root."
+                : "Multiple C# projects found, need selection.";
         } else {
             status["state"] = "ready";
             status["message"] =

@@ -1135,6 +1135,16 @@ void FennaraScriptDiagnosticsTool::_worker() {
                     error += "\n\nDotnet output tail:\n" + output_tail;
                 }
                 language_errors["csharp"] = error;
+            } else if ((bool)cs_build.get("build_succeeded", false) &&
+                       keys.is_empty()) {
+                godot::String project_path =
+                    cs_build.get("project_path", "C# project");
+                per_file[project_path] = empty_file_result();
+                godot::Dictionary request;
+                request["file_path"] = project_path;
+                request["resolved_path"] = project_path;
+                request["language"] = "csharp";
+                valid_requests.append(request);
             }
         }
 

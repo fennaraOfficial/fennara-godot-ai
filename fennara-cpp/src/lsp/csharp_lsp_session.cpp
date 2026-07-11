@@ -68,6 +68,11 @@ std::thread &warmup_thread() {
     return *thread;
 }
 
+std::mutex &warmup_thread_mutex() {
+    static std::mutex *mutex = new std::mutex();
+    return *mutex;
+}
+
 std::atomic_bool &shutting_down() {
     static std::atomic_bool *value = new std::atomic_bool(false);
     return *value;
@@ -201,11 +206,6 @@ godot::String ensure_generated_solution(const godot::String &project_path) {
     godot::DirAccess::make_dir_recursive_absolute(dir);
     godot::String solution_path = dir.path_join("fennara-csharp-lsp.sln");
 
-    godot::Ref<godot::FileAccess> file =
-        godot::FileAccess::open(solution_path, godot::FileAccess::WRITE);
-    if (file.is_null()) {
-        return "";
-    }
     godot::String project_name = project_path.get_file().get_basename();
     godot::OS *os = godot::OS::get_singleton();
     godot::String solution_project_path =
@@ -228,7 +228,26 @@ godot::String ensure_generated_solution(const godot::String &project_path) {
         "\t\t" + project_guid + ".Debug|Any CPU.ActiveCfg = Debug|Any CPU\r\n"
         "\t\t" + project_guid + ".Debug|Any CPU.Build.0 = Debug|Any CPU\r\n"
         "\tEndGlobalSection\r\nEndGlobal\r\n";
+
+    if (godot::FileAccess::file_exists(solution_path)) {
+        godot::Ref<godot::FileAccess> existing =
+            godot::FileAccess::open(solution_path, godot::FileAccess::READ);
+        if (existing.is_valid()) {
+            godot::String existing_content = existing->get_as_text();
+            existing->close();
+            if (existing_content == content) {
+                return solution_path;
+            }
+        }
+    }
+
+    godot::Ref<godot::FileAccess> file =
+        godot::FileAccess::open(solution_path, godot::FileAccess::WRITE);
+    if (file.is_null()) {
+        return "";
+    }
     file->store_string(content);
+    file->close();
     return solution_path;
 }
 
@@ -361,6 +380,10 @@ void launch_preparation_async(const godot::String &client_name,
         if (!warmup_in_progress().compare_exchange_strong(expected, true)) {
             return;
         }
+    }
+    std::lock_guard<std::mutex> thread_lock(warmup_thread_mutex());
+    if (shutting_down().load()) {
+        return;
     }
     if (warmup_thread().joinable()) {
         warmup_thread().join();
@@ -756,9 +779,13 @@ void shutdown_warm_server() {
     shutting_down().store(true);
     preparation_reserved().store(false);
     internal::request_abort();
-    if (warmup_thread().joinable() &&
-        warmup_thread().get_id() != std::this_thread::get_id()) {
-        warmup_thread().join();
+    {
+        std::lock_guard<std::mutex> thread_lock(warmup_thread_mutex());
+        if (warmup_thread().joinable() &&
+            warmup_thread().get_id() != std::this_thread::get_id()) {
+            warmup_thread().join();
+            warmup_thread() = std::thread();
+        }
     }
     std::lock_guard<std::mutex> lock(session_mutex());
     shutdown_warm_server_locked();

@@ -20,6 +20,8 @@
 namespace fennara::csharp_build {
 namespace {
 
+constexpr int kRetainedBuildLogRuns = 20;
+
 std::atomic_bool &background_build_running() {
     static std::atomic_bool *value = new std::atomic_bool(false);
     return *value;
@@ -43,6 +45,57 @@ std::mutex &build_coordinator_mutex() {
 std::atomic_uint64_t &build_log_sequence() {
     static std::atomic_uint64_t *sequence = new std::atomic_uint64_t(0);
     return *sequence;
+}
+
+bool remove_directory_recursive(const godot::String &path) {
+    godot::Ref<godot::DirAccess> dir = godot::DirAccess::open(path);
+    if (dir.is_null()) {
+        return false;
+    }
+
+    bool removed = true;
+    dir->list_dir_begin();
+    godot::String name = dir->get_next();
+    while (!name.is_empty()) {
+        if (name != "." && name != "..") {
+            godot::String child = path.path_join(name);
+            bool child_removed = dir->current_is_dir()
+                ? remove_directory_recursive(child)
+                : godot::DirAccess::remove_absolute(child) == godot::OK;
+            removed = child_removed && removed;
+        }
+        name = dir->get_next();
+    }
+    dir->list_dir_end();
+    return godot::DirAccess::remove_absolute(path) == godot::OK && removed;
+}
+
+void prune_build_log_runs(const godot::String &root, int retain_count) {
+    godot::Ref<godot::DirAccess> dir = godot::DirAccess::open(root);
+    if (dir.is_null()) {
+        return;
+    }
+
+    godot::PackedStringArray run_names;
+    dir->list_dir_begin();
+    godot::String name = dir->get_next();
+    while (!name.is_empty()) {
+        int separator = name.find("-");
+        if (dir->current_is_dir() && separator > 0 &&
+            name.left(separator).is_valid_int() &&
+            name.substr(separator + 1).is_valid_int()) {
+            run_names.append(name);
+        }
+        name = dir->get_next();
+    }
+    dir->list_dir_end();
+
+    run_names.sort();
+    int remove_count = run_names.size() - retain_count;
+    for (int i = 0; i < remove_count; i++) {
+        // Retention is best effort. A locked log must not fail diagnostics.
+        remove_directory_recursive(root.path_join(run_names[i]));
+    }
 }
 
 bool acquire_build_coordinator(
@@ -511,13 +564,15 @@ godot::Dictionary run_diagnostics_impl(const std::atomic_bool *cancelled,
         return result;
     }
 
-    godot::String logs_dir = project_root()
+    godot::String build_logs_root = project_root()
         .path_join(".godot")
         .path_join("fennara")
-        .path_join("build_logs")
-        .path_join(
-            godot::String::num_uint64(now_ms()) + "-" +
-            godot::String::num_uint64(build_log_sequence().fetch_add(1) + 1));
+        .path_join("build_logs");
+    godot::DirAccess::make_dir_recursive_absolute(build_logs_root);
+    prune_build_log_runs(build_logs_root, kRetainedBuildLogRuns - 1);
+    godot::String logs_dir = build_logs_root.path_join(
+        godot::String::num_uint64(now_ms()) + "-" +
+        godot::String::num_uint64(build_log_sequence().fetch_add(1) + 1));
     godot::DirAccess::make_dir_recursive_absolute(logs_dir);
 
     godot::String diagnostic_output_root = project_root()
