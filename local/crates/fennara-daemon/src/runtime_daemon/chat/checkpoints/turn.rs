@@ -79,6 +79,10 @@ impl PendingTurnCheckpoint {
         }
     }
 
+    pub(crate) fn capture_result(&self) -> Option<&CaptureResult> {
+        self.inner.as_ref().map(|inner| &inner.start_capture)
+    }
+
     pub(crate) async fn attach(mut self, ids: TurnCheckpointIds<'_>) -> TurnCheckpoint {
         let Some(inner) = self.inner.take() else {
             return TurnCheckpoint {

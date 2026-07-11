@@ -189,6 +189,10 @@
         <section class="turn-recovery-bar" aria-label="Turn recovery" aria-live="polite" aria-busy="false" data-turn-recovery hidden>
           <div class="turn-recovery-notice" data-turn-recovery-notice hidden>
             <span data-turn-recovery-notice-text></span>
+            <details class="turn-recovery-changed" data-turn-recovery-changed hidden>
+              <summary>Show changed files</summary>
+              <ul class="turn-recovery-paths turn-recovery-changed-paths" data-turn-recovery-changed-list></ul>
+            </details>
             <details class="turn-recovery-skipped" data-turn-recovery-skipped hidden>
               <summary>Show affected paths</summary>
               <ul class="turn-recovery-paths" data-turn-recovery-skipped-list></ul>
@@ -198,7 +202,6 @@
             <button type="button" data-turn-undo hidden>Undo</button>
             <button type="button" data-turn-redo hidden>Redo</button>
             <button type="button" data-turn-retry hidden>Retry</button>
-            <button type="button" data-turn-edit-retry hidden>Edit and retry</button>
             <button type="button" data-turn-resume hidden>Resume recovery</button>
           </div>
         </section>

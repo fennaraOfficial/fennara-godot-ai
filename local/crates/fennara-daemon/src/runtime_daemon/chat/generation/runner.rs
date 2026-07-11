@@ -130,6 +130,16 @@ where
     }
     state.cancelled_chats.write().await.remove(&chat_id);
     *active_chat_id = Some(chat_id.clone());
+    let checkpoint_start_started_at = Instant::now();
+    let _ = send_json(
+        sender,
+        json!({
+            "type": "chat_recovery_debug",
+            "request_id": request_id.clone(),
+            "event": "checkpoint_start_started"
+        }),
+    )
+    .await;
     let pending_turn_checkpoint =
         match checkpoints::begin_project_turn(scope.project_path.as_deref()).await {
             Ok(checkpoint) => checkpoint,
@@ -158,6 +168,21 @@ where
                 checkpoints::PendingTurnCheckpoint::unavailable(error.to_string())
             }
         };
+    let checkpoint_start_duration_ms = checkpoint_start_started_at.elapsed().as_millis() as i64;
+    let checkpoint_start_capture = pending_turn_checkpoint.capture_result();
+    let _ = send_json(
+        sender,
+        json!({
+            "type": "chat_recovery_debug",
+            "request_id": request_id.clone(),
+            "event": "checkpoint_start_finished",
+            "duration_ms": checkpoint_start_duration_ms,
+            "ok": checkpoint_start_capture.is_some_and(|capture| capture.snapshot_id.is_some()),
+            "coverage": checkpoint_start_capture.map(|capture| capture.coverage),
+            "unavailable_reason": checkpoint_start_capture.and_then(|capture| capture.unavailable_reason)
+        }),
+    )
+    .await;
     let active_project = state
         .projects
         .read()
@@ -1020,7 +1045,30 @@ where
         );
     };
 
-    if let Err(error) = turn_checkpoint.finish().await {
+    let checkpoint_finish_started_at = Instant::now();
+    let _ = send_json(
+        sender,
+        json!({
+            "type": "chat_recovery_debug",
+            "request_id": request_id.clone(),
+            "event": "checkpoint_finish_started"
+        }),
+    )
+    .await;
+    let checkpoint_finish_result = turn_checkpoint.finish().await;
+    let checkpoint_finish_duration_ms = checkpoint_finish_started_at.elapsed().as_millis() as i64;
+    let _ = send_json(
+        sender,
+        json!({
+            "type": "chat_recovery_debug",
+            "request_id": request_id.clone(),
+            "event": "checkpoint_finish_finished",
+            "duration_ms": checkpoint_finish_duration_ms,
+            "ok": checkpoint_finish_result.is_ok()
+        }),
+    )
+    .await;
+    if let Err(error) = checkpoint_finish_result {
         trace.warn(
             "checkpoint.finish_failed",
             "failed",

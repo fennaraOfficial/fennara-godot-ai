@@ -22,6 +22,13 @@
       chatTitle.textContent = chat?.title || "Scene Diagnostics";
     }
 
+    function showPendingChatTitle(text) {
+      if (!chatTitle || chatTitle.textContent.trim() !== "New chat") {
+        return;
+      }
+      chatTitle.textContent = titleFromPrompt(text);
+    }
+
     function renderChatList(chats) {
       if (!chatList) {
         return;
@@ -114,10 +121,19 @@
       closeDrawer,
       closeDrawerFromOutsideClick,
       renderChatList,
+      showPendingChatTitle,
       startNewChat,
       toggleDrawer,
       updateChatTitle,
     };
+  }
+
+  function titleFromPrompt(text) {
+    const title = String(text || "").trim().split(/\s+/).filter(Boolean).slice(0, 8).join(" ");
+    if (Array.from(title).length > 60) {
+      return Array.from(title).slice(0, 57).join("") + "...";
+    }
+    return title || "New chat";
   }
 
   window.FennaraChatNavigation = {

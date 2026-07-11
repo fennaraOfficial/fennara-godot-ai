@@ -245,6 +245,13 @@ public:
             this);
         debug_log("Web chat Windows debug binding result=" +
                   webview_error_string(bind_error));
+        webview_error_t recovery_log_bind_error = webview_bind(
+            static_cast<webview_t>(webview),
+            "__fennaraRecoveryLog",
+            &WindowsWebviewBackend::recovery_log_binding,
+            this);
+        debug_log("Web chat Windows recovery log binding result=" +
+                  webview_error_string(recovery_log_bind_error));
         webview_error_t init_error =
             webview_init(static_cast<webview_t>(webview), kWindowsLifecycleScript);
         debug_log("Web chat Windows lifecycle script init result=" +
@@ -405,6 +412,14 @@ private:
         self->debug_log_from_js(id, req);
     }
 
+    static void recovery_log_binding(const char *id, const char *req, void *arg) {
+        auto *self = static_cast<WindowsWebviewBackend *>(arg);
+        if (self == nullptr) {
+            return;
+        }
+        self->recovery_log_from_js(id, req);
+    }
+
     void debug_log_from_js(const char *id, const char *req) {
         debug_log("Web chat Windows JS lifecycle id=" +
                   godot::String(id != nullptr ? id : "") +
@@ -414,6 +429,14 @@ private:
                 webview_return(static_cast<webview_t>(webview), id, 0, "null");
             debug_log("Web chat Windows JS lifecycle return result=" +
                       webview_error_string(return_error));
+        }
+    }
+
+    void recovery_log_from_js(const char *id, const char *req) {
+        output_log("Chat recovery trace " +
+                   godot::String(req != nullptr ? req : ""));
+        if (webview != nullptr && id != nullptr) {
+            webview_return(static_cast<webview_t>(webview), id, 0, "null");
         }
     }
 

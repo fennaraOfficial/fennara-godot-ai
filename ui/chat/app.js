@@ -84,12 +84,13 @@
   const turnRecoveryBar = document.querySelector("[data-turn-recovery]");
   const turnRecoveryNotice = document.querySelector("[data-turn-recovery-notice]");
   const turnRecoveryNoticeText = document.querySelector("[data-turn-recovery-notice-text]");
+  const turnRecoveryChanged = document.querySelector("[data-turn-recovery-changed]");
+  const turnRecoveryChangedList = document.querySelector("[data-turn-recovery-changed-list]");
   const turnRecoverySkipped = document.querySelector("[data-turn-recovery-skipped]");
   const turnRecoverySkippedList = document.querySelector("[data-turn-recovery-skipped-list]");
   const turnUndoButton = document.querySelector("[data-turn-undo]");
   const turnRedoButton = document.querySelector("[data-turn-redo]");
   const turnRetryButton = document.querySelector("[data-turn-retry]");
-  const turnEditRetryButton = document.querySelector("[data-turn-edit-retry]");
   const turnResumeButton = document.querySelector("[data-turn-resume]");
   const turnRecoveryConfirm = document.querySelector("[data-turn-recovery-confirm]");
   const turnRecoveryConfirmText = document.querySelector("[data-turn-recovery-confirm-text]");
@@ -446,7 +447,10 @@
       requestNativePastedImage,
       chatWsUrl,
       appendSystem,
-      onMessageSubmitted: () => turnRecoveryControls?.handleReplacementSubmitted(),
+      onMessageSubmitted: (payload) => {
+        chatNavigation?.showPendingChatTitle(payload?.message);
+        turnRecoveryControls?.handleReplacementSubmitted();
+      },
     },
   });
 
@@ -455,12 +459,13 @@
       bar: turnRecoveryBar,
       notice: turnRecoveryNotice,
       noticeText: turnRecoveryNoticeText,
+      changedDetails: turnRecoveryChanged,
+      changedList: turnRecoveryChangedList,
       skippedDetails: turnRecoverySkipped,
       skippedList: turnRecoverySkippedList,
       undoButton: turnUndoButton,
       redoButton: turnRedoButton,
       retryButton: turnRetryButton,
-      editRetryButton: turnEditRetryButton,
       resumeButton: turnResumeButton,
       confirmDialog: turnRecoveryConfirm,
       confirmText: turnRecoveryConfirmText,
@@ -1472,6 +1477,10 @@
       addContextSnippet(message);
       return;
     }
+    if (message.type === "chat_recovery_debug") {
+      turnRecoveryControls?.handleDebugEvent(message);
+      return;
+    }
     if (message.type === "project_file_opened") {
       if (message.ok === false || message.error) {
         appendSystem(message.error || "Could not open that project file.");
@@ -1560,6 +1569,7 @@
       return;
     }
     if (message.type === "chat_response") {
+      turnRecoveryControls?.handleGenerationSettled(message.request_id || "");
       clearSystemStatus();
       updateAssistantText(message.response || "");
       transcriptRenderer.flushAssistantRender();
@@ -1654,6 +1664,7 @@
       messages,
       message.turn_recovery,
       checkpointWarnings.get(activeChatId) || "",
+      message.request_id || "",
     );
     if (message.recovery_resume_refresh?.ok === false) {
       appendSystem(
@@ -1668,9 +1679,11 @@
     if (!activeChatId) {
       return false;
     }
+    const requestId = nextRequestId(prefix);
+    turnRecoveryControls?.handleRefreshRequested(prefix, requestId);
     return send({
       type: "open_chat",
-      request_id: nextRequestId(prefix),
+      request_id: requestId,
       chat_id: activeChatId,
     });
   }
