@@ -74,6 +74,8 @@ fn explicit_version_mismatch_is_rejected_before_download() {
     fs::write(project.join("project.godot"), "[application]\n").unwrap();
     fs::write(addon.join("VERSION"), "1.2.3\n").unwrap();
     fs::write(&library, "store library").unwrap();
+    fs::create_dir_all(addon.join("ai")).unwrap();
+    fs::write(addon.join("ai/guidelines.md"), "store guidance\n").unwrap();
     fs::write(
         addon.join("fennara.gdextension"),
         format!(
@@ -99,6 +101,44 @@ fn explicit_version_mismatch_is_rejected_before_download() {
     assert!(stderr.contains("[FEN-INSTALL-PROJECT-INVALID]"));
     assert!(stderr.contains("existing project addon is version 1.2.3"));
     assert_eq!(fs::read_to_string(library).unwrap(), "store library");
+}
+
+#[test]
+fn source_conflict_with_existing_addon_has_project_invalid_code() {
+    let root = test_root("existing-addon-source-conflict");
+    let project = root.join("project");
+    let addon = project.join("addons").join("fennara");
+    let library = addon.join("bin").join("fennara-test-library");
+    fs::create_dir_all(library.parent().unwrap()).unwrap();
+    fs::create_dir_all(addon.join("ai")).unwrap();
+    fs::write(project.join("project.godot"), "[application]\n").unwrap();
+    fs::write(addon.join("VERSION"), "1.2.3\n").unwrap();
+    fs::write(&library, "store library").unwrap();
+    fs::write(addon.join("ai/guidelines.md"), "store guidance\n").unwrap();
+    fs::write(
+        addon.join("fennara.gdextension"),
+        format!(
+            "[libraries]\n{}.editor.{} = \"res://addons/fennara/bin/fennara-test-library\"\n",
+            std::env::consts::OS,
+            fennara_arch()
+        ),
+    )
+    .unwrap();
+
+    let output = run(
+        &root,
+        [
+            "install",
+            "--project",
+            path_arg(&project),
+            "--source",
+            path_arg(&root),
+        ],
+    );
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("[FEN-INSTALL-PROJECT-INVALID]"));
+    assert!(stderr.contains("--source cannot be used"));
 }
 
 #[test]

@@ -44,11 +44,33 @@ fn redact_url_queries(text: &str) -> String {
             .map(|offset| url_start + offset)
             .unwrap_or(text.len());
         let url = &text[url_start..url_end];
-        if let Some(query_start) = url.find('?') {
-            output.push_str(&url[..=query_start]);
-            output.push_str("<redacted>");
+        let scheme_end = url.find("://").map(|index| index + 3).unwrap_or(0);
+        let authority_end = url[scheme_end..]
+            .find(['/', '?', '#'])
+            .map(|offset| scheme_end + offset)
+            .unwrap_or(url.len());
+        let authority = &url[scheme_end..authority_end];
+        if let Some(userinfo_end) = authority.rfind('@') {
+            output.push_str(&url[..scheme_end]);
+            output.push_str("<redacted>@");
+            output.push_str(&url[scheme_end + userinfo_end + 1..authority_end]);
         } else {
-            output.push_str(url);
+            output.push_str(&url[..authority_end]);
+        }
+        if let Some(query_start) = url[authority_end..].find('?') {
+            output.push_str(&url[authority_end..authority_end + query_start + 1]);
+            output.push_str("<redacted>");
+        } else if let Some(fragment_start) = url[authority_end..].find('#') {
+            let fragment_start = authority_end + fragment_start;
+            output.push_str(&url[authority_end..=fragment_start]);
+            let fragment = &url[fragment_start + 1..];
+            if contains_secret_assignment(fragment) {
+                output.push_str("<redacted>");
+            } else {
+                output.push_str(fragment);
+            }
+        } else {
+            output.push_str(&url[authority_end..]);
         }
         cursor = url_end;
     }
@@ -61,21 +83,46 @@ pub(super) fn replace_path(
     replacement: &str,
     case_insensitive: bool,
 ) -> String {
-    if !case_insensitive {
-        return text.replace(path, replacement);
+    if path.is_empty() {
+        return text.to_string();
     }
-    let lower_text = text.to_ascii_lowercase();
-    let lower_path = path.to_ascii_lowercase();
+    let normalized_text = text.replace('\\', "/");
+    let normalized_path = path.replace('\\', "/");
+    let search_text = if case_insensitive {
+        normalized_text.to_ascii_lowercase()
+    } else {
+        normalized_text
+    };
+    let search_path = if case_insensitive {
+        normalized_path.to_ascii_lowercase()
+    } else {
+        normalized_path
+    };
     let mut output = String::with_capacity(text.len());
     let mut cursor = 0;
-    while let Some(offset) = lower_text[cursor..].find(&lower_path) {
+    while let Some(offset) = search_text[cursor..].find(&search_path) {
         let start = cursor + offset;
         output.push_str(&text[cursor..start]);
         output.push_str(replacement);
-        cursor = start + path.len();
+        cursor = start + search_path.len();
     }
     output.push_str(&text[cursor..]);
     output
+}
+
+fn contains_secret_assignment(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    [
+        "api_key=",
+        "apikey=",
+        "access_token=",
+        "auth_token=",
+        "password=",
+        "secret=",
+        "token=",
+    ]
+    .iter()
+    .any(|key| lower.contains(key))
 }
 
 fn redact_bearer_tokens(text: &str) -> String {

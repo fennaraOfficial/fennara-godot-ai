@@ -99,10 +99,12 @@ void FirstRunSetup::_process(double delta) {
 }
 
 bool FirstRunSetup::is_setup_required() const {
+#ifdef FENNARA_SETUP_TEST_HOOKS
     godot::OS *os = godot::OS::get_singleton();
     if (os != nullptr && os->get_environment("FENNARA_FORCE_FIRST_RUN_SETUP") == "1") {
         return true;
     }
+#endif
     return !_installed_components_match();
 }
 
@@ -169,8 +171,12 @@ void FirstRunSetup::start(const godot::String &next_project_path,
 
 void FirstRunSetup::_continue_start() {
     godot::OS *os = godot::OS::get_singleton();
+#ifdef FENNARA_SETUP_TEST_HOOKS
     const bool forced =
         os != nullptr && os->get_environment("FENNARA_FORCE_FIRST_RUN_SETUP") == "1";
+#else
+    const bool forced = false;
+#endif
     if (!forced && _installed_components_match()) {
         step = Step::Succeeded;
         _release_lock();
@@ -184,6 +190,15 @@ void FirstRunSetup::_continue_start() {
         return;
     }
 
+#ifdef FENNARA_SETUP_TEST_HOOKS
+    if (os != nullptr && os->get_environment("FENNARA_SETUP_TEST_SUCCESS") == "1") {
+        operation_id = "install-test-success";
+        operation_state["operation_id"] = operation_id;
+        operation_state["phase"] = "succeeded";
+        operation_state["updated_at_unix_ms"] = 1;
+        _apply_operation_state(operation_state);
+        return;
+    }
     const godot::String local_cli =
         os != nullptr ? os->get_environment("FENNARA_SETUP_CLI_PATH").strip_edges()
                       : godot::String();
@@ -200,6 +215,7 @@ void FirstRunSetup::_continue_start() {
         _launch_installer();
         return;
     }
+#endif
     if (!_prepare_download_paths()) {
         return;
     }

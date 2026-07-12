@@ -347,19 +347,36 @@ fn install_from_assets(
 
 pub fn activate_package(version: &str) -> Result<ActivationReceipt, String> {
     let layout = AppLayout::detect()?;
-    if !package_complete(&layout, version) {
-        return Err(format!(
-            "cannot activate incomplete Fennara package {version} at {}",
-            display_path(&layout.versions_dir.join(version))
+    activate_package_at(&layout, version)
+}
+
+pub(crate) fn activate_package_at(
+    layout: &AppLayout,
+    version: &str,
+) -> Result<ActivationReceipt, String> {
+    if !package_complete(layout, version) {
+        return Err(operation::failure(
+            FailureClass::ValidationFailed,
+            format!(
+                "cannot activate incomplete Fennara package {version} at {}",
+                display_path(&layout.versions_dir.join(version))
+            ),
         ));
     }
     let previous_manifest = fs::read(&layout.current_manifest_path).ok();
-    write_manifest(&layout, version)?;
+    write_manifest(layout, version)?;
     Ok(ActivationReceipt { previous_manifest })
 }
 
 pub fn restore_activation(receipt: ActivationReceipt) -> Result<(), String> {
     let layout = AppLayout::detect()?;
+    restore_activation_at(&layout, receipt)
+}
+
+pub(crate) fn restore_activation_at(
+    layout: &AppLayout,
+    receipt: ActivationReceipt,
+) -> Result<(), String> {
     match receipt.previous_manifest {
         Some(previous) => fs::write(&layout.current_manifest_path, previous).map_err(|error| {
             format!(

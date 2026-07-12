@@ -211,9 +211,14 @@ godot::String FirstRunSetup::_diagnostic_report() const {
 }
 
 bool FirstRunSetup::_test_failure(const godot::String &name) const {
+#ifdef FENNARA_SETUP_TEST_HOOKS
     godot::OS *os = godot::OS::get_singleton();
     return os != nullptr &&
            os->get_environment("FENNARA_SETUP_TEST_FAILURE").strip_edges().to_lower() == name;
+#else
+    (void)name;
+    return false;
+#endif
 }
 
 } // namespace fennara

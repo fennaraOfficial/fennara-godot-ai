@@ -10,6 +10,8 @@ struct TestDependencies {
     fail_second_check: bool,
     manifest_path: Option<PathBuf>,
     ensure_error: Option<String>,
+    webview_error: Option<String>,
+    activation_calls: usize,
 }
 
 impl InstallDependencies for TestDependencies {
@@ -30,6 +32,7 @@ impl InstallDependencies for TestDependencies {
     }
 
     fn activate_package(&mut self, _version: &str) -> Result<Self::Activation, String> {
+        self.activation_calls += 1;
         let Some(path) = &self.manifest_path else {
             return Ok(None);
         };
@@ -53,7 +56,10 @@ impl InstallDependencies for TestDependencies {
     }
 
     fn check_webview(&mut self) -> Result<(), String> {
-        Ok(())
+        match self.webview_error.take() {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
     }
 }
 
@@ -161,6 +167,59 @@ fn daemon_start_failure_restores_previous_manifest() {
 
     assert!(error.contains("daemon failed to start"));
     assert_eq!(fs::read(&manifest).unwrap(), previous);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn webview_failure_happens_before_runtime_activation() {
+    let root = test_root("webview-failure");
+    let project = root.join("project");
+    let manifest = root.join("current.json");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(&manifest, "{\"version\":\"1.2.2\"}\n").unwrap();
+    let previous = fs::read(&manifest).unwrap();
+    let mut dependencies = TestDependencies {
+        manifest_path: Some(manifest.clone()),
+        webview_error: Some("webview prerequisite failed".to_string()),
+        ..Default::default()
+    };
+
+    let error = install_with(
+        &project,
+        ExistingAddon {
+            version: "1.2.3".to_string(),
+        },
+        None,
+        &mut dependencies,
+    )
+    .unwrap_err();
+
+    assert!(error.contains("webview prerequisite failed"));
+    assert_eq!(dependencies.activation_calls, 0);
+    assert_eq!(fs::read(&manifest).unwrap(), previous);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn guidance_failure_happens_before_runtime_activation() {
+    let root = test_root("guidance-failure");
+    let project = root.join("project-file");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(&project, "blocks project guidance").unwrap();
+    let mut dependencies = TestDependencies::default();
+
+    let error = install_with(
+        &project,
+        ExistingAddon {
+            version: "1.2.3".to_string(),
+        },
+        None,
+        &mut dependencies,
+    )
+    .unwrap_err();
+
+    assert!(error.contains("failed to write"));
+    assert_eq!(dependencies.activation_calls, 0);
     fs::remove_dir_all(root).unwrap();
 }
 

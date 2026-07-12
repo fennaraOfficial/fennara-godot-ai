@@ -67,7 +67,7 @@ godot::PackedStringArray build_log_roots() {
         }
     } else {
         const godot::String xdg_data_home = os->get_environment("XDG_DATA_HOME");
-        if (!xdg_data_home.is_empty()) {
+        if (!xdg_data_home.is_empty() && xdg_data_home.is_absolute_path()) {
             append_if_present(roots, xdg_data_home.path_join("godot").path_join("mono").path_join("build_logs"));
         }
         const godot::String home = os->get_environment("HOME");

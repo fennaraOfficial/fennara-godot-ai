@@ -34,12 +34,20 @@ pub fn inspect(project_dir: &Path) -> Result<Option<ExistingAddon>, String> {
     }
 
     let library_path = current_library_path(&addon_dir, &manifest_path)?;
-    if !library_path.exists() {
+    if !library_path.is_file() {
         return Err(format!(
             "the existing Fennara addon is missing its {} {} editor library at {}",
             platform_name(),
             arch_name(),
             display_path(&library_path)
+        ));
+    }
+
+    let guidelines_path = addon_dir.join("ai").join("guidelines.md");
+    if !guidelines_path.is_file() {
+        return Err(format!(
+            "the existing Fennara addon is missing its guidance file at {}",
+            display_path(&guidelines_path)
         ));
     }
 
@@ -155,10 +163,36 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn rejects_directory_in_place_of_current_library() {
+        let root = test_root("library-directory");
+        let project = root.join("project");
+        let addon = write_addon(&project, Some("1.2.3"), false);
+        fs::create_dir_all(addon.join("bin/fennara-test-library")).unwrap();
+
+        let error = inspect(&project).unwrap_err();
+        assert!(error.contains("missing its"));
+        assert!(error.contains("editor library"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_existing_addon_without_guidance() {
+        let root = test_root("missing-guidance");
+        let project = root.join("project");
+        let addon = write_addon(&project, Some("1.2.3"), true);
+        fs::remove_file(addon.join("ai/guidelines.md")).unwrap();
+
+        let error = inspect(&project).unwrap_err();
+        assert!(error.contains("missing its guidance file"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
     fn write_addon(project: &Path, version: Option<&str>, include_library: bool) -> PathBuf {
         let addon = project_addon_dir(project);
         let library_relative = PathBuf::from("bin").join("fennara-test-library");
         fs::create_dir_all(addon.join("bin")).unwrap();
+        fs::create_dir_all(addon.join("ai")).unwrap();
         let key = format!("{}.editor.{}", platform_name(), arch_name());
         fs::write(
             addon.join("fennara.gdextension"),
@@ -174,6 +208,7 @@ mod tests {
         if include_library {
             fs::write(addon.join(library_relative), "library").unwrap();
         }
+        fs::write(addon.join("ai/guidelines.md"), "store guidance\n").unwrap();
         addon
     }
 

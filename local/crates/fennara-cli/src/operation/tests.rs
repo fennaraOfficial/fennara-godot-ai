@@ -109,6 +109,28 @@ fn url_query_redaction_preserves_whitespace_and_newlines() {
 }
 
 #[test]
+fn url_redaction_removes_userinfo_and_token_fragments() {
+    let input =
+        "https://alice:secret@example.com/path https://example.com/callback#access_token=secret";
+    let sanitized = sanitize_text(input, std::iter::empty::<(&PathBuf, &'static str)>());
+    assert_eq!(
+        sanitized,
+        "https://<redacted>@example.com/path https://example.com/callback#<redacted>"
+    );
+    assert!(!sanitized.contains("alice"));
+    assert!(!sanitized.contains("secret"));
+}
+
+#[test]
+fn path_redaction_accepts_mixed_separators() {
+    let input = r"project C:\Users\alice/project\private";
+    assert_eq!(
+        replace_path(input, r"C:\Users\alice\project\private", "<project>", true,),
+        "project <project>"
+    );
+}
+
+#[test]
 fn path_replacement_can_follow_case_sensitive_or_insensitive_rules() {
     let input = "native C:\\Users\\Alice\\Fennara slash c:/users/alice/fennara";
     let native_replaced = replace_path(input, "c:\\users\\alice\\fennara", "<data>", true);

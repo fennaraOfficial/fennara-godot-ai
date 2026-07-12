@@ -146,7 +146,7 @@ fn app_dir() -> Result<PathBuf, String> {
 
 #[cfg(any(all(unix, not(target_os = "macos")), test))]
 fn linux_app_dir(xdg_data_home: Option<PathBuf>, home: Option<PathBuf>) -> Result<PathBuf, String> {
-    if let Some(path) = xdg_data_home.filter(|path| !path.as_os_str().is_empty()) {
+    if let Some(path) = xdg_data_home.filter(|path| path.to_string_lossy().starts_with('/')) {
         return Ok(path.join("fennara"));
     }
     home.filter(|path| !path.as_os_str().is_empty())
@@ -180,6 +180,18 @@ mod tests {
     fn linux_layout_falls_back_to_home() {
         assert_eq!(
             linux_app_dir(None, Some(PathBuf::from("/home/user"))).unwrap(),
+            PathBuf::from("/home/user/.local/share/fennara")
+        );
+    }
+
+    #[test]
+    fn linux_layout_ignores_relative_xdg_data_home() {
+        assert_eq!(
+            linux_app_dir(
+                Some(PathBuf::from("relative/data")),
+                Some(PathBuf::from("/home/user")),
+            )
+            .unwrap(),
             PathBuf::from("/home/user/.local/share/fennara")
         );
     }

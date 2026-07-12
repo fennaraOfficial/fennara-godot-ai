@@ -56,6 +56,15 @@ func _initialize() -> void:
 
 	OS.set_environment("FENNARA_SETUP_CLI_PATH", "")
 	OS.set_environment("FENNARA_SETUP_TEST_FAILURE", "")
+	OS.set_environment("FENNARA_SETUP_TEST_SUCCESS", "1")
+	var success_signal_seen := [false]
+	setup.setup_succeeded.connect(func() -> void: success_signal_seen[0] = true)
+	setup.retry()
+	assert(setup.has_succeeded())
+	assert(setup.get_operation_id() == "install-test-success")
+	assert(success_signal_seen[0])
+
+	OS.set_environment("FENNARA_SETUP_TEST_SUCCESS", "")
 	OS.set_environment("FENNARA_FORCE_FIRST_RUN_SETUP", "")
 	OS.set_environment("LOCALAPPDATA", original_local_app_data)
 	setup.queue_free()

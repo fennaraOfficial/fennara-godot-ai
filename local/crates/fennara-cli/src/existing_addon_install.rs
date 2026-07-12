@@ -97,12 +97,18 @@ fn install_with(
     dependencies
         .check_daemon(&addon.version)
         .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
-    let activation = dependencies.activate_package(&addon.version)?;
-
     operation::phase(
         Phase::Validating,
-        "Starting and checking the matching daemon",
+        "Checking project and platform prerequisites",
     )?;
+    dependencies
+        .check_webview()
+        .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
+    println!("guidance: writing project AGENTS.md");
+    project_guidance::write_project_files(project_dir)
+        .map_err(|error| operation::failure(FailureClass::StageFilesystem, error))?;
+
+    let activation = dependencies.activate_package(&addon.version)?;
     let daemon_state = match dependencies.ensure_daemon(&addon.version) {
         Ok(state) => state,
         Err(error) => {
@@ -123,10 +129,6 @@ fn install_with(
         }
         ReadyState::Started => println!("daemon: started version {}", addon.version),
     }
-
-    println!("guidance: writing project AGENTS.md");
-    project_guidance::write_project_files(project_dir)?;
-    dependencies.check_webview()?;
 
     println!("Installed matching Fennara components");
     println!("version: {}", addon.version);

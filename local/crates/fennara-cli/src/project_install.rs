@@ -24,7 +24,10 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
         .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?
     {
         if options.source_dir.is_some() {
-            return Err("--source cannot be used when adopting an existing project addon".into());
+            return Err(operation::failure(
+                FailureClass::ProjectInvalid,
+                "--source cannot be used when adopting an existing project addon",
+            ));
         }
         return existing_addon_install::run(&project_dir, existing, options.version.as_deref());
     }

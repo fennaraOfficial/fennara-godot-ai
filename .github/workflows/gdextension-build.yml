@@ -163,7 +163,11 @@ jobs:
       - name: Test native first-run setup states
         if: steps.source.outputs.available == 'true' && matrix.platform == 'windows'
         shell: pwsh
+        working-directory: fennara-cpp
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/fennara-cpp/.scons_cache
         run: |
+          scons platform=windows target=editor fennara_setup_tests=yes
           & "${{ steps.godot.outputs.console }}" `
             --headless `
             --path "${{ github.workspace }}\godot_demo" `

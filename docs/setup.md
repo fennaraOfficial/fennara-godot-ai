@@ -132,6 +132,8 @@ addons/fennara/ai/guidelines.md
 ```
 
 If `AGENTS.md` already exists, Fennara only updates the generated block between its own markers.
+Existing-addon adoption may also update an existing project `.gitignore` with
+Fennara-managed local state entries.
 
 ### Built-In Chat Webview Prerequisites
 
