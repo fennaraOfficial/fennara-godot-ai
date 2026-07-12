@@ -54,6 +54,27 @@ fn writes_durable_state_and_jsonl_events() {
 }
 
 #[test]
+fn caller_supplied_operation_id_is_used_exactly() {
+    let layout = test_layout("caller-id");
+    layout.ensure_base_dirs().unwrap();
+    let journal = OperationJournal::create_with_id(
+        layout,
+        OperationKind::Install,
+        None,
+        "1.2.3",
+        "install-123-godot-456",
+    )
+    .unwrap();
+
+    assert_eq!(journal.id, "install-123-godot-456");
+    assert_eq!(
+        journal.state_path.file_name().unwrap(),
+        "install-123-godot-456.json"
+    );
+    fs::remove_dir_all(&journal.app_dir).unwrap();
+}
+
+#[test]
 fn sanitizes_paths_tokens_and_url_queries() {
     let layout = test_layout("sanitize");
     layout.ensure_base_dirs().unwrap();

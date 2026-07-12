@@ -90,11 +90,20 @@ pub fn begin(kind: OperationKind, args: &[String]) -> Result<(), String> {
     layout.ensure_base_dirs()?;
     let project_dir = project_dir_for_operation(kind, args);
     let requested_version = option_value(args, "--version").unwrap_or_else(|| "latest".into());
+    let requested_operation_id = option_value(args, "--operation-id");
     let resume_id = env::var(OPERATION_ID_ENV)
         .ok()
         .filter(|value| !value.is_empty());
     let journal = if let Some(id) = resume_id {
         OperationJournal::resume(layout, &id, project_dir.as_deref())?
+    } else if let Some(id) = requested_operation_id {
+        OperationJournal::create_with_id(
+            layout,
+            kind,
+            project_dir.as_deref(),
+            &requested_version,
+            &id,
+        )?
     } else {
         OperationJournal::create(layout, kind, project_dir.as_deref(), &requested_version)?
     };

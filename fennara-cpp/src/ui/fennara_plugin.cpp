@@ -1,4 +1,5 @@
 #include "fennara/ui/fennara_plugin.hpp"
+#include "fennara/app_paths.hpp"
 #include "fennara/csharp/build.hpp"
 #include "fennara/local_bridge.hpp"
 #include "fennara/logger.hpp"
@@ -68,7 +69,11 @@ void FennaraPlugin::_enter_tree() {
     script_context_menu_plugin->set_local_bridge(local_bridge);
     add_context_menu_plugin(godot::EditorContextMenuPlugin::CONTEXT_SLOT_SCRIPT_EDITOR_CODE,
                             script_context_menu_plugin);
-    update_notice::check_once();
+    if (godot::FileAccess::file_exists(app_paths::daemon_binary_path())) {
+        update_notice::check_once();
+    } else {
+        FLOG_SYS("Update check deferred until first-run setup is complete");
+    }
 
     _ensure_runtime_helper_autoload();
 

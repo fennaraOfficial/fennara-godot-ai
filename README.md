@@ -56,9 +56,28 @@ The built-in chat dock uses the platform webview: Microsoft Edge WebView2 on Win
 
 ## Quick Start
 
-Install the CLI and Godot addon first, then choose the MCP app path, the built-in chat path, or both.
+Install the Fennara addon from the Godot Asset Library or copy its
+`addons/fennara/` folder into the project. Open the project and select the
+Fennara dock. On a clean machine the native setup panel appears before chat:
 
-### 1. Install The CLI
+```text
+Fennara needs to finish setup.
+
+[Set Up Fennara]
+```
+
+The panel downloads and verifies the exact CLI for the addon version. The CLI
+then installs the matching daemon, MCP server, local runtimes, project guidance,
+and optional shared webview runtime. The existing addon files remain unchanged.
+
+After setup, choose the MCP app path, the built-in chat path, or both.
+
+### Terminal Setup Alternative
+
+Use the terminal flow when native first-run setup cannot start or when you are
+preparing a project non-interactively.
+
+#### 1. Install The CLI
 
 Windows:
 
@@ -78,7 +97,7 @@ Check the install:
 fennara doctor
 ```
 
-### 2. Add Fennara To A Godot Project
+#### 2. Add Fennara To A Godot Project
 
 Run this from the Godot project folder:
 

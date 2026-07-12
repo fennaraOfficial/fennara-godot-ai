@@ -12,7 +12,35 @@ This guide walks through a normal Fennara setup from a clean machine to a Godot 
 - Optional for embedded Windows chat: Microsoft Edge WebView2 Runtime
 - Windows troubleshooting only: Microsoft Visual C++ Redistributable 2015-2022 x64 if the Fennara CLI/runtime fails to start with missing `VCRUNTIME` / `MSVCP` DLLs or exit code `-1073741515`
 
-## 1. Install The Fennara CLI
+## Default: Set Up From Godot
+
+Install the Fennara addon from the Godot Asset Library or copy its
+`addons/fennara/` folder into the project. Open the project and select the
+Fennara dock. If the matching local components are missing, Fennara shows a
+native setup panel that does not depend on chat, the daemon, or a webview.
+
+Select **Set Up Fennara**. The addon reads its own `VERSION`, downloads the
+release manifest and matching CLI archive, verifies the archive SHA-256, and
+installs the CLI under Fennara app data. It then runs the same
+`fennara install --project <path> --version <addon-version>` flow used by the
+terminal installer.
+
+The panel follows the CLI's durable operation state and shows installation
+progress. A failure includes a stable error code, operation ID when one was
+created, **Retry**, **Copy Report**, and **Open Logs** actions. Copied reports
+use the sanitized operation state and do not include API keys, chat content, or
+project files.
+
+The bootstrap only installs the exact verified CLI and then delegates the rest
+of setup to that CLI. It does not place the daemon, MCP server, browser runtime,
+or updater inside the project addon.
+
+## Terminal Setup Alternative
+
+Use this flow for non-interactive setup or when the native setup panel cannot
+download or launch the CLI.
+
+### 1. Install The Fennara CLI
 
 Windows:
 
@@ -47,7 +75,7 @@ The install script installs the small outer CLI. In normal releases,
 Rerun the install script only when CLI self-update is not available for the
 selected release or install location.
 
-## 2. Install Fennara In A Godot Project
+### 2. Install Fennara In A Godot Project
 
 Run this inside the Godot project folder:
 

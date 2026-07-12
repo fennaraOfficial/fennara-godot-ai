@@ -45,6 +45,35 @@ impl OperationJournal {
             kind.as_str().replace('_', "-"),
             std::process::id()
         );
+        Self::create_named(layout, kind, project_dir, requested_version, id, now)
+    }
+
+    pub(super) fn create_with_id(
+        layout: AppLayout,
+        kind: OperationKind,
+        project_dir: Option<&Path>,
+        requested_version: &str,
+        id: &str,
+    ) -> Result<Self, String> {
+        validate_operation_id(id)?;
+        Self::create_named(
+            layout,
+            kind,
+            project_dir,
+            requested_version,
+            id.to_string(),
+            unix_ms(),
+        )
+    }
+
+    fn create_named(
+        layout: AppLayout,
+        kind: OperationKind,
+        project_dir: Option<&Path>,
+        requested_version: &str,
+        id: String,
+        now: u128,
+    ) -> Result<Self, String> {
         let state_path = layout.operations_dir.join(format!("{id}.json"));
         let log_path = layout.operation_logs_dir.join(format!("{id}.jsonl"));
         let log_file = OpenOptions::new()

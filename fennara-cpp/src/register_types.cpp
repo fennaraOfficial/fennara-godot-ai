@@ -18,10 +18,12 @@
 #include "fennara/tools/runtime_session.hpp"
 #include "fennara/tools/scrape_editor.hpp"
 #include "fennara/snapshot_manager.hpp"
+#include "fennara/setup/first_run_setup.hpp"
 #include "fennara/warning_capture.hpp"
 
 #include "fennara/ui/dock.hpp"
 #include "fennara/ui/fennara_plugin.hpp"
+#include "fennara/ui/setup_panel.hpp"
 #include "fennara/ui/script_context_menu.hpp"
 
 #include <gdextension_interface.h>
@@ -52,8 +54,10 @@ void initialize_fennara(godot::ModuleInitializationLevel p_level) {
         godot::ClassDB::register_class<fennara::FennaraLocalBridge>();
         godot::ClassDB::register_class<fennara::FennaraSnapshotManager>();
         godot::ClassDB::register_class<fennara::FennaraWarningCapture>();
+        godot::ClassDB::register_class<fennara::FirstRunSetup>();
 
         godot::ClassDB::register_class<fennara::FennaraDock>();
+        godot::ClassDB::register_class<fennara::FirstRunSetupPanel>();
     }
 
     if (p_level == godot::MODULE_INITIALIZATION_LEVEL_EDITOR) {

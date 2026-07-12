@@ -56,6 +56,8 @@ This is the quick map for contributors and coding agents working in this reposit
 | `fennara-cpp/SConstruct` | GDExtension build entrypoint. |
 | `fennara-cpp/include/` | Public C++ headers. |
 | `fennara-cpp/src/` | C++ implementation. |
+| `fennara-cpp/src/setup/` | Native first-run setup state, release-manifest CLI bootstrap, hash verification, CLI launch, and durable operation progress reader. |
+| `fennara-cpp/src/ui/setup_panel.cpp` | Webview-independent first-run setup panel with progress, retry, logs, and sanitized report actions. |
 | `fennara-cpp/vendor/cef/` | Official CEF 139 header snapshot used by the Linux OSR bridge. Runtime binaries stay outside the addon. |
 | `fennara-cpp/src/ui/webview_host*` | Native in-editor chat webview host and platform backends. |
 | `fennara-cpp/src/ui/linux_cef_runtime.*` | Linux-only shared CEF runtime discovery, marker validation, and dynamic `libcef.so` loader foundation. |
@@ -76,6 +78,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `godot_demo/addons/fennara/bin/` | Built platform libraries. |
 | `godot_demo/addons/fennara/dist/` | Packaged web UI assets used by the in-editor chat webview. |
 | `godot_demo/addons/fennara/runtime/` | Synced packaged copy of `runtime/` shipped inside the addon. |
+| `godot_demo/tests/first_run_setup_test.gd` | Headless native first-run setup state and deterministic failure test. |
 
 ## Runtime Helper Source
 
@@ -105,7 +108,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `scripts/write-release-manifest.mjs` | Writes and validates `fennara-release-manifest-v<version>.json` from release assets, including local package, addon, and shared runtime hashes. |
 | `scripts/cef/linux/fennara_cef_helper.cpp` | Minimal Linux CEF subprocess helper source packaged inside the separate CEF runtime zip. |
 | `.github/workflows/version-check.yml` | Version consistency check. |
-| `.github/workflows/gdextension-build.yml` | GDExtension build check. |
+| `.github/workflows/gdextension-build.yml` | Cross-platform GDExtension build check plus the Windows headless native first-run setup state test. |
 | `.github/workflows/local-build.yml` | Rust local package build check. |
 | `.github/workflows/package-preview.yml` | Manual package preview artifacts, including a test-only Linux CEF runtime artifact for Linux chat smoke tests. |
 | `.github/workflows/release.yml` | Manual GitHub release publishing, including generated Linux CEF runtime packaging, release manifest generation, and final asset validation. |
@@ -117,6 +120,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | Add or change a Godot tool | `fennara-cpp/src/tools/` and `local/schemas/tools/` |
 | Change MCP schema text | `local/schemas/tools/` |
 | Change `fennara install` or `fennara update` | `local/crates/fennara-cli/src/` |
+| Change native first-run setup or CLI bootstrap | `fennara-cpp/src/setup/`, `fennara-cpp/src/ui/setup_panel.cpp`, and `fennara-cpp/src/ui/dock.cpp` |
 | Change install/update operation logs, phases, error codes, or diagnostic reports | `local/crates/fennara-cli/src/operation.rs`, `local/crates/fennara-cli/src/operation/`, and `local/crates/fennara-cli/src/diagnostics.rs` |
 | Change webview prerequisite checks | `local/crates/fennara-cli/src/webview_prereq.rs`, `local/crates/fennara-cli/src/webview_runtime.rs`, and `fennara-cpp/src/ui/webview_host*` |
 | Change generated project guidance | `local/templates/` and `local/crates/fennara-cli/src/project_guidance.rs` |

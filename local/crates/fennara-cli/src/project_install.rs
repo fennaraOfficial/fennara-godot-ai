@@ -189,6 +189,15 @@ impl InstallOptions {
                 arg if arg.starts_with("--version=") => {
                     version = Some(arg.trim_start_matches("--version=").to_string());
                 }
+                "--operation-id" => {
+                    index += 1;
+                    value_arg(&args, index, "--operation-id")?;
+                }
+                arg if arg.starts_with("--operation-id=") => {
+                    if arg.trim_start_matches("--operation-id=").is_empty() {
+                        return Err("--operation-id requires a value".to_string());
+                    }
+                }
                 "-h" | "--help" => {
                     print_help();
                     return Err("".to_string());

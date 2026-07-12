@@ -102,6 +102,23 @@ not captured by default. The daemon exposes a small local debug read endpoint at
 
 ## Install Layout
 
+For the default Asset Library flow, the GDExtension first presents a native
+setup panel when the exact local installation is missing. Its bootstrap bridge
+downloads the addon version's release manifest and CLI archive with Godot's
+HTTP client, verifies the declared SHA-256, and places only the CLI in Fennara
+app data. It then launches `fennara install` and reads the durable operation
+state for progress and diagnostics. Chat and the webview remain inactive until
+setup succeeds and the matching daemon connects.
+
+A shared app-data bootstrap lock serializes CLI download and activation across
+concurrent Godot editors. Lock ownership transfers to the launched installer
+process, so another editor waits until that exact process exits. The panel
+generates an operation ID, passes it to the CLI, and reads only that operation's
+state file. If the child exits with a nonterminal state, the panel reports a
+stable failure instead of waiting indefinitely.
+
+The terminal install scripts remain the non-interactive and recovery path.
+
 The install script installs the small outer CLI and adds it to `PATH`. After
 that, modern releases can update the installed CLI through `fennara update` or
 `fennara self-update`; rerun the install script only when CLI self-update is not
