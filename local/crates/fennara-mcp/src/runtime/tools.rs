@@ -579,7 +579,10 @@ mod tests {
 
         let text = result["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("Tool: fennara_status"));
-        assert!(text.contains("MCP server: fennara-mcp 0.3.7"));
+        assert!(text.contains(&format!(
+            "MCP server: fennara-mcp {}",
+            env!("CARGO_PKG_VERSION")
+        )));
         assert!(text.contains("Daemon: connected"));
         assert!(text.contains("Active project: Top\\_Down Template 2d"));
         assert!(
