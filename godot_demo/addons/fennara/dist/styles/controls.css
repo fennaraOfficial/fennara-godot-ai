@@ -170,6 +170,26 @@
   white-space: nowrap;
 }
 
+.version-update-action {
+  border: 1px solid rgba(112, 188, 255, 0.45);
+  border-radius: 7px;
+  background: rgba(55, 132, 210, 0.22);
+  color: var(--text-primary);
+  padding: 7px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.version-update-action:hover,
+.version-update-action:focus-visible {
+  background: rgba(55, 132, 210, 0.36);
+}
+
+.version-update-action:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .icon-button,
 .secondary-button,
 .primary-button {

@@ -3,7 +3,8 @@ use crate::operation::{self, FailureClass};
 use crate::release_client::{self, DownloadAsset, Release};
 use crate::release_manifest::ReleaseManifest;
 use crate::webview_runtime;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub struct InstalledPackage {
@@ -342,6 +343,13 @@ fn install_from_assets(
         )?;
     } else {
         println!("launchers: keeping the active installation unchanged during staging");
+        let staged_launchers = version_dir.join("staged-launchers");
+        for launcher in ["fennara-mcp", "fennara-daemon"] {
+            copy_file(
+                &local_dir.join("bin").join(binary_name(launcher)),
+                &staged_launchers.join(binary_name(launcher)),
+            )?;
+        }
     }
     println!("runtimes: installing to {}", display_path(&version_dir));
     copy_file(
@@ -380,6 +388,35 @@ fn install_from_assets(
     })
 }
 
+pub fn activate_staged_launchers(version: &str) -> Result<(), String> {
+    let layout = AppLayout::detect()?;
+    let staged = layout.versions_dir.join(version).join("staged-launchers");
+    if !staged.is_dir() {
+        return Ok(());
+    }
+    let mut activated_all = true;
+    for launcher in ["fennara-mcp", "fennara-daemon"] {
+        let source = staged.join(binary_name(launcher));
+        let target = layout.bin_dir.join(binary_name(launcher));
+        if let Err(error) = copy_file(&source, &target) {
+            activated_all = false;
+            println!(
+                "warning: kept the current launcher at {}: {error}",
+                display_path(&target)
+            );
+        }
+    }
+    if activated_all {
+        fs::remove_dir_all(&staged).map_err(|error| {
+            format!(
+                "failed to remove activated launcher staging {}: {error}",
+                display_path(&staged)
+            )
+        })?;
+    }
+    Ok(())
+}
+
 pub fn activate_package(version: &str) -> Result<ActivationReceipt, String> {
     let layout = AppLayout::detect()?;
     activate_package_at(&layout, version)
@@ -412,13 +449,16 @@ pub(crate) fn restore_activation_at(
     layout: &AppLayout,
     receipt: ActivationReceipt,
 ) -> Result<(), String> {
-    match receipt.previous_manifest {
-        Some(previous) => fs::write(&layout.current_manifest_path, previous).map_err(|error| {
-            format!(
-                "failed to restore {}: {error}",
-                display_path(&layout.current_manifest_path)
-            )
-        }),
+    restore_manifest_at(layout, receipt.previous_manifest.as_deref())
+}
+
+pub fn restore_manifest(previous: Option<&[u8]>) -> Result<(), String> {
+    restore_manifest_at(&AppLayout::detect()?, previous)
+}
+
+fn restore_manifest_at(layout: &AppLayout, previous: Option<&[u8]>) -> Result<(), String> {
+    match previous {
+        Some(bytes) => write_current_manifest(&layout.current_manifest_path, bytes),
         None => match fs::remove_file(&layout.current_manifest_path) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -443,12 +483,36 @@ fn write_manifest(layout: &AppLayout, version: &str) -> Result<(), String> {
     });
     let raw = serde_json::to_string_pretty(&manifest)
         .map_err(|err| format!("failed to write manifest json: {err}"))?;
-    fs::write(&layout.current_manifest_path, format!("{raw}\n")).map_err(|err| {
-        format!(
-            "failed to write {}: {err}",
-            display_path(&layout.current_manifest_path)
-        )
-    })
+    write_current_manifest(&layout.current_manifest_path, format!("{raw}\n").as_bytes())
+}
+
+fn write_current_manifest(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let next = path.with_extension("json.next");
+    let previous = path.with_extension("json.previous");
+    let mut file = File::create(&next)
+        .map_err(|err| format!("failed to create {}: {err}", display_path(&next)))?;
+    file.write_all(bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|err| format!("failed to write {}: {err}", display_path(&next)))?;
+    if previous.exists() {
+        fs::remove_file(&previous)
+            .map_err(|err| format!("failed to remove {}: {err}", display_path(&previous)))?;
+    }
+    if path.exists() {
+        fs::rename(path, &previous)
+            .map_err(|err| format!("failed to preserve {}: {err}", display_path(path)))?;
+    }
+    if let Err(err) = fs::rename(&next, path) {
+        if previous.exists() {
+            let _ = fs::rename(&previous, path);
+        }
+        return Err(format!("failed to activate {}: {err}", display_path(path)));
+    }
+    if previous.exists() {
+        fs::remove_file(&previous)
+            .map_err(|err| format!("failed to remove {}: {err}", display_path(&previous)))?;
+    }
+    Ok(())
 }
 
 fn copy_file(source: &Path, target: &Path) -> Result<(), String> {

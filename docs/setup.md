@@ -275,6 +275,19 @@ the packaged addon, and copies it to an operation-specific directory under
 receipt is durable. Preparation does not replace `addons/fennara`, switch
 `current.json`, or restart the running daemon.
 
+The chat update action runs this preparation command and displays native
+progress in the Godot dock. Once the operation reaches `ready_to_close`, the
+dock asks the user to choose **Close Godot and Install** or **Not Now**. On
+confirmation, a detached CLI waits for the exact Godot process to exit, moves
+the current addon into the operation directory as `previous-addon`, renames the
+verified staged addon into `addons/fennara`, activates the matching runtime,
+and reopens the same executable and project.
+
+The previous addon and runtime manifest remain available until the reopened
+GDExtension writes its activation handshake and the CLI confirms the matching
+daemon. Failed validation records `recovery_required`; the dock then offers
+**Restore Previous Version**, **Open Logs**, and **Copy Report**.
+
 ## Troubleshooting
 
 ### An Install Or Update Failed

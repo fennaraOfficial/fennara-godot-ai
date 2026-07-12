@@ -18,6 +18,7 @@ void FennaraLocalBridge::_bind_methods() {
     ADD_SIGNAL(godot::MethodInfo(
         "mcp_target_state_changed",
         godot::PropertyInfo(godot::Variant::BOOL, "active")));
+    ADD_SIGNAL(godot::MethodInfo("fennara_update_requested"));
     godot::ClassDB::bind_method(
         godot::D_METHOD("_on_async_tool_call_completed", "results", "request_id", "tool_name", "input", "started_at_ms", "executor"),
         &FennaraLocalBridge::_on_async_tool_call_completed);

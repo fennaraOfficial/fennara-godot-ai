@@ -274,6 +274,22 @@ where
             .await
         }
         "get_project_status" => send_project_status(sender, request_id, state, bound_project).await,
+        "prepare_fennara_update" => {
+            match godot_bridge::request_fennara_update(state, &bound_project.session_id).await {
+                Ok(()) => {
+                    send_json(
+                        sender,
+                        json!({
+                            "type": "fennara_update_requested",
+                            "request_id": request_id,
+                            "ok": true
+                        }),
+                    )
+                    .await
+                }
+                Err(error) => send_error(sender, request_id, "update_start_failed", &error).await,
+            }
+        }
         "set_mcp_target" => {
             match godot_bridge::set_active_project_session(state, &bound_project.session_id).await {
                 Ok(()) => send_project_status(sender, request_id, state, bound_project).await,

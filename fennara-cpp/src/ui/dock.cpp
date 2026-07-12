@@ -5,7 +5,9 @@
 #include "fennara/logger.hpp"
 #include "fennara/setup/first_run_setup.hpp"
 #include "fennara/ui/setup_panel.hpp"
+#include "fennara/ui/update_panel.hpp"
 #include "fennara/ui/webview_host.hpp"
+#include "fennara/update/update_coordinator.hpp"
 
 #include <godot_cpp/classes/h_box_container.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
@@ -51,6 +53,9 @@ void FennaraDock::_bind_methods() {
     godot::ClassDB::bind_method(
         godot::D_METHOD("_on_setup_succeeded"),
         &FennaraDock::_on_setup_succeeded);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("_on_update_requested"),
+        &FennaraDock::_on_update_requested);
     godot::ClassDB::bind_method(
         godot::D_METHOD("_on_open_browser_pressed"),
         &FennaraDock::_on_open_browser_pressed);
@@ -237,6 +242,12 @@ void FennaraDock::_build_ui() {
             margin->move_child(browser_fallback_panel, margin->get_child_count() - 1);
         }
     }
+    if (local_bridge &&
+        !local_bridge->is_connected("fennara_update_requested",
+                                    callable_mp(this, &FennaraDock::_on_update_requested))) {
+        local_bridge->connect("fennara_update_requested",
+                              callable_mp(this, &FennaraDock::_on_update_requested));
+    }
 
     first_run_setup = memnew(FirstRunSetup);
     first_run_setup->set_name("FirstRunSetup");
@@ -251,6 +262,19 @@ void FennaraDock::_build_ui() {
     setup_panel->set_visible(false);
     margin->add_child(setup_panel);
     margin->move_child(setup_panel, margin->get_child_count() - 1);
+
+    update_coordinator = memnew(UpdateCoordinator);
+    update_coordinator->set_name("UpdateCoordinator");
+    add_child(update_coordinator);
+    update_coordinator->connect("state_changed",
+                                callable_mp(this, &FennaraDock::_refresh_status));
+
+    update_panel = memnew(UpdatePanel);
+    update_panel->set_name("UpdatePanel");
+    update_panel->set_coordinator(update_coordinator);
+    update_panel->set_visible(false);
+    margin->add_child(update_panel);
+    margin->move_child(update_panel, margin->get_child_count() - 1);
 }
 
 void FennaraDock::_try_start_webview() {
@@ -329,10 +353,31 @@ void FennaraDock::_refresh_status() {
     if (fallback_label == nullptr) {
         return;
     }
-    if (_show_setup_if_needed()) {
+    if (_show_update_if_needed() || _show_setup_if_needed()) {
         return;
     }
     _try_start_webview();
+}
+
+bool FennaraDock::_show_update_if_needed() {
+    if (update_coordinator == nullptr || update_panel == nullptr) {
+        return false;
+    }
+    const bool visible = update_coordinator->should_show();
+    update_panel->set_visible(visible);
+    if (visible) {
+        _release_webview_keyboard_focus();
+        if (internal_webview_surface != nullptr) {
+            internal_webview_surface->set_visible(false);
+        }
+        if (fallback_label != nullptr) {
+            fallback_label->set_visible(false);
+        }
+        if (browser_fallback_panel != nullptr) {
+            browser_fallback_panel->set_visible(false);
+        }
+    }
+    return visible;
 }
 
 bool FennaraDock::_show_setup_if_needed() {
@@ -403,6 +448,12 @@ void FennaraDock::_on_mcp_target_state_changed(bool active) {
 
 void FennaraDock::_on_setup_succeeded() {
     _refresh_status();
+}
+
+void FennaraDock::_on_update_requested() {
+    if (update_coordinator != nullptr) {
+        update_coordinator->start_prepare();
+    }
 }
 
 void FennaraDock::_on_open_browser_pressed() {

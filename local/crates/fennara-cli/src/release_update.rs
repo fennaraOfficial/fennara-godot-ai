@@ -8,6 +8,7 @@ use crate::self_update::{self, StartResult};
 use crate::update_stage;
 use crate::webview_prereq;
 use std::path::PathBuf;
+use sysinfo::{Pid, System};
 
 pub fn run(args: Vec<&str>) -> Result<(), String> {
     operation::phase(Phase::Checking, "Validating project update request")?;
@@ -85,6 +86,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             project_version.as_deref().unwrap_or("unknown"),
             &package,
             &operation_id,
+            observed_godot_process(options.godot_pid, options.godot_executable.as_deref())?,
         )
         .map_err(|error| operation::failure(FailureClass::StageFilesystem, error))?;
         operation::phase(
@@ -124,6 +126,8 @@ struct UpdateOptions {
     project_dir: Option<PathBuf>,
     no_self_update: bool,
     prepare: bool,
+    godot_pid: Option<u32>,
+    godot_executable: Option<PathBuf>,
 }
 
 impl UpdateOptions {
@@ -132,6 +136,8 @@ impl UpdateOptions {
         let mut project_dir = None;
         let mut no_self_update = false;
         let mut prepare = false;
+        let mut godot_pid = None;
+        let mut godot_executable = None;
         let mut index = 0;
 
         while index < args.len() {
@@ -165,6 +171,25 @@ impl UpdateOptions {
                         return Err("--operation-id requires a value".to_string());
                     }
                 }
+                "--godot-pid" => {
+                    index += 1;
+                    godot_pid = Some(parse_pid(value_arg(&args, index, "--godot-pid")?)?);
+                }
+                arg if arg.starts_with("--godot-pid=") => {
+                    godot_pid = Some(parse_pid(arg.trim_start_matches("--godot-pid="))?);
+                }
+                "--godot-executable" => {
+                    index += 1;
+                    godot_executable = Some(PathBuf::from(value_arg(
+                        &args,
+                        index,
+                        "--godot-executable",
+                    )?));
+                }
+                arg if arg.starts_with("--godot-executable=") => {
+                    godot_executable =
+                        Some(PathBuf::from(arg.trim_start_matches("--godot-executable=")));
+                }
                 "-h" | "--help" => {
                     print_help();
                     return Err("".to_string());
@@ -179,6 +204,8 @@ impl UpdateOptions {
             project_dir,
             no_self_update,
             prepare,
+            godot_pid,
+            godot_executable,
         })
     }
 
@@ -196,8 +223,53 @@ impl UpdateOptions {
         if self.prepare {
             args.push("--prepare".to_string());
         }
+        if let Some(pid) = self.godot_pid {
+            args.push("--godot-pid".to_string());
+            args.push(pid.to_string());
+        }
+        if let Some(executable) = &self.godot_executable {
+            args.push("--godot-executable".to_string());
+            args.push(executable.display().to_string());
+        }
         args
     }
+}
+
+fn parse_pid(value: &str) -> Result<u32, String> {
+    value
+        .parse::<u32>()
+        .ok()
+        .filter(|pid| *pid > 0)
+        .ok_or_else(|| format!("invalid Godot process ID: {value}"))
+}
+
+fn observed_godot_process(
+    pid: Option<u32>,
+    executable: Option<&std::path::Path>,
+) -> Result<Option<(u32, u64, &std::path::Path)>, String> {
+    match (pid, executable) {
+        (None, None) => Ok(None),
+        (Some(pid), Some(executable)) => {
+            let mut system = System::new();
+            system.refresh_processes();
+            let process = system.process(Pid::from_u32(pid)).ok_or_else(|| {
+                format!("Godot process {pid} exited before update preparation completed")
+            })?;
+            if let Some(actual) = process.exe()
+                && canonical_or_original(actual) != canonical_or_original(executable)
+            {
+                return Err(format!(
+                    "process {pid} does not match the selected Godot executable"
+                ));
+            }
+            Ok(Some((pid, process.start_time(), executable)))
+        }
+        _ => Err("--godot-pid and --godot-executable must be provided together".to_string()),
+    }
+}
+
+fn canonical_or_original(path: &std::path::Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn value_arg<'a>(args: &'a [&str], index: usize, option: &str) -> Result<&'a str, String> {
@@ -232,6 +304,8 @@ mod tests {
             project_dir: Some(PathBuf::from("demo-project")),
             no_self_update: false,
             prepare: false,
+            godot_pid: None,
+            godot_executable: None,
         };
 
         assert_eq!(
@@ -263,6 +337,8 @@ mod tests {
             project_dir: Some(PathBuf::from("demo-project")),
             no_self_update: false,
             prepare: true,
+            godot_pid: None,
+            godot_executable: None,
         };
 
         assert!(

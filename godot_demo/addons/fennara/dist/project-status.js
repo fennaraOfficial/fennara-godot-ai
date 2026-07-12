@@ -17,7 +17,6 @@
     const versionWarning = options.versionWarning || null;
     const versionPopover = options.versionPopover || null;
     const versionWarningText = options.versionWarningText || null;
-    const versionCommand = options.versionCommand || null;
     const escapeHtml = options.escapeHtml || defaultEscapeHtml;
 
     function basename(path) {
@@ -77,11 +76,8 @@
           `Current: ${escapeHtml(current)}`,
           `Available: ${escapeHtml(latest)}`,
           "",
-          "Close Godot, then run this in the current project.",
+          "The update will be verified before Godot asks to close.",
         ].join("<br>");
-      }
-      if (versionCommand) {
-        versionCommand.textContent = "fennara update";
       }
       if (versionPopover) {
         versionPopover.hidden = false;

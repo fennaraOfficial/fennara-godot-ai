@@ -64,6 +64,22 @@ pub(crate) async fn set_active_project_session(
     Ok(())
 }
 
+pub(crate) async fn request_fennara_update(
+    state: &AppState,
+    session_id: &str,
+) -> Result<(), String> {
+    let (_, sender) = select_session(state, Some(session_id)).await?;
+    sender
+        .send(Message::Text(
+            json!({ "type": "prepare_fennara_update" })
+                .to_string()
+                .into(),
+        ))
+        .map_err(|_| {
+            "The Godot project disconnected before update preparation started.".to_string()
+        })
+}
+
 pub(crate) async fn call_tool(
     State(state): State<AppState>,
     Json(request): Json<ToolCallRequest>,

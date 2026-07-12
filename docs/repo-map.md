@@ -119,7 +119,8 @@ This is the quick map for contributors and coding agents working in this reposit
 | --- | --- |
 | Add or change a Godot tool | `fennara-cpp/src/tools/` and `local/schemas/tools/` |
 | Change MCP schema text | `local/schemas/tools/` |
-| Change `fennara install` or `fennara update` | `local/crates/fennara-cli/src/`; native update staging is owned by `release_update.rs` and `update_stage.rs` |
+| Change `fennara install` or `fennara update` | `local/crates/fennara-cli/src/`; native staging and detached apply/rollback are owned by `release_update.rs`, `update_stage.rs`, and `update_apply.rs` |
+| Change native update progress, shutdown confirmation, activation handshake, or recovery | `fennara-cpp/src/update/`, `fennara-cpp/src/ui/update_panel.cpp`, `fennara-cpp/src/ui/dock.cpp`, `local/crates/fennara-daemon/src/runtime_daemon/chat/mod.rs`, and `ui/chat/` |
 | Change native first-run setup or CLI bootstrap | `fennara-cpp/src/setup/`, `fennara-cpp/src/ui/setup_panel.cpp`, and `fennara-cpp/src/ui/dock.cpp` |
 | Change install/update operation logs, phases, error codes, or diagnostic reports | `local/crates/fennara-cli/src/operation.rs`, `local/crates/fennara-cli/src/operation/`, and `local/crates/fennara-cli/src/diagnostics.rs` |
 | Change webview prerequisite checks | `local/crates/fennara-cli/src/webview_prereq.rs`, `local/crates/fennara-cli/src/webview_runtime.rs`, and `fennara-cpp/src/ui/webview_host*` |

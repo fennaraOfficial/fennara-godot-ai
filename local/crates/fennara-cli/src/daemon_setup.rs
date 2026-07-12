@@ -125,6 +125,61 @@ pub fn check_compatibility(expected_version: &str) -> Result<Compatibility, Stri
     }
 }
 
+pub fn shutdown_if_running(layout: &AppLayout) -> Result<(), String> {
+    if matches!(
+        health(),
+        Err(HealthError {
+            kind: HealthErrorKind::NotRunning,
+            ..
+        })
+    ) {
+        return Ok(());
+    }
+    let token_path = layout.app_dir.join("daemon-control-token");
+    let token = std::fs::read_to_string(&token_path)
+        .map_err(|error| format!("failed to read {}: {error}", display_path(&token_path)))?
+        .trim()
+        .to_string();
+    if token.is_empty() || token.contains(['\r', '\n']) {
+        return Err("the local daemon control token is invalid".to_string());
+    }
+    let mut stream = TcpStream::connect(DAEMON_ADDR)
+        .map_err(|error| format!("failed to connect to the running daemon: {error}"))?;
+    stream
+        .set_read_timeout(Some(HEALTH_TIMEOUT))
+        .map_err(|error| error.to_string())?;
+    stream
+        .set_write_timeout(Some(HEALTH_TIMEOUT))
+        .map_err(|error| error.to_string())?;
+    let request = format!(
+        "POST /shutdown HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Fennara-Control-Token: {token}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("failed to request daemon shutdown: {error}"))?;
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .map_err(|error| format!("failed to read daemon shutdown response: {error}"))?;
+    if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
+        return Err("daemon rejected the authenticated shutdown request".to_string());
+    }
+    let deadline = Instant::now() + START_TIMEOUT;
+    while Instant::now() < deadline {
+        if matches!(
+            health(),
+            Err(HealthError {
+                kind: HealthErrorKind::NotRunning,
+                ..
+            })
+        ) {
+            return Ok(());
+        }
+        thread::sleep(POLL_INTERVAL);
+    }
+    Err("the previous Fennara daemon did not stop before update activation".to_string())
+}
+
 pub fn health() -> Result<Value, HealthError> {
     let mut stream = TcpStream::connect(DAEMON_ADDR).map_err(|error| HealthError {
         kind: if matches!(

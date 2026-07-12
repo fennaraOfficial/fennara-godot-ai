@@ -3,12 +3,30 @@ use crate::operation;
 use crate::project_addon;
 use crate::project_install;
 use crate::release_package::InstalledPackage;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 const RECEIPT_SCHEMA_VERSION: u64 = 1;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct UpdateReceipt {
+    pub schema_version: u64,
+    pub operation_id: String,
+    pub state: String,
+    pub from_version: String,
+    pub to_version: String,
+    pub platform: String,
+    pub architecture: String,
+    pub addon: String,
+    pub backup_addon: String,
+    pub godot_pid: Option<u32>,
+    pub godot_started_at: Option<u64>,
+    pub godot_executable: Option<String>,
+    pub had_current_manifest: Option<bool>,
+    pub updater_pid: Option<u32>,
+}
 
 pub struct StagedUpdate {
     pub root: PathBuf,
@@ -16,11 +34,20 @@ pub struct StagedUpdate {
     pub version: String,
 }
 
+pub fn staging_root(project_dir: &Path, operation_id: &str) -> Result<PathBuf, String> {
+    operation::validate_id(operation_id)?;
+    Ok(project_dir
+        .join(".godot")
+        .join("fennara-update")
+        .join(operation_id))
+}
+
 pub fn prepare(
     project_dir: &Path,
     current_version: &str,
     package: &InstalledPackage,
     operation_id: &str,
+    godot_process: Option<(u32, u64, &Path)>,
 ) -> Result<StagedUpdate, String> {
     operation::validate_id(operation_id)?;
     let source = project_addon::validate(&package.addon_dir)?;
@@ -32,7 +59,7 @@ pub fn prepare(
     }
 
     let staging_parent = project_dir.join(".godot").join("fennara-update");
-    let final_root = staging_parent.join(operation_id);
+    let final_root = staging_root(project_dir, operation_id)?;
     let preparing_root = staging_parent.join(format!("{operation_id}.preparing"));
     project_install::ensure_target_within_project(project_dir, &staging_parent)?;
     project_install::ensure_target_within_project(project_dir, &final_root)?;
@@ -70,12 +97,23 @@ pub fn prepare(
     }
 
     let receipt_path = preparing_root.join("receipt.json");
-    write_receipt(
-        &receipt_path,
-        operation_id,
-        current_version,
-        &package.version,
-    )?;
+    let receipt = UpdateReceipt {
+        schema_version: RECEIPT_SCHEMA_VERSION,
+        operation_id: operation_id.to_string(),
+        state: "ready_to_close".to_string(),
+        from_version: current_version.to_string(),
+        to_version: package.version.clone(),
+        platform: platform_name().to_string(),
+        architecture: arch_name().to_string(),
+        addon: "addon".to_string(),
+        backup_addon: "previous-addon".to_string(),
+        godot_pid: godot_process.map(|value| value.0),
+        godot_started_at: godot_process.map(|value| value.1),
+        godot_executable: godot_process.map(|value| value.2.display().to_string()),
+        had_current_manifest: None,
+        updater_pid: None,
+    };
+    write_receipt(&receipt_path, &receipt)?;
     fs::rename(&preparing_root, &final_root).map_err(|error| {
         format!(
             "failed to finalize update staging directory {}: {error}",
@@ -91,31 +129,70 @@ pub fn prepare(
     })
 }
 
-fn write_receipt(
-    path: &Path,
-    operation_id: &str,
-    current_version: &str,
-    target_version: &str,
-) -> Result<(), String> {
-    let receipt = json!({
-        "schema_version": RECEIPT_SCHEMA_VERSION,
-        "operation_id": operation_id,
-        "state": "ready_to_close",
-        "from_version": current_version,
-        "to_version": target_version,
-        "platform": platform_name(),
-        "architecture": arch_name(),
-        "addon": "addon",
-    });
+pub fn read_receipt(path: &Path) -> Result<UpdateReceipt, String> {
+    let fallback = path.with_extension("json.previous");
+    for candidate in [path, fallback.as_path()] {
+        if !candidate.is_file() {
+            continue;
+        }
+        let raw = fs::read(candidate)
+            .map_err(|error| format!("failed to read {}: {error}", display_path(candidate)))?;
+        let receipt: UpdateReceipt = serde_json::from_slice(&raw)
+            .map_err(|error| format!("failed to parse {}: {error}", display_path(candidate)))?;
+        if receipt.schema_version != RECEIPT_SCHEMA_VERSION {
+            return Err(format!(
+                "unsupported update receipt schema {} in {}",
+                receipt.schema_version,
+                display_path(candidate)
+            ));
+        }
+        operation::validate_id(&receipt.operation_id)?;
+        return Ok(receipt);
+    }
+    Err(format!(
+        "update receipt was not found at {}",
+        display_path(path)
+    ))
+}
+
+pub fn write_receipt(path: &Path, receipt: &UpdateReceipt) -> Result<(), String> {
     let mut bytes = serde_json::to_vec_pretty(&receipt)
         .map_err(|error| format!("failed to serialize update staging receipt: {error}"))?;
     bytes.push(b'\n');
-    let mut file = File::create(path)
-        .map_err(|error| format!("failed to create {}: {error}", display_path(path)))?;
+    let next = path.with_extension("json.next");
+    let previous = path.with_extension("json.previous");
+    let mut file = File::create(&next)
+        .map_err(|error| format!("failed to create {}: {error}", display_path(&next)))?;
     file.write_all(&bytes)
-        .map_err(|error| format!("failed to write {}: {error}", display_path(path)))?;
+        .map_err(|error| format!("failed to write {}: {error}", display_path(&next)))?;
     file.sync_all()
-        .map_err(|error| format!("failed to flush {}: {error}", display_path(path)))
+        .map_err(|error| format!("failed to flush {}: {error}", display_path(&next)))?;
+    if previous.exists() {
+        fs::remove_file(&previous)
+            .map_err(|error| format!("failed to remove {}: {error}", display_path(&previous)))?;
+    }
+    if path.exists() {
+        fs::rename(path, &previous).map_err(|error| {
+            format!(
+                "failed to preserve update receipt {}: {error}",
+                display_path(path)
+            )
+        })?;
+    }
+    if let Err(error) = fs::rename(&next, path) {
+        if previous.exists() {
+            let _ = fs::rename(&previous, path);
+        }
+        return Err(format!(
+            "failed to activate update receipt {}: {error}",
+            display_path(path)
+        ));
+    }
+    if previous.exists() {
+        fs::remove_file(previous)
+            .map_err(|error| format!("failed to remove previous update receipt: {error}"))?;
+    }
+    Ok(())
 }
 
 fn copy_dir_without_links(source: &Path, target: &Path) -> Result<(), String> {
@@ -213,7 +290,7 @@ mod tests {
             addon_dir: source,
         };
 
-        let staged = prepare(&project, "1.0.0", &package, "update-123-test").unwrap();
+        let staged = prepare(&project, "1.0.0", &package, "update-123-test", None).unwrap();
 
         assert_eq!(staged.version, "1.1.0");
         assert!(staged.root.join("addon/fennara.gdextension").is_file());
@@ -241,7 +318,7 @@ mod tests {
             addon_dir: source,
         };
 
-        assert!(prepare(&project, "1.0.0", &package, "update-456-test").is_err());
+        assert!(prepare(&project, "1.0.0", &package, "update-456-test", None,).is_err());
         assert!(
             !project
                 .join(".godot/fennara-update/update-456-test")
