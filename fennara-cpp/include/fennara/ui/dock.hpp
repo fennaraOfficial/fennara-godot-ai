@@ -14,6 +14,8 @@ class FennaraLocalBridge;
 class FirstRunSetup;
 class FirstRunSetupPanel;
 class WebviewHost;
+class UpdateCoordinator;
+class UpdatePanel;
 
 class FennaraDock : public godot::Control {
     GDCLASS(FennaraDock, godot::Control)
@@ -30,6 +32,8 @@ private:
     godot::Control *browser_fallback_panel = nullptr;
     FirstRunSetup *first_run_setup = nullptr;
     FirstRunSetupPanel *setup_panel = nullptr;
+    UpdateCoordinator *update_coordinator = nullptr;
+    UpdatePanel *update_panel = nullptr;
     godot::Label *browser_fallback_message = nullptr;
     godot::Label *browser_restart_label = nullptr;
     godot::Button *open_browser_button = nullptr;
@@ -53,6 +57,7 @@ private:
     void _refresh_status();
     void _on_mcp_target_state_changed(bool active);
     void _on_setup_succeeded();
+    void _on_update_requested();
     void _on_open_browser_pressed();
     void _on_use_embedded_toggled(bool pressed);
     godot::String _chat_url() const;
@@ -61,6 +66,7 @@ private:
     bool _save_chat_surface(const godot::String &surface) const;
     void _show_browser_fallback(const godot::String &message);
     bool _show_setup_if_needed();
+    bool _show_update_if_needed();
     bool _webview_region_is_stable();
     void _output_log(const godot::String &message) const;
 

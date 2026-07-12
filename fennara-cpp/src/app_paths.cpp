@@ -200,7 +200,11 @@ godot::Dictionary read_json_first_existing(const godot::PackedStringArray &paths
             continue;
         }
 
-        godot::Variant parsed = godot::JSON::parse_string(file->get_as_text());
+        const godot::String contents = file->get_as_text().strip_edges();
+        if (contents.is_empty()) {
+            continue;
+        }
+        godot::Variant parsed = godot::JSON::parse_string(contents);
         if (parsed.get_type() != godot::Variant::DICTIONARY) {
             continue;
         }

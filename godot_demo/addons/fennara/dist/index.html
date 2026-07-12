@@ -27,16 +27,16 @@
             </div>
           </div>
           <div class="version-menu" data-version-menu hidden>
-            <button class="icon-button version-button" type="button" aria-label="Fennara update available" aria-expanded="false" data-version-warning>
+            <button class="version-button" type="button" aria-label="Update Fennara" aria-expanded="false" data-version-warning>
               <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 19V5"></path>
                 <path d="m6.5 10.5 5.5-5.5 5.5 5.5"></path>
               </svg>
+              <span>Update</span>
             </button>
             <div class="version-popover" role="tooltip" data-version-popover>
               <strong>Update available</strong>
-              <span data-version-warning-text>Close Godot, then run this command in the current project.</span>
-              <code data-version-command>fennara update</code>
+              <span data-version-warning-text>Press Update to start.</span>
             </div>
           </div>
           <button class="icon-button" type="button" title="Settings" aria-label="Settings" data-open-settings>
@@ -55,6 +55,14 @@
           </button>
         </div>
       </header>
+
+      <section class="update-start-overlay" aria-live="polite" data-update-start-overlay hidden>
+        <div class="update-start-card">
+          <span class="update-start-spinner" aria-hidden="true"></span>
+          <strong>Starting Fennara update</strong>
+          <span>Opening verified update preparation in Godot...</span>
+        </div>
+      </section>
 
       <aside class="chat-drawer" aria-label="Chats drawer" data-chat-drawer>
         <div class="drawer-top">

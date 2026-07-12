@@ -123,7 +123,10 @@ pub fn project_addon_dir(project_dir: &Path) -> PathBuf {
     project_dir.join("addons").join("fennara")
 }
 
-fn ensure_target_within_project(project_dir: &Path, target: &Path) -> Result<(), String> {
+pub(crate) fn ensure_target_within_project(
+    project_dir: &Path,
+    target: &Path,
+) -> Result<(), String> {
     let project_root = fs::canonicalize(project_dir).map_err(|err| {
         format!(
             "failed to resolve project path {}: {err}",

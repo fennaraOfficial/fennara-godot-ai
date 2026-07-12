@@ -99,7 +99,14 @@ fennara doctor
 
 #### 2. Add Fennara To A Godot Project
 
-Run this from the Godot project folder:
+When the chat toolbar shows an available release, select **Prepare Update**.
+Fennara downloads and verifies the update while Godot stays open. After staging
+finishes, choose **Close Godot and Install** or **Not Now**. The external updater
+waits for that exact editor process to exit, replaces the addon using
+same-filesystem directory renames, reopens the same project, and keeps the
+previous addon until the new GDExtension and daemon validate successfully.
+
+The terminal flow remains available:
 
 ```bash
 cd path/to/your-godot-project
@@ -203,6 +210,17 @@ fennara update
 When an update has to replace the running CLI before continuing, Fennara prints
 the updater log path so CI and agent runs can inspect the resumed project-update
 output.
+
+If validation cannot finish, the reopened dock offers **Restore Previous
+Version**, **Open Logs**, and **Copy Report**. Rollback also waits for explicit
+confirmation before closing Godot.
+
+If an interrupted native update prevents the addon from loading, close Godot
+and restore the recorded transaction with the same installed CLI:
+
+```bash
+fennara recover --project path/to/your-godot-project
+```
 
 ## Tools
 

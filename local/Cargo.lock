@@ -272,6 +272,7 @@ name = "fennara-cli"
 version = "0.3.8"
 dependencies = [
  "json5",
+ "serde",
  "serde_json",
  "sha2",
  "sysinfo",

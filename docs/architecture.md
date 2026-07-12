@@ -30,6 +30,27 @@ MCP client
 | GDExtension | `fennara-cpp/` | Godot-facing tools, dock UI, diagnostics, validation, runtime capture, and editor integration. |
 | Tool schemas | `local/schemas/tools/` | MCP tool descriptions exposed to clients. |
 
+## Native Update Handoff
+
+The chat UI requests update preparation through the daemon and the bound Godot
+bridge. The native `UpdateCoordinator` launches the installed CLI, follows the
+durable operation state, and presents progress without depending on the
+webview after preparation begins.
+
+Verified addon files are staged under
+`.godot/fennara-update/<operation-id>/`. After explicit confirmation, a detached
+CLI waits for the exact Godot PID and start time to disappear. It rechecks a
+digest covering the complete staged addon, snapshots both shared launchers and
+the runtime manifest, moves the active addon to `previous-addon`, moves the
+staged addon to `addons/fennara`, and reopens the same editor project.
+The reopened GDExtension writes an activation handshake. The CLI deletes the
+backup only after the success receipt, handshake, and matching daemon health
+are durable. Otherwise the receipt remains `recovery_required` and rollback
+restores the previous addon, launchers, and runtime manifest. If interruption
+temporarily leaves the addon unable to load, the installed CLI remains outside
+the project addon and provides `fennara recover --project <path>` as the
+single-addon emergency recovery entry point.
+
 ## In-Editor Chat Webview
 
 The optional chat dock is hosted by the GDExtension UI layer. The shared host

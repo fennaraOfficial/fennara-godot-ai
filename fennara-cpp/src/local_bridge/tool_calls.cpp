@@ -334,6 +334,8 @@ void FennaraLocalBridge::_handle_message(const godot::Dictionary &message) {
         _handle_snapshot_revert(message);
     } else if (type == "open_project_file") {
         _handle_open_project_file(message);
+    } else if (type == "prepare_fennara_update") {
+        emit_signal("fennara_update_requested");
     } else if (type == "active_project_changed") {
         bool active = message.get("is_active", false);
         _active_mcp_target_name = godot::String(message.get("active_project_name", "")).strip_edges();

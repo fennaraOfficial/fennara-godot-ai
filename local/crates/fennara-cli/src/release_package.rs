@@ -3,8 +3,11 @@ use crate::operation::{self, FailureClass};
 use crate::release_client::{self, DownloadAsset, Release};
 use crate::release_manifest::ReleaseManifest;
 use crate::webview_runtime;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+
+mod install_lock;
 
 pub struct InstalledPackage {
     pub version: String,
@@ -29,7 +32,7 @@ pub fn ensure_package(version_request: &str) -> Result<InstalledPackage, String>
         manifest
             .validate_for_install()
             .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
-        return ensure_manifest_package(&layout, &release, &manifest, None, true);
+        return ensure_manifest_package(&layout, &release, &manifest, None, true, true);
     }
 
     ensure_legacy_package(&layout, &release)
@@ -57,7 +60,32 @@ pub fn stage_exact_package(version: &str) -> Result<InstalledPackage, String> {
     manifest
         .validate_for_install()
         .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
-    ensure_manifest_package(&layout, &release, &manifest, Some(version), false)
+    ensure_manifest_package(&layout, &release, &manifest, Some(version), false, true)
+}
+
+pub fn prepare_package(version_request: &str) -> Result<InstalledPackage, String> {
+    let layout = AppLayout::detect()?;
+    layout.ensure_base_dirs()?;
+
+    println!("package: resolving release {version_request} for staging");
+    let release = release_client::fetch_release(version_request)?;
+    let manifest_asset = release.manifest_asset().ok_or_else(|| {
+        operation::failure(
+            FailureClass::ManifestInvalid,
+            format!(
+                "release {} has no release manifest; native updates require verified install metadata",
+                release.tag
+            ),
+        )
+    })?;
+    println!("manifest: {}", manifest_asset.name);
+    let bytes = release_client::download_bytes(&manifest_asset.url, &manifest_asset.name)?;
+    let manifest = ReleaseManifest::parse(&bytes)
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    manifest
+        .validate_for_install()
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    ensure_manifest_package(&layout, &release, &manifest, None, false, false)
 }
 
 fn ensure_manifest_package(
@@ -66,6 +94,7 @@ fn ensure_manifest_package(
     manifest: &ReleaseManifest,
     expected_version: Option<&str>,
     activate: bool,
+    update_launchers: bool,
 ) -> Result<InstalledPackage, String> {
     let selection = manifest
         .select_for_current_platform()
@@ -103,6 +132,7 @@ fn ensure_manifest_package(
             label: selection.addon.name.as_str(),
         },
         activate,
+        update_launchers,
     )?;
 
     for runtime in &selection.shared_runtimes {
@@ -196,6 +226,7 @@ fn ensure_legacy_package(
             label: &addon_asset.name,
         },
         true,
+        true,
     )?;
 
     if let Some(message) =
@@ -213,6 +244,7 @@ fn ensure_selected_package(
     local_asset: DownloadAsset<'_>,
     addon_asset: DownloadAsset<'_>,
     activate: bool,
+    update_launchers: bool,
 ) -> Result<InstalledPackage, String> {
     for component in ["addon", "daemon", "mcp", "runtime"] {
         operation::set_component(component, version)?;
@@ -240,6 +272,7 @@ fn ensure_selected_package(
         local_asset,
         addon_asset,
         activate,
+        update_launchers,
     );
     let _ = fs::remove_dir_all(&temp_dir);
     result
@@ -277,6 +310,7 @@ fn install_from_assets(
     local_asset: DownloadAsset<'_>,
     addon_asset: DownloadAsset<'_>,
     activate: bool,
+    update_launchers: bool,
 ) -> Result<InstalledPackage, String> {
     let local_dir = temp_dir.join("local");
     let addon_stage_dir = temp_dir.join("addon");
@@ -294,20 +328,32 @@ fn install_from_assets(
         ));
     }
 
+    let _install_lock = install_lock::acquire(layout, version)?;
     let version_dir = layout.versions_dir.join(version);
     let addon_target = version_dir.join("addon");
     fs::create_dir_all(&version_dir)
         .map_err(|err| format!("failed to create {}: {err}", display_path(&version_dir)))?;
 
-    println!("launchers: updating {}", display_path(&layout.bin_dir));
-    copy_existing_launcher(
-        &local_dir.join("bin").join(binary_name("fennara-mcp")),
-        &layout.bin_dir.join(binary_name("fennara-mcp")),
-    )?;
-    copy_existing_launcher(
-        &local_dir.join("bin").join(binary_name("fennara-daemon")),
-        &layout.bin_dir.join(binary_name("fennara-daemon")),
-    )?;
+    if update_launchers {
+        println!("launchers: updating {}", display_path(&layout.bin_dir));
+        copy_existing_launcher(
+            &local_dir.join("bin").join(binary_name("fennara-mcp")),
+            &layout.bin_dir.join(binary_name("fennara-mcp")),
+        )?;
+        copy_existing_launcher(
+            &local_dir.join("bin").join(binary_name("fennara-daemon")),
+            &layout.bin_dir.join(binary_name("fennara-daemon")),
+        )?;
+    } else {
+        println!("launchers: keeping the active installation unchanged during staging");
+        let staged_launchers = version_dir.join("staged-launchers");
+        for launcher in ["fennara-mcp", "fennara-daemon"] {
+            copy_file(
+                &local_dir.join("bin").join(binary_name(launcher)),
+                &staged_launchers.join(binary_name(launcher)),
+            )?;
+        }
+    }
     println!("runtimes: installing to {}", display_path(&version_dir));
     copy_file(
         &local_dir
@@ -345,6 +391,61 @@ fn install_from_assets(
     })
 }
 
+pub fn activate_staged_launchers(version: &str) -> Result<(), String> {
+    let layout = AppLayout::detect()?;
+    activate_staged_launchers_at(&layout, version)
+}
+
+pub(crate) fn activate_staged_launchers_at(
+    layout: &AppLayout,
+    version: &str,
+) -> Result<(), String> {
+    let staged = layout.versions_dir.join(version).join("staged-launchers");
+    if !staged.is_dir() {
+        return Err(format!(
+            "staged launchers are missing: {}",
+            display_path(&staged)
+        ));
+    }
+    for launcher in ["fennara-mcp", "fennara-daemon"] {
+        let source = staged.join(binary_name(launcher));
+        let target = layout.bin_dir.join(binary_name(launcher));
+        let activated = if launcher == "fennara-mcp" {
+            copy_existing_launcher(&source, &target)?
+        } else {
+            copy_file(&source, &target)?;
+            true
+        };
+        if activated {
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&target)
+                .and_then(|file| file.sync_all())
+                .map_err(|error| {
+                    format!(
+                        "failed to flush activated launcher {}: {error}",
+                        display_path(&target)
+                    )
+                })?;
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn remove_staged_launchers(version: &str) -> Result<(), String> {
+    let layout = AppLayout::detect()?;
+    let staged = layout.versions_dir.join(version).join("staged-launchers");
+    if staged.exists() {
+        fs::remove_dir_all(&staged).map_err(|error| {
+            format!(
+                "failed to remove activated launcher staging {}: {error}",
+                display_path(&staged)
+            )
+        })?;
+    }
+    Ok(())
+}
+
 pub fn activate_package(version: &str) -> Result<ActivationReceipt, String> {
     let layout = AppLayout::detect()?;
     activate_package_at(&layout, version)
@@ -377,13 +478,16 @@ pub(crate) fn restore_activation_at(
     layout: &AppLayout,
     receipt: ActivationReceipt,
 ) -> Result<(), String> {
-    match receipt.previous_manifest {
-        Some(previous) => fs::write(&layout.current_manifest_path, previous).map_err(|error| {
-            format!(
-                "failed to restore {}: {error}",
-                display_path(&layout.current_manifest_path)
-            )
-        }),
+    restore_manifest_at(layout, receipt.previous_manifest.as_deref())
+}
+
+pub fn restore_manifest(previous: Option<&[u8]>) -> Result<(), String> {
+    restore_manifest_at(&AppLayout::detect()?, previous)
+}
+
+fn restore_manifest_at(layout: &AppLayout, previous: Option<&[u8]>) -> Result<(), String> {
+    match previous {
+        Some(bytes) => write_current_manifest(&layout.current_manifest_path, bytes),
         None => match fs::remove_file(&layout.current_manifest_path) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -408,12 +512,36 @@ fn write_manifest(layout: &AppLayout, version: &str) -> Result<(), String> {
     });
     let raw = serde_json::to_string_pretty(&manifest)
         .map_err(|err| format!("failed to write manifest json: {err}"))?;
-    fs::write(&layout.current_manifest_path, format!("{raw}\n")).map_err(|err| {
-        format!(
-            "failed to write {}: {err}",
-            display_path(&layout.current_manifest_path)
-        )
-    })
+    write_current_manifest(&layout.current_manifest_path, format!("{raw}\n").as_bytes())
+}
+
+fn write_current_manifest(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let next = path.with_extension("json.next");
+    let previous = path.with_extension("json.previous");
+    let mut file = File::create(&next)
+        .map_err(|err| format!("failed to create {}: {err}", display_path(&next)))?;
+    file.write_all(bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|err| format!("failed to write {}: {err}", display_path(&next)))?;
+    if previous.exists() {
+        fs::remove_file(&previous)
+            .map_err(|err| format!("failed to remove {}: {err}", display_path(&previous)))?;
+    }
+    if path.exists() {
+        fs::rename(path, &previous)
+            .map_err(|err| format!("failed to preserve {}: {err}", display_path(path)))?;
+    }
+    if let Err(err) = fs::rename(&next, path) {
+        if previous.exists() {
+            let _ = fs::rename(&previous, path);
+        }
+        return Err(format!("failed to activate {}: {err}", display_path(path)));
+    }
+    if previous.exists() {
+        fs::remove_file(&previous)
+            .map_err(|err| format!("failed to remove {}: {err}", display_path(&previous)))?;
+    }
+    Ok(())
 }
 
 fn copy_file(source: &Path, target: &Path) -> Result<(), String> {
@@ -434,24 +562,25 @@ fn copy_file(source: &Path, target: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn copy_existing_launcher(source: &Path, target: &Path) -> Result<(), String> {
+fn copy_existing_launcher(source: &Path, target: &Path) -> Result<bool, String> {
     if !source.is_file() {
         return Err(format!("missing package file: {}", display_path(source)));
     }
 
     if !target.exists() {
-        return copy_file(source, target);
+        copy_file(source, target)?;
+        return Ok(true);
     }
 
     match copy_file(source, target) {
-        Ok(()) => Ok(()),
+        Ok(()) => Ok(true),
         Err(error) => {
             println!(
                 "warning: kept existing launcher because it could not be replaced: {}",
                 display_path(target)
             );
             println!("warning: {error}");
-            Ok(())
+            Ok(false)
         }
     }
 }

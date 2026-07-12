@@ -93,7 +93,8 @@ pub fn begin(kind: OperationKind, args: &[String]) -> Result<(), String> {
     let requested_operation_id = option_value(args, "--operation-id");
     let resume_id = env::var(OPERATION_ID_ENV)
         .ok()
-        .filter(|value| !value.is_empty());
+        .filter(|value| !value.is_empty())
+        .or_else(|| option_value(args, "--resume-operation"));
     let journal = if let Some(id) = resume_id {
         OperationJournal::resume(layout, &id, project_dir.as_deref())?
     } else if let Some(id) = requested_operation_id {
@@ -160,9 +161,20 @@ pub fn cancel_handoff() -> Result<(), String> {
     })
 }
 
+pub fn defer_completion() -> Result<(), String> {
+    with_current(|journal| {
+        journal.completion_deferred = true;
+        Ok(())
+    })
+}
+
 pub fn current_id() -> Option<String> {
     let slot = current_slot().lock().ok()?;
     slot.as_ref().map(|journal| journal.id.clone())
+}
+
+pub fn validate_id(id: &str) -> Result<(), String> {
+    validate_operation_id(id).map(|_| ())
 }
 
 pub fn finish_success() -> Result<(), String> {

@@ -17,6 +17,8 @@ mod release_package;
 mod release_package_tests;
 mod release_update;
 mod self_update;
+mod update_apply;
+mod update_stage;
 mod webview_prereq;
 mod webview_runtime;
 
@@ -40,6 +42,10 @@ fn run_tracked(args: Vec<String>) -> Result<(), String> {
     let kind = match args.first().map(String::as_str) {
         Some("install") => Some(operation::OperationKind::Install),
         Some("update") => Some(operation::OperationKind::Update),
+        Some("recover") => Some(operation::OperationKind::Update),
+        Some(update_apply::COMPLETE_COMMAND | update_apply::ROLLBACK_COMMAND) => {
+            Some(operation::OperationKind::Update)
+        }
         Some("self-update") | Some(self_update::COMPLETE_COMMAND) => {
             Some(operation::OperationKind::SelfUpdate)
         }
@@ -96,6 +102,13 @@ fn run(args: Vec<String>) -> Result<(), String> {
         Some("install") => project_install::run(args.iter().skip(1).map(String::as_str).collect()),
         Some("mcp-setup") => mcp_setup::run(args.iter().skip(1).map(String::as_str).collect()),
         Some("update") => release_update::run(args.iter().skip(1).map(String::as_str).collect()),
+        Some("recover") => update_apply::recover(args.iter().skip(1).map(String::as_str).collect()),
+        Some(update_apply::COMPLETE_COMMAND) => {
+            update_apply::complete(args.iter().skip(1).map(String::as_str).collect())
+        }
+        Some(update_apply::ROLLBACK_COMMAND) => {
+            update_apply::rollback(args.iter().skip(1).map(String::as_str).collect())
+        }
         Some("self-update") => self_update::run(args.iter().skip(1).map(String::as_str).collect()),
         Some(self_update::COMPLETE_COMMAND) => {
             self_update::complete(args.iter().skip(1).cloned().collect())
@@ -114,7 +127,8 @@ Usage:
   fennara diagnostics [--operation <operation-id>] [--json]
   fennara install [--project <path>] [--version <version>]
   fennara mcp-setup <target flags>
-  fennara update [--version <version>] [--project <path>] [--no-self-update]
+  fennara update [--version <version>] [--project <path>] [--no-self-update] [--prepare]
+  fennara recover --project <path> [--operation <operation-id>]
   fennara self-update [--version <version>]
   fennara --version
   fennara --help
@@ -126,6 +140,7 @@ Commands:
   install    Set up Fennara in a Godot project
   mcp-setup  Configure an MCP app to launch Fennara
   update     Update the CLI, local package, addon, and project guidance
+  recover    Restore an interrupted native update after Godot is closed
   self-update
              Update only the installed Fennara CLI
 
