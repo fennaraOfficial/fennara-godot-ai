@@ -390,23 +390,39 @@ fn install_from_assets(
 
 pub fn activate_staged_launchers(version: &str) -> Result<(), String> {
     let layout = AppLayout::detect()?;
+    activate_staged_launchers_at(&layout, version)
+}
+
+pub(crate) fn activate_staged_launchers_at(
+    layout: &AppLayout,
+    version: &str,
+) -> Result<(), String> {
     let staged = layout.versions_dir.join(version).join("staged-launchers");
     if !staged.is_dir() {
         return Ok(());
     }
-    let mut activated_all = true;
     for launcher in ["fennara-mcp", "fennara-daemon"] {
         let source = staged.join(binary_name(launcher));
         let target = layout.bin_dir.join(binary_name(launcher));
-        if let Err(error) = copy_file(&source, &target) {
-            activated_all = false;
-            println!(
-                "warning: kept the current launcher at {}: {error}",
-                display_path(&target)
-            );
-        }
+        copy_file(&source, &target)?;
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&target)
+            .and_then(|file| file.sync_all())
+            .map_err(|error| {
+                format!(
+                    "failed to flush activated launcher {}: {error}",
+                    display_path(&target)
+                )
+            })?;
     }
-    if activated_all {
+    Ok(())
+}
+
+pub(crate) fn remove_staged_launchers(version: &str) -> Result<(), String> {
+    let layout = AppLayout::detect()?;
+    let staged = layout.versions_dir.join(version).join("staged-launchers");
+    if staged.exists() {
         fs::remove_dir_all(&staged).map_err(|error| {
             format!(
                 "failed to remove activated launcher staging {}: {error}",

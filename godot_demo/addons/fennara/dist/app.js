@@ -70,7 +70,7 @@
   const versionWarning = document.querySelector("[data-version-warning]");
   const versionPopover = document.querySelector("[data-version-popover]");
   const versionWarningText = document.querySelector("[data-version-warning-text]");
-  const prepareFennaraUpdateButton = document.querySelector("[data-prepare-fennara-update]");
+  const updateStartOverlay = document.querySelector("[data-update-start-overlay]");
   const usageContainer = document.querySelector(".composer-usage");
   const usagePopover = document.querySelector("[data-usage-popover]");
   const usageTotalCost = document.querySelector("[data-usage-total-cost]");
@@ -129,14 +129,21 @@
   });
   const applyProjectStatus = projectStatusController.applyProjectStatus;
 
-  prepareFennaraUpdateButton?.addEventListener("click", () => {
-    prepareFennaraUpdateButton.disabled = true;
+  versionWarning?.addEventListener("click", () => {
+    if (versionWarning.disabled) {
+      return;
+    }
+    versionWarning.disabled = true;
+    versionWarning.setAttribute("aria-busy", "true");
+    updateStartOverlay.hidden = false;
     const sent = send({
       type: "prepare_fennara_update",
       request_id: nextRequestId("prepare-fennara-update"),
     });
     if (!sent) {
-      prepareFennaraUpdateButton.disabled = false;
+      versionWarning.disabled = false;
+      versionWarning.removeAttribute("aria-busy");
+      updateStartOverlay.hidden = true;
       appendSystem("Godot is not connected, so the update could not start.");
     }
   });
@@ -1418,9 +1425,8 @@
       return;
     }
     if (message.type === "fennara_update_requested") {
-      prepareFennaraUpdateButton.disabled = false;
-      appendSystem("Update preparation opened in the Fennara Godot dock.");
-      window.setTimeout(clearSystemStatus, 3000);
+      versionWarning.disabled = false;
+      versionWarning.removeAttribute("aria-busy");
       return;
     }
     if (message.type === "chat_context_snippet") {
@@ -1578,7 +1584,9 @@
       transcriptRenderer.updateContextCompaction("failed");
       const requestId = String(message.request_id || "");
       if (requestId.startsWith("prepare-fennara-update")) {
-        prepareFennaraUpdateButton.disabled = false;
+        versionWarning.disabled = false;
+        versionWarning.removeAttribute("aria-busy");
+        updateStartOverlay.hidden = true;
       }
       if (requestId.startsWith("open-project-file")) {
         appendSystem(errorText);

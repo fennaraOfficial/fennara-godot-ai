@@ -71,12 +71,13 @@
       }
       const current = version.current_version || "installed";
       const latest = version.latest_version || "latest";
+      versionWarning.title = `Update Fennara ${current} to ${latest}`;
       if (versionWarningText) {
         versionWarningText.innerHTML = [
           `Current: ${escapeHtml(current)}`,
           `Available: ${escapeHtml(latest)}`,
           "",
-          "The update will be verified before Godot asks to close.",
+          "Press Update to start.",
         ].join("<br>");
       }
       if (versionPopover) {

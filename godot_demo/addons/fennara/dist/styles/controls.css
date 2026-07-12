@@ -21,6 +21,49 @@
   display: none !important;
 }
 
+.update-start-overlay[hidden] {
+  display: none;
+}
+
+.update-start-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: #242424;
+}
+
+.update-start-card {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  max-width: 420px;
+  text-align: center;
+  color: #c8c8c8;
+}
+
+.update-start-card strong {
+  color: #f0f0f0;
+  font-size: 20px;
+}
+
+.update-start-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #4b4b4b;
+  border-top-color: #6ea8e5;
+  border-radius: 50%;
+  animation: fennara-update-spin 0.8s linear infinite;
+}
+
+@keyframes fennara-update-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .target-pill {
   display: flex;
   align-items: center;
@@ -117,9 +160,23 @@
 }
 
 .version-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 10px;
   border-color: #4f93d2;
+  border-style: solid;
+  border-width: 1px;
+  border-radius: var(--radius);
   background: #478ec9;
   color: #f2f8ff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(112, 188, 255, 0.12);
 }
 
 .version-button:hover {
@@ -170,22 +227,7 @@
   white-space: nowrap;
 }
 
-.version-update-action {
-  border: 1px solid rgba(112, 188, 255, 0.45);
-  border-radius: 7px;
-  background: rgba(55, 132, 210, 0.22);
-  color: var(--text-primary);
-  padding: 7px 10px;
-  cursor: pointer;
-  font: inherit;
-}
-
-.version-update-action:hover,
-.version-update-action:focus-visible {
-  background: rgba(55, 132, 210, 0.36);
-}
-
-.version-update-action:disabled {
+.version-button:disabled {
   cursor: wait;
   opacity: 0.6;
 }

@@ -304,7 +304,7 @@ When release packaging builds the CLI, those templates are compiled into the bin
 
 - `install.ps1` and `install.sh` fetch the latest CLI asset by default.
 - `fennara update` fetches the release manifest from `latest` by default, self-updates the installed CLI when needed, then resolves local/addon/shared runtime assets from it.
-- In-editor updates stage verified assets before shutdown, keep the previous addon and runtime manifest until activation validation succeeds, and require the reopened GDExtension handshake before deleting the rollback copy.
+- In-editor updates stage verified assets before shutdown, recheck the complete staged-addon digest before replacement, keep the previous addon, launchers, and runtime manifest until activation validation succeeds, and require the reopened GDExtension handshake before deleting rollback data.
 - `fennara install` fetches the release manifest from `latest` by default, then resolves local/addon/shared runtime assets from it.
 - The Godot plugin update check compares against GitHub's latest release.
 

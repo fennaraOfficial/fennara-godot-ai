@@ -144,8 +144,12 @@ godot::Dictionary FirstRunSetup::_find_install_operation() const {
     if (dir.is_empty() || operation_id.is_empty()) {
         return godot::Dictionary();
     }
-    const godot::Variant parsed = godot::JSON::parse_string(godot::FileAccess::get_file_as_string(
-        dir.path_join(operation_id + godot::String(".json"))));
+    const godot::String path = dir.path_join(operation_id + godot::String(".json"));
+    if (!godot::FileAccess::file_exists(path)) {
+        return godot::Dictionary();
+    }
+    const godot::Variant parsed =
+        godot::JSON::parse_string(godot::FileAccess::get_file_as_string(path));
     if (parsed.get_type() != godot::Variant::DICTIONARY) {
         return godot::Dictionary();
     }

@@ -3,7 +3,12 @@ use serde_json::Value;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
+use std::thread;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+const FILE_REPLACE_TIMEOUT: Duration = Duration::from_secs(2);
+const FILE_REPLACE_RETRY_DELAY: Duration = Duration::from_millis(20);
 
 pub(super) fn write_json_atomic(path: &Path, value: &Value) -> Result<(), String> {
     let temp = path.with_extension(format!("json.tmp-{}", std::process::id()));
@@ -24,7 +29,7 @@ pub(super) fn write_json_atomic(path: &Path, value: &Value) -> Result<(), String
 
     if path.exists() {
         let _ = fs::remove_file(&backup);
-        fs::rename(path, &backup).map_err(|err| {
+        rename_with_retry(path, &backup).map_err(|err| {
             format!(
                 "failed to back up {} as {}: {err}",
                 display_path(path),
@@ -46,6 +51,22 @@ pub(super) fn write_json_atomic(path: &Path, value: &Value) -> Result<(), String
                 display_path(&temp),
                 display_path(path)
             ))
+        }
+    }
+}
+
+fn rename_with_retry(source: &Path, destination: &Path) -> std::io::Result<()> {
+    let deadline = std::time::Instant::now() + FILE_REPLACE_TIMEOUT;
+    loop {
+        match fs::rename(source, destination) {
+            Ok(()) => return Ok(()),
+            Err(error)
+                if error.kind() == std::io::ErrorKind::PermissionDenied
+                    && std::time::Instant::now() < deadline =>
+            {
+                thread::sleep(FILE_REPLACE_RETRY_DELAY);
+            }
+            Err(error) => return Err(error),
         }
     }
 }

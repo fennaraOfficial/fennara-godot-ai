@@ -1,3 +1,4 @@
+use super::launchers;
 use super::options::ApplyOptions;
 use super::process::{reopen_godot, wait_for_handshake};
 use super::{activate_runtime_and_guidance, recovery_required, set_state};
@@ -26,16 +27,34 @@ pub(super) fn apply_after_exit(
     let layout = AppLayout::detect()?;
     daemon_setup::shutdown_if_running(&layout)
         .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
-    release_package::activate_staged_launchers(&receipt.to_version)
+    update_stage::verify_staged_addon(root, receipt)
+        .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
+    launchers::snapshot(&layout, root)
         .map_err(|error| operation::failure(FailureClass::StageFilesystem, error))?;
+    receipt.launchers_snapshotted = true;
+    update_stage::write_receipt(receipt_path, receipt)?;
     persist_previous_manifest(&layout, root, receipt)?;
-    replace_addon(&options.project_dir, root, receipt)?;
+    if let Err(error) = release_package::activate_staged_launchers(&receipt.to_version) {
+        return rollback_before_reopen(options, root, receipt_path, receipt, error);
+    }
+    if let Err(error) = replace_addon(&options.project_dir, root) {
+        return rollback_before_reopen(options, root, receipt_path, receipt, error);
+    }
+    receipt.addon_replaced = true;
+    if let Err(error) = update_stage::write_receipt(receipt_path, receipt) {
+        return rollback_before_reopen(options, root, receipt_path, receipt, error);
+    }
 
     if let Err(error) = activate_runtime_and_guidance(&options.project_dir, &receipt.to_version) {
         return rollback_before_reopen(options, root, receipt_path, receipt, error);
     }
-    operation::phase(Phase::Reopening, "Reopening Godot with the updated addon")?;
-    set_state(receipt_path, receipt, "reopening")?;
+    if let Err(error) = operation::phase(Phase::Reopening, "Reopening Godot with the updated addon")
+    {
+        return rollback_before_reopen(options, root, receipt_path, receipt, error);
+    }
+    if let Err(error) = set_state(receipt_path, receipt, "reopening") {
+        return rollback_before_reopen(options, root, receipt_path, receipt, error);
+    }
     let reopened_pid = match reopen_godot(&options.godot_executable, &options.project_dir) {
         Ok(pid) => pid,
         Err(error) => return rollback_before_reopen(options, root, receipt_path, receipt, error),
@@ -56,18 +75,21 @@ pub(super) fn apply_after_exit(
     if let Err(error) = daemon_setup::ensure_running(&layout, &receipt.to_version) {
         return recovery_required(receipt_path, receipt, error);
     }
-    remove_validated_backup(root, receipt)?;
     set_state(receipt_path, receipt, "succeeded")?;
     operation::phase(
         Phase::Succeeded,
         "The updated addon and runtime were validated",
-    )
+    )?;
+    if let Err(error) = remove_validated_backup(root, &receipt.to_version) {
+        eprintln!("warning: validated update cleanup is pending: {error}");
+    }
+    Ok(())
 }
 
-fn replace_addon(project_dir: &Path, root: &Path, receipt: &UpdateReceipt) -> Result<(), String> {
+fn replace_addon(project_dir: &Path, root: &Path) -> Result<(), String> {
     let active = project_install::project_addon_dir(project_dir);
-    let staged = root.join(&receipt.addon);
-    let backup = root.join(&receipt.backup_addon);
+    let staged = root.join(update_stage::STAGED_ADDON_NAME);
+    let backup = root.join(update_stage::BACKUP_ADDON_NAME);
     project_addon::validate(&staged)
         .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
     if backup.exists() {
@@ -113,27 +135,32 @@ fn rollback_before_reopen(
 ) -> Result<(), String> {
     match restore_previous(&options.project_dir, root) {
         Ok(()) => {
-            set_state(receipt_path, receipt, "rolled_back")?;
-            operation::phase(Phase::RolledBack, "The failed update was rolled back")?;
+            let state_error = set_state(receipt_path, receipt, "rolled_back").err();
+            let phase_error =
+                operation::phase(Phase::RolledBack, "The failed update was rolled back").err();
             let _ = reopen_godot(&options.godot_executable, &options.project_dir);
-            let error = operation::failure(
-                FailureClass::ValidationFailed,
-                format!("update failed and the previous version was restored: {original_error}"),
-            );
-            operation::defer_completion()?;
+            let mut detail =
+                format!("update failed and the previous version was restored: {original_error}");
+            for persistence_error in [state_error, phase_error].into_iter().flatten() {
+                detail.push_str(&format!(
+                    "; rollback status persistence failed: {persistence_error}"
+                ));
+            }
+            let error = operation::failure(FailureClass::ValidationFailed, detail);
+            let _ = operation::defer_completion();
             Err(error)
         }
         Err(rollback_error) => {
-            set_state(receipt_path, receipt, "recovery_required")?;
-            operation::phase(
+            let _ = set_state(receipt_path, receipt, "recovery_required");
+            let _ = operation::phase(
                 Phase::RecoveryRequired,
                 "The update and automatic rollback failed; manual recovery is required",
-            )?;
+            );
             let error = operation::failure(
                 FailureClass::RollbackFailed,
                 format!("update failed: {original_error}; rollback failed: {rollback_error}"),
             );
-            operation::defer_completion()?;
+            let _ = operation::defer_completion();
             Err(error)
         }
     }
@@ -141,29 +168,68 @@ fn rollback_before_reopen(
 
 pub(super) fn restore_previous(project_dir: &Path, root: &Path) -> Result<(), String> {
     let receipt = update_stage::read_receipt(&root.join("receipt.json"))?;
+    let layout = AppLayout::detect()?;
     let active = project_install::project_addon_dir(project_dir);
-    let backup = root.join(&receipt.backup_addon);
-    if !backup.is_dir() {
-        return Err(format!(
-            "update backup is missing at {}",
-            display_path(&backup)
-        ));
+    let backup = root.join(update_stage::BACKUP_ADDON_NAME);
+    let mut errors = match restore_addon(&active, &backup, &receipt.from_version) {
+        Ok(()) => Vec::new(),
+        Err(error) => vec![error],
+    };
+    if receipt.had_current_manifest.is_some()
+        && let Err(error) = restore_previous_manifest(root)
+    {
+        errors.push(error);
     }
-    if active.exists() {
-        fs::remove_dir_all(&active).map_err(|error| {
+    if receipt.launchers_snapshotted
+        && let Err(error) = launchers::restore(&layout, root)
+    {
+        errors.push(error);
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+fn restore_addon(active: &Path, backup: &Path, from_version: &str) -> Result<(), String> {
+    if backup.is_dir() {
+        if active.exists() {
+            fs::remove_dir_all(active).map_err(|error| {
+                format!(
+                    "failed to remove failed addon {}: {error}",
+                    display_path(active)
+                )
+            })?;
+        }
+        if let Some(parent) = active.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                format!(
+                    "failed to create addon parent {}: {error}",
+                    display_path(parent)
+                )
+            })?;
+        }
+        fs::rename(backup, active).map_err(|error| {
             format!(
-                "failed to remove failed addon {}: {error}",
-                display_path(&active)
+                "failed to restore addon backup {}: {error}",
+                display_path(backup)
             )
         })?;
+    } else if !active_has_version(active, from_version) {
+        return Err(format!(
+            "update backup is missing at {} and the active addon is not version {}",
+            display_path(backup),
+            from_version
+        ));
     }
-    fs::rename(&backup, &active).map_err(|error| {
-        format!(
-            "failed to restore addon backup {}: {error}",
-            display_path(&backup)
-        )
-    })?;
-    restore_previous_manifest(root)
+    Ok(())
+}
+
+fn active_has_version(active: &Path, expected: &str) -> bool {
+    project_addon::validate(active)
+        .map(|addon| addon.version == expected)
+        .unwrap_or(false)
 }
 
 fn persist_previous_manifest(
@@ -199,8 +265,8 @@ fn restore_previous_manifest(root: &Path) -> Result<(), String> {
     }
 }
 
-fn remove_validated_backup(root: &Path, receipt: &UpdateReceipt) -> Result<(), String> {
-    let backup = root.join(&receipt.backup_addon);
+fn remove_validated_backup(root: &Path, version: &str) -> Result<(), String> {
+    let backup = root.join(update_stage::BACKUP_ADDON_NAME);
     if backup.exists() {
         fs::remove_dir_all(&backup).map_err(|error| {
             operation::failure(
@@ -221,6 +287,8 @@ fn remove_validated_backup(root: &Path, receipt: &UpdateReceipt) -> Result<(), S
                 .map_err(|error| format!("failed to remove {}: {error}", display_path(&path)))?;
         }
     }
+    launchers::cleanup(root)?;
+    release_package::remove_staged_launchers(version)?;
     Ok(())
 }
 
@@ -232,3 +300,6 @@ fn write_synced(path: &Path, bytes: &[u8]) -> Result<(), String> {
     file.sync_all()
         .map_err(|error| format!("failed to flush {}: {error}", display_path(path)))
 }
+
+#[cfg(test)]
+mod tests;

@@ -221,12 +221,12 @@ bool UpdateCoordinator::_launch_completion(const godot::String &command) {
 
 void UpdateCoordinator::_request_editor_close() {
     godot::SceneTree *tree = get_tree();
-    godot::Window *root = tree == nullptr ? nullptr : tree->get_root();
-    if (root == nullptr) {
+    if (tree == nullptr || tree->get_root() == nullptr) {
         _fail("FEN-UPDATE-EDITOR-CLOSE", "Godot could not request normal editor shutdown.");
         return;
     }
-    root->call_deferred("emit_signal", "close_requested");
+    tree->get_root()->call_deferred("propagate_notification",
+                                    godot::Node::NOTIFICATION_WM_CLOSE_REQUEST);
 }
 
 void UpdateCoordinator::_set_step(Step next, const godot::String &status,

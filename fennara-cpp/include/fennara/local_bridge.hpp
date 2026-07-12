@@ -44,7 +44,6 @@ public:
                                    const godot::String &text);
 
 private:
-    static constexpr const char *LOCAL_DAEMON_WS_URL = "ws://127.0.0.1:41287/godot/ws";
     static constexpr double RECONNECT_DELAY_SECONDS = 2.0;
     static constexpr int LOCAL_BRIDGE_WS_BUFFER_SIZE_BYTES = 16 * 1024 * 1024;
 

@@ -45,7 +45,8 @@ godot::Dictionary request_json(godot::HTTPClient::Method method,
     }
     godot::Ref<godot::HTTPClient> http;
     http.instantiate();
-    if (http.is_null() || http->connect_to_host(kDaemonHost, kDaemonPort) != godot::OK) {
+    if (http.is_null() ||
+        http->connect_to_host(kDaemonHost, kDaemonPort) != godot::OK) {
         return godot::Dictionary();
     }
 
@@ -79,12 +80,20 @@ godot::Dictionary request_json(godot::HTTPClient::Method method,
                 }
                 response_body += chunk.get_string_from_utf8();
             }
-            if (http->get_status() != godot::HTTPClient::STATUS_BODY && http->has_response()) {
+            const int64_t response_length = http->get_response_body_length();
+            if (response_length >= 0 &&
+                response_body.to_utf8_buffer().size() >= response_length) {
                 break;
             }
         } else if (request_sent && status == godot::HTTPClient::STATUS_CONNECTED &&
                    http->has_response()) {
-            break;
+            const int64_t response_length = http->get_response_body_length();
+            if (response_length == 0 ||
+                (response_length > 0 &&
+                 response_body.to_utf8_buffer().size() >= response_length) ||
+                (response_length < 0 && !response_body.is_empty())) {
+                break;
+            }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
@@ -92,7 +101,11 @@ godot::Dictionary request_json(godot::HTTPClient::Method method,
         return godot::Dictionary();
     }
 
-    const godot::Variant parsed = godot::JSON::parse_string(response_body);
+    const godot::String response_json = response_body.strip_edges();
+    if (response_json.is_empty()) {
+        return godot::Dictionary();
+    }
+    const godot::Variant parsed = godot::JSON::parse_string(response_json);
     if (parsed.get_type() != godot::Variant::DICTIONARY) {
         return godot::Dictionary();
     }

@@ -103,7 +103,11 @@ void FennaraLocalBridge::_process(double delta) {
                 continue;
             }
 
-            godot::Variant parsed = godot::JSON::parse_string(packet.get_string_from_utf8());
+            const godot::String message = packet.get_string_from_utf8().strip_edges();
+            if (message.is_empty()) {
+                continue;
+            }
+            godot::Variant parsed = godot::JSON::parse_string(message);
             if (parsed.get_type() != godot::Variant::DICTIONARY) {
                 continue;
             }
@@ -202,7 +206,8 @@ void FennaraLocalBridge::_connect_socket() {
     headers.append(control_header);
     _ws->set_handshake_headers(headers);
 
-    godot::Error err = _ws->connect_to_url(LOCAL_DAEMON_WS_URL);
+    const godot::String daemon_url = "ws://127.0.0.1:41287/godot/ws";
+    godot::Error err = _ws->connect_to_url(daemon_url);
     if (err != godot::OK) {
         FLOG_NET("Local bridge daemon unavailable");
         _ws.unref();

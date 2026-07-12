@@ -5,6 +5,10 @@
 #include <godot_cpp/classes/control.hpp>
 #include <godot_cpp/classes/label.hpp>
 
+namespace godot {
+class ProgressBar;
+}
+
 namespace fennara {
 
 class UpdateCoordinator;
@@ -25,6 +29,9 @@ private:
     godot::Label *title_label = nullptr;
     godot::Label *status_label = nullptr;
     godot::Label *error_label = nullptr;
+    godot::Label *operation_label = nullptr;
+    godot::Label *action_label = nullptr;
+    godot::ProgressBar *progress = nullptr;
     godot::Button *close_button = nullptr;
     godot::Button *not_now_button = nullptr;
     godot::Button *retry_button = nullptr;
@@ -40,6 +47,7 @@ private:
     void _on_close_confirmed();
     void _on_restore_pressed();
     void _on_restore_confirmed();
+    void _on_copy_report_pressed();
 };
 
 } // namespace fennara

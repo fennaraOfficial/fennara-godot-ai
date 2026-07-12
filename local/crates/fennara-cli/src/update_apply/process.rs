@@ -105,6 +105,25 @@ fn pid_exists(pid: u32) -> bool {
     system.process(Pid::from_u32(pid)).is_some()
 }
 
+pub(super) fn identity_is_running(pid: Option<u32>, started_at: Option<u64>) -> bool {
+    let (Some(pid), Some(started_at)) = (pid, started_at) else {
+        return false;
+    };
+    let mut system = System::new();
+    system.refresh_processes();
+    system
+        .process(Pid::from_u32(pid))
+        .is_some_and(|process| process.start_time() == started_at)
+}
+
+pub(super) fn current_process_started_at() -> Option<u64> {
+    let mut system = System::new();
+    system.refresh_processes();
+    system
+        .process(Pid::from_u32(std::process::id()))
+        .map(|process| process.start_time())
+}
+
 fn canonical_or_original(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }

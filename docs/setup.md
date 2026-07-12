@@ -272,7 +272,7 @@ fennara update --prepare --project path/to/your-godot-project
 Preparation downloads and verifies manifest-backed release assets, validates
 the packaged addon, and copies it to an operation-specific directory under
 `.godot/fennara-update/`. It records `ready_to_close` only after the staging
-receipt is durable. Preparation does not replace `addons/fennara`, switch
+receipt and a digest covering every staged addon file are durable. Preparation does not replace `addons/fennara`, switch
 `current.json`, or restart the running daemon.
 
 The chat update action runs this preparation command and displays native
@@ -280,13 +280,27 @@ progress in the Godot dock. Once the operation reaches `ready_to_close`, the
 dock asks the user to choose **Close Godot and Install** or **Not Now**. On
 confirmation, a detached CLI waits for the exact Godot process to exit, moves
 the current addon into the operation directory as `previous-addon`, renames the
-verified staged addon into `addons/fennara`, activates the matching runtime,
-and reopens the same executable and project.
+verified staged addon into `addons/fennara`, activates the matching runtime and
+shared launchers, and reopens the same executable and project. Immediately
+before replacement, the CLI recomputes the full staged-addon digest and rejects
+any changed or missing file.
 
-The previous addon and runtime manifest remain available until the reopened
+The previous addon, shared launchers, and runtime manifest remain available until the reopened
 GDExtension writes its activation handshake and the CLI confirms the matching
 daemon. Failed validation records `recovery_required`; the dock then offers
 **Restore Previous Version**, **Open Logs**, and **Copy Report**.
+
+If a machine loses power during the brief addon replacement and the addon
+cannot load far enough to show the recovery panel, close Godot and run:
+
+```bash
+fennara recover --project path/to/your-godot-project
+```
+
+The installed CLI finds the newest interrupted operation, restores its addon,
+shared launchers, and runtime manifest, then reopens the recorded Godot
+executable when it is still available. Pass `--operation <operation-id>` to
+select a specific interrupted operation.
 
 ## Troubleshooting
 

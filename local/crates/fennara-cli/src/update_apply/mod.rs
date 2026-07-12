@@ -1,9 +1,13 @@
+mod launchers;
 mod options;
 mod process;
+mod recovery;
 mod transaction;
 
 use self::options::ApplyOptions;
-use self::process::{observe_process, reopen_godot, wait_for_process_exit};
+use self::process::{
+    current_process_started_at, observe_process, reopen_godot, wait_for_process_exit,
+};
 use crate::operation::{self, FailureClass, Phase};
 use crate::project_guidance;
 use crate::release_package;
@@ -14,6 +18,10 @@ use std::time::Duration;
 pub const COMPLETE_COMMAND: &str = "__complete-project-update";
 pub const ROLLBACK_COMMAND: &str = "__rollback-project-update";
 const GODOT_EXIT_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+pub fn recover(args: Vec<&str>) -> Result<(), String> {
+    recovery::run(args)
+}
 
 pub fn complete(args: Vec<&str>) -> Result<(), String> {
     let options = ApplyOptions::parse(args)?;
@@ -26,6 +34,7 @@ pub fn complete(args: Vec<&str>) -> Result<(), String> {
     receipt.godot_started_at = Some(process.started_at);
     receipt.godot_executable = Some(options.godot_executable.display().to_string());
     receipt.updater_pid = Some(std::process::id());
+    receipt.updater_started_at = current_process_started_at();
     set_state(&receipt_path, &mut receipt, "waiting_for_godot")?;
     operation::phase(
         Phase::WaitingForGodot,
@@ -51,6 +60,7 @@ pub fn rollback(args: Vec<&str>) -> Result<(), String> {
     validate_receipt_identity(&receipt, &options.operation_id)?;
     let process = observe_process(options.wait_for_pid, &options.godot_executable)?;
     receipt.updater_pid = Some(std::process::id());
+    receipt.updater_started_at = current_process_started_at();
     set_state(&receipt_path, &mut receipt, "waiting_for_godot")?;
     operation::phase(
         Phase::WaitingForGodot,
@@ -71,13 +81,15 @@ pub fn rollback(args: Vec<&str>) -> Result<(), String> {
         "Restoring the previous Fennara addon and runtime",
     )?;
     transaction::restore_previous(&options.project_dir, &root)?;
-    set_state(&receipt_path, &mut receipt, "rolled_back")?;
-    operation::phase(
+    let state_result = set_state(&receipt_path, &mut receipt, "rolled_back");
+    let phase_result = operation::phase(
         Phase::RolledBack,
         "The previous Fennara version was restored",
-    )?;
+    );
     reopen_godot(&options.godot_executable, &options.project_dir)
         .map_err(|error| operation::failure(FailureClass::HandoffFailed, error))?;
+    state_result?;
+    phase_result?;
     operation::defer_completion()?;
     Ok(())
 }

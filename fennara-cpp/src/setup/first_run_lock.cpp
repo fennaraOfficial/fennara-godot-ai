@@ -60,11 +60,13 @@ bool FirstRunSetup::_try_acquire_lock() {
     }
 
     const godot::String owner_path = lock_owner_path(bootstrap_lock_path);
-    const godot::Variant parsed =
-        godot::JSON::parse_string(godot::FileAccess::get_file_as_string(owner_path));
     int32_t owner_pid = -1;
-    if (parsed.get_type() == godot::Variant::DICTIONARY) {
-        owner_pid = static_cast<int32_t>((int64_t)godot::Dictionary(parsed).get("pid", -1));
+    if (godot::FileAccess::file_exists(owner_path)) {
+        const godot::Variant parsed =
+            godot::JSON::parse_string(godot::FileAccess::get_file_as_string(owner_path));
+        if (parsed.get_type() == godot::Variant::DICTIONARY) {
+            owner_pid = static_cast<int32_t>((int64_t)godot::Dictionary(parsed).get("pid", -1));
+        }
     }
     godot::OS *os = godot::OS::get_singleton();
     if (os != nullptr && owner_pid > 0 && os->is_process_running(owner_pid)) {

@@ -39,13 +39,17 @@ webview after preparation begins.
 
 Verified addon files are staged under
 `.godot/fennara-update/<operation-id>/`. After explicit confirmation, a detached
-CLI waits for the exact Godot PID and start time to disappear. It moves the
-active addon to `previous-addon`, moves the staged addon to `addons/fennara`,
-switches the versioned runtime manifest, and reopens the same editor project.
+CLI waits for the exact Godot PID and start time to disappear. It rechecks a
+digest covering the complete staged addon, snapshots both shared launchers and
+the runtime manifest, moves the active addon to `previous-addon`, moves the
+staged addon to `addons/fennara`, and reopens the same editor project.
 The reopened GDExtension writes an activation handshake. The CLI deletes the
-backup only after that handshake and matching daemon health succeed. Otherwise
-the receipt remains `recovery_required` and the native dock can launch the
-same detached flow to restore the previous addon and runtime manifest.
+backup only after the success receipt, handshake, and matching daemon health
+are durable. Otherwise the receipt remains `recovery_required` and rollback
+restores the previous addon, launchers, and runtime manifest. If interruption
+temporarily leaves the addon unable to load, the installed CLI remains outside
+the project addon and provides `fennara recover --project <path>` as the
+single-addon emergency recovery entry point.
 
 ## In-Editor Chat Webview
 

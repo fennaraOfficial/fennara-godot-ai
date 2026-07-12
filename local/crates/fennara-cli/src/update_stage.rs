@@ -8,7 +8,11 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-const RECEIPT_SCHEMA_VERSION: u64 = 1;
+mod integrity;
+
+const RECEIPT_SCHEMA_VERSION: u64 = 2;
+pub(crate) const STAGED_ADDON_NAME: &str = "addon";
+pub(crate) const BACKUP_ADDON_NAME: &str = "previous-addon";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UpdateReceipt {
@@ -21,11 +25,15 @@ pub struct UpdateReceipt {
     pub architecture: String,
     pub addon: String,
     pub backup_addon: String,
+    pub addon_sha256: String,
     pub godot_pid: Option<u32>,
     pub godot_started_at: Option<u64>,
     pub godot_executable: Option<String>,
     pub had_current_manifest: Option<bool>,
+    pub launchers_snapshotted: bool,
+    pub addon_replaced: bool,
     pub updater_pid: Option<u32>,
+    pub updater_started_at: Option<u64>,
 }
 
 pub struct StagedUpdate {
@@ -86,7 +94,7 @@ pub fn prepare(
     }
 
     let mut cleanup = PreparingCleanup::new(preparing_root.clone());
-    let staged_addon = preparing_root.join("addon");
+    let staged_addon = preparing_root.join(STAGED_ADDON_NAME);
     copy_dir_without_links(&package.addon_dir, &staged_addon)?;
     let staged = project_addon::validate(&staged_addon)?;
     if staged.version != package.version {
@@ -105,13 +113,17 @@ pub fn prepare(
         to_version: package.version.clone(),
         platform: platform_name().to_string(),
         architecture: arch_name().to_string(),
-        addon: "addon".to_string(),
-        backup_addon: "previous-addon".to_string(),
+        addon: STAGED_ADDON_NAME.to_string(),
+        backup_addon: BACKUP_ADDON_NAME.to_string(),
+        addon_sha256: integrity::hash_directory(&staged_addon)?,
         godot_pid: godot_process.map(|value| value.0),
         godot_started_at: godot_process.map(|value| value.1),
         godot_executable: godot_process.map(|value| value.2.display().to_string()),
         had_current_manifest: None,
+        launchers_snapshotted: false,
+        addon_replaced: false,
         updater_pid: None,
+        updater_started_at: None,
     };
     write_receipt(&receipt_path, &receipt)?;
     fs::rename(&preparing_root, &final_root).map_err(|error| {
@@ -146,13 +158,61 @@ pub fn read_receipt(path: &Path) -> Result<UpdateReceipt, String> {
                 display_path(candidate)
             ));
         }
-        operation::validate_id(&receipt.operation_id)?;
+        validate_receipt(&receipt)?;
         return Ok(receipt);
     }
     Err(format!(
         "update receipt was not found at {}",
         display_path(path)
     ))
+}
+
+pub(crate) fn verify_staged_addon(root: &Path, receipt: &UpdateReceipt) -> Result<(), String> {
+    let staged = root.join(STAGED_ADDON_NAME);
+    let actual = integrity::hash_directory(&staged)?;
+    if actual.eq_ignore_ascii_case(&receipt.addon_sha256) {
+        Ok(())
+    } else {
+        Err(format!(
+            "staged addon integrity check failed: expected {}, got {actual}",
+            receipt.addon_sha256
+        ))
+    }
+}
+
+fn validate_receipt(receipt: &UpdateReceipt) -> Result<(), String> {
+    operation::validate_id(&receipt.operation_id)?;
+    if receipt.addon != STAGED_ADDON_NAME || receipt.backup_addon != BACKUP_ADDON_NAME {
+        return Err("update receipt contains unsafe addon paths".to_string());
+    }
+    if receipt.platform != platform_name() || receipt.architecture != arch_name() {
+        return Err("update receipt targets a different platform or architecture".to_string());
+    }
+    validate_version_component(&receipt.from_version)?;
+    validate_version_component(&receipt.to_version)?;
+    if receipt.addon_sha256.len() != 64
+        || !receipt
+            .addon_sha256
+            .chars()
+            .all(|ch| ch.is_ascii_hexdigit())
+    {
+        return Err("update receipt contains an invalid addon digest".to_string());
+    }
+    Ok(())
+}
+
+fn validate_version_component(version: &str) -> Result<(), String> {
+    if version.is_empty()
+        || version.len() > 128
+        || version == "."
+        || version == ".."
+        || !version
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '+' | '_'))
+    {
+        return Err(format!("unsafe update version in receipt: {version}"));
+    }
+    Ok(())
 }
 
 pub fn write_receipt(path: &Path, receipt: &UpdateReceipt) -> Result<(), String> {
@@ -270,115 +330,4 @@ impl Drop for PreparingCleanup {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::app_layout::{arch_name, platform_name};
-    use std::ops::Deref;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    #[test]
-    fn stages_valid_addon_without_touching_active_addon() {
-        let root = TestRoot::new("success");
-        let project = root.join("project");
-        let source = root.join("package");
-        write_project(&project);
-        write_addon(&project.join("addons/fennara"), "1.0.0");
-        write_addon(&source, "1.1.0");
-        let active_before = fs::read(project.join("addons/fennara/VERSION")).unwrap();
-        let package = InstalledPackage {
-            version: "1.1.0".to_string(),
-            addon_dir: source,
-        };
-
-        let staged = prepare(&project, "1.0.0", &package, "update-123-test", None).unwrap();
-
-        assert_eq!(staged.version, "1.1.0");
-        assert!(staged.root.join("addon/fennara.gdextension").is_file());
-        assert_eq!(
-            fs::read(project.join("addons/fennara/VERSION")).unwrap(),
-            active_before
-        );
-        let receipt: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(staged.receipt_path).unwrap()).unwrap();
-        assert_eq!(receipt["state"], "ready_to_close");
-        assert_eq!(receipt["from_version"], "1.0.0");
-        assert_eq!(receipt["to_version"], "1.1.0");
-    }
-
-    #[test]
-    fn failed_validation_leaves_no_staging_directory() {
-        let root = TestRoot::new("invalid");
-        let project = root.join("project");
-        let source = root.join("package");
-        write_project(&project);
-        fs::create_dir_all(&source).unwrap();
-        fs::write(source.join("VERSION"), "1.1.0\n").unwrap();
-        let package = InstalledPackage {
-            version: "1.1.0".to_string(),
-            addon_dir: source,
-        };
-
-        assert!(prepare(&project, "1.0.0", &package, "update-456-test", None,).is_err());
-        assert!(
-            !project
-                .join(".godot/fennara-update/update-456-test")
-                .exists()
-        );
-        assert!(
-            !project
-                .join(".godot/fennara-update/update-456-test.preparing")
-                .exists()
-        );
-    }
-
-    fn write_project(project: &Path) {
-        fs::create_dir_all(project).unwrap();
-        fs::write(project.join("project.godot"), "[application]\n").unwrap();
-    }
-
-    fn write_addon(addon: &Path, version: &str) {
-        fs::create_dir_all(addon.join("bin")).unwrap();
-        fs::create_dir_all(addon.join("ai")).unwrap();
-        fs::write(addon.join("VERSION"), format!("{version}\n")).unwrap();
-        fs::write(addon.join("ai/guidelines.md"), "guidance\n").unwrap();
-        fs::write(addon.join("bin/fennara-test-library"), "library").unwrap();
-        fs::write(
-            addon.join("fennara.gdextension"),
-            format!(
-                "[libraries]\n{}.editor.{} = \"res://addons/fennara/bin/fennara-test-library\"\n",
-                platform_name(),
-                arch_name()
-            ),
-        )
-        .unwrap();
-    }
-
-    struct TestRoot(PathBuf);
-
-    impl TestRoot {
-        fn new(name: &str) -> Self {
-            let nonce = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
-            Self(std::env::temp_dir().join(format!(
-                "fennara-update-stage-{name}-{}-{nonce}",
-                std::process::id()
-            )))
-        }
-    }
-
-    impl Deref for TestRoot {
-        type Target = Path;
-
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
-    }
-
-    impl Drop for TestRoot {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-}
+mod tests;

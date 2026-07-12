@@ -155,10 +155,16 @@ void FennaraDock::_sync_webview_bounds() {
         return;
     }
 
-    webview_host->resize_to(webview_region ? webview_region : this);
-    if (webview_host->uses_internal_surface()) {
-        webview_host->set_visible(true);
+    const bool native_panel_visible =
+        (update_panel != nullptr && update_panel->is_visible()) ||
+        (setup_panel != nullptr && setup_panel->is_visible());
+    if (native_panel_visible) {
+        webview_host->set_visible(false);
+        return;
     }
+
+    webview_host->resize_to(webview_region ? webview_region : this);
+    webview_host->set_visible(true);
 }
 
 void FennaraDock::_build_ui() {
@@ -367,6 +373,9 @@ bool FennaraDock::_show_update_if_needed() {
     update_panel->set_visible(visible);
     if (visible) {
         _release_webview_keyboard_focus();
+        if (webview_host != nullptr && webview_host->is_started()) {
+            webview_host->set_visible(false);
+        }
         if (internal_webview_surface != nullptr) {
             internal_webview_surface->set_visible(false);
         }
@@ -395,6 +404,9 @@ bool FennaraDock::_show_setup_if_needed() {
     setup_panel->set_visible(visible);
     if (visible) {
         _release_webview_keyboard_focus();
+        if (webview_host != nullptr && webview_host->is_started()) {
+            webview_host->set_visible(false);
+        }
         if (internal_webview_surface != nullptr) {
             internal_webview_surface->set_visible(false);
         }

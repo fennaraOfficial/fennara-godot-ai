@@ -121,6 +121,13 @@ fennara install --project path/to/your-godot-project
 fennara update --project path/to/your-godot-project
 ```
 
+If an interrupted native update prevents the addon from loading, close Godot
+and restore the recorded transaction with the same installed CLI:
+
+```bash
+fennara recover --project path/to/your-godot-project
+```
+
 Your MCP app can point at the global Fennara launcher from anywhere. It does not
 need config files inside the Godot project. Fennara uses the Godot project you
 open in the editor.
