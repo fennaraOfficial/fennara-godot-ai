@@ -2,11 +2,14 @@
 
 import os
 import glob
-from SCons.Script import Exit
+from SCons.Script import ARGUMENTS, Exit
 
 CacheDir(os.environ.get("SCONS_CACHE", ".scons_cache/"))
 
-env = SConscript("godot-cpp/SConstruct")
+env = SConscript("godot-cpp/SConstruct").Clone()
+
+if str(ARGUMENTS.get("fennara_setup_tests", "no")).lower() in ("1", "yes", "true"):
+    env.Append(CPPDEFINES=["FENNARA_SETUP_TEST_HOOKS"])
 
 if env["platform"] == "windows":
     env.Append(CPPPATH=["vendor/webview/include", "vendor/webview2/include"])

@@ -6,7 +6,8 @@ on:
       - main
     paths:
       - "fennara-cpp/**"
-      - "godot/addons/fennara/**"
+      - "godot_demo/addons/fennara/**"
+      - "godot_demo/tests/**"
       - "scripts/prepare-linux-cef-sdk.mjs"
       - ".github/workflows/gdextension-build.yml"
   push:
@@ -14,7 +15,8 @@ on:
       - main
     paths:
       - "fennara-cpp/**"
-      - "godot/addons/fennara/**"
+      - "godot_demo/addons/fennara/**"
+      - "godot_demo/tests/**"
       - "scripts/prepare-linux-cef-sdk.mjs"
       - ".github/workflows/gdextension-build.yml"
   workflow_dispatch:
@@ -139,3 +141,37 @@ jobs:
           SCONS_CACHE: ${{ github.workspace }}/fennara-cpp/.scons_cache
           FENNARA_CEF_ROOT: ${{ steps.linux_cef_sdk.outputs.cef_root }}
         run: scons platform=${{ matrix.platform }} target=editor --debug=explain --cache-show
+
+      - name: Download Godot for native tests
+        if: steps.source.outputs.available == 'true' && matrix.platform == 'windows'
+        id: godot
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "godot.zip"
+          $directory = Join-Path $env:RUNNER_TEMP "godot"
+          Invoke-WebRequest `
+            -Uri "https://github.com/godotengine/godot/releases/download/4.5-stable/Godot_v4.5-stable_win64.exe.zip" `
+            -OutFile $archive
+          Expand-Archive -LiteralPath $archive -DestinationPath $directory
+          $console = Get-ChildItem -LiteralPath $directory -Filter "*console.exe" |
+            Select-Object -First 1
+          if (-not $console) {
+            throw "Godot console executable was not found after extraction."
+          }
+          "console=$($console.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Test native first-run setup states
+        if: steps.source.outputs.available == 'true' && matrix.platform == 'windows'
+        shell: pwsh
+        working-directory: fennara-cpp
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/fennara-cpp/.scons_cache
+        run: |
+          scons platform=windows target=editor fennara_setup_tests=yes
+          & "${{ steps.godot.outputs.console }}" `
+            --headless `
+            --path "${{ github.workspace }}\godot_demo" `
+            --script "res://tests/first_run_setup_test.gd"
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }

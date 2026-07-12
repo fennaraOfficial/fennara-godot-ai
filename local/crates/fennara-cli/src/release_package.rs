@@ -1,4 +1,5 @@
 use crate::app_layout::{AppLayout, arch_name, binary_name, display_path, platform_name};
+use crate::operation::{self, FailureClass};
 use crate::release_client::{self, DownloadAsset, Release};
 use crate::release_manifest::ReleaseManifest;
 use crate::webview_runtime;
@@ -10,6 +11,10 @@ pub struct InstalledPackage {
     pub addon_dir: PathBuf,
 }
 
+pub struct ActivationReceipt {
+    previous_manifest: Option<Vec<u8>>,
+}
+
 pub fn ensure_package(version_request: &str) -> Result<InstalledPackage, String> {
     let layout = AppLayout::detect()?;
     layout.ensure_base_dirs()?;
@@ -19,20 +24,53 @@ pub fn ensure_package(version_request: &str) -> Result<InstalledPackage, String>
     if let Some(manifest_asset) = release.manifest_asset() {
         println!("manifest: {}", manifest_asset.name);
         let bytes = release_client::download_bytes(&manifest_asset.url, &manifest_asset.name)?;
-        let manifest = ReleaseManifest::parse(&bytes)?;
-        manifest.validate_for_install()?;
-        return ensure_manifest_package(&layout, &release, &manifest);
+        let manifest = ReleaseManifest::parse(&bytes)
+            .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+        manifest
+            .validate_for_install()
+            .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+        return ensure_manifest_package(&layout, &release, &manifest, None, true);
     }
 
     ensure_legacy_package(&layout, &release)
+}
+
+pub fn stage_exact_package(version: &str) -> Result<InstalledPackage, String> {
+    let layout = AppLayout::detect()?;
+    layout.ensure_base_dirs()?;
+
+    println!("package: resolving exact release {version}");
+    let release = release_client::fetch_release(version)?;
+    let manifest_asset = release.manifest_asset().ok_or_else(|| {
+        operation::failure(
+            FailureClass::ManifestInvalid,
+            format!(
+                "release {} has no release manifest; an existing project addon can only be adopted from a release with verified install metadata",
+                release.tag
+            ),
+        )
+    })?;
+    println!("manifest: {}", manifest_asset.name);
+    let bytes = release_client::download_bytes(&manifest_asset.url, &manifest_asset.name)?;
+    let manifest = ReleaseManifest::parse(&bytes)
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    manifest
+        .validate_for_install()
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    ensure_manifest_package(&layout, &release, &manifest, Some(version), false)
 }
 
 fn ensure_manifest_package(
     layout: &AppLayout,
     release: &Release,
     manifest: &ReleaseManifest,
+    expected_version: Option<&str>,
+    activate: bool,
 ) -> Result<InstalledPackage, String> {
-    let selection = manifest.select_for_current_platform()?;
+    let selection = manifest
+        .select_for_current_platform()
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    validate_expected_version(&release.tag, &selection.version, expected_version)?;
     println!("package: selected {}", selection.version);
     let local_asset = release
         .asset_by_name(&selection.local.name)
@@ -64,8 +102,16 @@ fn ensure_manifest_package(
             expected_sha256: Some(selection.addon.sha256.as_str()),
             label: selection.addon.name.as_str(),
         },
+        activate,
     )?;
 
+    for runtime in &selection.shared_runtimes {
+        if let Some(version) = runtime.get("version").and_then(serde_json::Value::as_str)
+            && let Some(component) = shared_runtime_component_key(runtime)
+        {
+            operation::set_component(&component, version)?;
+        }
+    }
     for message in webview_runtime::ensure_from_release_manifest(
         layout,
         &selection.shared_runtimes,
@@ -75,6 +121,47 @@ fn ensure_manifest_package(
     }
 
     Ok(installed)
+}
+
+pub(crate) fn shared_runtime_component_key(runtime: &serde_json::Value) -> Option<String> {
+    let identifier = runtime
+        .get("id")
+        .or_else(|| runtime.get("kind"))
+        .and_then(serde_json::Value::as_str)?;
+    let normalized = identifier
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let normalized = normalized.trim_matches('_');
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(format!("shared_runtime_{normalized}"))
+    }
+}
+
+pub(crate) fn validate_expected_version(
+    release_tag: &str,
+    selected_version: &str,
+    expected_version: Option<&str>,
+) -> Result<(), String> {
+    if let Some(expected) = expected_version
+        && selected_version != expected
+    {
+        return Err(operation::failure(
+            FailureClass::ManifestInvalid,
+            format!(
+                "release {release_tag} declares version {selected_version}, but the existing addon requires {expected}"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn ensure_legacy_package(
@@ -108,6 +195,7 @@ fn ensure_legacy_package(
             expected_sha256: None,
             label: &addon_asset.name,
         },
+        true,
     )?;
 
     if let Some(message) =
@@ -124,9 +212,15 @@ fn ensure_selected_package(
     version: &str,
     local_asset: DownloadAsset<'_>,
     addon_asset: DownloadAsset<'_>,
+    activate: bool,
 ) -> Result<InstalledPackage, String> {
+    for component in ["addon", "daemon", "mcp", "runtime"] {
+        operation::set_component(component, version)?;
+    }
     if package_complete(layout, version) {
-        write_manifest(layout, version)?;
+        if activate {
+            write_manifest(layout, version)?;
+        }
         println!(
             "package: version {version} already installed at {}",
             display_path(&layout.versions_dir.join(version))
@@ -139,16 +233,25 @@ fn ensure_selected_package(
 
     let temp_dir = release_client::create_temp_dir("fennara-package")?;
     println!("package: staging downloads in {}", display_path(&temp_dir));
-    let result = install_from_assets(layout, &temp_dir, version, local_asset, addon_asset);
+    let result = install_from_assets(
+        layout,
+        &temp_dir,
+        version,
+        local_asset,
+        addon_asset,
+        activate,
+    );
     let _ = fs::remove_dir_all(&temp_dir);
     result
 }
 
-fn package_complete(layout: &AppLayout, version: &str) -> bool {
+pub(crate) fn package_complete(layout: &AppLayout, version: &str) -> bool {
     let version_dir = layout.versions_dir.join(version);
-    version_dir
-        .join(binary_name("fennara-mcp-runtime"))
-        .is_file()
+    layout.bin_dir.join(binary_name("fennara-mcp")).is_file()
+        && layout.bin_dir.join(binary_name("fennara-daemon")).is_file()
+        && version_dir
+            .join(binary_name("fennara-mcp-runtime"))
+            .is_file()
         && version_dir
             .join(binary_name("fennara-daemon-runtime"))
             .is_file()
@@ -173,6 +276,7 @@ fn install_from_assets(
     version: &str,
     local_asset: DownloadAsset<'_>,
     addon_asset: DownloadAsset<'_>,
+    activate: bool,
 ) -> Result<InstalledPackage, String> {
     let local_dir = temp_dir.join("local");
     let addon_stage_dir = temp_dir.join("addon");
@@ -231,12 +335,64 @@ fn install_from_assets(
         display_path(&addon_target)
     );
     copy_dir(&addon_stage_dir, &addon_target)?;
-    write_manifest(layout, version)?;
+    if activate {
+        write_manifest(layout, version)?;
+    }
 
     Ok(InstalledPackage {
         version: version.to_string(),
         addon_dir: addon_dir(layout, version),
     })
+}
+
+pub fn activate_package(version: &str) -> Result<ActivationReceipt, String> {
+    let layout = AppLayout::detect()?;
+    activate_package_at(&layout, version)
+}
+
+pub(crate) fn activate_package_at(
+    layout: &AppLayout,
+    version: &str,
+) -> Result<ActivationReceipt, String> {
+    if !package_complete(layout, version) {
+        return Err(operation::failure(
+            FailureClass::ValidationFailed,
+            format!(
+                "cannot activate incomplete Fennara package {version} at {}",
+                display_path(&layout.versions_dir.join(version))
+            ),
+        ));
+    }
+    let previous_manifest = fs::read(&layout.current_manifest_path).ok();
+    write_manifest(layout, version)?;
+    Ok(ActivationReceipt { previous_manifest })
+}
+
+pub fn restore_activation(receipt: ActivationReceipt) -> Result<(), String> {
+    let layout = AppLayout::detect()?;
+    restore_activation_at(&layout, receipt)
+}
+
+pub(crate) fn restore_activation_at(
+    layout: &AppLayout,
+    receipt: ActivationReceipt,
+) -> Result<(), String> {
+    match receipt.previous_manifest {
+        Some(previous) => fs::write(&layout.current_manifest_path, previous).map_err(|error| {
+            format!(
+                "failed to restore {}: {error}",
+                display_path(&layout.current_manifest_path)
+            )
+        }),
+        None => match fs::remove_file(&layout.current_manifest_path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!(
+                "failed to remove {} while restoring activation: {error}",
+                display_path(&layout.current_manifest_path)
+            )),
+        },
+    }
 }
 
 fn write_manifest(layout: &AppLayout, version: &str) -> Result<(), String> {

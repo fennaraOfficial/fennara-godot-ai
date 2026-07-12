@@ -1,5 +1,6 @@
 use crate::VERSION;
 use crate::app_layout::{AppLayout, binary_name, display_path};
+use crate::operation::{self, FailureClass, Phase};
 use crate::release_client::{self, DownloadAsset};
 use crate::release_manifest::{ReleaseManifest, compare_versions};
 use std::cmp::Ordering;
@@ -37,6 +38,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
 }
 
 pub fn start(version_request: &str, continuation_args: Vec<String>) -> Result<StartResult, String> {
+    operation::phase(Phase::Checking, "Checking whether the CLI must be updated")?;
     let layout = AppLayout::detect()?;
     layout.ensure_base_dirs()?;
 
@@ -49,9 +51,13 @@ pub fn start(version_request: &str, continuation_args: Vec<String>) -> Result<St
         )));
     };
     let manifest_bytes = release_client::download_bytes(&manifest_asset.url, &manifest_asset.name)?;
-    let manifest = ReleaseManifest::parse(&manifest_bytes)?;
-    let selection = manifest.select_cli_for_current_platform()?;
+    let manifest = ReleaseManifest::parse(&manifest_bytes)
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    let selection = manifest
+        .select_cli_for_current_platform()
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
     println!("self-update: selected CLI {}", selection.version);
+    operation::set_component("target_cli", &selection.version)?;
 
     match compare_versions(VERSION, &selection.version) {
         Some(Ordering::Less) => {}
@@ -88,8 +94,10 @@ pub fn start(version_request: &str, continuation_args: Vec<String>) -> Result<St
         ));
     }
     make_executable(&staged_cli)?;
+    operation::phase(Phase::Verifying, "Verifying the staged CLI")?;
     println!("self-update: verifying staged CLI");
-    validate_cli_version(&staged_cli, &selection.version)?;
+    validate_cli_version(&staged_cli, &selection.version)
+        .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
 
     println!("Updating Fennara CLI");
     println!("from: {VERSION}");
@@ -128,14 +136,22 @@ pub fn start(version_request: &str, continuation_args: Vec<String>) -> Result<St
         println!("continuation: fennara {}", continuation_args.join(" "));
         command.arg("--").args(continuation_args);
     }
+    operation::operation_environment(&mut command);
     let stderr_log = log_file
         .try_clone()
         .map_err(|err| format!("failed to prepare self-update log: {err}"))?;
-    command
+    operation::begin_handoff("Starting the replacement CLI")?;
+    let spawn_result = command
         .stdout(Stdio::from(log_file))
         .stderr(Stdio::from(stderr_log))
-        .spawn()
-        .map_err(|err| format!("failed to start staged Fennara CLI updater: {err}"))?;
+        .spawn();
+    if let Err(err) = spawn_result {
+        operation::cancel_handoff()?;
+        return Err(operation::failure(
+            FailureClass::HandoffFailed,
+            format!("failed to start staged Fennara CLI updater: {err}"),
+        ));
+    }
 
     println!("CLI updater started. The current process will exit so the binary can be replaced.");
     Ok(StartResult::Started)
@@ -143,9 +159,11 @@ pub fn start(version_request: &str, continuation_args: Vec<String>) -> Result<St
 
 pub fn complete(args: Vec<String>) -> Result<(), String> {
     let options = CompleteOptions::parse(args)?;
+    operation::phase(Phase::Applying, "Replacing the installed CLI")?;
     println!("self-update: replacing {}", display_path(&options.target));
     replace_with_retry(&options.source, &options.target)?;
     let installed_version = cli_version_output(&options.target)?;
+    operation::set_component("cli", installed_version.trim_start_matches("fennara "))?;
 
     println!("Updated Fennara CLI");
     println!("version: {installed_version}");
@@ -160,17 +178,30 @@ pub fn complete(args: Vec<String>) -> Result<(), String> {
         "continuation: fennara {}",
         options.continuation_args.join(" ")
     );
-    let status = Command::new(&options.target)
-        .args(&options.continuation_args)
-        .status()
-        .map_err(|err| format!("failed to continue update with new Fennara CLI: {err}"))?;
+    let mut continuation = Command::new(&options.target);
+    continuation.args(&options.continuation_args);
+    operation::operation_environment(&mut continuation);
+    operation::begin_handoff("Starting the continued update command")?;
+    let status = match continuation.status() {
+        Ok(status) => status,
+        Err(err) => {
+            operation::cancel_handoff()?;
+            return Err(operation::failure(
+                FailureClass::HandoffFailed,
+                format!("failed to continue update with new Fennara CLI: {err}"),
+            ));
+        }
+    };
     if status.success() {
         println!("continuation: completed");
         print_windows_prompt_redraw_hint();
         Ok(())
     } else {
         print_windows_prompt_redraw_hint();
-        Err(format!("continued update command exited with {status}"))
+        Err(operation::failure(
+            FailureClass::HandoffFailed,
+            format!("continued update command exited with {status}"),
+        ))
     }
 }
 

@@ -130,7 +130,11 @@ if [ -n "$INSTALL_DIR" ]; then
 elif [ "$platform" = "macos" ]; then
   app_dir="$HOME/Library/Application Support/Fennara"
 else
-  app_dir="${XDG_DATA_HOME:-$HOME/.local/share}/fennara"
+  if [ -n "${XDG_DATA_HOME:-}" ] && [ "${XDG_DATA_HOME#/}" != "$XDG_DATA_HOME" ]; then
+    app_dir="$XDG_DATA_HOME/fennara"
+  else
+    app_dir="$HOME/.local/share/fennara"
+  fi
 fi
 
 bin_dir="$app_dir/bin"

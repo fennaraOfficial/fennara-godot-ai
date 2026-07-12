@@ -12,7 +12,35 @@ This guide walks through a normal Fennara setup from a clean machine to a Godot 
 - Optional for embedded Windows chat: Microsoft Edge WebView2 Runtime
 - Windows troubleshooting only: Microsoft Visual C++ Redistributable 2015-2022 x64 if the Fennara CLI/runtime fails to start with missing `VCRUNTIME` / `MSVCP` DLLs or exit code `-1073741515`
 
-## 1. Install The Fennara CLI
+## Default: Set Up From Godot
+
+Install the Fennara addon from the Godot Asset Library or copy its
+`addons/fennara/` folder into the project. Open the project and select the
+Fennara dock. If the matching local components are missing, Fennara shows a
+native setup panel that does not depend on chat, the daemon, or a webview.
+
+Select **Set Up Fennara**. The addon reads its own `VERSION`, downloads the
+release manifest and matching CLI archive, verifies the archive SHA-256, and
+installs the CLI under Fennara app data. It then runs the same
+`fennara install --project <path> --version <addon-version>` flow used by the
+terminal installer.
+
+The panel follows the CLI's durable operation state and shows installation
+progress. A failure includes a stable error code, operation ID when one was
+created, **Retry**, **Copy Report**, and **Open Logs** actions. Copied reports
+use the sanitized operation state and do not include API keys, chat content, or
+project files.
+
+The bootstrap only installs the exact verified CLI and then delegates the rest
+of setup to that CLI. It does not place the daemon, MCP server, browser runtime,
+or updater inside the project addon.
+
+## Terminal Setup Alternative
+
+Use this flow for non-interactive setup or when the native setup panel cannot
+download or launch the CLI.
+
+### 1. Install The Fennara CLI
 
 Windows:
 
@@ -47,7 +75,7 @@ The install script installs the small outer CLI. In normal releases,
 Rerun the install script only when CLI self-update is not available for the
 selected release or install location.
 
-## 2. Install Fennara In A Godot Project
+### 2. Install Fennara In A Godot Project
 
 Run this inside the Godot project folder:
 
@@ -72,7 +100,8 @@ For a C# Godot project, use the same `fennara install` command. Ensure the .NET
 SDK required by the project is available through `dotnet`; Fennara uses project
 builds for C# diagnostics and runtime preflight.
 
-`fennara install` copies the Godot addon into:
+When the project does not have a complete addon, `fennara install` copies the
+selected Godot addon into:
 
 ```text
 addons/fennara
@@ -80,12 +109,22 @@ addons/fennara
 
 If that directory exists from a failed or partial installation but does not
 contain `fennara.gdextension`, `fennara install` treats it as incomplete and
-replaces it with the selected addon package. A complete installation still
-directs you to `fennara update`.
+replaces it with the selected addon package.
 
-It also reads the release manifest, downloads and verifies the local Fennara
-runtime package into your user app-data folder, and writes project guidance for
-AI coding agents:
+If the directory already contains a complete addon from the Godot Asset
+Library or a release archive, install adopts it instead. The CLI reads its
+`VERSION`, validates the matching editor library, resolves that exact release,
+checks the release's minimum CLI version, and installs the matching daemon, MCP
+server, local runtime, and optional shared webview runtime. It does not replace
+or rewrite the existing addon. It starts the daemon when needed and confirms
+that the running daemon version matches the addon. Repeating the same install
+is safe.
+
+Install also reads the release manifest, downloads and verifies the local
+Fennara runtime package into your user app-data folder, and writes project
+guidance for AI coding agents. Fresh addon installs write both paths below.
+Existing-addon adoption only writes the project-level `AGENTS.md`, because the
+addon already contains its matching guidance:
 
 ```text
 AGENTS.md
@@ -93,6 +132,8 @@ addons/fennara/ai/guidelines.md
 ```
 
 If `AGENTS.md` already exists, Fennara only updates the generated block between its own markers.
+Existing-addon adoption may also update an existing project `.gitignore` with
+Fennara-managed local state entries.
 
 ### Built-In Chat Webview Prerequisites
 
@@ -222,6 +263,31 @@ the updater log path. Use that log to inspect the resumed project-update output
 in CI or agent-driven runs.
 
 ## Troubleshooting
+
+### An Install Or Update Failed
+
+`fennara install`, `fennara update`, and CLI self-update operations print an
+operation ID and durable event-log path. Show the latest sanitized report with:
+
+```bash
+fennara diagnostics
+```
+
+Use a specific ID when reporting or revisiting an older failure:
+
+```bash
+fennara diagnostics --operation <operation-id>
+```
+
+Operation state is stored under the Fennara app-data `operations/` directory,
+with JSONL events under `logs/operations/`. Reports include the phase, stable
+error code, platform, architecture, and component versions known to the CLI.
+Downloaded artifacts also record their selected asset name, expected hash,
+actual hash, and verification status. Operation failures use stable typed codes
+so support does not depend on matching the wording of an error message.
+They replace the project, home, and Fennara app-data paths with placeholders
+and redact common credential fields, bearer tokens, and URL query strings.
+They do not collect chat messages, provider keys, or project file contents.
 
 ### `fennara` Is Not Found
 

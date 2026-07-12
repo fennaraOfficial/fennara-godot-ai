@@ -3,6 +3,8 @@
 #include "fennara/app_paths.hpp"
 #include "fennara/local_bridge.hpp"
 #include "fennara/logger.hpp"
+#include "fennara/setup/first_run_setup.hpp"
+#include "fennara/ui/setup_panel.hpp"
 #include "fennara/ui/webview_host.hpp"
 
 #include <godot_cpp/classes/h_box_container.hpp>
@@ -46,6 +48,9 @@ void FennaraDock::_bind_methods() {
     godot::ClassDB::bind_method(
         godot::D_METHOD("_on_mcp_target_state_changed", "active"),
         &FennaraDock::_on_mcp_target_state_changed);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("_on_setup_succeeded"),
+        &FennaraDock::_on_setup_succeeded);
     godot::ClassDB::bind_method(
         godot::D_METHOD("_on_open_browser_pressed"),
         &FennaraDock::_on_open_browser_pressed);
@@ -232,6 +237,20 @@ void FennaraDock::_build_ui() {
             margin->move_child(browser_fallback_panel, margin->get_child_count() - 1);
         }
     }
+
+    first_run_setup = memnew(FirstRunSetup);
+    first_run_setup->set_name("FirstRunSetup");
+    add_child(first_run_setup);
+    first_run_setup->connect(
+        "setup_succeeded",
+        callable_mp(this, &FennaraDock::_on_setup_succeeded));
+
+    setup_panel = memnew(FirstRunSetupPanel);
+    setup_panel->set_name("FirstRunSetupPanel");
+    setup_panel->set_setup(first_run_setup);
+    setup_panel->set_visible(false);
+    margin->add_child(setup_panel);
+    margin->move_child(setup_panel, margin->get_child_count() - 1);
 }
 
 void FennaraDock::_try_start_webview() {
@@ -310,7 +329,38 @@ void FennaraDock::_refresh_status() {
     if (fallback_label == nullptr) {
         return;
     }
+    if (_show_setup_if_needed()) {
+        return;
+    }
     _try_start_webview();
+}
+
+bool FennaraDock::_show_setup_if_needed() {
+    if (first_run_setup == nullptr || setup_panel == nullptr) {
+        return false;
+    }
+    const bool waiting_for_connection =
+        first_run_setup->has_succeeded() &&
+        (local_bridge == nullptr || !local_bridge->is_daemon_connected());
+    const bool visible = first_run_setup->is_running() ||
+                         first_run_setup->has_failed() ||
+                         waiting_for_connection ||
+                         (!first_run_setup->has_succeeded() &&
+                          first_run_setup->is_setup_required());
+    setup_panel->set_visible(visible);
+    if (visible) {
+        _release_webview_keyboard_focus();
+        if (internal_webview_surface != nullptr) {
+            internal_webview_surface->set_visible(false);
+        }
+        if (fallback_label != nullptr) {
+            fallback_label->set_visible(false);
+        }
+        if (browser_fallback_panel != nullptr) {
+            browser_fallback_panel->set_visible(false);
+        }
+    }
+    return visible;
 }
 
 void FennaraDock::_set_webview_keyboard_focus(bool focused) {
@@ -348,6 +398,10 @@ void FennaraDock::release_active_webview_keyboard_focus() {
 
 void FennaraDock::_on_mcp_target_state_changed(bool active) {
     (void)active;
+    _refresh_status();
+}
+
+void FennaraDock::_on_setup_succeeded() {
     _refresh_status();
 }
 

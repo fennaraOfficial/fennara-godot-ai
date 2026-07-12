@@ -1,4 +1,5 @@
 use crate::app_layout::display_path;
+use crate::operation::{self, FailureClass, Phase};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::env;
@@ -78,15 +79,24 @@ pub fn fetch_release(version: &str) -> Result<Release, String> {
         format!("v{version}")
     };
     let url = format!("https://api.github.com/repos/{REPO}/releases/tags/{tag}");
+    operation::phase(Phase::Checking, "Fetching release metadata")?;
     println!("release: fetching metadata from {url}");
     let response = http_agent()
         .get(&url)
         .set("User-Agent", "fennara-cli")
         .call()
-        .map_err(|err| format!("failed to fetch release metadata from {url}: {err}"))?;
-    let value: Value = response
-        .into_json()
-        .map_err(|err| format!("failed to parse release metadata: {err}"))?;
+        .map_err(|err| {
+            operation::failure(
+                FailureClass::ReleaseMetadataDownload,
+                format!("failed to fetch release metadata from {url}: {err}"),
+            )
+        })?;
+    let value: Value = response.into_json().map_err(|err| {
+        operation::failure(
+            FailureClass::ManifestInvalid,
+            format!("failed to parse release metadata: {err}"),
+        )
+    })?;
 
     let release = Release {
         tag: value
@@ -97,54 +107,97 @@ pub fn fetch_release(version: &str) -> Result<Release, String> {
         assets: value.get("assets").cloned().unwrap_or(Value::Null),
     };
     println!("release: {}", release.tag);
+    operation::set_component("release", release.tag.trim_start_matches('v'))?;
     Ok(release)
 }
 
 pub fn download_zip_to_dir(asset: &DownloadAsset<'_>, target: &Path) -> Result<(), String> {
-    fs::create_dir_all(target)
-        .map_err(|err| format!("failed to create {}: {err}", display_path(target)))?;
-    let bytes = download_bytes(asset.url, asset.label)?;
-    if let Some(expected_sha256) = asset.expected_sha256 {
-        let actual_sha256 = format!("{:x}", Sha256::digest(&bytes));
-        if !actual_sha256.eq_ignore_ascii_case(expected_sha256) {
-            return Err(format!(
-                "{} sha256 mismatch: expected {expected_sha256}, got {actual_sha256}",
-                asset.label
-            ));
-        }
-        println!("sha256: verified {}", asset.label);
-    }
+    operation::select_asset(asset.label, asset.expected_sha256)?;
+    fs::create_dir_all(target).map_err(|err| {
+        operation::failure(
+            FailureClass::StageFilesystem,
+            format!("failed to create {}: {err}", display_path(target)),
+        )
+    })?;
+    let (bytes, actual_sha256) = download_bytes_with_hash(asset.url, asset.label)?;
+    verify_download_hash(asset, &actual_sha256)?;
 
+    operation::phase(Phase::Staging, &format!("Extracting {}", asset.label))?;
     println!("extracting: {} to {}", asset.label, display_path(target));
     let cursor = Cursor::new(bytes);
-    let mut archive =
-        ZipArchive::new(cursor).map_err(|err| format!("failed to open downloaded zip: {err}"))?;
-    archive
-        .extract(target)
-        .map_err(|err| format!("failed to extract zip into {}: {err}", display_path(target)))?;
+    let mut archive = ZipArchive::new(cursor).map_err(|err| {
+        operation::failure(
+            FailureClass::ValidationFailed,
+            format!("failed to open downloaded zip: {err}"),
+        )
+    })?;
+    archive.extract(target).map_err(|err| {
+        operation::failure(
+            FailureClass::StageFilesystem,
+            format!("failed to extract zip into {}: {err}", display_path(target)),
+        )
+    })?;
     println!("extracted: {}", asset.label);
     Ok(())
 }
 
+pub(crate) fn verify_download_hash(
+    asset: &DownloadAsset<'_>,
+    actual_sha256: &str,
+) -> Result<(), String> {
+    if let Some(expected_sha256) = asset.expected_sha256 {
+        operation::phase(Phase::Verifying, &format!("Verifying {}", asset.label))?;
+        if !actual_sha256.eq_ignore_ascii_case(expected_sha256) {
+            operation::record_asset_hash(asset.label, actual_sha256, Some(false))?;
+            return Err(operation::failure(
+                FailureClass::HashMismatch,
+                format!(
+                    "{} sha256 mismatch: expected {expected_sha256}, got {actual_sha256}",
+                    asset.label
+                ),
+            ));
+        }
+        operation::record_asset_hash(asset.label, actual_sha256, Some(true))?;
+        println!("sha256: verified {}", asset.label);
+    } else {
+        operation::record_asset_hash(asset.label, actual_sha256, None)?;
+    }
+    Ok(())
+}
+
 pub fn download_bytes(url: &str, label: &str) -> Result<Vec<u8>, String> {
+    download_bytes_with_hash(url, label).map(|(bytes, _)| bytes)
+}
+
+fn download_bytes_with_hash(url: &str, label: &str) -> Result<(Vec<u8>, String), String> {
+    operation::select_asset(label, None)?;
+    operation::phase(Phase::Downloading, &format!("Downloading {label}"))?;
     println!("download: {label}");
     println!("from: {url}");
     let response = http_agent()
         .get(url)
         .set("User-Agent", "fennara-cli")
         .call()
-        .map_err(|err| {
+        .map_err(|err| operation::failure(
+            FailureClass::AssetDownload,
             format!(
                 "failed to download {label} from {url} within connect/read timeouts ({HTTP_CONNECT_TIMEOUT_SECS}s/{HTTP_READ_TIMEOUT_SECS}s): {err}"
-            )
-        })?;
+            ),
+        ))?;
     let mut bytes = Vec::new();
     response
         .into_reader()
         .read_to_end(&mut bytes)
-        .map_err(|err| format!("failed to read download for {label}: {err}"))?;
+        .map_err(|err| {
+            operation::failure(
+                FailureClass::AssetDownload,
+                format!("failed to read download for {label}: {err}"),
+            )
+        })?;
+    let actual_sha256 = format!("{:x}", Sha256::digest(&bytes));
+    operation::record_asset_hash(label, &actual_sha256, None)?;
     println!("downloaded: {label} ({})", format_bytes(bytes.len()));
-    Ok(bytes)
+    Ok((bytes, actual_sha256))
 }
 
 pub fn create_temp_dir(prefix: &str) -> Result<PathBuf, String> {
@@ -156,8 +209,12 @@ pub fn create_temp_dir(prefix: &str) -> Result<PathBuf, String> {
             .map(|duration| duration.as_millis())
             .unwrap_or(0)
     ));
-    fs::create_dir_all(&path)
-        .map_err(|err| format!("failed to create {}: {err}", display_path(&path)))?;
+    fs::create_dir_all(&path).map_err(|err| {
+        operation::failure(
+            FailureClass::StageFilesystem,
+            format!("failed to create {}: {err}", display_path(&path)),
+        )
+    })?;
     Ok(path)
 }
 

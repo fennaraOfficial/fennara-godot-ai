@@ -9,6 +9,8 @@ pub struct AppLayout {
     pub versions_dir: PathBuf,
     pub cache_dir: PathBuf,
     pub logs_dir: PathBuf,
+    pub operation_logs_dir: PathBuf,
+    pub operations_dir: PathBuf,
     pub tools_dir: PathBuf,
     pub webview_dir: PathBuf,
     pub current_manifest_path: PathBuf,
@@ -22,6 +24,8 @@ impl AppLayout {
             versions_dir: app_dir.join("versions"),
             cache_dir: app_dir.join("cache"),
             logs_dir: app_dir.join("logs"),
+            operation_logs_dir: app_dir.join("logs").join("operations"),
+            operations_dir: app_dir.join("operations"),
             tools_dir: app_dir.join("tools"),
             webview_dir: app_dir.join("webview"),
             current_manifest_path: app_dir.join("current.json"),
@@ -36,6 +40,8 @@ impl AppLayout {
             &self.versions_dir,
             &self.cache_dir,
             &self.logs_dir,
+            &self.operation_logs_dir,
+            &self.operations_dir,
             &self.tools_dir,
             &self.webview_dir,
         ] {
@@ -135,12 +141,58 @@ fn app_dir() -> Result<PathBuf, String> {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 fn app_dir() -> Result<PathBuf, String> {
-    home_dir()
+    linux_app_dir(env::var_os("XDG_DATA_HOME").map(PathBuf::from), home_dir())
+}
+
+#[cfg(any(all(unix, not(target_os = "macos")), test))]
+fn linux_app_dir(xdg_data_home: Option<PathBuf>, home: Option<PathBuf>) -> Result<PathBuf, String> {
+    if let Some(path) = xdg_data_home.filter(|path| path.to_string_lossy().starts_with('/')) {
+        return Ok(path.join("fennara"));
+    }
+    home.filter(|path| !path.as_os_str().is_empty())
         .map(|path| path.join(".local").join("share").join("fennara"))
-        .ok_or_else(|| "home directory is not available".to_string())
+        .ok_or_else(|| "HOME and XDG_DATA_HOME are not set".to_string())
 }
 
 #[cfg(not(target_os = "windows"))]
 fn home_dir() -> Option<PathBuf> {
     env::var_os("HOME").map(PathBuf::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::linux_app_dir;
+    use std::path::PathBuf;
+
+    #[test]
+    fn linux_layout_prefers_xdg_data_home() {
+        assert_eq!(
+            linux_app_dir(
+                Some(PathBuf::from("/custom/data")),
+                Some(PathBuf::from("/home/user")),
+            )
+            .unwrap(),
+            PathBuf::from("/custom/data/fennara")
+        );
+    }
+
+    #[test]
+    fn linux_layout_falls_back_to_home() {
+        assert_eq!(
+            linux_app_dir(None, Some(PathBuf::from("/home/user"))).unwrap(),
+            PathBuf::from("/home/user/.local/share/fennara")
+        );
+    }
+
+    #[test]
+    fn linux_layout_ignores_relative_xdg_data_home() {
+        assert_eq!(
+            linux_app_dir(
+                Some(PathBuf::from("relative/data")),
+                Some(PathBuf::from("/home/user")),
+            )
+            .unwrap(),
+            PathBuf::from("/home/user/.local/share/fennara")
+        );
+    }
 }

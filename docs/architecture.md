@@ -102,6 +102,23 @@ not captured by default. The daemon exposes a small local debug read endpoint at
 
 ## Install Layout
 
+For the default Asset Library flow, the GDExtension first presents a native
+setup panel when the exact local installation is missing. Its bootstrap bridge
+downloads the addon version's release manifest and CLI archive with Godot's
+HTTP client, verifies the declared SHA-256, and places only the CLI in Fennara
+app data. It then launches `fennara install` and reads the durable operation
+state for progress and diagnostics. Chat and the webview remain inactive until
+setup succeeds and the matching daemon connects.
+
+A shared app-data bootstrap lock serializes CLI download and activation across
+concurrent Godot editors. Lock ownership transfers to the launched installer
+process, so another editor waits until that exact process exits. The panel
+generates an operation ID, passes it to the CLI, and reads only that operation's
+state file. If the child exits with a nonterminal state, the panel reports a
+stable failure instead of waiting indefinitely.
+
+The terminal install scripts remain the non-interactive and recovery path.
+
 The install script installs the small outer CLI and adds it to `PATH`. After
 that, modern releases can update the installed CLI through `fennara update` or
 `fennara self-update`; rerun the install script only when CLI self-update is not
@@ -167,7 +184,8 @@ When a user runs this inside a Godot project:
 fennara install
 ```
 
-the CLI copies the release addon into:
+the CLI copies the release addon into this layout when no complete addon is
+already present:
 
 ```text
 <godot-project>/
@@ -177,6 +195,12 @@ the CLI copies the release addon into:
       ai/
         guidelines.md
 ```
+
+When a complete addon is already present, the CLI validates its `VERSION` and
+current-platform editor library, installs the exact matching local package, and
+leaves the addon directory unchanged. The shared daemon is started only when it
+is not already running, and install succeeds only after its health response
+reports the addon version.
 
 After Godot's editor filesystem scan completes, the addon immediately starts a
 plugin-owned worker that prepares C# support. The worker runs one isolated

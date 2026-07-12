@@ -67,13 +67,13 @@ godot::PackedStringArray app_dir_candidates() {
     }
 
     const godot::String xdg_data_home = os->get_environment("XDG_DATA_HOME");
-    if (!xdg_data_home.is_empty()) {
+    if (!xdg_data_home.is_empty() && xdg_data_home.is_absolute_path()) {
         append_if_present(paths, xdg_data_home.path_join("fennara"));
     }
     if (!home.is_empty()) {
         append_if_present(paths, home.path_join(".local").path_join("share").path_join("fennara"));
     }
-    if (!xdg_data_home.is_empty()) {
+    if (!xdg_data_home.is_empty() && xdg_data_home.is_absolute_path()) {
         append_if_present(paths, xdg_data_home.path_join("Fennara"));
     }
     if (!home.is_empty()) {
@@ -84,6 +84,12 @@ godot::PackedStringArray app_dir_candidates() {
 
 godot::String app_dir() {
     const godot::PackedStringArray paths = app_dir_candidates();
+    const godot::String name = binary_name("fennara");
+    for (int i = 0; i < paths.size(); i++) {
+        if (godot::FileAccess::file_exists(paths[i].path_join("bin").path_join(name))) {
+            return paths[i];
+        }
+    }
     return paths.is_empty() ? godot::String() : paths[0];
 }
 
@@ -97,8 +103,8 @@ godot::PackedStringArray webview_dir_candidates() {
 }
 
 godot::String webview_dir() {
-    const godot::PackedStringArray paths = webview_dir_candidates();
-    return paths.is_empty() ? godot::String() : paths[0];
+    const godot::String dir = app_dir();
+    return dir.is_empty() ? godot::String() : dir.path_join("webview");
 }
 
 godot::String webview_profile_dir() {
@@ -115,16 +121,33 @@ godot::String webview_log_dir() {
                : dir.path_join("logs").path_join("webview");
 }
 
+godot::String cli_binary_path() {
+    const godot::String dir = app_dir();
+    return dir.is_empty() ? godot::String()
+                          : dir.path_join("bin").path_join(binary_name("fennara"));
+}
+
 godot::String daemon_binary_path() {
-    const godot::PackedStringArray paths = app_dir_candidates();
-    const godot::String name = binary_name("fennara-daemon");
-    for (int i = 0; i < paths.size(); i++) {
-        const godot::String candidate = paths[i].path_join("bin").path_join(name);
-        if (godot::FileAccess::file_exists(candidate)) {
-            return candidate;
-        }
-    }
-    return paths.is_empty() ? godot::String() : paths[0].path_join("bin").path_join(name);
+    const godot::String dir = app_dir();
+    return dir.is_empty() ? godot::String()
+                          : dir.path_join("bin").path_join(binary_name("fennara-daemon"));
+}
+
+godot::String current_manifest_path() {
+    const godot::String dir = app_dir();
+    return dir.is_empty() ? godot::String() : dir.path_join("current.json");
+}
+
+godot::String operations_dir() {
+    const godot::String dir = app_dir();
+    return dir.is_empty() ? godot::String() : dir.path_join("operations");
+}
+
+godot::String operation_logs_dir() {
+    const godot::String dir = app_dir();
+    return dir.is_empty()
+               ? godot::String()
+               : dir.path_join("logs").path_join("operations");
 }
 
 godot::String daemon_control_token_path() {
