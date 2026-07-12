@@ -17,6 +17,7 @@ mod release_package;
 mod release_package_tests;
 mod release_update;
 mod self_update;
+mod update_stage;
 mod webview_prereq;
 mod webview_runtime;
 
@@ -114,7 +115,7 @@ Usage:
   fennara diagnostics [--operation <operation-id>] [--json]
   fennara install [--project <path>] [--version <version>]
   fennara mcp-setup <target flags>
-  fennara update [--version <version>] [--project <path>] [--no-self-update]
+  fennara update [--version <version>] [--project <path>] [--no-self-update] [--prepare]
   fennara self-update [--version <version>]
   fennara --version
   fennara --help

@@ -16,6 +16,18 @@ pub fn inspect(project_dir: &Path) -> Result<Option<ExistingAddon>, String> {
         return Ok(None);
     }
 
+    validate(&addon_dir).map(Some)
+}
+
+pub fn validate(addon_dir: &Path) -> Result<ExistingAddon, String> {
+    let manifest_path = addon_dir.join("fennara.gdextension");
+    if !manifest_path.is_file() {
+        return Err(format!(
+            "the Fennara addon is missing its extension manifest at {}",
+            display_path(&manifest_path)
+        ));
+    }
+
     let version_path = addon_dir.join("VERSION");
     let version = fs::read_to_string(&version_path)
         .map_err(|error| {
@@ -33,7 +45,7 @@ pub fn inspect(project_dir: &Path) -> Result<Option<ExistingAddon>, String> {
         ));
     }
 
-    let library_path = current_library_path(&addon_dir, &manifest_path)?;
+    let library_path = current_library_path(addon_dir, &manifest_path)?;
     if !library_path.is_file() {
         return Err(format!(
             "the existing Fennara addon is missing its {} {} editor library at {}",
@@ -51,7 +63,7 @@ pub fn inspect(project_dir: &Path) -> Result<Option<ExistingAddon>, String> {
         ));
     }
 
-    Ok(Some(ExistingAddon { version }))
+    Ok(ExistingAddon { version })
 }
 
 fn current_library_path(addon_dir: &Path, manifest_path: &Path) -> Result<PathBuf, String> {

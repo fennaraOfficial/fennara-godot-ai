@@ -29,7 +29,7 @@ pub fn ensure_package(version_request: &str) -> Result<InstalledPackage, String>
         manifest
             .validate_for_install()
             .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
-        return ensure_manifest_package(&layout, &release, &manifest, None, true);
+        return ensure_manifest_package(&layout, &release, &manifest, None, true, true);
     }
 
     ensure_legacy_package(&layout, &release)
@@ -57,7 +57,32 @@ pub fn stage_exact_package(version: &str) -> Result<InstalledPackage, String> {
     manifest
         .validate_for_install()
         .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
-    ensure_manifest_package(&layout, &release, &manifest, Some(version), false)
+    ensure_manifest_package(&layout, &release, &manifest, Some(version), false, true)
+}
+
+pub fn prepare_package(version_request: &str) -> Result<InstalledPackage, String> {
+    let layout = AppLayout::detect()?;
+    layout.ensure_base_dirs()?;
+
+    println!("package: resolving release {version_request} for staging");
+    let release = release_client::fetch_release(version_request)?;
+    let manifest_asset = release.manifest_asset().ok_or_else(|| {
+        operation::failure(
+            FailureClass::ManifestInvalid,
+            format!(
+                "release {} has no release manifest; native updates require verified install metadata",
+                release.tag
+            ),
+        )
+    })?;
+    println!("manifest: {}", manifest_asset.name);
+    let bytes = release_client::download_bytes(&manifest_asset.url, &manifest_asset.name)?;
+    let manifest = ReleaseManifest::parse(&bytes)
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    manifest
+        .validate_for_install()
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    ensure_manifest_package(&layout, &release, &manifest, None, false, false)
 }
 
 fn ensure_manifest_package(
@@ -66,6 +91,7 @@ fn ensure_manifest_package(
     manifest: &ReleaseManifest,
     expected_version: Option<&str>,
     activate: bool,
+    update_launchers: bool,
 ) -> Result<InstalledPackage, String> {
     let selection = manifest
         .select_for_current_platform()
@@ -103,6 +129,7 @@ fn ensure_manifest_package(
             label: selection.addon.name.as_str(),
         },
         activate,
+        update_launchers,
     )?;
 
     for runtime in &selection.shared_runtimes {
@@ -196,6 +223,7 @@ fn ensure_legacy_package(
             label: &addon_asset.name,
         },
         true,
+        true,
     )?;
 
     if let Some(message) =
@@ -213,6 +241,7 @@ fn ensure_selected_package(
     local_asset: DownloadAsset<'_>,
     addon_asset: DownloadAsset<'_>,
     activate: bool,
+    update_launchers: bool,
 ) -> Result<InstalledPackage, String> {
     for component in ["addon", "daemon", "mcp", "runtime"] {
         operation::set_component(component, version)?;
@@ -240,6 +269,7 @@ fn ensure_selected_package(
         local_asset,
         addon_asset,
         activate,
+        update_launchers,
     );
     let _ = fs::remove_dir_all(&temp_dir);
     result
@@ -277,6 +307,7 @@ fn install_from_assets(
     local_asset: DownloadAsset<'_>,
     addon_asset: DownloadAsset<'_>,
     activate: bool,
+    update_launchers: bool,
 ) -> Result<InstalledPackage, String> {
     let local_dir = temp_dir.join("local");
     let addon_stage_dir = temp_dir.join("addon");
@@ -299,15 +330,19 @@ fn install_from_assets(
     fs::create_dir_all(&version_dir)
         .map_err(|err| format!("failed to create {}: {err}", display_path(&version_dir)))?;
 
-    println!("launchers: updating {}", display_path(&layout.bin_dir));
-    copy_existing_launcher(
-        &local_dir.join("bin").join(binary_name("fennara-mcp")),
-        &layout.bin_dir.join(binary_name("fennara-mcp")),
-    )?;
-    copy_existing_launcher(
-        &local_dir.join("bin").join(binary_name("fennara-daemon")),
-        &layout.bin_dir.join(binary_name("fennara-daemon")),
-    )?;
+    if update_launchers {
+        println!("launchers: updating {}", display_path(&layout.bin_dir));
+        copy_existing_launcher(
+            &local_dir.join("bin").join(binary_name("fennara-mcp")),
+            &layout.bin_dir.join(binary_name("fennara-mcp")),
+        )?;
+        copy_existing_launcher(
+            &local_dir.join("bin").join(binary_name("fennara-daemon")),
+            &layout.bin_dir.join(binary_name("fennara-daemon")),
+        )?;
+    } else {
+        println!("launchers: keeping the active installation unchanged during staging");
+    }
     println!("runtimes: installing to {}", display_path(&version_dir));
     copy_file(
         &local_dir

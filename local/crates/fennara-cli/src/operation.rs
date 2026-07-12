@@ -160,9 +160,20 @@ pub fn cancel_handoff() -> Result<(), String> {
     })
 }
 
+pub fn defer_completion() -> Result<(), String> {
+    with_current(|journal| {
+        journal.completion_deferred = true;
+        Ok(())
+    })
+}
+
 pub fn current_id() -> Option<String> {
     let slot = current_slot().lock().ok()?;
     slot.as_ref().map(|journal| journal.id.clone())
+}
+
+pub fn validate_id(id: &str) -> Result<(), String> {
+    validate_operation_id(id).map(|_| ())
 }
 
 pub fn finish_success() -> Result<(), String> {
