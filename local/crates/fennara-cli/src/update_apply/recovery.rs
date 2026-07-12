@@ -27,8 +27,9 @@ pub(super) fn run(args: Vec<&str>) -> Result<(), String> {
     operation::phase(Phase::RolledBack, "The interrupted update was restored")?;
     if let Some(executable) = receipt.godot_executable.as_deref().map(Path::new)
         && executable.is_file()
+        && let Err(error) = reopen_godot(executable, &options.project_dir)
     {
-        reopen_godot(executable, &options.project_dir)?;
+        eprintln!("warning: restored Fennara but failed to reopen Godot: {error}");
     }
     println!(
         "restored Fennara {} for {}",
@@ -45,6 +46,12 @@ fn find_operation(
     if let Some(operation_id) = operation_id {
         let root = update_stage::staging_root(project_dir, operation_id)?;
         let receipt = update_stage::read_receipt(&root.join("receipt.json"))?;
+        if !is_recoverable(&receipt) {
+            return Err(format!(
+                "Fennara update {operation_id} is not recoverable from state {}",
+                receipt.state
+            ));
+        }
         return Ok((root, receipt));
     }
 
@@ -64,10 +71,7 @@ fn find_operation(
         let Ok(receipt) = update_stage::read_receipt(&entry.path().join("receipt.json")) else {
             continue;
         };
-        if !matches!(
-            receipt.state.as_str(),
-            "applying" | "reopening" | "validating" | "recovery_required"
-        ) {
+        if !is_recoverable(&receipt) {
             continue;
         }
         let modified = entry
@@ -81,6 +85,13 @@ fn find_operation(
         .max_by_key(|candidate| candidate.0)
         .map(|(_, root, receipt)| (root, receipt))
         .ok_or_else(|| "no interrupted Fennara update is available to recover".to_string())
+}
+
+fn is_recoverable(receipt: &UpdateReceipt) -> bool {
+    matches!(
+        receipt.state.as_str(),
+        "applying" | "reopening" | "validating" | "recovery_required"
+    )
 }
 
 struct RecoveryOptions {

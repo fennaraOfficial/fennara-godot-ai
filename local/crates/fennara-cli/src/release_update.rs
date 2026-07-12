@@ -64,12 +64,16 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
         release_package::ensure_package(&options.version)?
     };
     if project_version.as_deref() == Some(package.version.as_str()) {
-        println!("guidance: refreshing AGENTS.md and addons/fennara/ai/guidelines.md");
-        project_guidance::write(&project_dir)?;
+        if !options.prepare {
+            println!("guidance: refreshing AGENTS.md and addons/fennara/ai/guidelines.md");
+            project_guidance::write(&project_dir)?;
+        }
         println!("Fennara is already up to date.");
         println!("version: {}", package.version);
         println!("project: {}", display_path(&project_dir));
-        println!("guidance: refreshed AGENTS.md and addons/fennara/ai/guidelines.md");
+        if !options.prepare {
+            println!("guidance: refreshed AGENTS.md and addons/fennara/ai/guidelines.md");
+        }
         webview_prereq::warn_for_current_platform()?;
         return Ok(());
     }

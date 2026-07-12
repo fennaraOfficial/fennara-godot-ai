@@ -66,6 +66,14 @@ fn repeated_launcher_restore_is_idempotent() {
     assert!(!layout.bin_dir.join(binary_name("fennara-daemon")).exists());
 }
 
+#[test]
+fn activation_requires_staged_launchers() {
+    let root = TestRoot::new("missing-staged");
+    let layout = layout(&root);
+
+    assert!(release_package::activate_staged_launchers_at(&layout, "1.1.0").is_err());
+}
+
 fn layout(root: &Path) -> AppLayout {
     AppLayout {
         app_dir: root.join("app"),

@@ -135,7 +135,9 @@
     }
     versionWarning.disabled = true;
     versionWarning.setAttribute("aria-busy", "true");
-    updateStartOverlay.hidden = false;
+    if (updateStartOverlay) {
+      updateStartOverlay.hidden = false;
+    }
     const sent = send({
       type: "prepare_fennara_update",
       request_id: nextRequestId("prepare-fennara-update"),
@@ -143,7 +145,9 @@
     if (!sent) {
       versionWarning.disabled = false;
       versionWarning.removeAttribute("aria-busy");
-      updateStartOverlay.hidden = true;
+      if (updateStartOverlay) {
+        updateStartOverlay.hidden = true;
+      }
       appendSystem("Godot is not connected, so the update could not start.");
     }
   });
@@ -1427,6 +1431,9 @@
     if (message.type === "fennara_update_requested") {
       versionWarning.disabled = false;
       versionWarning.removeAttribute("aria-busy");
+      if (updateStartOverlay) {
+        updateStartOverlay.hidden = true;
+      }
       return;
     }
     if (message.type === "chat_context_snippet") {
@@ -1586,7 +1593,9 @@
       if (requestId.startsWith("prepare-fennara-update")) {
         versionWarning.disabled = false;
         versionWarning.removeAttribute("aria-busy");
-        updateStartOverlay.hidden = true;
+        if (updateStartOverlay) {
+          updateStartOverlay.hidden = true;
+        }
       }
       if (requestId.startsWith("open-project-file")) {
         appendSystem(errorText);

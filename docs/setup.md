@@ -262,7 +262,7 @@ When an update has to replace the running CLI before continuing, Fennara prints
 the updater log path. Use that log to inspect the resumed project-update output
 in CI or agent-driven runs.
 
-The native update flow prepares verified files before asking Godot to close. Its
+The native update flow separates preparation from user-confirmed shutdown. Its
 CLI staging primitive is:
 
 ```bash
@@ -272,8 +272,9 @@ fennara update --prepare --project path/to/your-godot-project
 Preparation downloads and verifies manifest-backed release assets, validates
 the packaged addon, and copies it to an operation-specific directory under
 `.godot/fennara-update/`. It records `ready_to_close` only after the staging
-receipt and a digest covering every staged addon file are durable. Preparation does not replace `addons/fennara`, switch
-`current.json`, or restart the running daemon.
+receipt and a digest covering every staged addon file are durable. Preparation
+does not ask Godot to close, replace `addons/fennara`, switch `current.json`, or
+restart the running daemon.
 
 The chat update action runs this preparation command and displays native
 progress in the Godot dock. Once the operation reaches `ready_to_close`, the

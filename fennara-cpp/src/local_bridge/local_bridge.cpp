@@ -206,8 +206,7 @@ void FennaraLocalBridge::_connect_socket() {
     headers.append(control_header);
     _ws->set_handshake_headers(headers);
 
-    const godot::String daemon_url = "ws://127.0.0.1:41287/godot/ws";
-    godot::Error err = _ws->connect_to_url(daemon_url);
+    godot::Error err = _ws->connect_to_url(LOCAL_DAEMON_WS_URL);
     if (err != godot::OK) {
         FLOG_NET("Local bridge daemon unavailable");
         _ws.unref();

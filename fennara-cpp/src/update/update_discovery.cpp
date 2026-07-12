@@ -119,12 +119,12 @@ void UpdateCoordinator::_scan_pending_updates() {
         const godot::String candidate = root.path_join(name);
         const godot::Dictionary receipt = _read_receipt(candidate);
         const godot::String state = receipt.get("state", "");
-        if (state == "validating") {
-            _write_activation_handshake(candidate, receipt);
-        }
         const bool interrupted =
             (state == "applying" || state == "reopening" || state == "validating") &&
             update_state_is_stalled(candidate.path_join("receipt.json"));
+        if (state == "validating" && !interrupted) {
+            _write_activation_handshake(candidate, receipt);
+        }
         if (state == "recovery_required" ||
             interrupted) {
             operation_id = receipt.get("operation_id", name);

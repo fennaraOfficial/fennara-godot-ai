@@ -32,8 +32,12 @@ pub(super) fn apply_after_exit(
     launchers::snapshot(&layout, root)
         .map_err(|error| operation::failure(FailureClass::StageFilesystem, error))?;
     receipt.launchers_snapshotted = true;
-    update_stage::write_receipt(receipt_path, receipt)?;
-    persist_previous_manifest(&layout, root, receipt)?;
+    if let Err(error) = update_stage::write_receipt(receipt_path, receipt) {
+        return rollback_before_reopen(options, root, receipt_path, receipt, error);
+    }
+    if let Err(error) = persist_previous_manifest(&layout, root, receipt) {
+        return rollback_before_reopen(options, root, receipt_path, receipt, error);
+    }
     if let Err(error) = release_package::activate_staged_launchers(&receipt.to_version) {
         return rollback_before_reopen(options, root, receipt_path, receipt, error);
     }
@@ -138,12 +142,17 @@ fn rollback_before_reopen(
             let state_error = set_state(receipt_path, receipt, "rolled_back").err();
             let phase_error =
                 operation::phase(Phase::RolledBack, "The failed update was rolled back").err();
-            let _ = reopen_godot(&options.godot_executable, &options.project_dir);
+            let reopen_error = reopen_godot(&options.godot_executable, &options.project_dir).err();
             let mut detail =
                 format!("update failed and the previous version was restored: {original_error}");
             for persistence_error in [state_error, phase_error].into_iter().flatten() {
                 detail.push_str(&format!(
                     "; rollback status persistence failed: {persistence_error}"
+                ));
+            }
+            if let Some(reopen_error) = reopen_error {
+                detail.push_str(&format!(
+                    "; Godot did not reopen after rollback: {reopen_error}"
                 ));
             }
             let error = operation::failure(FailureClass::ValidationFailed, detail);

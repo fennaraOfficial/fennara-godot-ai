@@ -7,6 +7,8 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+mod install_lock;
+
 pub struct InstalledPackage {
     pub version: String,
     pub addon_dir: PathBuf,
@@ -326,6 +328,7 @@ fn install_from_assets(
         ));
     }
 
+    let _install_lock = install_lock::acquire(layout, version)?;
     let version_dir = layout.versions_dir.join(version);
     let addon_target = version_dir.join("addon");
     fs::create_dir_all(&version_dir)
@@ -399,22 +402,32 @@ pub(crate) fn activate_staged_launchers_at(
 ) -> Result<(), String> {
     let staged = layout.versions_dir.join(version).join("staged-launchers");
     if !staged.is_dir() {
-        return Ok(());
+        return Err(format!(
+            "staged launchers are missing: {}",
+            display_path(&staged)
+        ));
     }
     for launcher in ["fennara-mcp", "fennara-daemon"] {
         let source = staged.join(binary_name(launcher));
         let target = layout.bin_dir.join(binary_name(launcher));
-        copy_file(&source, &target)?;
-        fs::OpenOptions::new()
-            .write(true)
-            .open(&target)
-            .and_then(|file| file.sync_all())
-            .map_err(|error| {
-                format!(
-                    "failed to flush activated launcher {}: {error}",
-                    display_path(&target)
-                )
-            })?;
+        let activated = if launcher == "fennara-mcp" {
+            copy_existing_launcher(&source, &target)?
+        } else {
+            copy_file(&source, &target)?;
+            true
+        };
+        if activated {
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&target)
+                .and_then(|file| file.sync_all())
+                .map_err(|error| {
+                    format!(
+                        "failed to flush activated launcher {}: {error}",
+                        display_path(&target)
+                    )
+                })?;
+        }
     }
     Ok(())
 }
@@ -549,24 +562,25 @@ fn copy_file(source: &Path, target: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn copy_existing_launcher(source: &Path, target: &Path) -> Result<(), String> {
+fn copy_existing_launcher(source: &Path, target: &Path) -> Result<bool, String> {
     if !source.is_file() {
         return Err(format!("missing package file: {}", display_path(source)));
     }
 
     if !target.exists() {
-        return copy_file(source, target);
+        copy_file(source, target)?;
+        return Ok(true);
     }
 
     match copy_file(source, target) {
-        Ok(()) => Ok(()),
+        Ok(()) => Ok(true),
         Err(error) => {
             println!(
                 "warning: kept existing launcher because it could not be replaced: {}",
                 display_path(target)
             );
             println!("warning: {error}");
-            Ok(())
+            Ok(false)
         }
     }
 }

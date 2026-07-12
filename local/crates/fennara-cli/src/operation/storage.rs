@@ -37,14 +37,14 @@ pub(super) fn write_json_atomic(path: &Path, value: &Value) -> Result<(), String
             )
         })?;
     }
-    match fs::rename(&temp, path) {
+    match rename_with_retry(&temp, path) {
         Ok(()) => {
             let _ = fs::remove_file(&backup);
             Ok(())
         }
         Err(error) => {
             if backup.exists() && !path.exists() {
-                let _ = fs::rename(&backup, path);
+                let _ = rename_with_retry(&backup, path);
             }
             Err(format!(
                 "failed to activate {} as {}: {error}",

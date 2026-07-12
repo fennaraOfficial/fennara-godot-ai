@@ -31,6 +31,19 @@ fn ignores_updates_that_are_only_ready_to_close() {
     assert!(find_operation(&project, None).is_err());
 }
 
+#[test]
+fn rejects_explicit_update_that_is_only_ready_to_close() {
+    let root = TestRoot::new("explicit-ready");
+    let project = root.join("project");
+    fs::create_dir_all(&project).unwrap();
+    let operation = update_stage::staging_root(&project, "update-456-ready").unwrap();
+    fs::create_dir_all(&operation).unwrap();
+    let receipt = receipt("update-456-ready", "ready_to_close");
+    update_stage::write_receipt(&operation.join("receipt.json"), &receipt).unwrap();
+
+    assert!(find_operation(&project, Some("update-456-ready")).is_err());
+}
+
 fn receipt(operation_id: &str, state: &str) -> UpdateReceipt {
     UpdateReceipt {
         schema_version: 2,
