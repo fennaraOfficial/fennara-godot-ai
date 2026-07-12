@@ -72,7 +72,8 @@ For a C# Godot project, use the same `fennara install` command. Ensure the .NET
 SDK required by the project is available through `dotnet`; Fennara uses project
 builds for C# diagnostics and runtime preflight.
 
-`fennara install` copies the Godot addon into:
+When the project does not have a complete addon, `fennara install` copies the
+selected Godot addon into:
 
 ```text
 addons/fennara
@@ -80,12 +81,22 @@ addons/fennara
 
 If that directory exists from a failed or partial installation but does not
 contain `fennara.gdextension`, `fennara install` treats it as incomplete and
-replaces it with the selected addon package. A complete installation still
-directs you to `fennara update`.
+replaces it with the selected addon package.
 
-It also reads the release manifest, downloads and verifies the local Fennara
-runtime package into your user app-data folder, and writes project guidance for
-AI coding agents:
+If the directory already contains a complete addon from the Godot Asset
+Library or a release archive, install adopts it instead. The CLI reads its
+`VERSION`, validates the matching editor library, resolves that exact release,
+checks the release's minimum CLI version, and installs the matching daemon, MCP
+server, local runtime, and optional shared webview runtime. It does not replace
+or rewrite the existing addon. It starts the daemon when needed and confirms
+that the running daemon version matches the addon. Repeating the same install
+is safe.
+
+Install also reads the release manifest, downloads and verifies the local
+Fennara runtime package into your user app-data folder, and writes project
+guidance for AI coding agents. Fresh addon installs write both paths below.
+Existing-addon adoption only writes the project-level `AGENTS.md`, because the
+addon already contains its matching guidance:
 
 ```text
 AGENTS.md

@@ -1,5 +1,7 @@
 use crate::app_layout::display_path;
+use crate::existing_addon_install;
 use crate::operation::{self, FailureClass, Phase};
+use crate::project_addon;
 use crate::project_guidance;
 use crate::release_package;
 use crate::webview_prereq;
@@ -18,11 +20,13 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     println!("project: {}", display_path(&project_dir));
 
     let addon_dir = project_addon_dir(&project_dir);
-    if has_fennara_addon(&project_dir) {
-        return Err(format!(
-            "Fennara is already installed in this project. Run `fennara update` from {} instead.",
-            display_path(&project_dir)
-        ));
+    if let Some(existing) = project_addon::inspect(&project_dir)
+        .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?
+    {
+        if options.source_dir.is_some() {
+            return Err("--source cannot be used when adopting an existing project addon".into());
+        }
+        return existing_addon_install::run(&project_dir, existing, options.version.as_deref());
     }
     if addon_dir.exists() {
         println!(
@@ -37,8 +41,9 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             ("local".to_string(), path)
         }
         None => {
-            println!("requested version: {}", options.version);
-            let package = release_package::ensure_package(&options.version)?;
+            let requested_version = options.version.as_deref().unwrap_or("latest");
+            println!("requested version: {requested_version}");
+            let package = release_package::ensure_package(requested_version)?;
             (package.version, package.addon_dir)
         }
     };
@@ -151,14 +156,14 @@ fn ensure_target_within_project(project_dir: &Path, target: &Path) -> Result<(),
 struct InstallOptions {
     project_dir: Option<PathBuf>,
     source_dir: Option<PathBuf>,
-    version: String,
+    version: Option<String>,
 }
 
 impl InstallOptions {
     fn parse(args: Vec<&str>) -> Result<Self, String> {
         let mut project_dir = None;
         let mut source_dir = None;
-        let mut version = "latest".to_string();
+        let mut version = None;
         let mut index = 0;
 
         while index < args.len() {
@@ -179,10 +184,10 @@ impl InstallOptions {
                 }
                 "--version" => {
                     index += 1;
-                    version = value_arg(&args, index, "--version")?.to_string();
+                    version = Some(value_arg(&args, index, "--version")?.to_string());
                 }
                 arg if arg.starts_with("--version=") => {
-                    version = arg.trim_start_matches("--version=").to_string();
+                    version = Some(arg.trim_start_matches("--version=").to_string());
                 }
                 "-h" | "--help" => {
                     print_help();
@@ -211,6 +216,8 @@ fn print_help() {
     println!(
         "\
 Install Fennara into a Godot project.
+
+If a complete addon already exists, install keeps it and sets up its exact matching local components.
 
 Usage:
   fennara install

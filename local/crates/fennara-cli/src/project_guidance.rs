@@ -10,6 +10,10 @@ const GUIDELINES_PATH: &[&str] = &["addons", "fennara", "ai", "guidelines.md"];
 
 pub fn write(project_dir: &Path) -> Result<(), String> {
     write_guidelines(project_dir)?;
+    write_project_files(project_dir)
+}
+
+pub fn write_project_files(project_dir: &Path) -> Result<(), String> {
     update_agents(project_dir)?;
     update_gitignore_if_present(project_dir)
 }
@@ -61,7 +65,7 @@ fn update_gitignore_if_present(project_dir: &Path) -> Result<(), String> {
 
 fn replace_or_append_block(existing: &str, block: &str) -> Result<String, String> {
     if existing.trim().is_empty() {
-        return Ok(format!("{block}\n"));
+        return Ok(ensure_single_trailing_newline(block));
     }
 
     if let Some(start) = existing.find(AGENTS_START) {
@@ -131,5 +135,35 @@ mod tests {
             "target/\n.fennara/\n"
         );
         let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn new_agents_file_is_stable_after_first_write() {
+        let block = format!("{AGENTS_START}\nBLOCK\n{AGENTS_END}\n");
+        let first = replace_or_append_block("", &block).unwrap();
+        let second = replace_or_append_block(&first, &block).unwrap();
+        assert_eq!(first, block);
+        assert_eq!(second, first);
+    }
+
+    #[test]
+    fn project_files_do_not_modify_addon_guidelines() {
+        let temp = std::env::temp_dir().join(format!(
+            "fennara-guidance-project-files-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&temp);
+        let guidelines = temp.join("addons/fennara/ai/guidelines.md");
+        fs::create_dir_all(guidelines.parent().unwrap()).unwrap();
+        fs::write(&guidelines, "store addon content\n").unwrap();
+
+        write_project_files(&temp).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(guidelines).unwrap(),
+            "store addon content\n"
+        );
+        assert!(temp.join("AGENTS.md").is_file());
+        let _ = fs::remove_dir_all(temp);
     }
 }

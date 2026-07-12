@@ -19,9 +19,12 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     println!("requested version: {}", options.version);
 
     if !project_install::has_fennara_addon(&project_dir) {
-        return Err(format!(
-            "This Godot project does not have Fennara installed yet. Run `fennara install` from {} first.",
-            display_path(&project_dir)
+        return Err(operation::failure(
+            FailureClass::ProjectInvalid,
+            format!(
+                "This Godot project does not have Fennara installed yet. Run `fennara install` from {} first.",
+                display_path(&project_dir)
+            ),
         ));
     }
 
@@ -52,9 +55,11 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
 
     operation::phase(Phase::Staging, "Installing the updated project addon")?;
     println!("addon: copying from {}", display_path(&package.addon_dir));
-    project_install::install_addon(&project_dir, &package.addon_dir)?;
+    project_install::install_addon(&project_dir, &package.addon_dir)
+        .map_err(|error| operation::failure(FailureClass::StageFilesystem, error))?;
     println!("guidance: refreshing AGENTS.md and addons/fennara/ai/guidelines.md");
-    project_guidance::write(&project_dir)?;
+    project_guidance::write(&project_dir)
+        .map_err(|error| operation::failure(FailureClass::StageFilesystem, error))?;
     operation::phase(Phase::Validating, "Checking the updated installation")?;
     println!("Updated Fennara");
     println!(

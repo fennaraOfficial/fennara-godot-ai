@@ -9,6 +9,7 @@ pub enum FailureClass {
     ProjectInvalid,
     StageFilesystem,
     HandoffFailed,
+    RollbackFailed,
     ValidationFailed,
 }
 
@@ -31,6 +32,7 @@ impl FailureClass {
             Self::ProjectInvalid => "PROJECT-INVALID",
             Self::StageFilesystem => "STAGE-FILESYSTEM",
             Self::HandoffFailed => "HANDOFF-FAILED",
+            Self::RollbackFailed => "ROLLBACK-FAILED",
             Self::ValidationFailed => "VALIDATION-FAILED",
         }
     }

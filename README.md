@@ -104,6 +104,12 @@ runtime preflight checks use the project's installed .NET SDK.
 
 Then open the project in Godot.
 
+If `addons/fennara` already contains a complete addon from the Godot Asset
+Library or a release archive, `fennara install` reads its `VERSION`, validates
+the editor library for the current platform, and installs that exact matching
+local runtime. It keeps the existing addon files unchanged, starts the matching
+daemon when needed, and confirms the daemon connection.
+
 `fennara install` also writes project guidance for AI coding agents:
 
 ```text

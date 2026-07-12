@@ -112,6 +112,10 @@ pub fn set_component(name: &str, version: &str) -> Result<(), String> {
     with_current(|journal| journal.set_component(name, version))
 }
 
+pub fn set_requested_version(version: &str) -> Result<(), String> {
+    with_current(|journal| journal.set_requested_version(version))
+}
+
 pub fn select_asset(name: &str, expected_sha256: Option<&str>) -> Result<(), String> {
     with_current(|journal| journal.select_asset(name, expected_sha256))
 }

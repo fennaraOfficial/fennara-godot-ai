@@ -178,10 +178,11 @@ impl OperationJournal {
             "artifacts": self.artifacts,
             "rollback_state": self.rollback_state,
         });
-        serde_json::to_writer(&mut self.log_file, &event)
+        let mut entry = serde_json::to_vec(&event)
             .map_err(|err| format!("failed to serialize operation event: {err}"))?;
+        entry.push(b'\n');
         self.log_file
-            .write_all(b"\n")
+            .write_all(&entry)
             .map_err(|err| format!("failed to append {}: {err}", display_path(&self.log_path)))?;
         self.log_file
             .sync_data()
@@ -198,6 +199,12 @@ impl OperationJournal {
         }
         self.components
             .insert(name.to_string(), Value::String(self.sanitize(version)));
+        self.updated_at_unix_ms = unix_ms();
+        self.write_state()
+    }
+
+    pub(super) fn set_requested_version(&mut self, version: &str) -> Result<(), String> {
+        self.requested_version = self.sanitize(version);
         self.updated_at_unix_ms = unix_ms();
         self.write_state()
     }

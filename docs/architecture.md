@@ -167,7 +167,8 @@ When a user runs this inside a Godot project:
 fennara install
 ```
 
-the CLI copies the release addon into:
+the CLI copies the release addon into this layout when no complete addon is
+already present:
 
 ```text
 <godot-project>/
@@ -177,6 +178,12 @@ the CLI copies the release addon into:
       ai/
         guidelines.md
 ```
+
+When a complete addon is already present, the CLI validates its `VERSION` and
+current-platform editor library, installs the exact matching local package, and
+leaves the addon directory unchanged. The shared daemon is started only when it
+is not already running, and install succeeds only after its health response
+reports the addon version.
 
 After Godot's editor filesystem scan completes, the addon immediately starts a
 plugin-owned worker that prepares C# support. The worker runs one isolated

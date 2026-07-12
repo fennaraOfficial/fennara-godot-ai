@@ -3,17 +3,12 @@ use crate::app_layout::{
     AppLayout, arch_name, binary_name, display_path, platform_name, read_current_manifest,
     resolve_manifest_path,
 };
+use crate::daemon_setup::{self, HealthErrorKind};
 use crate::webview_prereq;
 use serde_json::Value;
 use std::fs;
-use std::io::{Read, Write};
-use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 use sysinfo::System;
-
-const DAEMON_ADDR: &str = "127.0.0.1:41287";
-const DAEMON_HEALTH_TIMEOUT: Duration = Duration::from_millis(500);
 
 pub fn run(args: Vec<&str>) -> Result<(), String> {
     let repair = args.contains(&"--repair");
@@ -107,7 +102,7 @@ fn report_running_state(app_dir: &Path, manifest: &Value) {
 }
 
 fn report_running_daemon_version(expected_version: &str) {
-    match daemon_health() {
+    match daemon_setup::health() {
         Ok(health) => {
             let running_version = health
                 .get("version")
@@ -122,7 +117,7 @@ fn report_running_daemon_version(expected_version: &str) {
                 println!("warning: restart Godot or the Fennara daemon to use the current runtime");
             }
         }
-        Err(error) if error.kind == DaemonHealthErrorKind::NotRunning => {
+        Err(error) if error.kind == HealthErrorKind::NotRunning => {
             println!("running daemon: not detected");
         }
         Err(error) => {
@@ -250,67 +245,6 @@ struct RuntimeSpec {
     process_name: String,
     manifest_field: &'static str,
     restart_hint: &'static str,
-}
-
-#[derive(Debug)]
-struct DaemonHealthError {
-    kind: DaemonHealthErrorKind,
-    message: String,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum DaemonHealthErrorKind {
-    NotRunning,
-    Other,
-}
-
-fn daemon_health() -> Result<Value, DaemonHealthError> {
-    let mut stream = TcpStream::connect(DAEMON_ADDR).map_err(|error| DaemonHealthError {
-        kind: if matches!(
-            error.kind(),
-            std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::TimedOut
-        ) {
-            DaemonHealthErrorKind::NotRunning
-        } else {
-            DaemonHealthErrorKind::Other
-        },
-        message: error.to_string(),
-    })?;
-    stream
-        .set_read_timeout(Some(DAEMON_HEALTH_TIMEOUT))
-        .map_err(other_daemon_health_error)?;
-    stream
-        .set_write_timeout(Some(DAEMON_HEALTH_TIMEOUT))
-        .map_err(other_daemon_health_error)?;
-
-    stream
-        .write_all(b"GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
-        .map_err(other_daemon_health_error)?;
-
-    let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .map_err(other_daemon_health_error)?;
-    let (headers, body) = response
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| other_daemon_health_message("invalid daemon HTTP response"))?;
-    if !headers.starts_with("HTTP/1.1 200") && !headers.starts_with("HTTP/1.0 200") {
-        return Err(other_daemon_health_message(
-            "daemon returned non-200 status",
-        ));
-    }
-    serde_json::from_str(body).map_err(|error| other_daemon_health_message(error.to_string()))
-}
-
-fn other_daemon_health_error(error: std::io::Error) -> DaemonHealthError {
-    other_daemon_health_message(error.to_string())
-}
-
-fn other_daemon_health_message(message: impl Into<String>) -> DaemonHealthError {
-    DaemonHealthError {
-        kind: DaemonHealthErrorKind::Other,
-        message: message.into(),
-    }
 }
 
 fn report_dir(label: &str, path: &Path) {

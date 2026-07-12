@@ -31,6 +31,9 @@ This is the quick map for contributors and coding agents working in this reposit
 | `local/crates/fennara-cli/` | `fennara` command: install, update, CLI self-update, doctor, operation diagnostics, webview prerequisite checks, C# support, MCP app setup, and generated project guidance. |
 | `local/crates/fennara-cli/src/operation.rs` | Public install/update operation coordinator, phases, and CLI handoff entry points. |
 | `local/crates/fennara-cli/src/operation/` | Focused operation journal, durable storage, diagnostic redaction, and test modules. |
+| `local/crates/fennara-cli/src/project_addon.rs` | Existing project-addon version and current-platform GDExtension library validation. |
+| `local/crates/fennara-cli/src/existing_addon_install.rs` | Exact-version adoption of an existing Asset Library or release addon without replacing project addon files. |
+| `local/crates/fennara-cli/src/daemon_setup.rs` | Shared daemon health check, exact-version readiness, and startup used by install and doctor. |
 | `local/crates/fennara-cli/tests/operation_failures.rs` | Process-level failure, durable diagnostics, redaction, and fail-closed operation-log tests. |
 | `local/crates/fennara-cli/src/diagnostics.rs` | User-facing access to the latest or a named sanitized operation report. |
 | `local/crates/fennara-mcp/` | Local stdio MCP server and tool schema forwarding. |

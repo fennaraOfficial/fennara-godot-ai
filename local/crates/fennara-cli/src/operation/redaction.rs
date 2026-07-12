@@ -14,8 +14,9 @@ pub(super) fn sanitize_text<'a>(
         .filter(|(path, _)| !path.is_empty())
         .collect();
     replacements.sort_by(|left, right| right.0.len().cmp(&left.0.len()));
+    let case_insensitive_paths = cfg!(windows) || cfg!(target_os = "macos");
     for (path, replacement) in replacements {
-        sanitized = sanitized.replace(&path, replacement);
+        sanitized = replace_path(&sanitized, &path, replacement, case_insensitive_paths);
     }
     sanitized = redact_url_queries(&sanitized);
     sanitized = redact_bearer_tokens(&sanitized);
@@ -23,17 +24,58 @@ pub(super) fn sanitize_text<'a>(
 }
 
 fn redact_url_queries(text: &str) -> String {
-    text.split_whitespace()
-        .map(|word| {
-            if (word.starts_with("http://") || word.starts_with("https://"))
-                && let Some(index) = word.find('?')
-            {
-                return format!("{}?<redacted>", &word[..index]);
-            }
-            word.to_string()
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+    let mut output = String::with_capacity(text.len());
+    let lower = text.to_ascii_lowercase();
+    let mut cursor = 0;
+    while cursor < text.len() {
+        let http = lower[cursor..]
+            .find("http://")
+            .map(|offset| cursor + offset);
+        let https = lower[cursor..]
+            .find("https://")
+            .map(|offset| cursor + offset);
+        let Some(url_start) = http.into_iter().chain(https).min() else {
+            output.push_str(&text[cursor..]);
+            break;
+        };
+        output.push_str(&text[cursor..url_start]);
+        let url_end = text[url_start..]
+            .find(char::is_whitespace)
+            .map(|offset| url_start + offset)
+            .unwrap_or(text.len());
+        let url = &text[url_start..url_end];
+        if let Some(query_start) = url.find('?') {
+            output.push_str(&url[..=query_start]);
+            output.push_str("<redacted>");
+        } else {
+            output.push_str(url);
+        }
+        cursor = url_end;
+    }
+    output
+}
+
+pub(super) fn replace_path(
+    text: &str,
+    path: &str,
+    replacement: &str,
+    case_insensitive: bool,
+) -> String {
+    if !case_insensitive {
+        return text.replace(path, replacement);
+    }
+    let lower_text = text.to_ascii_lowercase();
+    let lower_path = path.to_ascii_lowercase();
+    let mut output = String::with_capacity(text.len());
+    let mut cursor = 0;
+    while let Some(offset) = lower_text[cursor..].find(&lower_path) {
+        let start = cursor + offset;
+        output.push_str(&text[cursor..start]);
+        output.push_str(replacement);
+        cursor = start + path.len();
+    }
+    output.push_str(&text[cursor..]);
+    output
 }
 
 fn redact_bearer_tokens(text: &str) -> String {

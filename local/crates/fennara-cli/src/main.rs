@@ -1,8 +1,11 @@
 mod app_layout;
+mod daemon_setup;
 mod diagnostics;
 mod doctor;
+mod existing_addon_install;
 mod mcp_setup;
 mod operation;
+mod project_addon;
 mod project_guidance;
 mod project_install;
 mod release_client;
@@ -10,6 +13,8 @@ mod release_client;
 mod release_client_tests;
 mod release_manifest;
 mod release_package;
+#[cfg(test)]
+mod release_package_tests;
 mod release_update;
 mod self_update;
 mod webview_prereq;

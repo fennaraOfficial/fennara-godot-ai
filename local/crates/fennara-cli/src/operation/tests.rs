@@ -1,4 +1,5 @@
 use super::journal::OperationJournal;
+use super::redaction::{replace_path, sanitize_text};
 use super::storage::{read_operation_state, unix_ms, validate_operation_id};
 use super::{FailureClass, OperationKind, Phase};
 use crate::app_layout::AppLayout;
@@ -74,6 +75,30 @@ fn sanitizes_paths_tokens_and_url_queries() {
     assert!(!events.contains("token=secret"));
     assert!(!events.contains("private-project"));
     fs::remove_dir_all(&journal.app_dir).unwrap();
+}
+
+#[test]
+fn url_query_redaction_preserves_whitespace_and_newlines() {
+    let input = "before  https://example.com/file?token=secret\n\tafter http://example.com/plain";
+    let sanitized = sanitize_text(input, std::iter::empty::<(&PathBuf, &'static str)>());
+    assert_eq!(
+        sanitized,
+        "before  https://example.com/file?<redacted>\n\tafter http://example.com/plain"
+    );
+}
+
+#[test]
+fn path_replacement_can_follow_case_sensitive_or_insensitive_rules() {
+    let input = "native C:\\Users\\Alice\\Fennara slash c:/users/alice/fennara";
+    let native_replaced = replace_path(input, "c:\\users\\alice\\fennara", "<data>", true);
+    assert_eq!(
+        replace_path(&native_replaced, "C:/Users/Alice/Fennara", "<data>", true),
+        "native <data> slash <data>"
+    );
+    assert_eq!(
+        replace_path(input, "C:/USERS/ALICE/FENNARA", "<data>", false),
+        input
+    );
 }
 
 #[test]
@@ -205,6 +230,20 @@ fn records_structured_asset_hashes_and_rollback_state() {
         "mismatch"
     );
     assert_eq!(last_event["rollback_state"], "not_started");
+    fs::remove_dir_all(&journal.app_dir).unwrap();
+}
+
+#[test]
+fn discovered_addon_version_replaces_latest_in_operation_state() {
+    let layout = test_layout("requested-version");
+    layout.ensure_base_dirs().unwrap();
+    let mut journal =
+        OperationJournal::create(layout, OperationKind::Install, None, "latest").unwrap();
+    journal.set_requested_version("1.2.3").unwrap();
+
+    let state: Value =
+        serde_json::from_str(&fs::read_to_string(&journal.state_path).unwrap()).unwrap();
+    assert_eq!(state["requested_version"], "1.2.3");
     fs::remove_dir_all(&journal.app_dir).unwrap();
 }
 
