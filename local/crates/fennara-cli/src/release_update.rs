@@ -1,4 +1,5 @@
 use crate::app_layout::display_path;
+use crate::operation::{self, FailureClass, Phase};
 use crate::project_guidance;
 use crate::project_install;
 use crate::release_package;
@@ -7,9 +8,12 @@ use crate::webview_prereq;
 use std::path::PathBuf;
 
 pub fn run(args: Vec<&str>) -> Result<(), String> {
+    operation::phase(Phase::Checking, "Validating project update request")?;
     let options = UpdateOptions::parse(args)?;
-    let project_dir = project_install::resolve_project_dir(options.project_dir.clone())?;
-    project_install::ensure_godot_project(&project_dir)?;
+    let project_dir = project_install::resolve_project_dir(options.project_dir.clone())
+        .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
+    project_install::ensure_godot_project(&project_dir)
+        .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
     println!("Updating Fennara");
     println!("project: {}", display_path(&project_dir));
     println!("requested version: {}", options.version);
@@ -46,10 +50,12 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
         return Ok(());
     }
 
+    operation::phase(Phase::Staging, "Installing the updated project addon")?;
     println!("addon: copying from {}", display_path(&package.addon_dir));
     project_install::install_addon(&project_dir, &package.addon_dir)?;
     println!("guidance: refreshing AGENTS.md and addons/fennara/ai/guidelines.md");
     project_guidance::write(&project_dir)?;
+    operation::phase(Phase::Validating, "Checking the updated installation")?;
     println!("Updated Fennara");
     println!(
         "from: {}",

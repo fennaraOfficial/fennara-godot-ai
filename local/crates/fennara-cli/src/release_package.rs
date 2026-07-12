@@ -1,4 +1,5 @@
 use crate::app_layout::{AppLayout, arch_name, binary_name, display_path, platform_name};
+use crate::operation::{self, FailureClass};
 use crate::release_client::{self, DownloadAsset, Release};
 use crate::release_manifest::ReleaseManifest;
 use crate::webview_runtime;
@@ -19,8 +20,11 @@ pub fn ensure_package(version_request: &str) -> Result<InstalledPackage, String>
     if let Some(manifest_asset) = release.manifest_asset() {
         println!("manifest: {}", manifest_asset.name);
         let bytes = release_client::download_bytes(&manifest_asset.url, &manifest_asset.name)?;
-        let manifest = ReleaseManifest::parse(&bytes)?;
-        manifest.validate_for_install()?;
+        let manifest = ReleaseManifest::parse(&bytes)
+            .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+        manifest
+            .validate_for_install()
+            .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
         return ensure_manifest_package(&layout, &release, &manifest);
     }
 
@@ -32,7 +36,9 @@ fn ensure_manifest_package(
     release: &Release,
     manifest: &ReleaseManifest,
 ) -> Result<InstalledPackage, String> {
-    let selection = manifest.select_for_current_platform()?;
+    let selection = manifest
+        .select_for_current_platform()
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
     println!("package: selected {}", selection.version);
     let local_asset = release
         .asset_by_name(&selection.local.name)
@@ -66,6 +72,11 @@ fn ensure_manifest_package(
         },
     )?;
 
+    for runtime in &selection.shared_runtimes {
+        if let Some(version) = runtime.get("version").and_then(serde_json::Value::as_str) {
+            operation::set_component("shared_runtime", version)?;
+        }
+    }
     for message in webview_runtime::ensure_from_release_manifest(
         layout,
         &selection.shared_runtimes,
@@ -125,6 +136,9 @@ fn ensure_selected_package(
     local_asset: DownloadAsset<'_>,
     addon_asset: DownloadAsset<'_>,
 ) -> Result<InstalledPackage, String> {
+    for component in ["addon", "daemon", "mcp", "runtime"] {
+        operation::set_component(component, version)?;
+    }
     if package_complete(layout, version) {
         write_manifest(layout, version)?;
         println!(

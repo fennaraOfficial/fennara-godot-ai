@@ -223,6 +223,31 @@ in CI or agent-driven runs.
 
 ## Troubleshooting
 
+### An Install Or Update Failed
+
+`fennara install`, `fennara update`, and CLI self-update operations print an
+operation ID and durable event-log path. Show the latest sanitized report with:
+
+```bash
+fennara diagnostics
+```
+
+Use a specific ID when reporting or revisiting an older failure:
+
+```bash
+fennara diagnostics --operation <operation-id>
+```
+
+Operation state is stored under the Fennara app-data `operations/` directory,
+with JSONL events under `logs/operations/`. Reports include the phase, stable
+error code, platform, architecture, and component versions known to the CLI.
+Downloaded artifacts also record their selected asset name, expected hash,
+actual hash, and verification status. Operation failures use stable typed codes
+so support does not depend on matching the wording of an error message.
+They replace the project, home, and Fennara app-data paths with placeholders
+and redact common credential fields, bearer tokens, and URL query strings.
+They do not collect chat messages, provider keys, or project file contents.
+
 ### `fennara` Is Not Found
 
 Open a new terminal and try again:

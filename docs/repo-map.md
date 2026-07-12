@@ -28,7 +28,11 @@ This is the quick map for contributors and coding agents working in this reposit
 
 | Path | Owns |
 | --- | --- |
-| `local/crates/fennara-cli/` | `fennara` command: install, update, CLI self-update, doctor, webview prerequisite checks, C# support, MCP app setup, and generated project guidance. |
+| `local/crates/fennara-cli/` | `fennara` command: install, update, CLI self-update, doctor, operation diagnostics, webview prerequisite checks, C# support, MCP app setup, and generated project guidance. |
+| `local/crates/fennara-cli/src/operation.rs` | Public install/update operation coordinator, phases, and CLI handoff entry points. |
+| `local/crates/fennara-cli/src/operation/` | Focused operation journal, durable storage, diagnostic redaction, and test modules. |
+| `local/crates/fennara-cli/tests/operation_failures.rs` | Process-level failure, durable diagnostics, redaction, and fail-closed operation-log tests. |
+| `local/crates/fennara-cli/src/diagnostics.rs` | User-facing access to the latest or a named sanitized operation report. |
 | `local/crates/fennara-mcp/` | Local stdio MCP server and tool schema forwarding. |
 | `local/crates/fennara-daemon/` | Local daemon used for runtime sessions and Godot bridge work. |
 | `local/crates/fennara-daemon/src/runtime_daemon/permissions.rs` | Built-in chat approval modes, tool-risk classification, permission decisions, and pending approval request types. |
@@ -110,6 +114,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | Add or change a Godot tool | `fennara-cpp/src/tools/` and `local/schemas/tools/` |
 | Change MCP schema text | `local/schemas/tools/` |
 | Change `fennara install` or `fennara update` | `local/crates/fennara-cli/src/` |
+| Change install/update operation logs, phases, error codes, or diagnostic reports | `local/crates/fennara-cli/src/operation.rs`, `local/crates/fennara-cli/src/operation/`, and `local/crates/fennara-cli/src/diagnostics.rs` |
 | Change webview prerequisite checks | `local/crates/fennara-cli/src/webview_prereq.rs`, `local/crates/fennara-cli/src/webview_runtime.rs`, and `fennara-cpp/src/ui/webview_host*` |
 | Change generated project guidance | `local/templates/` and `local/crates/fennara-cli/src/project_guidance.rs` |
 | Sync generated demo addon guidance | `local/templates/fennara-guidelines.md`, `scripts/sync-guidance.mjs`, and `godot_demo/addons/fennara/ai/guidelines.md` |

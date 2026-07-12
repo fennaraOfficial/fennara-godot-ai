@@ -1,4 +1,5 @@
 use crate::app_layout::display_path;
+use crate::operation::{self, FailureClass, Phase};
 use crate::project_guidance;
 use crate::release_package;
 use crate::webview_prereq;
@@ -7,9 +8,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub fn run(args: Vec<&str>) -> Result<(), String> {
+    operation::phase(Phase::Checking, "Validating project installation request")?;
     let options = InstallOptions::parse(args)?;
-    let project_dir = resolve_project_dir(options.project_dir)?;
-    ensure_godot_project(&project_dir)?;
+    let project_dir = resolve_project_dir(options.project_dir)
+        .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
+    ensure_godot_project(&project_dir)
+        .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
     println!("Installing Fennara");
     println!("project: {}", display_path(&project_dir));
 
@@ -38,10 +42,12 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             (package.version, package.addon_dir)
         }
     };
+    operation::phase(Phase::Staging, "Installing the project addon")?;
     println!("addon: copying from {}", display_path(&source));
     install_addon(&project_dir, &source)?;
     println!("guidance: writing AGENTS.md and addons/fennara/ai/guidelines.md");
     project_guidance::write(&project_dir)?;
+    operation::phase(Phase::Validating, "Checking platform prerequisites")?;
     println!("Installed Fennara");
     println!("version: {version}");
     println!("project: {}", display_path(&project_dir));
