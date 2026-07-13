@@ -20,6 +20,11 @@ Releases are manual. Do not publish from pull request workflows.
 
 `VERSION` is the source of truth.
 
+Release tooling accepts SemVer values. Stable releases use `X.Y.Z`. Staging
+candidates use an isolated pull-request prerelease such as
+`0.3.9-pr.101.2`, where `pr-101` is the staging channel and `2` is that
+channel's candidate number.
+
 To bump the repo version:
 
 ```bash
@@ -33,6 +38,21 @@ The script updates:
 - plugin version constants
 - Rust workspace package version under `local/`
 - `local/Cargo.lock`
+
+The addon also carries `addons/fennara/release.json`. Stable identity is
+written automatically by the normal command above. A staging build workspace
+uses the explicit identity inputs:
+
+```bash
+node scripts/set-version.mjs 0.3.9-pr.101.2 \
+  --track staging \
+  --channel pr-101 \
+  --source-commit <full-commit-sha>
+```
+
+The staging version, channel, source commit, and immutable release tag must
+agree. A prerelease addon without this identity is rejected. Existing stable
+addons from before `release.json` continue to default to the stable track.
 
 Check version sync:
 
@@ -178,6 +198,34 @@ per-platform `assets.cli` entry to update the installed CLI first, then resume
 the package update with `--no-self-update`. If self-update is not available for
 that release or install location, it should fail before installing packages and
 print a clear instruction to rerun `install.sh` or `install.ps1`.
+
+The optional release identity added to manifest schema 1 does not require a
+minimum CLI increase. Older schema-1 clients ignore unknown fields, while
+staging-aware clients validate the identity when it is present. A future
+release that depends on channel-aware activation or updater handoff must
+revisit the minimum CLI before publication.
+
+## Staging Identity And Discovery Contract
+
+Staging channels are isolated per pull request:
+
+| Value | PR 101 example |
+| --- | --- |
+| Channel | `pr-101` |
+| Candidate version | `0.3.9-pr.101.2` |
+| Immutable release | `v0.3.9-pr.101.2` |
+| Channel release | `staging-pr-101` |
+| Pointer asset | `fennara-staging-channel-pr-101.json` |
+
+The channel release contains only a small pointer to an immutable exact
+release. Release binaries never live under the moving channel name. The CLI
+can resolve this pointer with the internal version request
+`channel:pr-101`, then continues using only the exact immutable version.
+
+PR 101 and PR 125 therefore use different release tags and pointer assets.
+Updating one channel cannot redirect testers on the other channel. Publishing
+these releases and safely advancing their pointers belongs to the later
+staging workflow work, not this identity foundation.
 
 The shared addon zip contains every built GDExtension binary referenced by `godot_demo/addons/fennara/fennara.gdextension`. Godot loads the matching library for the user's OS and ignores the others.
 

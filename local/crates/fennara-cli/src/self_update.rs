@@ -2,7 +2,7 @@ use crate::VERSION;
 use crate::app_layout::{AppLayout, binary_name, display_path};
 use crate::operation::{self, FailureClass, Phase};
 use crate::release_client::{self, DownloadAsset};
-use crate::release_manifest::{ReleaseManifest, compare_versions};
+use crate::release_manifest::compare_versions;
 use std::cmp::Ordering;
 use std::env;
 use std::fs::{self, File, OpenOptions};
@@ -50,9 +50,7 @@ pub fn start(version_request: &str, continuation_args: Vec<String>) -> Result<St
             release.tag
         )));
     };
-    let manifest_bytes = release_client::download_bytes(&manifest_asset.url, &manifest_asset.name)?;
-    let manifest = ReleaseManifest::parse(&manifest_bytes)
-        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    let manifest = release_client::download_release_manifest(&release, &manifest_asset)?;
     let selection = manifest
         .select_cli_for_current_platform()
         .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;

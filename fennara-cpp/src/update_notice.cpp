@@ -2,6 +2,7 @@
 
 #include "fennara/local_bridge.hpp"
 #include "fennara/logger.hpp"
+#include "fennara/release/version.hpp"
 
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/http_client.hpp>
@@ -27,43 +28,8 @@ std::string g_current_version;
 std::string g_latest_version;
 std::string g_error;
 
-int parse_part(const godot::String &part) {
-    godot::String digits;
-    for (int i = 0; i < part.length(); i++) {
-        char32_t c = part[i];
-        if (c < '0' || c > '9') {
-            break;
-        }
-        digits += godot::String::chr(c);
-    }
-    return digits.is_empty() ? 0 : digits.to_int();
-}
-
-godot::String normalize_version(godot::String version) {
-    version = version.strip_edges();
-    if (version.begins_with("v")) {
-        version = version.substr(1);
-    }
-    return version;
-}
-
 bool is_version_candidate(godot::String version) {
-    version = normalize_version(version);
-    godot::PackedStringArray parts = version.split(".");
-    if (parts.size() < 2) {
-        return false;
-    }
-    for (int i = 0; i < parts.size(); i++) {
-        godot::String part = parts[i];
-        if (part.is_empty()) {
-            return false;
-        }
-        char32_t c = part[0];
-        if (c < '0' || c > '9') {
-            return false;
-        }
-    }
-    return true;
+    return release_version::is_valid(release_version::normalize(version));
 }
 
 godot::String extract_asset_version(const godot::String &name,
@@ -77,12 +43,12 @@ godot::String extract_asset_version(const godot::String &name,
     if (count <= 0) {
         return "";
     }
-    godot::String version = normalize_version(name.substr(start, count));
+    godot::String version = release_version::normalize(name.substr(start, count));
     return is_version_candidate(version) ? version : godot::String();
 }
 
 godot::String latest_version_from_release(const godot::Dictionary &response) {
-    godot::String tag = normalize_version(godot::String(response.get("tag_name", "")));
+    godot::String tag = release_version::normalize(godot::String(response.get("tag_name", "")));
     if (is_version_candidate(tag)) {
         return tag;
     }
@@ -134,22 +100,7 @@ godot::String latest_version_from_release(const godot::Dictionary &response) {
 }
 
 bool version_is_newer(const godot::String &latest, const godot::String &current) {
-    godot::PackedStringArray latest_parts = latest.split(".");
-    godot::PackedStringArray current_parts = current.split(".");
-    int count = latest_parts.size() > current_parts.size()
-                    ? latest_parts.size()
-                    : current_parts.size();
-    for (int i = 0; i < count; i++) {
-        int latest_part = i < latest_parts.size() ? parse_part(latest_parts[i]) : 0;
-        int current_part = i < current_parts.size() ? parse_part(current_parts[i]) : 0;
-        if (latest_part > current_part) {
-            return true;
-        }
-        if (latest_part < current_part) {
-            return false;
-        }
-    }
-    return false;
+    return release_version::compare(latest, current).value_or(0) > 0;
 }
 
 godot::String read_addon_version() {
@@ -255,7 +206,7 @@ void check_once() {
     }
     g_checked = true;
 
-    godot::String current = normalize_version(read_addon_version());
+    godot::String current = release_version::normalize(read_addon_version());
     g_current_version = current.utf8().get_data();
 
     godot::Dictionary response = get_github_latest_release(5000);

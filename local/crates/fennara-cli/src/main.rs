@@ -8,14 +8,25 @@ mod operation;
 mod project_addon;
 mod project_guidance;
 mod project_install;
+mod release_channel;
+#[cfg(test)]
+mod release_channel_tests;
 mod release_client;
 #[cfg(test)]
 mod release_client_tests;
+mod release_identity;
+#[cfg(test)]
+mod release_identity_tests;
 mod release_manifest;
+#[cfg(test)]
+mod release_manifest_tests;
 mod release_package;
 #[cfg(test)]
 mod release_package_tests;
 mod release_update;
+mod release_version;
+#[cfg(test)]
+mod release_version_tests;
 mod self_update;
 mod update_apply;
 mod update_stage;

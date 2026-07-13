@@ -1,7 +1,9 @@
 use crate::app_layout::{AppLayout, binary_name};
+use crate::release_channel::ChannelPointer;
+use crate::release_client::Release;
 use crate::release_package::{
     activate_package_at, package_complete, restore_activation_at, shared_runtime_component_key,
-    validate_expected_version,
+    validate_expected_version, validate_legacy_fallback_allowed,
 };
 use std::fs;
 use std::ops::Deref;
@@ -77,6 +79,26 @@ fn shared_runtime_component_uses_manifest_identifier() {
         shared_runtime_component_key(&runtime).as_deref(),
         Some("shared_runtime_linux_cef")
     );
+}
+
+#[test]
+fn channel_release_cannot_use_legacy_installation_without_a_manifest() {
+    let release = Release {
+        tag: "v0.3.9-pr.101.2".into(),
+        assets: serde_json::Value::Array(Vec::new()),
+        channel_pointer: Some(ChannelPointer {
+            schema_version: 1,
+            channel: "pr-101".into(),
+            version: "0.3.9-pr.101.2".into(),
+            release_tag: "v0.3.9-pr.101.2".into(),
+            source_commit: "0123456789abcdef0123456789abcdef01234567".into(),
+            release_manifest_sha256: "a".repeat(64),
+        }),
+    };
+
+    let error = validate_legacy_fallback_allowed(&release).unwrap_err();
+    assert!(error.contains("has no release manifest"));
+    assert!(error.contains("refusing unverified legacy installation"));
 }
 
 fn write_complete_package(layout: &AppLayout, version: &str) {

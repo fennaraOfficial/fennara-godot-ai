@@ -1,5 +1,6 @@
 use crate::app_layout::{arch_name, display_path, platform_name};
 use crate::project_install::project_addon_dir;
+use crate::release_identity::ReleaseIdentity;
 use crate::release_manifest::compare_versions;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -44,6 +45,7 @@ pub fn validate(addon_dir: &Path) -> Result<ExistingAddon, String> {
             display_path(&version_path)
         ));
     }
+    ReleaseIdentity::load(addon_dir, &version)?;
 
     let library_path = current_library_path(addon_dir, &manifest_path)?;
     if !library_path.is_file() {

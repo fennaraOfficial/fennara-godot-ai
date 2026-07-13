@@ -26,16 +26,28 @@ pub fn ensure_package(version_request: &str) -> Result<InstalledPackage, String>
     let release = release_client::fetch_release(version_request)?;
     if let Some(manifest_asset) = release.manifest_asset() {
         println!("manifest: {}", manifest_asset.name);
-        let bytes = release_client::download_bytes(&manifest_asset.url, &manifest_asset.name)?;
-        let manifest = ReleaseManifest::parse(&bytes)
-            .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+        let manifest = release_client::download_release_manifest(&release, &manifest_asset)?;
         manifest
             .validate_for_install()
             .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
         return ensure_manifest_package(&layout, &release, &manifest, None, true, true);
     }
 
+    validate_legacy_fallback_allowed(&release)?;
     ensure_legacy_package(&layout, &release)
+}
+
+pub(crate) fn validate_legacy_fallback_allowed(release: &Release) -> Result<(), String> {
+    if release.is_channel_release() {
+        return Err(operation::failure(
+            FailureClass::ManifestInvalid,
+            format!(
+                "staging channel release {} has no release manifest; refusing unverified legacy installation",
+                release.tag
+            ),
+        ));
+    }
+    Ok(())
 }
 
 pub fn stage_exact_package(version: &str) -> Result<InstalledPackage, String> {
@@ -54,9 +66,7 @@ pub fn stage_exact_package(version: &str) -> Result<InstalledPackage, String> {
         )
     })?;
     println!("manifest: {}", manifest_asset.name);
-    let bytes = release_client::download_bytes(&manifest_asset.url, &manifest_asset.name)?;
-    let manifest = ReleaseManifest::parse(&bytes)
-        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    let manifest = release_client::download_release_manifest(&release, &manifest_asset)?;
     manifest
         .validate_for_install()
         .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
@@ -79,9 +89,7 @@ pub fn prepare_package(version_request: &str) -> Result<InstalledPackage, String
         )
     })?;
     println!("manifest: {}", manifest_asset.name);
-    let bytes = release_client::download_bytes(&manifest_asset.url, &manifest_asset.name)?;
-    let manifest = ReleaseManifest::parse(&bytes)
-        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    let manifest = release_client::download_release_manifest(&release, &manifest_asset)?;
     manifest
         .validate_for_install()
         .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
