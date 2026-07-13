@@ -184,6 +184,7 @@
   let providerPopovers = null;
   let projectFileLinks = null;
   let settingsPanel = null;
+  let mcpAppsSettings = null;
   let storedTranscript = null;
   let composerActions = null;
   let effortControls = null;
@@ -255,6 +256,7 @@
     onClose() {
       appShell?.setAttribute("data-connection", "offline");
       stopProjectStatusPolling();
+      mcpAppsSettings?.handleDisconnect();
     },
     onSendUnavailable() {
       appendSystem("Local daemon is not connected yet.");
@@ -268,6 +270,15 @@
   const ensureDaemonConnected = daemonClient.ensureConnected;
   const nextRequestId = daemonClient.nextRequestId;
   const send = daemonClient.send;
+
+  mcpAppsSettings = window.FennaraMcpAppsSettings.createMcpAppsSettings({
+    callbacks: {
+      ensureDaemonConnected,
+      nextRequestId,
+      send,
+    },
+    previewMode: new URLSearchParams(window.location.search).get("preview") === "mcp",
+  });
 
   projectFileLinks = window.FennaraProjectFileLinks.createProjectFileLinks({
     send,
@@ -1327,6 +1338,9 @@
   }
 
   function handleDaemonMessage(message) {
+    if (mcpAppsSettings?.handleMessage(message)) {
+      return;
+    }
     if (message.type === "settings" || message.type === "settings_saved") {
       const requestId = String(message.request_id || "");
       const isKeySave = requestId.startsWith("save-settings-key");

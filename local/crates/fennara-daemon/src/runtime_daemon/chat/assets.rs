@@ -142,6 +142,9 @@ fn asset(path: &str) -> Option<Asset> {
         "model-picker.js" => js(include_bytes!(
             "../../../../../../godot_demo/addons/fennara/dist/model-picker.js"
         )),
+        "mcp-apps-settings.js" => js(include_bytes!(
+            "../../../../../../godot_demo/addons/fennara/dist/mcp-apps-settings.js"
+        )),
         "overlay-manager.js" => js(include_bytes!(
             "../../../../../../godot_demo/addons/fennara/dist/overlay-manager.js"
         )),
@@ -328,7 +331,11 @@ mod tests {
         let Some(path_end) = line[path_start..].find('"') else {
             return;
         };
-        let path = &line[path_start..path_start + path_end];
-        assert!(asset(path).is_some(), "missing embedded chat asset: {path}");
+        let reference = &line[path_start..path_start + path_end];
+        let path = reference.split(['?', '#']).next().unwrap_or(reference);
+        assert!(
+            asset(path).is_some(),
+            "missing embedded chat asset: {reference}"
+        );
     }
 }

@@ -22,6 +22,8 @@ Start here:
 - README.md
 - AGENTS.md
 - CONTEXT.md
+- docs/setup.md
+- docs/cli.md
 - docs/repo-map.md
 - docs/architecture.md
 - docs/mcp-setup.md

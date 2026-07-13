@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Fennara Chat</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=mcp-apps-7" />
   </head>
   <body>
     <main class="app-shell" data-connection="offline">
@@ -393,49 +393,139 @@
             <h2>Chat Settings</h2>
             <button class="icon-button" type="submit" aria-label="Close settings">x</button>
           </header>
-          <fieldset class="settings-group">
-            <legend>Providers</legend>
-            <p class="settings-note">
-              Choose a provider and configure the connection details it requires.
-            </p>
-            <button class="secondary-button settings-provider-button" type="button" data-open-settings-providers>
-              Open providers
-            </button>
-          </fieldset>
-          <fieldset class="settings-group">
-            <legend>Tool approvals</legend>
-            <label class="settings-radio">
-              <input type="radio" name="approval_mode" value="ask" data-approval-mode checked />
-              <span>
-                <strong>Ask for approval</strong>
-                <small>Read-only tools run. Project changes and runtime actions wait for you.</small>
-              </span>
+          <nav class="settings-tabs" aria-label="Settings sections">
+            <button class="settings-tab is-active" type="button" aria-selected="true" data-settings-tab="chat">Chat</button>
+            <button class="settings-tab" type="button" aria-selected="false" data-settings-tab="mcp">MCP Apps</button>
+          </nav>
+          <section class="settings-page" data-settings-page="chat">
+            <fieldset class="settings-group">
+              <legend>Providers</legend>
+              <p class="settings-note">
+                Choose a provider and configure the connection details it requires.
+              </p>
+              <button class="secondary-button settings-provider-button" type="button" data-open-settings-providers>
+                Open providers
+              </button>
+            </fieldset>
+            <fieldset class="settings-group">
+              <legend>Tool approvals</legend>
+              <label class="settings-radio">
+                <input type="radio" name="approval_mode" value="ask" data-approval-mode checked />
+                <span>
+                  <strong>Ask for approval</strong>
+                  <small>Read-only tools run. Project changes and runtime actions wait for you.</small>
+                </span>
+              </label>
+              <label class="settings-radio">
+                <input type="radio" name="approval_mode" value="full_access" data-approval-mode />
+                <span>
+                  <strong>Full access</strong>
+                  <small>Project changes and runtime actions run without prompting. Hard safety blocks still apply.</small>
+                </span>
+              </label>
+            </fieldset>
+            <fieldset class="settings-group">
+              <legend>Chat display</legend>
+              <label class="settings-check">
+                <input type="checkbox" data-chat-surface-browser />
+                <span>Open chat in my system browser next time</span>
+              </label>
+              <p class="settings-note">
+                This keeps the Godot dock lightweight and can reduce editor GPU and memory usage.
+              </p>
+              <p class="settings-status settings-restart" data-chat-surface-restart hidden>
+                Restart Godot for this change to take effect.
+              </p>
+            </fieldset>
+          </section>
+          <section class="settings-page mcp-apps-page" data-settings-page="mcp" hidden>
+            <div class="mcp-apps-intro">
+              <div>
+                <h3>Use Fennara from your AI apps</h3>
+                <p>Connect an app once, then choose this Godot project from the MCP target button.</p>
+              </div>
+              <span class="mcp-ready-badge"><span></span> Fennara ready</span>
+            </div>
+            <label class="mcp-app-search">
+              <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="7"></circle>
+                <path d="M20 20l-3.5-3.5"></path>
+              </svg>
+              <input type="search" placeholder="Search supported apps..." aria-label="Search supported MCP apps" data-mcp-app-search />
             </label>
-            <label class="settings-radio">
-              <input type="radio" name="approval_mode" value="full_access" data-approval-mode />
-              <span>
-                <strong>Full access</strong>
-                <small>Project changes and runtime actions run without prompting. Hard safety blocks still apply.</small>
-              </span>
-            </label>
-          </fieldset>
-          <fieldset class="settings-group">
-            <legend>Chat display</legend>
-            <label class="settings-check">
-              <input type="checkbox" data-chat-surface-browser />
-              <span>Open chat in my system browser next time</span>
-            </label>
-            <p class="settings-note">
-              This keeps the Godot dock lightweight and can reduce editor GPU and memory usage.
-            </p>
-            <p class="settings-status settings-restart" data-chat-surface-restart hidden>
-              Restart Godot for this change to take effect.
-            </p>
-          </fieldset>
+            <div class="mcp-app-list" aria-label="MCP applications">
+              <article class="mcp-app-card" data-mcp-app="codex" data-mcp-search="codex">
+                <div class="mcp-app-copy">
+                  <strong>Codex</strong>
+                  <span class="mcp-app-status" data-mcp-app-status>Setup available</span>
+                </div>
+                <button class="primary-button mcp-app-action" type="button" data-mcp-app-action>Set Up</button>
+              </article>
+              <article class="mcp-app-card" data-mcp-app="claude" data-mcp-search="claude code desktop" data-mcp-restart="Claude Code and Claude Desktop">
+                <div class="mcp-app-copy">
+                  <strong>Claude</strong>
+                  <span class="mcp-app-status" data-mcp-app-status>Setup available</span>
+                </div>
+                <button class="primary-button mcp-app-action" type="button" data-mcp-app-action>Set Up</button>
+              </article>
+              <article class="mcp-app-card" data-mcp-app="gemini" data-mcp-search="gemini antigravity" data-mcp-restart="Gemini CLI and Antigravity">
+                <div class="mcp-app-copy">
+                  <strong>Gemini &amp; Antigravity</strong>
+                  <span class="mcp-app-status" data-mcp-app-status>Setup available</span>
+                </div>
+                <button class="primary-button mcp-app-action" type="button" data-mcp-app-action>Set Up</button>
+              </article>
+              <article class="mcp-app-card" data-mcp-app="cline" data-mcp-search="cline">
+                <div class="mcp-app-copy">
+                  <strong>Cline</strong>
+                  <span class="mcp-app-status" data-mcp-app-status>Setup available</span>
+                </div>
+                <button class="primary-button mcp-app-action" type="button" data-mcp-app-action>Set Up</button>
+              </article>
+              <article class="mcp-app-card" data-mcp-app="cursor" data-mcp-search="cursor">
+                <div class="mcp-app-copy">
+                  <strong>Cursor</strong>
+                  <span class="mcp-app-status" data-mcp-app-status>Setup available</span>
+                </div>
+                <button class="primary-button mcp-app-action" type="button" data-mcp-app-action>Set Up</button>
+              </article>
+              <article class="mcp-app-card" data-mcp-app="vscode" data-mcp-search="vs code vscode visual studio code">
+                <div class="mcp-app-copy">
+                  <strong>VS Code</strong>
+                  <span class="mcp-app-status" data-mcp-app-status>Setup available</span>
+                </div>
+                <button class="primary-button mcp-app-action" type="button" data-mcp-app-action>Set Up</button>
+              </article>
+              <article class="mcp-app-card" data-mcp-app="opencode" data-mcp-search="opencode open code">
+                <div class="mcp-app-copy">
+                  <strong>OpenCode</strong>
+                  <span class="mcp-app-status" data-mcp-app-status>Setup available</span>
+                </div>
+                <button class="primary-button mcp-app-action" type="button" data-mcp-app-action>Set Up</button>
+              </article>
+              <article class="mcp-app-card" data-mcp-app="windsurf" data-mcp-search="windsurf">
+                <div class="mcp-app-copy">
+                  <strong>Windsurf</strong>
+                  <span class="mcp-app-status" data-mcp-app-status>Setup available</span>
+                </div>
+                <button class="primary-button mcp-app-action" type="button" data-mcp-app-action>Set Up</button>
+              </article>
+              <article class="mcp-app-card" data-mcp-app="kiro" data-mcp-search="kiro">
+                <div class="mcp-app-copy">
+                  <strong>Kiro</strong>
+                  <span class="mcp-app-status" data-mcp-app-status>Setup available</span>
+                </div>
+                <button class="primary-button mcp-app-action" type="button" data-mcp-app-action>Set Up</button>
+              </article>
+            </div>
+            <p class="mcp-app-empty" data-mcp-app-empty hidden>No supported apps match your search.</p>
+            <div class="mcp-app-result" role="status" aria-live="polite" data-mcp-app-result hidden></div>
+            <p class="mcp-apps-footnote">Fennara creates a backup before changing an app's MCP configuration.</p>
+          </section>
           <p class="settings-toast" role="status" aria-live="polite" data-settings-saved-toast hidden>
             Settings saved
           </p>
-          <menu>
+          <menu data-settings-actions>
             <button class="secondary-button" value="cancel">Cancel</button>
             <button class="primary-button" value="default" data-save-settings disabled>Save</button>
           </menu>
@@ -457,11 +547,12 @@
     <script src="./project-file-links.js"></script>
     <script src="./provider-popovers.js"></script>
     <script src="./settings-panel.js"></script>
+    <script src="./mcp-apps-settings.js?v=mcp-apps-8"></script>
     <script src="./chat-navigation.js"></script>
     <script src="./composer-actions.js"></script>
     <script src="./effort-controls.js"></script>
     <script src="./overlay-manager.js"></script>
     <script src="./shell-bindings.js"></script>
-    <script src="./app.js"></script>
+    <script src="./app.js?v=mcp-apps-8"></script>
   </body>
 </html>

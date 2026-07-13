@@ -4,5 +4,5 @@
 @import "./styles/drawer.css";
 @import "./styles/chat.css";
 @import "./styles/model-picker.css";
-@import "./styles/settings.css";
+@import "./styles/settings.css?v=mcp-apps-7";
 @import "./styles/responsive.css";

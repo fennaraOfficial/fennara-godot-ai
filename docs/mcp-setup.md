@@ -10,9 +10,17 @@ configured separately inside Godot.
 
 ## Preferred Setup
 
-Run `fennara install` inside your Godot project first. This installs the Godot
-addon, downloads the local runtime package, and creates the stable MCP launcher
-that external apps should call.
+Finish **Set Up Fennara** in the Godot dock first. Then open **Chat Settings >
+MCP Apps**, find the external app, and press **Set Up**. The dock asks the local
+daemon to run the matching `fennara mcp-setup` command. The CLI remains the only
+component that edits MCP app configuration and creates backups.
+
+Restart the selected MCP app after setup so it reloads Fennara. The combined
+**Claude** option configures Claude Code and Claude Desktop. **Gemini &
+Antigravity** configures the shared Gemini and Antigravity targets.
+
+The terminal workflow remains available. Run `fennara install` inside the Godot
+project first, then configure the external app directly:
 
 Then configure your MCP app:
 
@@ -35,8 +43,6 @@ fennara mcp-setup --windsurf
 fennara mcp-setup --kiro
 fennara mcp-setup --help
 ```
-
-Restart the MCP app after setup so it reloads Fennara.
 
 ## Manual Setup
 

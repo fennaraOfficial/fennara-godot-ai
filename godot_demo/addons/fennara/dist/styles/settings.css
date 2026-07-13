@@ -1,11 +1,13 @@
 .settings-dialog {
-  width: min(420px, calc(100vw - 24px));
+  width: min(520px, calc(100vw - 24px));
+  height: min(520px, calc(100vh - 24px));
   padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 16px 48px var(--shadow);
+  overflow: hidden;
 }
 
 .settings-dialog::backdrop {
@@ -15,8 +17,245 @@
 .settings-panel {
   position: relative;
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 10px;
+  height: 100%;
   padding: 10px;
+  overflow: hidden;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 7px;
+  background: var(--surface-raised);
+}
+
+.settings-tab {
+  flex: 1;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--faint);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.settings-tab:hover {
+  color: var(--text);
+}
+
+.settings-tab.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 4px var(--shadow);
+}
+
+.settings-page {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.settings-page[hidden] {
+  display: none;
+}
+
+.mcp-apps-page {
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.settings-panel .mcp-app-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--field);
+}
+
+.settings-panel .mcp-app-search:focus-within {
+  border-color: #4f93d2;
+}
+
+.settings-panel .mcp-app-search .svg-icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--faint);
+}
+
+.settings-panel .mcp-app-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.settings-panel .mcp-app-search input::placeholder {
+  color: var(--faint);
+}
+
+.mcp-apps-intro {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 2px 2px;
+}
+
+.mcp-apps-intro h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.mcp-apps-intro p {
+  max-width: 330px;
+  margin: 0;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mcp-ready-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  border: 1px solid rgba(79, 147, 210, 0.42);
+  border-radius: 999px;
+  color: #68a8ff;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.mcp-ready-badge span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #68a8ff;
+}
+
+.mcp-app-list {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 0;
+  padding-right: 3px;
+  overflow-y: auto;
+}
+
+.mcp-app-card[hidden] {
+  display: none;
+}
+
+.mcp-app-empty {
+  align-self: center;
+  margin: 0;
+  color: var(--faint);
+  text-align: center;
+}
+
+.mcp-app-empty[hidden] {
+  display: none;
+}
+
+.mcp-app-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-raised);
+}
+
+.mcp-app-card.is-configured {
+  border-color: rgba(79, 147, 210, 0.48);
+}
+
+.mcp-app-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mcp-app-copy strong {
+  font-size: 12.5px;
+}
+
+.mcp-app-status {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-app-status.is-configured {
+  color: #68a8ff;
+}
+
+.mcp-app-status.is-error {
+  color: #d98686;
+}
+
+.mcp-app-status.is-warning {
+  color: var(--warning);
+}
+
+.mcp-app-action {
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+  justify-self: end;
+  padding: 6px 9px;
+  font-size: 11.5px;
+}
+
+.mcp-app-result {
+  display: grid;
+  gap: 2px;
+  padding: 9px 10px;
+  border: 1px solid rgba(79, 147, 210, 0.46);
+  border-radius: 7px;
+  background: rgba(71, 142, 201, 0.12);
+  color: #68a8ff;
+  font-size: 11.5px;
+}
+
+.mcp-app-result[hidden] {
+  display: none;
+}
+
+.mcp-app-result span {
+  color: var(--muted);
+}
+
+.mcp-app-result.is-error {
+  border-color: rgba(217, 134, 134, 0.46);
+  background: rgba(152, 66, 66, 0.12);
+  color: #e39a9a;
+}
+
+.mcp-apps-footnote {
+  margin: 0;
+  color: var(--faint);
+  font-size: 10.5px;
+  line-height: 1.4;
 }
 
 .settings-panel header {
@@ -118,6 +357,10 @@
   justify-content: flex-end;
   margin: 0;
   padding: 0;
+}
+
+.settings-panel menu[hidden] {
+  display: none;
 }
 
 .settings-panel .primary-button:disabled,
