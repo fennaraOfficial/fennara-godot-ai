@@ -35,10 +35,13 @@ for (const manifest of [
 ]) {
   update(manifest, (text) => {
     if (/version\.workspace\s*=\s*true/.test(text)) {
-      return text.replace(/version\s*=\s*"[^"]+"\r?\n/g, "");
+      return text.replace(/^version\s*=\s*"[^"]+"\r?\n/gm, "");
     }
 
-    return text.replace(/version\s*=\s*"[^"]+"/, "version.workspace = true");
+    return text.replace(
+      /^version\s*=\s*"[^"]+"/m,
+      "version.workspace = true",
+    );
   });
 }
 
