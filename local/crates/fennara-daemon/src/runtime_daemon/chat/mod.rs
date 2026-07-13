@@ -23,6 +23,7 @@ mod exec_command;
 mod generation;
 mod ids;
 mod images;
+mod mcp_setup;
 mod models;
 mod prompt;
 mod providers;
@@ -66,6 +67,7 @@ struct ClientRequest {
     force: Option<bool>,
     refresh_local: Option<bool>,
     chat_surface: Option<String>,
+    mcp_target: Option<String>,
 }
 
 #[derive(Clone)]
@@ -288,6 +290,29 @@ where
                     .await
                 }
                 Err(error) => send_error(sender, request_id, "update_start_failed", &error).await,
+            }
+        }
+        "setup_mcp_app" => {
+            let Some(target) = request.mcp_target.as_deref() else {
+                return send_error(sender, request_id, "bad_request", "mcp_target is required.")
+                    .await
+                    .map_err(|_| ());
+            };
+            match mcp_setup::run(target).await {
+                Ok(result) => {
+                    send_json(
+                        sender,
+                        json!({
+                            "type": "mcp_setup_completed",
+                            "request_id": request_id,
+                            "target": result.target,
+                            "report": result.report,
+                            "warning": result.warning
+                        }),
+                    )
+                    .await
+                }
+                Err(error) => send_error(sender, request_id, "mcp_setup_failed", &error).await,
             }
         }
         "set_mcp_target" => {

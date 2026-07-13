@@ -20,6 +20,8 @@ This is the quick map for contributors and coding agents working in this reposit
 | `install.ps1` / `install.sh` | Bootstrap scripts that install the Fennara CLI from GitHub releases. |
 | `VERSION` | Version source of truth. |
 | `README.md` | Short human-facing overview and quick start. |
+| `docs/setup.md` | User-facing addon-first setup, chat prerequisites, MCP connection, update flow, and troubleshooting. |
+| `docs/cli.md` | Terminal command reference, CLI-owned install/update behavior, recovery, diagnostics, app-data layout, and automation guidance. |
 | `CONTRIBUTING.md` | Contribution rules. |
 | `SECURITY.md` | Security reporting policy. |
 | `LICENSE.md` | Project license. |
@@ -120,6 +122,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | Add or change a Godot tool | `fennara-cpp/src/tools/` and `local/schemas/tools/` |
 | Change MCP schema text | `local/schemas/tools/` |
 | Change `fennara install` or `fennara update` | `local/crates/fennara-cli/src/`; native staging and detached apply/rollback are owned by `release_update.rs`, `update_stage.rs`, `update_stage/`, and `update_apply/` |
+| Change CLI commands or terminal behavior | `local/crates/fennara-cli/src/` and `docs/cli.md` |
 | Change native update progress, shutdown confirmation, activation handshake, or recovery | `fennara-cpp/src/update/`, `fennara-cpp/src/ui/update_panel.cpp`, `fennara-cpp/src/ui/dock.cpp`, `local/crates/fennara-daemon/src/runtime_daemon/chat/mod.rs`, and `ui/chat/` |
 | Change native first-run setup or CLI bootstrap | `fennara-cpp/src/setup/`, `fennara-cpp/src/ui/setup_panel.cpp`, and `fennara-cpp/src/ui/dock.cpp` |
 | Change install/update operation logs, phases, error codes, or diagnostic reports | `local/crates/fennara-cli/src/operation.rs`, `local/crates/fennara-cli/src/operation/`, and `local/crates/fennara-cli/src/diagnostics.rs` |
@@ -142,3 +145,4 @@ This is the quick map for contributors and coding agents working in this reposit
 - Keep this file current when adding or moving major source areas.
 - Keep release steps in [release.md](release.md).
 - Keep setup steps in [setup.md](setup.md).
+- Keep terminal command behavior in [cli.md](cli.md).
