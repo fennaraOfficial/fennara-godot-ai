@@ -2,19 +2,6 @@
 
 This is the quick map for contributors and coding agents working in this repository.
 
-## Find The Right Area
-
-| Change | Primary Location |
-| --- | --- |
-| User setup or CLI behavior | `local/crates/fennara-cli/` |
-| External MCP protocol or schemas | `local/crates/fennara-mcp/`, `local/schemas/tools/` |
-| Built-in chat or daemon behavior | `local/crates/fennara-daemon/` |
-| Godot editor integration | `fennara-cpp/` |
-| Chat UI | `ui/chat/` |
-| Runtime helper scripts | `runtime/` |
-| Packaging or releases | `scripts/`, `.github/workflows/` |
-| User documentation | `README.md`, `docs/` |
-
 ## Top Level
 
 | Path | Owns |
@@ -33,7 +20,6 @@ This is the quick map for contributors and coding agents working in this reposit
 | `install.ps1` / `install.sh` | Bootstrap scripts that install the Fennara CLI from GitHub releases. |
 | `VERSION` | Version source of truth. |
 | `README.md` | Short human-facing overview and quick start. |
-| `docs/README.md` | Task-oriented documentation index. |
 | `docs/setup.md` | User-facing addon-first setup, chat prerequisites, MCP connection, update flow, and troubleshooting. |
 | `docs/cli.md` | Terminal command reference, CLI-owned install/update behavior, recovery, diagnostics, app-data layout, and automation guidance. |
 | `CONTRIBUTING.md` | Contribution rules. |
@@ -60,7 +46,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `local/crates/fennara-daemon/src/runtime_daemon/chat/prompt.rs` | Built-in chat PromptBuilder and generated runtime environment context. |
 | `local/crates/fennara-daemon/src/runtime_daemon/chat/trace.rs` | Local-only built-in chat trace recorder, SQLite event rows, retention, and debug query helpers. |
 | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/` | Built-in chat provider runtime primitives, catalog/resolution, context preflight hooks, normalized stream/error types, and OpenAI-compatible or Anthropic-compatible adapters for OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, Ollama/local, and LM Studio. |
-| `local/schemas/tools/` | Shared tool JSON schemas. The external MCP server and built-in chat embed their own allowed subsets. |
+| `local/schemas/tools/` | MCP tool JSON schemas embedded into the local MCP server. |
 | `local/webview-runtimes/linux-cef.json` | Linux CEF runtime placeholder/generated manifest used for release manifest generation, doctor output, and legacy fallback. It records the shared app-data layout and archive metadata without placing CEF inside the addon zip. |
 | `local/Cargo.toml` | Rust workspace config. |
 | `local/Cargo.lock` | Locked Rust dependency graph. |

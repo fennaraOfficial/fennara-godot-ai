@@ -1,23 +1,12 @@
 # Fennara CLI
 
-Use the CLI when you prefer the terminal, need diagnostics or recovery, or want
-an automated install with an exact version.
+The Fennara CLI is the shared installer and maintenance layer behind both the
+Godot setup panel and terminal workflows. The addon bootstrap downloads the
+matching CLI, verifies it, and asks it to finish setup. Users who prefer a
+terminal can run the same operations directly.
 
-> [!TIP]
-> You do not need to install the CLI manually if **Set Up Fennara** already
-> completed in the Godot dock.
-
-## Common Flow
-
-```bash
-cd path/to/your-godot-project
-fennara install
-```
-
-Use `fennara doctor` when you need to inspect or repair the local installation.
-
-Use [Setup](setup.md) for the normal Godot journey. Keep this page as the
-terminal command reference.
+Use [Setup](setup.md) for the normal Godot user journey. This page is the CLI
+reference.
 
 ## Install The CLI
 
@@ -53,18 +42,17 @@ Linux: ~/.local/share/fennara
 
 ## Command Summary
 
-| Command | Purpose |
-| --- | --- |
-| `fennara install` | Install or adopt a project addon and its matching local components |
-| `fennara update` | Update a project and its local components |
-| `fennara doctor` | Inspect or repair the local installation |
-| `fennara diagnostics` | Show a sanitized operation report |
-| `fennara mcp-setup` | Connect an external MCP app |
-| `fennara recover` | Restore an interrupted native update |
-| `fennara self-update` | Update only the installed CLI |
+```text
+fennara doctor [--repair]
+fennara diagnostics [--operation <operation-id>] [--json]
+fennara install [--project <path>] [--version <version>]
+fennara mcp-setup <target flags>
+fennara update [--project <path>] [--version <version>] [--no-self-update] [--prepare]
+fennara recover --project <path> [--operation <operation-id>]
+fennara self-update [--version <version>]
+```
 
-Run `fennara --help` for the installed command summary. Use
-`fennara mcp-setup --help` for the supported MCP app targets.
+Run `fennara <command> --help` for the options supported by the installed CLI.
 
 ## Install A Project
 
@@ -84,7 +72,7 @@ Without `--version`, the CLI selects the current release manifest. Use an exact
 release when reproducibility matters:
 
 ```bash
-fennara install --project path/to/project --version <version>
+fennara install --project path/to/project --version 0.3.8
 ```
 
 Installation has two safe paths:
@@ -96,6 +84,9 @@ Installation has two safe paths:
   the current platform library, and installs that exact version's CLI-managed
   components. It keeps the project addon unchanged. An explicit `--version`
   must match the existing addon.
+
+This second path is what the Godot **Set Up Fennara** panel uses after it has
+bootstrapped the CLI.
 
 ## Update A Project
 
@@ -158,9 +149,6 @@ launchers, runtimes, daemon state, and webview prerequisite:
 ```bash
 fennara doctor
 ```
-
-If it reports a running daemon or MCP runtime older than `current.json`, restart
-Godot or the affected MCP app so it launches the selected runtime.
 
 Use `--repair` to recreate missing base app-data directories. On Linux it also
 cleans stale CEF process profiles and repairs the current-runtime marker when a

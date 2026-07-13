@@ -1,11 +1,5 @@
 # Fennara vs Traditional Godot MCP
 
-| Traditional command bridge | Fennara feedback loop |
-| --- | --- |
-| Exposes editor actions | Exposes Godot-aware inspection, actions, and checks |
-| A successful command can be the end of the flow | Diagnostics, validation, runtime logs, and screenshots inform the next step |
-| Best for direct, known edits | Best when an agent must inspect, change, verify, and recover |
-
 Most Godot MCP servers expose editor commands to AI clients.
 
 Examples:

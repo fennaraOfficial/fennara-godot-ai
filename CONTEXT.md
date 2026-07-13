@@ -58,9 +58,7 @@ The display mode for built-in chat. Embedded mode uses the native Godot dock web
 
 **Chat Provider**
 
-A backend that can generate built-in chat responses, such as OpenAI, Anthropic,
-OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax,
-local Ollama, or LM Studio.
+A backend that can generate built-in chat responses, such as OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, local Ollama, or LM Studio.
 
 **Model Ref**
 

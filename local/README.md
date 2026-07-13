@@ -25,12 +25,11 @@ local/target/debug/fennara-daemon.exe
 
 ## MCP Server
 
-`crates/fennara-mcp` is the local MCP server. It speaks JSON-RPC over stdio so MCP clients can launch it as a local process.
+`crates/fennara-mcp` is the first local MCP server. It speaks JSON-RPC over stdio so MCP clients can launch it as a local process.
 
-`fennara-mcp` embeds its selected MCP-facing schemas from `local/schemas/tools/`
-at build time and forwards those tool calls to the local daemon. It does not
-need an external schema service at runtime. The built-in chat selects a related
-but different tool set from the same schema directory.
+`fennara-mcp` embeds the MCP-facing tool schemas from `local/schemas/tools/`
+at build time and forwards tool calls to the local daemon. It does not need an
+external schema service at runtime.
 
 `fennara install` also writes generated project guidance from `local/templates/`
 into the Godot project:

@@ -34,9 +34,9 @@ Open an issue or discussion before starting:
 Use Conventional Commit style:
 
 ```text
-fix(daemon): handle missing daemon status
-docs(setup): clarify setup steps
-ci(actions): add public pull request checks
+fix: handle missing daemon status
+docs: clarify setup steps
+ci: add public pull request checks
 ```
 
 Common types:

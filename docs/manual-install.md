@@ -1,14 +1,14 @@
 # Manual Install
 
-Use this page only when you need to assemble Fennara without the Godot setup
-flow or `fennara install`.
+Use this page if you do not want to run the install script.
 
-> [!TIP]
-> Most users should add `addons/fennara` to the project, open the Fennara dock,
-> and press **Set Up Fennara**. See [Setup](setup.md).
+For most users, the normal setup guide is easier:
 
-Manual installation has four parts: the CLI, the project addon, the shared local
-runtime package, and optional MCP app configuration.
+```bash
+fennara install
+```
+
+See [Setup](setup.md).
 
 ## 1. Download Release Files
 
@@ -16,19 +16,42 @@ Open the latest GitHub release:
 
 https://github.com/fennaraOfficial/fennara-godot-ai/releases/latest
 
-Download the release manifest, your platform files, and the shared addon zip.
+Download the release manifest, the CLI and local runtime files for your
+platform, plus the shared addon zip.
 
-| Purpose | Asset |
-| --- | --- |
-| Release plan and SHA-256 values | `fennara-release-manifest-v<version>.json` |
-| Windows x86_64 CLI | `fennara-cli-windows-x86_64-v<version>.zip` |
-| Windows x86_64 local runtime | `fennara-release-local-windows-x86_64-v<version>.zip` |
-| Linux x86_64 CLI | `fennara-cli-linux-x86_64-v<version>.zip` |
-| Linux x86_64 local runtime | `fennara-release-local-linux-x86_64-v<version>.zip` |
-| Linux x86_64 embedded webview | `fennara-webview-cef-linux-x64-<cef-version>.zip` |
-| macOS arm64 CLI | `fennara-cli-macos-arm64-v<version>.zip` |
-| macOS arm64 local runtime | `fennara-release-local-macos-arm64-v<version>.zip` |
-| Versioned all-platform addon | `fennara-release-addon-v<version>.zip` |
+Release manifest:
+
+```text
+fennara-release-manifest-v<version>.json
+```
+
+Windows:
+
+```text
+fennara-cli-windows-x86_64-v<version>.zip
+fennara-release-local-windows-x86_64-v<version>.zip
+```
+
+Linux:
+
+```text
+fennara-cli-linux-x86_64-v<version>.zip
+fennara-release-local-linux-x86_64-v<version>.zip
+fennara-webview-cef-linux-x64-<cef-version>.zip
+```
+
+macOS:
+
+```text
+fennara-cli-macos-arm64-v<version>.zip
+fennara-release-local-macos-arm64-v<version>.zip
+```
+
+Shared addon:
+
+```text
+fennara-release-addon-v<version>.zip
+```
 
 For Godot Asset Library links, use the stable latest asset:
 
@@ -228,6 +251,10 @@ Even if you install the CLI manually, you can let it install the addon and local
 cd path/to/your-godot-project
 fennara install
 ```
+
+For C# projects, use the same `fennara install` command and ensure the required
+.NET SDK is available through `dotnet`. Fennara uses project builds for C#
+diagnostics and runtime preflight checks.
 
 The CLI also writes project guidance for AI coding agents:
 

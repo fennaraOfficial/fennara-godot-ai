@@ -1,124 +1,164 @@
 # Setup
 
-Install Fennara, choose where you want to chat, and connect your Godot project.
+This guide walks through a normal Fennara setup from a clean machine to a Godot project connected through an external MCP app, the built-in chat dock, or both.
 
-> [!TIP]
-> Most users only need to add the addon, open the Fennara dock, and press
-> **Set Up Fennara**.
+## Requirements
 
-## Before You Start
+- Godot 4.5+ project
+- An MCP client that can run local stdio MCP servers, only if you want external AI app integration
+- Windows, macOS, or Linux
+- For C# projects: .NET SDK installed and available as `dotnet`
+- Optional for built-in chat: a configured chat provider, such as a cloud API key or a local Ollama/LM Studio server
+- Optional for embedded Windows chat: Microsoft Edge WebView2 Runtime
+- Windows troubleshooting only: Microsoft Visual C++ Redistributable 2015-2022 x64 if the Fennara CLI/runtime fails to start with missing `VCRUNTIME` / `MSVCP` DLLs or exit code `-1073741515`
 
-| Requirement | When you need it |
-| --- | --- |
-| Godot 4.5 or newer | Always |
-| Windows x86_64, Linux x86_64, or macOS arm64 | Always |
-| An MCP-capable AI app | Only for external MCP use |
-| A cloud API key, Ollama, or LM Studio | Only for the built-in chat |
-| The .NET SDK available as `dotnet` | Only for C# diagnostics and runtime preflight |
+## Default: Set Up From Godot
 
-## Install From Godot
+Add Fennara to the project using one of the download options in the
+[README Quick Start](../README.md#quick-start). Open the project and select the
+Fennara dock. If the matching local components are missing, Fennara shows a
+native setup panel that does not depend on chat, the daemon, or a webview.
 
-1. Install **Fennara** from the Godot Asset Library, or download
-   `fennara-addon-latest.zip` from the
-   [latest release](https://github.com/fennaraOfficial/fennara-godot-ai/releases/latest)
-   and copy `addons/fennara/` into your project.
-2. Open the project and select the Fennara dock.
-3. Press **Set Up Fennara**.
+Select **Set Up Fennara**. The addon reads its own `VERSION`, downloads the
+release manifest and matching CLI archive, verifies the archive SHA-256, and
+installs the CLI under Fennara app data. It then runs the same
+`fennara install --project <path> --version <addon-version>` flow used by the
+terminal installer.
 
-Fennara installs the matching local components and connects the open project.
-If setup fails, the dock provides **Retry**, **Copy Report**, and **Open Logs**.
-Copied reports are sanitized and do not include API keys, chat content, or
+The panel follows the CLI's durable operation state and shows installation
+progress. A failure includes a stable error code, operation ID when one was
+created, **Retry**, **Copy Report**, and **Open Logs** actions. Copied reports
+use the sanitized operation state and do not include API keys, chat content, or
 project files.
 
-> [!NOTE]
-> The addon stays in your project. The CLI, daemon, MCP server, logs, and shared
-> browser runtime live in Fennara app data outside the project.
+The bootstrap only installs the exact verified CLI and then delegates the rest
+of setup to that CLI. It does not place the daemon, MCP server, browser runtime,
+or updater inside the project addon.
 
-## Alternative: Install From The Terminal
+## Terminal Setup Alternative
 
-You do not need this if setup from the Godot dock succeeded.
+Use this flow for non-interactive setup or when the native setup panel cannot
+download or launch the CLI. It uses the same CLI that the Godot panel
+bootstraps.
 
-Install the CLI on Windows:
-
-```powershell
-irm https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.ps1 | iex
-```
-
-Or on macOS and Linux:
+Install the CLI using the platform command in
+[Fennara CLI](cli.md#install-the-cli), then install the Godot project:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.sh | sh
+fennara install --project path/to/your-godot-project
 ```
 
-Then run Fennara inside the project:
+Running inside the project works too:
 
 ```bash
 cd path/to/your-godot-project
 fennara install
 ```
 
-If the project already contains a complete Fennara addon, the CLI keeps it and
-installs the matching local components. Otherwise, it installs the current
-release addon too. See the [CLI install reference](cli.md#install-a-project) for
-version pinning and automation.
+For a C# Godot project, use the same `fennara install` command. Ensure the .NET
+SDK required by the project is available through `dotnet`; Fennara uses project
+builds for C# diagnostics and runtime preflight.
 
-## Choose How You Use Fennara
+If the project already has a complete Asset Library or release addon, the CLI
+keeps it and installs its exact matching local components. Otherwise it installs
+the selected release addon. See [Fennara CLI](cli.md#install-a-project) for
+version selection, repeat-install behavior, and automation options.
 
-| Path | Model account | Setup |
-| --- | --- | --- |
-| Built-in chat | A provider connected in Fennara Chat Settings | [Connect a provider](#connect-the-built-in-chat) |
-| External MCP app | The app's own model account or subscription | [Connect an MCP app](#connect-an-mcp-app) |
-| Both | Each path keeps its own model settings | Complete both sections |
+## Built-In Chat Webview Prerequisites
 
-### Connect The Built-In Chat
+Fennara MCP tools work without the built-in Godot chat dock. The chat dock needs
+the platform webview:
 
-1. Open **Chat Settings > Chat**.
-2. Select **Open providers**.
-3. Connect a cloud provider with your own key, or connect a local Ollama or
-   LM Studio server.
-4. Choose a model.
+```text
+Windows: Microsoft Edge WebView2 Runtime
+macOS: WKWebView from the system WebKit.framework
+Linux: Fennara-managed shared CEF runtime
+```
 
-See [Built-In Chat Providers](providers.md) for supported providers, keys, local
-server URLs, and model IDs. Use `/provider` and `/model` for the same actions
-from the composer.
+`fennara install`, `fennara update`, and `fennara doctor` check the current
+platform. On Windows, missing WebView2 prints the official Microsoft WebView2
+Runtime link. On macOS, WebKit is normally part of the OS, so Fennara only
+reports if the framework cannot be found. On Linux, the CEF runtime is selected
+from the release manifest and installed under Fennara app data.
 
-The embedded chat uses the platform webview:
+On Linux, Fennara also uses a shared browser runtime location for the embedded
+chat CEF runtime:
 
-| Platform | Webview |
-| --- | --- |
-| Windows | Microsoft Edge WebView2 Runtime |
-| macOS | System WKWebView/WebKit |
-| Linux | Fennara-managed shared CEF runtime |
+```text
+~/.local/share/fennara/webview/cef/linux-x64/<cef-version>
+```
 
-`fennara install`, `fennara update`, and `fennara doctor` check these
-prerequisites. MCP tools continue to work if the optional embedded chat cannot
-start.
+The CEF browser payload is installed once per user and shared across Godot
+projects/editors. It is not copied into `addons/fennara`. The Linux chat dock
+renders through that shared runtime when it is present. Release manifests point
+at the matching CEF runtime asset; `fennara install`, `fennara update`, and
+`fennara doctor --repair` validate or repair the shared runtime layout.
 
-To use the system browser instead, enable **Open chat in my system browser next
-time** in Chat Settings and restart Godot. This changes only where the built-in
-chat appears. It keeps the same provider, history, and project connection.
+The shared CEF runtime directory is read-only during normal browser use. Each
+open Godot editor gets its own writable CEF profile/cache/log directories under
+the Fennara app-data `cache/webview/profiles/cef/` and `logs/webview/cef/`
+roots, so multiple editors can keep embedded chat open at the same time.
 
-To attach code to the next built-in chat message, select code in Godot's script
-editor, open the context menu, and choose **Add to Chat**.
+The built-in chat has its own provider settings. It can use OpenAI, Anthropic,
+OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax,
+local Ollama, or LM Studio. These settings are separate
+from Claude Code, Codex, Cursor, Gemini, or any other external MCP app.
+Provider keys and local base URLs are stored locally outside the Godot project.
 
-### Connect An MCP App
+Chat Settings also has **Open chat in my system browser next time**. Leave it
+off to use the embedded Godot dock webview. Turn it on to have the dock show an
+**Open chat** button that launches the same built-in chat in your system browser
+through the local daemon. Restart Godot after changing this display setting.
 
-Open **Chat Settings > MCP Apps**, find your app, and press **Set Up**. Restart
-the app so it can load Fennara.
+Inside the dock, use `/provider` to connect or switch providers and `/model` to
+choose a model. See [Built-In Chat Providers](providers.md) and [Built-In Chat Slash Commands](slash-commands.md).
 
-You can also connect an app from the terminal:
+To add focused code context to a built-in chat request, select code in Godot's
+script editor, open the script editor context menu, and choose **Add to Chat**.
+The selected script range is attached to the next chat message as removable code
+context.
+
+## Configure Your MCP App
+
+Claude Code and Claude Desktop:
+
+```bash
+fennara mcp-setup --claude
+```
+
+Codex:
 
 ```bash
 fennara mcp-setup --codex
+```
+
+Cursor:
+
+```bash
+fennara mcp-setup --cursor
+```
+
+Gemini and Antigravity:
+
+```bash
+fennara mcp-setup --gemini
+```
+
+Other supported targets:
+
+```bash
 fennara mcp-setup --help
 ```
 
-If your app is not listed, see [MCP Setup](mcp-setup.md) for every supported
-target and manual configuration formats.
+Restart the MCP app after running `mcp-setup`.
 
-External MCP apps use their own model accounts. The built-in chat uses the
-provider selected in Fennara Chat Settings. See
-[MCP Apps And Built-In Chat](chat-vs-mcp.md) for the distinction.
+If your app is not listed, or if `mcp-setup` cannot find that app's config file,
+see [MCP Setup](mcp-setup.md) for manual JSON/TOML config examples.
+
+`mcp-setup` only connects that external app to Fennara's MCP tools. For example,
+`fennara mcp-setup --claude` lets Claude call Fennara tools, but it does not make
+the built-in Fennara dock use Claude or your Claude subscription. The dock uses
+the provider configured in Fennara chat settings. See [MCP Apps And Built-In Chat](chat-vs-mcp.md).
 
 ## Verify The Connection
 
@@ -128,55 +168,64 @@ Open the Godot project, then ask your MCP app:
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-If it reports the wrong project, select the correct MCP target from the Fennara
-dock.
+The result should show the project path you expect.
+
+If the wrong project is shown, use the Fennara dock in Godot to set the current project as the MCP target.
 
 ## Update Fennara
 
-When the dock shows **Update**, press it and follow the prompts. Fennara
-downloads and verifies the update before asking to close Godot. It reopens the
-same project after installation and keeps the previous working version until
-the update validates.
+When the dock shows **Update**, select it to download and verify the release
+while Godot stays open. The dock shows progress, then asks whether to close
+Godot and install. Choosing **Not Now** leaves the current installation running.
 
-To update from the terminal, close Godot and run:
+After confirmation, Fennara closes the editor normally, installs the staged
+release, and reopens the same project. It keeps the previous working version
+until the new addon and daemon validate. If validation fails, the dock offers
+**Restore Previous Version**, **Open Logs**, and **Copy Report**.
+
+Terminal users can close Godot and run:
 
 ```bash
-cd path/to/your-godot-project
-fennara update
+fennara update --project path/to/your-godot-project
 ```
 
-If validation fails, use **Restore Previous Version**, **Open Logs**, or
-**Copy Report** in the dock. See the [CLI update reference](cli.md#update-a-project)
-for exact versions, preparation, and interrupted-update recovery.
+See [Fennara CLI](cli.md#update-a-project) for exact-version updates, the
+prepare primitive, interrupted-update recovery, and diagnostics.
 
 ## Troubleshooting
 
 ### An Install Or Update Failed
 
-Copy the sanitized report from the dock, or show the latest report in a
-terminal:
+`fennara install`, `fennara update`, and CLI self-update operations print an
+operation ID and durable event-log path. Show the latest sanitized report with:
 
 ```bash
 fennara diagnostics
 ```
 
-See [CLI diagnostics](cli.md#inspect-health-and-failures) for operation IDs,
+The report is safe to copy into a support request. See
+[CLI diagnostics](cli.md#inspect-health-and-failures) for operation selection,
 JSON output, recorded fields, and redaction guarantees.
 
 ### `fennara` Is Not Found
 
-Open a new terminal and run:
+Open a new terminal and try again:
 
 ```bash
 fennara doctor
 ```
 
-If the command is still unavailable, add the Fennara `bin` directory to PATH.
-The [CLI installation page](cli.md#install-the-cli) lists the platform paths.
+`doctor` also reports when a running Fennara daemon or MCP runtime appears to be
+older than the version selected by `current.json`; restart Godot or the MCP app
+when it prints that warning.
 
-### Windows Binaries Fail Before Starting
+If it still fails, add the Fennara `bin` directory to PATH manually.
+The platform paths are listed in [Fennara CLI](cli.md#install-the-cli).
 
-If a Fennara binary reports a missing `VCRUNTIME` or `MSVCP` DLL, exit code
+### Windows CLI Fails Before It Starts
+
+If `fennara`, `fennara-mcp`, or `fennara-daemon` fails before printing normal
+output with a missing `VCRUNTIME` / `MSVCP` DLL error, exit code
 `-1073741515`, or `0xc0000135`, install the Microsoft Visual C++ Redistributable
 2015-2022 x64:
 
@@ -184,34 +233,43 @@ If a Fennara binary reports a missing `VCRUNTIME` or `MSVCP` DLL, exit code
 https://aka.ms/vs/17/release/vc_redist.x64.exe
 ```
 
-This is required only on Windows machines missing those Microsoft runtime DLLs.
+This is not a hard requirement for every Windows user. It only means that
+machine is missing the Microsoft runtime DLLs used by the current Fennara
+Windows binaries. The installer and self-update path already print clearer
+messages for the known `-1073741515` case, but the docs call it out here for
+manual troubleshooting.
 
-### A Release Requires A Newer CLI
+Long term, Fennara should either ship Windows binaries in a way that avoids
+this footgun or detect the missing runtime earlier and point directly at the
+fix.
 
-If CLI self-update cannot install the required version, rerun the install script
-from [Install The CLI](cli.md#install-the-cli), then retry the command.
+### Release Requires A Newer CLI
+
+If `fennara install` or `fennara update` says the release requires a newer
+Fennara CLI and self-update could not run, rerun the install script from
+[Install the CLI](cli.md#install-the-cli), then run the command again. This
+should be rare; normal package, runtime, and CLI changes are handled by the
+release manifest.
 
 ### The Addon Is Not Visible In Godot
 
-Confirm this file exists, then reopen the project:
+Check that the project contains:
 
 ```text
 addons/fennara/fennara.gdextension
 ```
 
+Then reopen the project or refresh the plugin list in Godot.
+
 ### `fennara_status` Shows The Wrong Project
 
-Open the intended project and select it with the MCP target control in the
-Fennara dock.
+Open the intended Godot project and use the Fennara dock to set it as the MCP target.
 
 ### C# Diagnostics Are Missing
 
-Confirm the project contains one clear `.csproj`, `.sln`, or `.slnx`, then run:
+Make sure the project contains an unambiguous `.csproj`, `.sln`, or `.slnx` and
+that `dotnet` works from your terminal:
 
 ```bash
 dotnet --version
 ```
-
-For browser runtime layouts, manual recovery, and implementation details, see
-[Architecture](architecture.md), [Manual Install](manual-install.md), and the
-[FAQ](faq.md).
