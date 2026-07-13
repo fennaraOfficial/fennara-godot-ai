@@ -246,9 +246,10 @@ fix.
 ### Release Requires A Newer CLI
 
 If `fennara install` or `fennara update` says the release requires a newer
-Fennara CLI and self-update could not run, rerun the install script from step 1,
-then run the command again. This should be rare; normal package, runtime, and
-CLI changes are handled by the release manifest.
+Fennara CLI and self-update could not run, rerun the install script from
+[Install the CLI](cli.md#install-the-cli), then run the command again. This
+should be rare; normal package, runtime, and CLI changes are handled by the
+release manifest.
 
 ### The Addon Is Not Visible In Godot
 
