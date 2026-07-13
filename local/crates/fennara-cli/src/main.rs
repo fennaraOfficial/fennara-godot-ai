@@ -28,6 +28,8 @@ mod release_version;
 #[cfg(test)]
 mod release_version_tests;
 mod self_update;
+#[cfg(test)]
+mod self_update_tests;
 mod update_apply;
 mod update_stage;
 mod webview_prereq;
@@ -136,7 +138,7 @@ Fennara CLI {VERSION}
 Usage:
   fennara doctor [--repair]
   fennara diagnostics [--operation <operation-id>] [--json]
-  fennara install [--project <path>] [--version <version>]
+  fennara install [--project <path>] [--version <version>] [--channel pr-<number>]
   fennara mcp-setup <target flags>
   fennara update [--version <version>] [--project <path>] [--no-self-update] [--prepare]
   fennara recover --project <path> [--operation <operation-id>]

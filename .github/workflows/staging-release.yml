@@ -1,0 +1,712 @@
+name: Staging Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: "Open pull request number to build."
+        required: true
+        type: string
+      base_version:
+        description: "Planned stable version, for example 0.3.9."
+        required: true
+        type: string
+      candidate:
+        description: "Positive candidate number for this pull request."
+        required: true
+        type: string
+      source_commit:
+        description: "Optional full PR head SHA used as an optimistic lock."
+        required: false
+        default: ""
+        type: string
+      publish:
+        description: "Publish the validated candidate and advance its PR channel. Leave off for a dry run."
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: staging-release-pr-${{ inputs.pull_request }}
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    name: resolve trusted candidate identity
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.candidate.outputs.version }}
+      channel: ${{ steps.candidate.outputs.channel }}
+      pull_request: ${{ steps.candidate.outputs.pull_request }}
+      source_commit: ${{ steps.candidate.outputs.source_commit }}
+      source_repository: ${{ steps.candidate.outputs.source_repository }}
+      release_tag: ${{ steps.candidate.outputs.release_tag }}
+
+    steps:
+      - name: Require the trusted main workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::Staging releases must be dispatched from main."
+            exit 1
+          fi
+
+      - name: Checkout trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Resolve the frozen PR head
+        id: source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pull_request }}
+          REQUESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::pull_request must be a positive integer."
+            exit 1
+          fi
+
+          read -r state head_sha head_repository <<< "$(
+            gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+              --jq '[.state, .head.sha, .head.repo.full_name] | @tsv'
+          )"
+          if [[ "${state}" != "open" || ! "${head_sha}" =~ ^[0-9a-f]{40}$ || -z "${head_repository}" ]]; then
+            echo "::error::Pull request ${PR_NUMBER} is not an open buildable pull request."
+            exit 1
+          fi
+          if [[ -n "${REQUESTED_SOURCE_COMMIT}" && "${REQUESTED_SOURCE_COMMIT}" != "${head_sha}" ]]; then
+            echo "::error::Requested source commit does not match the current PR head ${head_sha}."
+            exit 1
+          fi
+
+          echo "source_commit=${head_sha}" >> "${GITHUB_OUTPUT}"
+          echo "source_repository=${head_repository}" >> "${GITHUB_OUTPUT}"
+
+      - name: Write staging candidate identity
+        id: candidate
+        env:
+          BASE_VERSION: ${{ inputs.base_version }}
+          PR_NUMBER: ${{ inputs.pull_request }}
+          CANDIDATE_NUMBER: ${{ inputs.candidate }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.source_commit }}
+          SOURCE_REPOSITORY: ${{ steps.source.outputs.source_repository }}
+        run: |
+          node scripts/write-staging-candidate.mjs \
+            --base-version "${BASE_VERSION}" \
+            --pull-request "${PR_NUMBER}" \
+            --candidate "${CANDIDATE_NUMBER}" \
+            --source-commit "${SOURCE_COMMIT}" \
+            --source-repository "${SOURCE_REPOSITORY}" \
+            --out staging-metadata/candidate.json \
+            --github-output "${GITHUB_OUTPUT}"
+
+      - name: Upload trusted candidate identity
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennara-staging-candidate-metadata
+          path: staging-metadata/candidate.json
+          if-no-files-found: error
+
+  linux-cef-runtime:
+    name: prepare Linux CEF runtime
+    runs-on: ubuntu-latest
+    needs: resolve
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout exact candidate source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.resolve.outputs.source_repository }}
+          ref: ${{ needs.resolve.outputs.source_commit }}
+          persist-credentials: false
+
+      - name: Verify exact source commit
+        shell: bash
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${EXPECTED_SOURCE_COMMIT}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux CEF packaging dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential bzip2 binutils
+
+      - name: Prepare Linux CEF SDK
+        id: linux_cef_sdk
+        run: |
+          node scripts/prepare-linux-cef-sdk.mjs \
+            --out-dir "${RUNNER_TEMP}/fennara-cef-sdk" \
+            --download-dir "${RUNNER_TEMP}/fennara-cef-download"
+
+      - name: Build Linux CEF runtime asset
+        run: |
+          node scripts/prepare-linux-cef-runtime.mjs \
+            --cef-root "${{ steps.linux_cef_sdk.outputs.cef_root }}" \
+            --version "139.0.28+g55ab8a8+chromium-139.0.7258.139" \
+            --out-dir dist/linux-cef-runtime-release \
+            --write-manifest dist/generated-linux-cef-manifest/linux-cef.json
+
+      - name: Validate Linux CEF runtime asset
+        run: |
+          cp dist/generated-linux-cef-manifest/linux-cef.json local/webview-runtimes/linux-cef.json
+          node scripts/check-linux-cef-runtime-release.mjs --assets-dir dist/linux-cef-runtime-release
+
+      - name: Upload generated Linux CEF manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennara-generated-linux-cef-manifest
+          path: dist/generated-linux-cef-manifest/linux-cef.json
+          if-no-files-found: error
+
+      - name: Upload Linux CEF runtime asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennara-release-linux-cef-runtime
+          path: dist/linux-cef-runtime-release/*.zip
+          if-no-files-found: error
+
+  package:
+    name: package ${{ matrix.platform }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    needs: [resolve, linux-cef-runtime]
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            arch: x86_64
+            os: windows-latest
+          - platform: linux
+            arch: x86_64
+            os: ubuntu-latest
+          - platform: macos
+            arch: arm64
+            os: macos-latest
+
+    steps:
+      - name: Checkout exact candidate source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.resolve.outputs.source_repository }}
+          ref: ${{ needs.resolve.outputs.source_commit }}
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Verify exact source commit
+        shell: bash
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${EXPECTED_SOURCE_COMMIT}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Stamp candidate version in the runner workspace
+        run: |
+          node scripts/set-version.mjs "${{ needs.resolve.outputs.version }}" \
+            --track staging \
+            --channel "${{ needs.resolve.outputs.channel }}" \
+            --source-commit "${{ needs.resolve.outputs.source_commit }}"
+
+      - name: Check candidate version sync
+        run: node scripts/check-version.mjs
+
+      - name: Download generated Linux CEF manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: fennara-generated-linux-cef-manifest
+          path: generated-linux-cef-manifest
+
+      - name: Use generated Linux CEF manifest
+        shell: bash
+        run: cp generated-linux-cef-manifest/linux-cef.json local/webview-runtimes/linux-cef.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install SCons
+        run: pip install scons
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential bzip2 pkg-config ripgrep
+
+      - name: Install Windows ripgrep
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: choco install ripgrep -y --no-progress
+
+      - name: Install macOS ripgrep
+        if: matrix.platform == 'macos'
+        run: brew install ripgrep
+
+      - name: Prepare Linux CEF SDK
+        if: matrix.platform == 'linux'
+        id: linux_cef_sdk
+        run: |
+          node scripts/prepare-linux-cef-sdk.mjs \
+            --out-dir "${RUNNER_TEMP}/fennara-cef-sdk" \
+            --download-dir "${RUNNER_TEMP}/fennara-cef-download"
+
+      - name: Build GDExtension
+        working-directory: fennara-cpp
+        env:
+          FENNARA_CEF_ROOT: ${{ steps.linux_cef_sdk.outputs.cef_root }}
+        run: scons platform=${{ matrix.platform }} target=editor
+
+      - name: Build local tools
+        working-directory: local
+        run: cargo build --release --locked
+
+      - name: Assemble candidate archives
+        run: node scripts/package-preview.mjs --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+
+      - name: Upload candidate archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennara-release-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+      - name: Upload addon part
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennara-addon-part-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/addon-part-${{ matrix.platform }}-${{ matrix.arch }}/
+          if-no-files-found: error
+
+  addon:
+    name: package all-platform addon
+    runs-on: ubuntu-latest
+    needs: [resolve, package]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout trusted packaging tools
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download addon parts without merging them
+        uses: actions/download-artifact@v4
+        with:
+          path: addon-parts
+          pattern: fennara-addon-part-*
+
+      - name: Assemble all-platform addon archive
+        run: |
+          node scripts/package-addon-all.mjs \
+            --parts-dir addon-parts \
+            --version "${{ needs.resolve.outputs.version }}"
+
+      - name: Upload all-platform addon archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennara-release-addon
+          path: dist/fennara-addon-v${{ needs.resolve.outputs.version }}.zip
+          if-no-files-found: error
+
+  assemble:
+    name: validate candidate release assets
+    runs-on: ubuntu-latest
+    needs: [resolve, linux-cef-runtime, package, addon]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout trusted validation tools
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download candidate identity
+        uses: actions/download-artifact@v4
+        with:
+          name: fennara-staging-candidate-metadata
+          path: staging-metadata
+
+      - name: Download candidate release archives
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: fennara-release-*
+          merge-multiple: true
+
+      - name: Download addon parts for cross-platform validation
+        uses: actions/download-artifact@v4
+        with:
+          path: addon-parts
+          pattern: fennara-addon-part-*
+
+      - name: Download generated Linux CEF manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: fennara-generated-linux-cef-manifest
+          path: generated-linux-cef-manifest
+
+      - name: Rename manifest-managed packages
+        shell: bash
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          local_assets=(release-assets/fennara-local-*-v"${VERSION}".zip)
+          if [[ "${#local_assets[@]}" -ne 3 ]]; then
+            echo "::error::Expected three local archives for ${VERSION}."
+            exit 1
+          fi
+          for asset in "${local_assets[@]}"; do
+            renamed="${asset/release-assets\/fennara-local-/release-assets\/fennara-release-local-}"
+            mv "${asset}" "${renamed}"
+          done
+
+          mv "release-assets/fennara-addon-v${VERSION}.zip" \
+            "release-assets/fennara-release-addon-v${VERSION}.zip"
+
+      - name: Validate Linux CEF runtime asset
+        run: |
+          cp generated-linux-cef-manifest/linux-cef.json local/webview-runtimes/linux-cef.json
+          node scripts/check-linux-cef-runtime-release.mjs --assets-dir release-assets
+
+      - name: Write exact release manifest
+        run: |
+          node scripts/write-release-manifest.mjs \
+            --version "${{ needs.resolve.outputs.version }}" \
+            --assets-dir release-assets \
+            --linux-cef-manifest generated-linux-cef-manifest/linux-cef.json \
+            --release-identity staging-metadata/candidate.json \
+            --minimum-cli-version 0.3.8 \
+            --out "release-assets/fennara-release-manifest-v${{ needs.resolve.outputs.version }}.json"
+
+      - name: Validate complete candidate asset set
+        run: |
+          node scripts/validate-staging-build.mjs \
+            --candidate staging-metadata/candidate.json \
+            --assets-dir release-assets \
+            --addon-parts-dir addon-parts \
+            --release-manifest "release-assets/fennara-release-manifest-v${{ needs.resolve.outputs.version }}.json" \
+            --linux-cef-manifest generated-linux-cef-manifest/linux-cef.json
+
+      - name: Write channel pointer
+        run: |
+          node scripts/write-staging-pointer.mjs \
+            --candidate staging-metadata/candidate.json \
+            --manifest "release-assets/fennara-release-manifest-v${{ needs.resolve.outputs.version }}.json" \
+            --out "staging-metadata/fennara-staging-channel-${{ needs.resolve.outputs.channel }}.json"
+
+      - name: Assemble publication bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging-bundle/release-assets staging-bundle/metadata
+          cp release-assets/* staging-bundle/release-assets/
+          cp staging-metadata/candidate.json staging-bundle/metadata/candidate.json
+          cp staging-metadata/fennara-staging-channel-*.json staging-bundle/metadata/channel-pointer.json
+          cp generated-linux-cef-manifest/linux-cef.json staging-bundle/metadata/linux-cef.json
+
+      - name: Upload validated staging candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennara-staging-candidate-${{ needs.resolve.outputs.version }}
+          path: staging-bundle/
+          if-no-files-found: error
+
+  publish:
+    name: publish immutable candidate and advance channel
+    runs-on: ubuntu-latest
+    needs: [resolve, assemble]
+    if: inputs.publish
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - name: Checkout trusted publication tools
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download validated publication bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: fennara-staging-candidate-${{ needs.resolve.outputs.version }}
+          path: staging-bundle
+
+      - name: Revalidate untrusted candidate artifacts as data
+        run: node scripts/validate-staging-publish-bundle.mjs --bundle staging-bundle
+
+      - name: Require immutable GitHub releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh api \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/immutable-releases" >/dev/null 2>&1; then
+            echo "::error::Repository release immutability must be enabled before publishing staging candidates."
+            exit 1
+          fi
+
+      - name: Publish or verify immutable candidate release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          CHANNEL: ${{ needs.resolve.outputs.channel }}
+          PULL_REQUEST: ${{ needs.resolve.outputs.pull_request }}
+          SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
+          SOURCE_REPOSITORY: ${{ needs.resolve.outputs.source_repository }}
+        run: |
+          set -euo pipefail
+          expected_dir="staging-bundle/release-assets"
+          remote_dir="${RUNNER_TEMP}/published-${VERSION}"
+
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            read -r is_draft is_prerelease is_immutable target_commitish <<< "$(
+              gh release view "${RELEASE_TAG}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --json isDraft,isPrerelease,isImmutable,targetCommitish \
+                --jq '[.isDraft, .isPrerelease, .isImmutable, .targetCommitish] | @tsv'
+            )"
+            if [[ "${target_commitish}" != "${SOURCE_COMMIT}" || "${is_prerelease}" != "true" ]]; then
+              echo "::error::Existing ${RELEASE_TAG} has conflicting release metadata."
+              exit 1
+            fi
+            if [[ "${is_draft}" == "true" ]]; then
+              gh release delete "${RELEASE_TAG}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --yes \
+                --cleanup-tag
+            elif [[ "${is_immutable}" != "true" ]]; then
+              echo "::error::Existing ${RELEASE_TAG} is published but not immutable."
+              exit 1
+            fi
+          fi
+
+          if ! gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            mapfile -t assets < <(find "${expected_dir}" -maxdepth 1 -type f | sort)
+            notes="Testing-only Fennara staging candidate ${VERSION}.
+
+          Channel: ${CHANNEL}
+          Pull request: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pull/${PULL_REQUEST}
+          Source: ${SOURCE_REPOSITORY}@${SOURCE_COMMIT}
+          Supported packages: Windows x86_64, Linux x86_64, macOS arm64
+          Workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            gh release create "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${SOURCE_COMMIT}" \
+              --title "Fennara staging ${VERSION}" \
+              --notes "${notes}" \
+              --draft \
+              --prerelease
+            gh release upload "${RELEASE_TAG}" "${assets[@]}" \
+              --repo "${GITHUB_REPOSITORY}"
+            gh release edit "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --draft=false \
+              --prerelease
+          fi
+
+          gh release verify "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}"
+
+          rm -rf "${remote_dir}"
+          mkdir -p "${remote_dir}"
+          gh release download "${RELEASE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --dir "${remote_dir}"
+          node scripts/verify-published-assets.mjs \
+            --expected-dir "${expected_dir}" \
+            --actual-dir "${remote_dir}"
+
+      - name: Smoke test public release downloads
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+        run: |
+          node scripts/smoke-public-release.mjs \
+            --repository "${GITHUB_REPOSITORY}" \
+            --release-tag "${RELEASE_TAG}" \
+            --expected-dir staging-bundle/release-assets \
+            --download-dir "${RUNNER_TEMP}/public-${{ needs.resolve.outputs.version }}"
+
+      - name: Read current channel pointer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL_REF: fennara-staging/${{ needs.resolve.outputs.channel }}
+          POINTER_NAME: fennara-staging-channel-${{ needs.resolve.outputs.channel }}.json
+        run: |
+          set -euo pipefail
+          mkdir -p current-channel
+          if gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/contents/${POINTER_NAME}" \
+            -f ref="${CHANNEL_REF}" \
+            -H "Accept: application/vnd.github.raw+json" \
+            > "current-channel/${POINTER_NAME}" 2>/dev/null; then
+            echo "Loaded ${CHANNEL_REF}."
+          else
+            rm -f "current-channel/${POINTER_NAME}"
+          fi
+
+      - name: Check monotonic channel advancement
+        id: channel
+        run: |
+          node scripts/check-staging-channel-advance.mjs \
+            --current "current-channel/fennara-staging-channel-${{ needs.resolve.outputs.channel }}.json" \
+            --next staging-bundle/metadata/channel-pointer.json \
+            --github-output "${GITHUB_OUTPUT}"
+
+      - name: Advance the per-PR staging pointer last
+        if: steps.channel.outputs.action != 'noop'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL_REF: fennara-staging/${{ needs.resolve.outputs.channel }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          CHANNEL: ${{ needs.resolve.outputs.channel }}
+          SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
+          POINTER_NAME: fennara-staging-channel-${{ needs.resolve.outputs.channel }}.json
+        run: |
+          set -euo pipefail
+          pointer="staging-bundle/metadata/channel-pointer.json"
+          cp "${pointer}" "${RUNNER_TEMP}/${POINTER_NAME}"
+
+          rm -rf channel-recheck
+          mkdir -p channel-recheck
+          if gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/contents/${POINTER_NAME}" \
+            -f ref="${CHANNEL_REF}" \
+            -H "Accept: application/vnd.github.raw+json" \
+            > "channel-recheck/${POINTER_NAME}" 2>/dev/null; then
+            echo "Rechecked ${CHANNEL_REF}."
+          else
+            rm -f "channel-recheck/${POINTER_NAME}"
+          fi
+          action="$(
+            node scripts/check-staging-channel-advance.mjs \
+              --current "channel-recheck/${POINTER_NAME}" \
+              --next "${pointer}"
+          )"
+          if [[ "${action}" == "noop" ]]; then
+            exit 0
+          fi
+
+          if ! gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/${CHANNEL_REF}" >/dev/null 2>&1; then
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/git/refs" \
+              --raw-field ref="refs/heads/${CHANNEL_REF}" \
+              --raw-field sha="${GITHUB_SHA}" >/dev/null
+          fi
+
+          current_blob_sha="$(
+            gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/contents/${POINTER_NAME}" \
+              -f ref="${CHANNEL_REF}" \
+              --jq '.sha' 2>/dev/null || true
+          )"
+          content="$(base64 -w 0 < "${RUNNER_TEMP}/${POINTER_NAME}")"
+          update_args=(
+            --method PUT
+            "repos/${GITHUB_REPOSITORY}/contents/${POINTER_NAME}"
+            --raw-field message="chore(release): advance ${CHANNEL} to ${VERSION}"
+            --raw-field content="${content}"
+            --raw-field branch="${CHANNEL_REF}"
+          )
+          if [[ -n "${current_blob_sha}" ]]; then
+            update_args+=(--raw-field sha="${current_blob_sha}")
+          fi
+          gh api "${update_args[@]}" >/dev/null
+
+      - name: Verify active channel pointer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL_REF: fennara-staging/${{ needs.resolve.outputs.channel }}
+          POINTER_NAME: fennara-staging-channel-${{ needs.resolve.outputs.channel }}.json
+        run: |
+          set -euo pipefail
+          rm -rf verified-channel
+          mkdir -p verified-channel
+          gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/contents/${POINTER_NAME}" \
+            -f ref="${CHANNEL_REF}" \
+            -H "Accept: application/vnd.github.raw+json" \
+            > "verified-channel/${POINTER_NAME}"
+          cmp staging-bundle/metadata/channel-pointer.json "verified-channel/${POINTER_NAME}"

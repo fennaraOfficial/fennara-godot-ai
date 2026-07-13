@@ -74,6 +74,10 @@ bool FirstRunSetup::_launch_installer() {
     args.append(project_path);
     args.append("--version");
     args.append(addon_version);
+    if (addon_identity.is_staging()) {
+        args.append("--channel");
+        args.append(addon_identity.channel);
+    }
     args.append("--operation-id");
     args.append(operation_id);
     const godot::String executable =
@@ -201,6 +205,12 @@ void FirstRunSetup::_cleanup_download() const {
 
 godot::String FirstRunSetup::_diagnostic_report() const {
     godot::String report = "Fennara setup report\n";
+    report += "Track: " + addon_identity.track + "\n";
+    if (addon_identity.is_staging()) {
+        report += "Channel: " + addon_identity.channel + "\n";
+        report += "Source commit: " + addon_identity.source_commit + "\n";
+        report += "Release tag: " + addon_identity.release_tag + "\n";
+    }
     report += "Addon version: " + addon_version + "\n";
     report += "Operation: " + (operation_id.is_empty() ? "not created" : operation_id) + "\n";
     report += "Code: " + (error_code.is_empty() ? "none" : error_code) + "\n";

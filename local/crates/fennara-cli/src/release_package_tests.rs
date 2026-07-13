@@ -62,6 +62,34 @@ fn activation_restore_removes_manifest_when_none_existed() {
 }
 
 #[test]
+fn activation_records_staging_identity_for_self_update() {
+    let layout = test_layout("staging-identity");
+    let version = "1.2.3-pr.101.2";
+    write_complete_package(&layout, version);
+    fs::write(
+        layout
+            .versions_dir
+            .join(version)
+            .join("addon/addons/fennara/release.json"),
+        format!(
+            r#"{{"schema_version":1,"track":"staging","version":"{version}","release_tag":"v{version}","channel":"pr-101","source_commit":"0123456789abcdef0123456789abcdef01234567"}}"#
+        ),
+    )
+    .unwrap();
+
+    activate_package_at(&layout, version).unwrap();
+    let active: serde_json::Value =
+        serde_json::from_slice(&fs::read(&layout.current_manifest_path).unwrap()).unwrap();
+    assert_eq!(active["release_track"], "staging");
+    assert_eq!(active["release_channel"], "pr-101");
+    assert_eq!(active["release_tag"], format!("v{version}"));
+    assert_eq!(
+        active["source_commit"],
+        "0123456789abcdef0123456789abcdef01234567"
+    );
+}
+
+#[test]
 fn exact_install_rejects_mismatched_manifest_before_asset_installation() {
     let error = validate_expected_version("v1.2.3", "1.2.4", Some("1.2.3")).unwrap_err();
     assert!(error.contains("release v1.2.3 declares version 1.2.4"));
@@ -94,6 +122,19 @@ fn channel_release_cannot_use_legacy_installation_without_a_manifest() {
             source_commit: "0123456789abcdef0123456789abcdef01234567".into(),
             release_manifest_sha256: "a".repeat(64),
         }),
+    };
+
+    let error = validate_legacy_fallback_allowed(&release).unwrap_err();
+    assert!(error.contains("has no release manifest"));
+    assert!(error.contains("refusing unverified legacy installation"));
+}
+
+#[test]
+fn exact_prerelease_cannot_use_legacy_installation_without_a_manifest() {
+    let release = Release {
+        tag: "v0.3.9-pr.101.2".into(),
+        assets: serde_json::Value::Array(Vec::new()),
+        channel_pointer: None,
     };
 
     let error = validate_legacy_fallback_allowed(&release).unwrap_err();

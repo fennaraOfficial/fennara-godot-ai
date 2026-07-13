@@ -21,7 +21,6 @@ const HTTP_WRITE_TIMEOUT_SECS: u64 = 30;
 pub struct ReleaseAsset {
     pub name: String,
     pub url: String,
-    pub api_url: Option<String>,
     pub version: Option<String>,
 }
 
@@ -34,6 +33,8 @@ pub struct Release {
 impl Release {
     pub(crate) fn is_channel_release(&self) -> bool {
         self.channel_pointer.is_some()
+            || crate::release_version::parse_release_version(self.tag.trim_start_matches('v'))
+                .is_ok_and(|version| !version.pre.is_empty())
     }
 
     pub fn asset(&self, prefix: &str) -> Option<ReleaseAsset> {
@@ -54,7 +55,6 @@ impl Release {
             Some(ReleaseAsset {
                 name: name.to_string(),
                 url: url.to_string(),
-                api_url: asset.get("url").and_then(Value::as_str).map(str::to_string),
                 version: version_from_asset_name(name),
             })
         })
@@ -70,7 +70,6 @@ impl Release {
             Some(ReleaseAsset {
                 name: name.to_string(),
                 url: url.to_string(),
-                api_url: asset.get("url").and_then(Value::as_str).map(str::to_string),
                 version: version_from_asset_name(name),
             })
         })
@@ -162,27 +161,21 @@ pub(crate) fn parse_release_manifest(
     Ok(manifest)
 }
 
-pub(crate) fn download_github_api_asset(
-    asset: &ReleaseAsset,
-    label: &str,
-) -> Result<Vec<u8>, String> {
-    let api_url = asset.api_url.as_deref().ok_or_else(|| {
-        operation::failure(
-            FailureClass::ReleaseMetadataDownload,
-            format!("GitHub release asset {} is missing its API URL", asset.name),
-        )
-    })?;
+pub(crate) fn download_github_contents(reference: &str, label: &str) -> Result<Vec<u8>, String> {
+    let encoded_reference = reference.replace('/', "%2F");
+    let api_url =
+        format!("https://api.github.com/repos/{REPO}/contents/{label}?ref={encoded_reference}");
     operation::select_asset(label, None)?;
     operation::phase(Phase::Downloading, &format!("Downloading {label}"))?;
     let response = http_agent()
-        .get(api_url)
-        .set("Accept", "application/octet-stream")
+        .get(&api_url)
+        .set("Accept", "application/vnd.github.raw+json")
         .set("User-Agent", "fennara-cli")
         .call()
         .map_err(|error| {
             operation::failure(
                 FailureClass::AssetDownload,
-                format!("failed to download {label} from GitHub asset API: {error}"),
+                format!("failed to download {label} from staging channel {reference}: {error}"),
             )
         })?;
     let mut bytes = Vec::new();
@@ -192,7 +185,7 @@ pub(crate) fn download_github_api_asset(
         .map_err(|error| {
             operation::failure(
                 FailureClass::AssetDownload,
-                format!("failed to read {label} from GitHub asset API: {error}"),
+                format!("failed to read {label} from staging channel {reference}: {error}"),
             )
         })?;
     Ok(bytes)

@@ -29,6 +29,7 @@ private:
     godot::Control *webview_region = nullptr;
     godot::Control *internal_webview_surface = nullptr;
     godot::Label *fallback_label = nullptr;
+    godot::Label *staging_badge = nullptr;
     godot::Control *browser_fallback_panel = nullptr;
     FirstRunSetup *first_run_setup = nullptr;
     FirstRunSetupPanel *setup_panel = nullptr;

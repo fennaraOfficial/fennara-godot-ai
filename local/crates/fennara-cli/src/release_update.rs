@@ -1,8 +1,11 @@
 use crate::app_layout::display_path;
+use crate::daemon_setup;
 use crate::operation::{self, FailureClass, Phase};
 use crate::project_addon;
 use crate::project_guidance;
 use crate::project_install;
+use crate::release_client;
+use crate::release_identity::{ReleaseIdentity, ReleaseSelector, ReleaseTrack};
 use crate::release_package;
 use crate::self_update::{self, StartResult};
 use crate::update_stage;
@@ -12,14 +15,13 @@ use sysinfo::{Pid, System};
 
 pub fn run(args: Vec<&str>) -> Result<(), String> {
     operation::phase(Phase::Checking, "Validating project update request")?;
-    let options = UpdateOptions::parse(args)?;
+    let mut options = UpdateOptions::parse(args)?;
     let project_dir = project_install::resolve_project_dir(options.project_dir.clone())
         .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
     project_install::ensure_godot_project(&project_dir)
         .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
     println!("Updating Fennara");
     println!("project: {}", display_path(&project_dir));
-    println!("requested version: {}", options.version);
 
     if !project_install::has_fennara_addon(&project_dir) {
         return Err(operation::failure(
@@ -30,21 +32,59 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             ),
         ));
     }
-    let project_version = if options.prepare {
-        Some(
-            project_addon::inspect(&project_dir)
-                .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?
-                .ok_or_else(|| {
+    let existing = project_addon::inspect(&project_dir)
+        .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?
+        .ok_or_else(|| {
+            operation::failure(
+                FailureClass::ProjectInvalid,
+                "The project does not contain a complete Fennara addon to update.",
+            )
+        })?;
+    let project_version = Some(existing.version.clone());
+    let identity = ReleaseIdentity::load(
+        &project_install::project_addon_dir(&project_dir),
+        &existing.version,
+    )
+    .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
+    if options.version.is_empty() {
+        options.version = match identity.track {
+            ReleaseTrack::Stable => "latest".to_string(),
+            ReleaseTrack::Staging => format!(
+                "channel:{}",
+                identity.channel.as_deref().ok_or_else(|| {
                     operation::failure(
                         FailureClass::ProjectInvalid,
-                        "The project does not contain a complete Fennara addon to update.",
+                        "the staging addon is missing its release channel",
                     )
                 })?
-                .version,
+            ),
+        };
+    }
+    options.version = resolve_exact_target(&options.version)?;
+    if options.version != existing.version {
+        let layout = crate::app_layout::AppLayout::detect()?;
+        daemon_setup::ensure_switch_available(
+            &layout,
+            options.prepare.then_some(project_dir.as_path()),
         )
-    } else {
-        project_install::project_addon_version(&project_dir)
-    };
+        .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
+    }
+    operation::set_requested_version(&options.version)?;
+    println!("requested version: {}", options.version);
+    operation::set_component(
+        "release_track",
+        match identity.track {
+            ReleaseTrack::Stable => "stable",
+            ReleaseTrack::Staging => "staging",
+        },
+    )?;
+    operation::set_component("activation_reason", "project_update")?;
+    if let Some(channel) = identity.channel.as_deref() {
+        operation::set_component("release_channel", channel)?;
+    }
+    if let Some(source_commit) = identity.source_commit.as_deref() {
+        operation::set_component("source_commit", source_commit)?;
+    }
 
     if !options.no_self_update {
         println!("self-update: checking installed CLI");
@@ -125,6 +165,48 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     Ok(())
 }
 
+fn resolve_exact_target(request: &str) -> Result<String, String> {
+    if matches!(
+        ReleaseSelector::from_version_request(request)?,
+        ReleaseSelector::ExactVersion(_)
+    ) {
+        return Ok(request.to_string());
+    }
+    let release = release_client::fetch_release(request)?;
+    if let Some(pointer) = release.channel_pointer.as_ref() {
+        operation::set_component("release_channel", &pointer.channel)?;
+        operation::set_component("source_commit", &pointer.source_commit)?;
+        return Ok(pointer.version.clone());
+    }
+    exact_version_from_stable_release(&release)
+}
+
+fn exact_version_from_stable_release(release: &release_client::Release) -> Result<String, String> {
+    let manifest = release.manifest_asset().ok_or_else(|| {
+        operation::failure(
+            FailureClass::ManifestInvalid,
+            format!(
+                "release {} does not contain a versioned release manifest",
+                release.tag
+            ),
+        )
+    })?;
+    let exact = manifest
+        .name
+        .strip_prefix("fennara-release-manifest-v")
+        .and_then(|value| value.strip_suffix(".json"))
+        .ok_or_else(|| {
+            operation::failure(
+                FailureClass::ManifestInvalid,
+                "stable latest contains an invalid release manifest asset name",
+            )
+        })?;
+    match ReleaseSelector::exact(exact)? {
+        ReleaseSelector::ExactVersion(version) => Ok(version),
+        _ => unreachable!(),
+    }
+}
+
 struct UpdateOptions {
     version: String,
     project_dir: Option<PathBuf>,
@@ -136,7 +218,7 @@ struct UpdateOptions {
 
 impl UpdateOptions {
     fn parse(args: Vec<&str>) -> Result<Self, String> {
-        let mut version = "latest".to_string();
+        let mut version = String::new();
         let mut project_dir = None;
         let mut no_self_update = false;
         let mut prepare = false;
@@ -300,6 +382,7 @@ Usage:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn continuation_args_resume_without_self_update() {
@@ -359,5 +442,21 @@ mod tests {
                 .unwrap();
 
         assert!(options.prepare);
+    }
+
+    #[test]
+    fn stable_latest_version_comes_from_the_versioned_manifest_asset() {
+        let release = release_client::Release {
+            tag: "latest".to_string(),
+            assets: json!([{
+                "name": "fennara-release-manifest-v0.3.9.json",
+                "browser_download_url": "https://example.invalid/manifest"
+            }]),
+            channel_pointer: None,
+        };
+        assert_eq!(
+            exact_version_from_stable_release(&release).unwrap(),
+            "0.3.9"
+        );
     }
 }

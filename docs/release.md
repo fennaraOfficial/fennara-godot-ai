@@ -214,18 +214,70 @@ Staging channels are isolated per pull request:
 | Channel | `pr-101` |
 | Candidate version | `0.3.9-pr.101.2` |
 | Immutable release | `v0.3.9-pr.101.2` |
-| Channel release | `staging-pr-101` |
-| Pointer asset | `fennara-staging-channel-pr-101.json` |
+| Channel ref | `fennara-staging/pr-101` |
+| Pointer file | `fennara-staging-channel-pr-101.json` |
 
-The channel release contains only a small pointer to an immutable exact
-release. Release binaries never live under the moving channel name. The CLI
-can resolve this pointer with the internal version request
+The per-channel Git ref contains only a small pointer file to an immutable
+exact release. Release binaries never live under the moving channel ref. The
+CLI can resolve this pointer with the internal version request
 `channel:pr-101`, then continues using only the exact immutable version.
 
 PR 101 and PR 125 therefore use different release tags and pointer assets.
 Updating one channel cannot redirect testers on the other channel. Publishing
-these releases and safely advancing their pointers belongs to the later
-staging workflow work, not this identity foundation.
+one channel never changes stable `latest` or another pull request's channel.
+
+## Staging Candidate Workflow
+
+The manual **Staging Release** workflow builds a candidate from the current
+head of an open pull request. Run it from `main` and provide:
+
+| Input | Meaning |
+| --- | --- |
+| `pull_request` | Open pull request to build |
+| `base_version` | Planned stable version, such as `0.3.9` |
+| `candidate` | Increasing candidate number for this pull request |
+| `source_commit` | Optional full SHA that must still be the pull request head |
+| `publish` | Off for artifact-only validation, on to publish the candidate |
+
+The workflow freezes the pull request head SHA before any platform build. The
+Windows, Linux, and macOS jobs check out that exact commit with read-only
+permissions, no persisted Git credentials, no release credentials, and no
+shared dependency caches. Candidate code can produce build artifacts, but it
+cannot publish a GitHub Release.
+
+Trusted repository scripts then validate the candidate identity, exact archive
+inventory, addon contents, platform package layout, release manifest, and every
+SHA-256 value. Publication remains disabled unless `publish` is explicitly
+selected.
+
+When publication is enabled, the trusted final job:
+
+1. Requires GitHub release immutability to be enabled for the repository.
+2. Revalidates the candidate artifacts as data.
+3. Creates a draft, uploads every asset, publishes it as the immutable
+   `v<exact-version>` prerelease, and verifies its release attestation.
+4. Downloads the published assets and compares their names and hashes.
+5. Rejects a backward or conflicting channel change.
+6. Updates the small `fennara-staging/pr-<number>` pointer ref last through a
+   conditional GitHub Contents API write.
+7. Downloads the active pointer and verifies its exact contents.
+
+Runs for one pull request are serialized. Different pull requests use separate
+concurrency groups, release tags, and pointer refs. Retrying the same exact
+candidate verifies the existing immutable release instead of mixing files into
+it. The workflow never creates, uploads to, or promotes stable `latest`.
+
+GitHub release immutability applies only to releases created after the setting
+is enabled. Fennara intentionally preserves the existing pre-policy `latest`
+release as the one mutable compatibility endpoint used by current installers.
+The stable Release workflow updates that release in place and fails if it is
+missing or immutable. Exact stable and staging releases are created as drafts,
+receive all assets before publication, and must pass `gh release verify` after
+publication.
+
+Staging-capable and stable release workflows use `minimum_cli_version: 0.3.8`.
+Channel handoff, exact-target preservation across CLI replacement, and safe
+shared-runtime activation depend on the updater behavior introduced in that CLI.
 
 The shared addon zip contains every built GDExtension binary referenced by `godot_demo/addons/fennara/fennara.gdextension`. Godot loads the matching library for the user's OS and ignores the others.
 

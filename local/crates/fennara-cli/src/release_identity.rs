@@ -42,15 +42,18 @@ impl ReleaseIdentity {
 
     pub(crate) fn load(addon_dir: &Path, expected_version: &str) -> Result<Self, String> {
         let path = addon_dir.join(ADDON_IDENTITY_FILE);
-        if !path.is_file() {
-            return Self::legacy_stable(expected_version);
-        }
-        let bytes = fs::read(&path).map_err(|error| {
-            format!(
-                "failed to read addon release identity {}: {error}",
-                path.display()
-            )
-        })?;
+        let bytes = match fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Self::legacy_stable(expected_version);
+            }
+            Err(error) => {
+                return Err(format!(
+                    "failed to read addon release identity {}: {error}",
+                    path.display()
+                ));
+            }
+        };
         Self::parse(&bytes, expected_version)
     }
 
@@ -185,6 +188,11 @@ pub(crate) fn pull_request_number(channel: &str) -> Result<u64, String> {
 pub(crate) fn channel_pointer_asset_name(channel: &str) -> Result<String, String> {
     pull_request_number(channel)?;
     Ok(format!("fennara-staging-channel-{channel}.json"))
+}
+
+pub(crate) fn channel_pointer_ref(channel: &str) -> Result<String, String> {
+    pull_request_number(channel)?;
+    Ok(format!("fennara-staging/{channel}"))
 }
 
 fn validate_source_commit(value: &str) -> Result<(), String> {

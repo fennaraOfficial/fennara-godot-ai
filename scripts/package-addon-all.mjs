@@ -1,5 +1,6 @@
 import {
   copyFileSync,
+  chmodSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -10,10 +11,15 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { copyFile } from "./package-text-assets.mjs";
+import { parseReleaseVersion } from "./release-identity.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = parseArgs(process.argv.slice(2));
-const version = readVersion();
+const version = args.version ?? readVersion();
+const parsedVersion = parseReleaseVersion(version, "addon package version");
+if (parsedVersion.build) {
+  throw new Error("addon package version must not contain SemVer build metadata");
+}
 const partsDir = path.resolve(root, args["parts-dir"] ?? "dist");
 const distDir = path.join(root, "dist");
 const stageDir = path.join(root, ".package-preview", "addon-all");
@@ -33,6 +39,7 @@ for (const partRoot of partRoots) {
 }
 assertNoBundledCef(path.join(stageDir, "addons", "fennara"));
 assertBundledRipgrep(path.join(stageDir, "addons", "fennara"));
+restoreUnixExecutableModes(path.join(stageDir, "addons", "fennara"));
 
 zipDirectory(stageDir, archive);
 copyFileSync(archive, latestArchive);
@@ -168,5 +175,20 @@ function assertBundledRipgrep(addonRoot) {
     if (!exists(filePath)) {
       throw new Error(`Missing bundled ripgrep binary in addon archive: ${relative}`);
     }
+  }
+}
+
+function restoreUnixExecutableModes(addonRoot) {
+  const executableFiles = [
+    "bin/rg-linux-x86_64",
+    "bin/rg-macos-arm64",
+    "bin/libfennara.macos.editor.framework/libfennara.macos.editor",
+  ];
+  for (const relative of executableFiles) {
+    const filePath = path.join(addonRoot, ...relative.split("/"));
+    if (!exists(filePath)) {
+      throw new Error(`Missing executable addon file: ${relative}`);
+    }
+    chmodSync(filePath, 0o755);
   }
 }

@@ -167,14 +167,19 @@ void UpdatePanel::refresh() {
     if (coordinator == nullptr || title_label == nullptr) {
         return;
     }
+    const bool staging = coordinator->get_release_track() == "staging";
+    const godot::String channel_label = coordinator->get_release_channel().replace("pr-", "PR ");
+    const godot::String update_label = staging ? channel_label + godot::String(" staging update")
+                                               : godot::String("Fennara update");
     if (coordinator->is_preparing()) {
-        title_label->set_text("Preparing Fennara update");
+        title_label->set_text("Preparing " + update_label);
     } else if (coordinator->is_ready_to_close()) {
-        title_label->set_text("Ready to install Fennara");
+        title_label->set_text("Ready to install " + update_label);
     } else if (coordinator->is_waiting_for_godot()) {
-        title_label->set_text("Installing Fennara update");
+        title_label->set_text("Installing " + update_label);
     } else {
-        title_label->set_text("Update Fennara");
+        title_label->set_text(staging ? channel_label + godot::String(" staging update")
+                                      : godot::String("Update Fennara"));
     }
     status_label->set_text(coordinator->get_status() + "\n\n" + coordinator->get_detail());
     progress->set_visible(coordinator->is_preparing() || coordinator->is_waiting_for_godot());

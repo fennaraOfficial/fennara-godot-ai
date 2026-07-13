@@ -3,10 +3,11 @@ import test from "node:test";
 
 import {
   channelPointerAssetName,
-  channelReleaseTag,
+  channelPointerRef,
   createChannelPointer,
   createReleaseIdentity,
   parseReleaseVersion,
+  validateChannelPointer,
   validateReleaseIdentity,
 } from "../release-identity.mjs";
 
@@ -70,9 +71,10 @@ test("creates an isolated pointer name and record per pull request", () => {
     channel: "pr-101",
     sourceCommit: SOURCE_COMMIT,
   });
-  assert.equal(channelReleaseTag("pr-101"), "staging-pr-101");
+  assert.equal(channelPointerRef("pr-101"), "fennara-staging/pr-101");
   assert.equal(channelPointerAssetName("pr-101"), "fennara-staging-channel-pr-101.json");
-  assert.deepEqual(createChannelPointer(identity, "a".repeat(64)), {
+  const pointer = createChannelPointer(identity, "a".repeat(64));
+  assert.deepEqual(pointer, {
     schema_version: 1,
     channel: "pr-101",
     version: "0.3.9-pr.101.2",
@@ -80,6 +82,7 @@ test("creates an isolated pointer name and record per pull request", () => {
     source_commit: SOURCE_COMMIT,
     release_manifest_sha256: "a".repeat(64),
   });
+  assert.deepEqual(validateChannelPointer(pointer, "pr-101"), pointer);
 });
 
 test("accepts SemVer prereleases and rejects invalid numeric identifiers", () => {

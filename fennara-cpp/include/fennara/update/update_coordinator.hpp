@@ -44,6 +44,8 @@ public:
     godot::String get_error_code() const;
     godot::String get_operation_id() const;
     godot::String get_target_version() const;
+    godot::String get_release_track() const;
+    godot::String get_release_channel() const;
 
 protected:
     static void _bind_methods();
@@ -55,6 +57,10 @@ private:
     godot::String error_code;
     godot::String operation_id;
     godot::String target_version;
+    godot::String release_track;
+    godot::String release_channel;
+    godot::String release_tag;
+    godot::String source_commit;
     godot::String staging_root;
     int64_t child_pid = -1;
     double poll_timer = 0.0;

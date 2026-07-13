@@ -1,202 +1,15 @@
 #include "fennara/update_notice.hpp"
 
-#include "fennara/local_bridge.hpp"
 #include "fennara/logger.hpp"
-#include "fennara/release/version.hpp"
+#include "fennara/release/discovery.hpp"
 
-#include <godot_cpp/classes/file_access.hpp>
-#include <godot_cpp/classes/http_client.hpp>
-#include <godot_cpp/classes/json.hpp>
-#include <godot_cpp/classes/os.hpp>
-#include <godot_cpp/classes/time.hpp>
-#include <godot_cpp/classes/tls_options.hpp>
-#include <godot_cpp/variant/array.hpp>
-#include <godot_cpp/variant/packed_string_array.hpp>
-
-#include <string>
+#include <godot_cpp/variant/variant.hpp>
 
 namespace fennara::update_notice {
 namespace {
 
-constexpr const char *kLatestReleasePath =
-    "/repos/fennaraOfficial/fennara-godot-ai/releases/latest";
-
 bool g_checked = false;
-bool g_update_available = false;
-bool g_check_failed = false;
-std::string g_current_version;
-std::string g_latest_version;
-std::string g_error;
-
-bool is_version_candidate(godot::String version) {
-    return release_version::is_valid(release_version::normalize(version));
-}
-
-godot::String extract_asset_version(const godot::String &name,
-                                    const godot::String &prefix,
-                                    const godot::String &suffix) {
-    if (!name.begins_with(prefix) || !name.ends_with(suffix)) {
-        return "";
-    }
-    int start = prefix.length();
-    int count = name.length() - start - suffix.length();
-    if (count <= 0) {
-        return "";
-    }
-    godot::String version = release_version::normalize(name.substr(start, count));
-    return is_version_candidate(version) ? version : godot::String();
-}
-
-godot::String latest_version_from_release(const godot::Dictionary &response) {
-    godot::String tag = release_version::normalize(godot::String(response.get("tag_name", "")));
-    if (is_version_candidate(tag)) {
-        return tag;
-    }
-
-    godot::Variant assets_value = response.get("assets", godot::Array());
-    if (assets_value.get_type() != godot::Variant::ARRAY) {
-        return "";
-    }
-
-    godot::Array assets = assets_value;
-    const godot::String prefixes[] = {
-        "fennara-release-manifest-v",
-        "fennara-release-addon-v",
-        "fennara-release-local-linux-x86_64-v",
-        "fennara-release-local-windows-x86_64-v",
-        "fennara-release-local-macos-arm64-v",
-        "fennara-cli-linux-x86_64-v",
-        "fennara-cli-windows-x86_64-v",
-        "fennara-cli-macos-arm64-v",
-    };
-    const godot::String suffixes[] = {
-        ".json",
-        ".zip",
-        ".zip",
-        ".zip",
-        ".zip",
-        ".zip",
-        ".zip",
-        ".zip",
-    };
-
-    for (int prefix_index = 0; prefix_index < 8; prefix_index++) {
-        for (int asset_index = 0; asset_index < assets.size(); asset_index++) {
-            godot::Variant asset_value = assets[asset_index];
-            if (asset_value.get_type() != godot::Variant::DICTIONARY) {
-                continue;
-            }
-            godot::Dictionary asset = asset_value;
-            godot::String name = asset.get("name", "");
-            godot::String version =
-                extract_asset_version(name, prefixes[prefix_index], suffixes[prefix_index]);
-            if (!version.is_empty()) {
-                return version;
-            }
-        }
-    }
-
-    return "";
-}
-
-bool version_is_newer(const godot::String &latest, const godot::String &current) {
-    return release_version::compare(latest, current).value_or(0) > 0;
-}
-
-godot::String read_addon_version() {
-    godot::String path = "res://addons/fennara/VERSION";
-    if (!godot::FileAccess::file_exists(path)) {
-        return FennaraLocalBridge::PLUGIN_VERSION;
-    }
-    godot::Ref<godot::FileAccess> file = godot::FileAccess::open(path, godot::FileAccess::READ);
-    if (file.is_null()) {
-        return FennaraLocalBridge::PLUGIN_VERSION;
-    }
-    godot::String version = file->get_as_text().strip_edges();
-    return version.is_empty() ? godot::String(FennaraLocalBridge::PLUGIN_VERSION) : version;
-}
-
-godot::Dictionary get_github_latest_release(int timeout_ms) {
-    godot::Dictionary result;
-    godot::Ref<godot::HTTPClient> http;
-    http.instantiate();
-
-    godot::Error err = http->connect_to_host(
-        "https://api.github.com",
-        443,
-        godot::TLSOptions::client());
-    if (err != godot::OK) {
-        result["success"] = false;
-        result["error"] = "Failed to connect to GitHub.";
-        return result;
-    }
-
-    godot::PackedStringArray headers;
-    headers.append("Accept: application/vnd.github+json");
-    headers.append("User-Agent: fennara-godot-ai");
-
-    uint64_t deadline = godot::Time::get_singleton()->get_ticks_msec() + timeout_ms;
-    bool request_sent = false;
-    godot::String response_body;
-
-    while (godot::Time::get_singleton()->get_ticks_msec() < deadline) {
-        http->poll();
-        godot::HTTPClient::Status status = http->get_status();
-
-        if (status == godot::HTTPClient::STATUS_CANT_CONNECT ||
-            status == godot::HTTPClient::STATUS_TLS_HANDSHAKE_ERROR ||
-            status == godot::HTTPClient::STATUS_CONNECTION_ERROR) {
-            result["success"] = false;
-            result["error"] = "Failed to connect to GitHub.";
-            return result;
-        }
-
-        if (status == godot::HTTPClient::STATUS_CONNECTED && !request_sent) {
-            err = http->request(godot::HTTPClient::METHOD_GET, kLatestReleasePath, headers);
-            if (err != godot::OK) {
-                result["success"] = false;
-                result["error"] = "Failed to send GitHub request.";
-                return result;
-            }
-            request_sent = true;
-        }
-
-        if (status == godot::HTTPClient::STATUS_BODY) {
-            godot::PackedByteArray chunk = http->read_response_body_chunk();
-            if (!chunk.is_empty()) {
-                response_body += chunk.get_string_from_utf8();
-            }
-            if (http->get_response_body_length() >= 0 &&
-                response_body.to_utf8_buffer().size() >= http->get_response_body_length()) {
-                break;
-            }
-        }
-
-        godot::OS::get_singleton()->delay_usec(10000);
-    }
-
-    if (!http->has_response()) {
-        result["success"] = false;
-        result["error"] = "Timed out waiting for GitHub.";
-        return result;
-    }
-
-    godot::Variant parsed = godot::JSON::parse_string(response_body);
-    if (parsed.get_type() != godot::Variant::DICTIONARY) {
-        result["success"] = false;
-        result["error"] = "GitHub response was not JSON.";
-        return result;
-    }
-
-    result = parsed;
-    result["success"] = true;
-    return result;
-}
-
-void set_error(const godot::String &message) {
-    g_check_failed = true;
-    g_error = message.utf8().get_data();
-}
+release_discovery::Result g_result;
 
 } // namespace
 
@@ -205,58 +18,67 @@ void check_once() {
         return;
     }
     g_checked = true;
-
-    godot::String current = release_version::normalize(read_addon_version());
-    g_current_version = current.utf8().get_data();
-
-    godot::Dictionary response = get_github_latest_release(5000);
-    if (!(bool)response.get("success", false)) {
-        set_error(response.get("error", "Latest version request failed."));
-        FLOG_TOOL("Update check skipped: latest release request failed");
-        return;
+    g_result = release_discovery::check(5000);
+    if (!g_result.success) {
+        FLOG_TOOL("Update check skipped: " + g_result.error);
     }
-
-    godot::String latest = latest_version_from_release(response);
-    if (latest.is_empty()) {
-        set_error("Latest release did not include a versioned tag or asset.");
-        return;
-    }
-
-    g_latest_version = latest.utf8().get_data();
-    g_update_available = version_is_newer(latest, current);
 }
 
 bool is_update_available() {
-    return g_update_available;
+    return g_result.update_available;
 }
 
 godot::String current_version() {
-    return godot::String(g_current_version.c_str());
+    return g_result.current.version;
 }
 
 godot::String latest_version() {
-    return godot::String(g_latest_version.c_str());
+    return g_result.target_version;
+}
+
+godot::String channel() {
+    return g_result.current.channel;
+}
+
+godot::String track() {
+    return g_result.current.track;
+}
+
+godot::String target_release_tag() {
+    return g_result.target_release_tag;
+}
+
+godot::String source_commit() {
+    return g_result.target_source_commit.is_empty() ? g_result.current.source_commit
+                                                    : g_result.target_source_commit;
 }
 
 godot::String warning_text() {
-    if (!g_update_available) {
+    if (!g_result.update_available) {
         return "";
     }
-    return "Fennara is out of date. Current addon: " + current_version() +
-           ". Latest release: " + latest_version() +
-           ". Ask the user to run `fennara update` inside this Godot project or pass `--project <path>`.";
+    const godot::String label = g_result.current.is_staging()
+                                    ? g_result.current.channel + " staging"
+                                    : godot::String("stable");
+    return "Fennara " + label + " is out of date. Current addon: " +
+           current_version() + ". Available release: " + latest_version() + ".";
 }
 
 godot::Dictionary status() {
     godot::Dictionary result;
     result["checked"] = g_checked;
-    result["check_failed"] = g_check_failed;
+    result["check_failed"] = g_checked && !g_result.success;
+    result["track"] = track();
+    result["channel"] = channel();
     result["current_version"] = current_version();
     result["latest_version"] = latest_version();
-    result["outdated"] = g_update_available;
-    result["message"] = g_update_available ? warning_text() : "";
-    if (g_check_failed) {
-        result["error"] = godot::String(g_error.c_str());
+    result["target_release_tag"] = target_release_tag();
+    result["source_commit"] = source_commit();
+    result["installed_source_commit"] = g_result.current.source_commit;
+    result["outdated"] = g_result.update_available;
+    result["message"] = g_result.update_available ? warning_text() : g_result.detail;
+    if (!g_result.error.is_empty()) {
+        result["error"] = g_result.error;
     }
     return result;
 }

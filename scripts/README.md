@@ -21,6 +21,18 @@ Both scripts use `.package-preview/` as temporary staging and write zip outputs 
 
 Packaging scripts must keep the addon payload small. In particular, Linux CEF runtime files such as `libcef.so` and `fennara_cef_helper` must not be bundled inside `fennara-addon-*`; CEF is installed once into the user's shared Fennara app-data directory.
 
+## Staging Release Scripts
+
+- `write-staging-candidate.mjs`: creates the exact prerelease identity for one pull request and frozen source commit.
+- `validate-staging-build.mjs`: checks addon parts, platform archives, the assembled addon, the release manifest, and Linux CEF before publication.
+- `smoke-public-release.mjs`: downloads every published candidate through its unauthenticated browser URL and verifies the trusted asset and manifest hashes before channel advancement.
+- `write-staging-pointer.mjs`: writes the small per-PR pointer after hashing the exact release manifest.
+- `check-staging-channel-advance.mjs`: rejects backward or conflicting channel movement.
+- `validate-staging-publish-bundle.mjs`: revalidates the final artifact bundle without executing candidate code.
+- `verify-published-assets.mjs`: compares the expected and downloaded GitHub Release asset names and SHA-256 values.
+
+These scripts support `.github/workflows/staging-release.yml`. Candidate build jobs run without release credentials. Only the trusted final job can publish, and it advances the per-channel Git ref after the immutable release has been downloaded and verified.
+
 ## Linux CEF Scripts
 
 - `prepare-linux-cef-sdk.mjs`: downloads/extracts the pinned official Linux x64 CEF SDK used to build the Linux CEF bridge.

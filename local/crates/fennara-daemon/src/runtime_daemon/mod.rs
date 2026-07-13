@@ -1,5 +1,7 @@
 use axum::{
-    Extension, Json, Router, middleware,
+    Extension, Json, Router,
+    http::StatusCode,
+    middleware,
     routing::{get, post},
 };
 use serde_json::{Value, json};
@@ -15,6 +17,8 @@ pub(crate) mod process_helpers;
 pub(crate) mod runtime_log;
 pub(crate) mod runtime_sessions;
 pub(crate) mod scene_runner;
+#[cfg(test)]
+mod shutdown_tests;
 pub(crate) mod state;
 pub(crate) mod util;
 
@@ -104,21 +108,43 @@ async fn health() -> Json<Value> {
     }))
 }
 
-async fn shutdown(axum::extract::State(state): axum::extract::State<AppState>) -> Json<Value> {
+async fn shutdown(
+    axum::extract::State(state): axum::extract::State<AppState>,
+) -> (StatusCode, Json<Value>) {
+    let connected_projects = state.projects.read().await.len();
+    if let Some(error) = connected_shutdown_error(connected_projects) {
+        return (StatusCode::CONFLICT, Json(error));
+    }
     if let Some(sender) = state.shutdown_sender.lock().await.take() {
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(100)).await;
             let _ = sender.send(());
         });
 
-        Json(json!({
-            "ok": true,
-            "message": "daemon shutdown requested"
-        }))
+        (
+            StatusCode::OK,
+            Json(json!({
+                "ok": true,
+                "message": "daemon shutdown requested"
+            })),
+        )
     } else {
-        Json(json!({
-            "ok": true,
-            "message": "daemon shutdown already requested"
-        }))
+        (
+            StatusCode::OK,
+            Json(json!({
+                "ok": true,
+                "message": "daemon shutdown already requested"
+            })),
+        )
     }
+}
+
+fn connected_shutdown_error(connected_projects: usize) -> Option<Value> {
+    (connected_projects > 0).then(|| {
+        json!({
+            "ok": false,
+            "error": "connected_godot_projects",
+            "connected_project_count": connected_projects
+        })
+    })
 }

@@ -8,6 +8,7 @@
 #include "fennara/ui/update_panel.hpp"
 #include "fennara/ui/webview_host.hpp"
 #include "fennara/update/update_coordinator.hpp"
+#include "fennara/update_notice.hpp"
 
 #include <godot_cpp/classes/h_box_container.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
@@ -188,6 +189,20 @@ void FennaraDock::_build_ui() {
     margin->add_theme_constant_override("margin_bottom", 0);
     root->add_child(margin);
     webview_region = margin;
+
+    staging_badge = memnew(godot::Label);
+    staging_badge->set_anchors_and_offsets_preset(godot::Control::PRESET_TOP_RIGHT);
+    staging_badge->set_offset(godot::SIDE_LEFT, -118);
+    staging_badge->set_offset(godot::SIDE_BOTTOM, 26);
+    staging_badge->set_horizontal_alignment(godot::HORIZONTAL_ALIGNMENT_CENTER);
+    staging_badge->set_mouse_filter(godot::Control::MOUSE_FILTER_IGNORE);
+    staging_badge->set_z_index(20);
+    staging_badge->add_theme_color_override("font_color", godot::Color("#ffd166"));
+    const godot::String channel = update_notice::channel();
+    staging_badge->set_text(channel.replace("pr-", "PR ") + " STAGING");
+    staging_badge->set_tooltip_text("Testing candidate " + update_notice::current_version());
+    staging_badge->set_visible(update_notice::track() == "staging");
+    root->add_child(staging_badge);
 
     fallback_label = make_fallback_label("Starting Fennara chat...");
     fallback_label->set_anchors_preset(godot::Control::PRESET_FULL_RECT);

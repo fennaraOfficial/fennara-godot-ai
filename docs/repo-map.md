@@ -77,6 +77,9 @@ This is the quick map for contributors and coding agents working in this reposit
 | `fennara-cpp/src/` | C++ implementation. |
 | `fennara-cpp/src/setup/` | Native first-run setup state, release-manifest CLI bootstrap, hash verification, CLI launch, and durable operation progress reader. |
 | `fennara-cpp/src/release/version.cpp` | Native SemVer validation and precedence used by release/update discovery. |
+| `fennara-cpp/src/release/identity.cpp` | Packaged stable/staging identity validation and legacy stable compatibility. |
+| `fennara-cpp/src/release/discovery.cpp` | Stable-latest and isolated staging-channel update discovery. |
+| `fennara-cpp/src/update/` | Exact-target update coordination, durable receipt discovery, close/install handoff, and recovery UI state. |
 | `fennara-cpp/src/ui/setup_panel.cpp` | Webview-independent first-run setup panel with progress, retry, logs, and sanitized report actions. |
 | `fennara-cpp/vendor/cef/` | Official CEF 139 header snapshot used by the Linux OSR bridge. Runtime binaries stay outside the addon. |
 | `fennara-cpp/src/ui/webview_host*` | Native in-editor chat webview host and platform backends. |
@@ -121,6 +124,9 @@ This is the quick map for contributors and coding agents working in this reposit
 | `scripts/set-version.mjs` | Updates versioned files across the repo. |
 | `scripts/check-version.mjs` | Checks version sync. |
 | `scripts/release-identity.mjs` | Shared Node validation and generation for SemVer release identity and per-PR staging pointers. |
+| `scripts/staging-candidate.mjs` | Trusted staging candidate identity generation and monotonic per-PR pointer decisions. |
+| `scripts/staging-*-validation.mjs` | Focused staging addon, archive, manifest, and publication-bundle validation. |
+| `scripts/write-staging-candidate.mjs` / `scripts/write-staging-pointer.mjs` | Write the frozen candidate identity and its small channel pointer. |
 | `scripts/sync-chat-ui.mjs` | Copies the buildless chat UI source into the addon payload. |
 | `scripts/sync-runtime.mjs` | Copies repo-root runtime helper source into the addon payload. |
 | `scripts/package-preview.mjs` | Assembles addon, CLI, and local runtime preview/release zips after platform builds. |
@@ -134,6 +140,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `.github/workflows/local-build.yml` | Rust local package build check. |
 | `.github/workflows/package-preview.yml` | Manual package preview artifacts, including a test-only Linux CEF runtime artifact for Linux chat smoke tests. |
 | `.github/workflows/release.yml` | Manual GitHub release publishing, including generated Linux CEF runtime packaging, release manifest generation, and final asset validation. |
+| `.github/workflows/staging-release.yml` | Manual exact-SHA staging build, validation-only dry run, immutable prerelease publication, and per-PR pointer advancement. |
 
 ## Where To Change Things
 

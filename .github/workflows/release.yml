@@ -366,7 +366,7 @@ jobs:
           node scripts/write-release-manifest.mjs \
             --assets-dir release-assets \
             --linux-cef-manifest generated-linux-cef-manifest/linux-cef.json \
-            --minimum-cli-version 0.3.3 \
+            --minimum-cli-version 0.3.8 \
             --out "release-assets/fennara-release-manifest-v${{ inputs.version }}.json"
 
       - name: Publish release
@@ -379,8 +379,10 @@ jobs:
           set -euo pipefail
 
           tag="v${VERSION}"
-          if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            echo "::error::Release ${tag} already exists."
+          if ! gh api \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/immutable-releases" >/dev/null 2>&1; then
+            echo "::error::Repository release immutability must be enabled before publishing a release."
             exit 1
           fi
 
@@ -389,22 +391,76 @@ jobs:
             echo "::error::No release assets found."
             exit 1
           fi
+          mapfile -t desired_assets < <(printf '%s\n' "${assets[@]##*/}" | sort)
+
+          if [[ "${PROMOTE_LATEST}" == "true" ]]; then
+            if ! gh release view latest --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              echo "::error::The legacy mutable latest release is missing and cannot be recreated after enabling release immutability."
+              exit 1
+            fi
+            latest_immutable="$(
+              gh release view latest \
+                --repo "${GITHUB_REPOSITORY}" \
+                --json isImmutable \
+                --jq '.isImmutable'
+            )"
+            if [[ "${latest_immutable}" != "false" ]]; then
+              echo "::error::The moving latest release must remain the pre-policy mutable release."
+              exit 1
+            fi
+          fi
 
           notes="Fennara Godot AI ${tag}
 
           Built from ${GITHUB_SHA}."
+          promotion_assets=("${assets[@]}")
 
-          gh release create "${tag}" "${assets[@]}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --target "${GITHUB_SHA}" \
-            --title "Fennara Godot AI ${tag}" \
-            --notes "${notes}"
+          if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            read -r exact_immutable exact_draft exact_prerelease < <(
+              gh release view "${tag}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --json isImmutable,isDraft,isPrerelease \
+                --jq '[.isImmutable, .isDraft, .isPrerelease] | @tsv'
+            )
+            exact_tag_sha="$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')"
+            mapfile -t published_exact_assets < <(
+              gh release view "${tag}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --json assets \
+                --jq '.assets[].name' | sort
+            )
+            if [[ "${exact_immutable}" != "true" || "${exact_draft}" != "false" || "${exact_prerelease}" != "false" || "${exact_tag_sha}" != "${GITHUB_SHA}" ]] ||
+              ! diff -u <(printf '%s\n' "${desired_assets[@]}") <(printf '%s\n' "${published_exact_assets[@]}"); then
+              echo "::error::Existing ${tag} release does not match this immutable release request."
+              exit 1
+            fi
+            exact_assets_dir="${RUNNER_TEMP}/exact-release-${VERSION}"
+            rm -rf "${exact_assets_dir}"
+            mkdir -p "${exact_assets_dir}"
+            gh release download "${tag}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --dir "${exact_assets_dir}"
+            node scripts/verify-published-assets.mjs \
+              --expected-dir release-assets \
+              --actual-dir "${exact_assets_dir}"
+            mapfile -t promotion_assets < <(find "${exact_assets_dir}" -maxdepth 1 -type f | sort)
+            echo "Resuming promotion from matching immutable release ${tag}."
+          else
+            gh release create "${tag}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${GITHUB_SHA}" \
+              --title "Fennara Godot AI ${tag}" \
+              --notes "${notes}" \
+              --draft
+            gh release upload "${tag}" "${assets[@]}" \
+              --repo "${GITHUB_REPOSITORY}"
+            gh release edit "${tag}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --draft=false
+          fi
+          gh release verify "${tag}" --repo "${GITHUB_REPOSITORY}"
 
           if [[ "${PROMOTE_LATEST}" == "true" ]]; then
-            if gh release view latest --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-              gh release delete latest --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag
-            fi
-
             git tag --force latest "${GITHUB_SHA}"
             git push --force origin refs/tags/latest
 
@@ -412,9 +468,27 @@ jobs:
 
             Currently points to ${tag}, built from ${GITHUB_SHA}."
 
-            gh release create latest "${assets[@]}" \
+            gh release upload latest "${promotion_assets[@]}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber
+            mapfile -t desired_latest_assets < <(printf '%s\n' "${promotion_assets[@]##*/}" | sort)
+            mapfile -t published_latest_assets < <(
+              gh release view latest \
+                --repo "${GITHUB_REPOSITORY}" \
+                --json assets \
+                --jq '.assets[].name' | sort
+            )
+            for published_asset in "${published_latest_assets[@]}"; do
+              if ! printf '%s\n' "${desired_latest_assets[@]}" | grep -Fxq "${published_asset}"; then
+                gh release delete-asset latest "${published_asset}" \
+                  --repo "${GITHUB_REPOSITORY}" \
+                  --yes
+              fi
+            done
+            gh release edit latest \
               --repo "${GITHUB_REPOSITORY}" \
               --target "${GITHUB_SHA}" \
               --title "Fennara Godot AI latest" \
-              --notes "${latest_notes}"
+              --notes "${latest_notes}" \
+              --latest
           fi

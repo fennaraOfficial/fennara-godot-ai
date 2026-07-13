@@ -1,5 +1,5 @@
 use crate::release_identity::{
-    ReleaseIdentity, ReleaseSelector, ReleaseTrack, channel_pointer_asset_name,
+    ReleaseIdentity, ReleaseSelector, ReleaseTrack, channel_pointer_asset_name, channel_pointer_ref,
 };
 
 const SOURCE_COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
@@ -39,6 +39,13 @@ fn rejects_cross_channel_or_unidentified_prerelease_identity() {
 }
 
 #[test]
+fn rejects_release_identity_versions_with_build_metadata() {
+    let release = identity("stable", "0.3.9+build", None, None);
+    let error = ReleaseIdentity::parse(&release, "0.3.9+build").unwrap_err();
+    assert!(error.contains("must not contain SemVer build metadata"));
+}
+
+#[test]
 fn maps_selectors_to_isolated_github_tags() {
     assert_eq!(ReleaseSelector::StableLatest.github_tag(), "latest");
     assert_eq!(
@@ -58,6 +65,10 @@ fn maps_selectors_to_isolated_github_tags() {
     assert_eq!(
         channel_pointer_asset_name("pr-101").unwrap(),
         "fennara-staging-channel-pr-101.json"
+    );
+    assert_eq!(
+        channel_pointer_ref("pr-101").unwrap(),
+        "fennara-staging/pr-101"
     );
 }
 

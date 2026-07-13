@@ -1,8 +1,10 @@
 use crate::app_layout::display_path;
+use crate::daemon_setup;
 use crate::existing_addon_install;
 use crate::operation::{self, FailureClass, Phase};
 use crate::project_addon;
 use crate::project_guidance;
+use crate::release_identity::{ReleaseIdentity, ReleaseTrack};
 use crate::release_package;
 use crate::webview_prereq;
 use std::env;
@@ -29,6 +31,16 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
                 "--source cannot be used when adopting an existing project addon",
             ));
         }
+        validate_requested_channel(
+            &project_addon_dir(&project_dir),
+            &existing.version,
+            options.channel.as_deref(),
+        )?;
+        let layout = crate::app_layout::AppLayout::detect()?;
+        if active_version(&layout).as_deref() != Some(existing.version.as_str()) {
+            daemon_setup::ensure_switch_available(&layout, Some(&project_dir))
+                .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
+        }
         return existing_addon_install::run(&project_dir, existing, options.version.as_deref());
     }
     if addon_dir.exists() {
@@ -37,16 +49,36 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             display_path(&addon_dir)
         );
     }
+    let layout = crate::app_layout::AppLayout::detect()?;
+    daemon_setup::ensure_switch_available(&layout, Some(&project_dir))
+        .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
 
     let (version, source) = match options.source_dir {
         Some(path) => {
+            if options.channel.is_some() {
+                return Err(operation::failure(
+                    FailureClass::ProjectInvalid,
+                    "--channel cannot be combined with a local --source addon",
+                ));
+            }
             println!("package: using local addon source {}", display_path(&path));
             ("local".to_string(), path)
         }
         None => {
-            let requested_version = options.version.as_deref().unwrap_or("latest");
+            let requested_version = options.version.clone().unwrap_or_else(|| {
+                options
+                    .channel
+                    .as_ref()
+                    .map(|channel| format!("channel:{channel}"))
+                    .unwrap_or_else(|| "latest".to_string())
+            });
             println!("requested version: {requested_version}");
-            let package = release_package::ensure_package(requested_version)?;
+            let package = release_package::ensure_package(&requested_version)?;
+            validate_requested_channel(
+                &package.addon_dir,
+                &package.version,
+                options.channel.as_deref(),
+            )?;
             (package.version, package.addon_dir)
         }
     };
@@ -63,6 +95,18 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     webview_prereq::warn_for_current_platform()?;
     println!("next: run `fennara update` inside this project when a new release is available");
     Ok(())
+}
+
+fn active_version(layout: &crate::app_layout::AppLayout) -> Option<String> {
+    crate::app_layout::read_current_manifest(&layout.current_manifest_path)
+        .ok()
+        .flatten()
+        .and_then(|manifest| {
+            manifest
+                .get("version")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        })
 }
 
 pub fn resolve_project_dir(project_dir: Option<PathBuf>) -> Result<PathBuf, String> {
@@ -93,13 +137,6 @@ pub fn has_fennara_addon(project_dir: &Path) -> bool {
     project_addon_dir(project_dir)
         .join("fennara.gdextension")
         .is_file()
-}
-
-pub fn project_addon_version(project_dir: &Path) -> Option<String> {
-    fs::read_to_string(project_addon_dir(project_dir).join("VERSION"))
-        .ok()
-        .map(|version| version.trim().to_string())
-        .filter(|version| !version.is_empty())
 }
 
 pub fn install_addon(project_dir: &Path, source: &Path) -> Result<(), String> {
@@ -163,6 +200,7 @@ struct InstallOptions {
     project_dir: Option<PathBuf>,
     source_dir: Option<PathBuf>,
     version: Option<String>,
+    channel: Option<String>,
 }
 
 impl InstallOptions {
@@ -170,6 +208,7 @@ impl InstallOptions {
         let mut project_dir = None;
         let mut source_dir = None;
         let mut version = None;
+        let mut channel = None;
         let mut index = 0;
 
         while index < args.len() {
@@ -195,6 +234,13 @@ impl InstallOptions {
                 arg if arg.starts_with("--version=") => {
                     version = Some(arg.trim_start_matches("--version=").to_string());
                 }
+                "--channel" => {
+                    index += 1;
+                    channel = Some(value_arg(&args, index, "--channel")?.to_string());
+                }
+                arg if arg.starts_with("--channel=") => {
+                    channel = Some(arg.trim_start_matches("--channel=").to_string());
+                }
                 "--operation-id" => {
                     index += 1;
                     value_arg(&args, index, "--operation-id")?;
@@ -217,8 +263,47 @@ impl InstallOptions {
             project_dir,
             source_dir,
             version,
+            channel,
         })
     }
+}
+
+fn validate_requested_channel(
+    addon_dir: &Path,
+    version: &str,
+    requested_channel: Option<&str>,
+) -> Result<(), String> {
+    let identity = ReleaseIdentity::load(addon_dir, version)
+        .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
+    if let Some(channel) = requested_channel {
+        let actual = identity.channel.as_deref().ok_or_else(|| {
+            operation::failure(
+                FailureClass::ProjectInvalid,
+                format!("--channel requested {channel}, but the addon is on the stable track"),
+            )
+        })?;
+        if identity.track != ReleaseTrack::Staging || actual != channel {
+            return Err(operation::failure(
+                FailureClass::ProjectInvalid,
+                format!("--channel requested {channel}, but the addon belongs to {actual}"),
+            ));
+        }
+    }
+    operation::set_component(
+        "release_track",
+        match identity.track {
+            ReleaseTrack::Stable => "stable",
+            ReleaseTrack::Staging => "staging",
+        },
+    )?;
+    operation::set_component("activation_reason", "project_install")?;
+    if let Some(channel) = identity.channel.as_deref() {
+        operation::set_component("release_channel", channel)?;
+    }
+    if let Some(source_commit) = identity.source_commit.as_deref() {
+        operation::set_component("source_commit", source_commit)?;
+    }
+    Ok(())
 }
 
 fn value_arg<'a>(args: &'a [&str], index: usize, option: &str) -> Result<&'a str, String> {
@@ -238,6 +323,7 @@ Usage:
   fennara install
   fennara install --project <path>
   fennara install --version 0.2.8 --project <path>
+  fennara install --version 0.3.9-pr.101.2 --channel pr-101 --project <path>
 "
     );
 }

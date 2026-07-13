@@ -128,9 +128,45 @@ export function createChannelPointer(identity, releaseManifestSha256) {
   };
 }
 
-export function channelReleaseTag(channel) {
+export function validateChannelPointer(value, expectedChannel) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("staging channel pointer must be a JSON object");
+  }
+  if (value.schema_version !== 1) {
+    throw new Error(`unsupported staging channel pointer schema ${JSON.stringify(value.schema_version)}`);
+  }
+  const channel = requiredString(value, "channel");
   validatePullRequestChannel(channel);
-  return `staging-${channel}`;
+  if (expectedChannel !== undefined && channel !== expectedChannel) {
+    throw new Error(
+      `staging channel pointer ${JSON.stringify(channel)} does not match ${JSON.stringify(expectedChannel)}`,
+    );
+  }
+  const identity = validateReleaseIdentity({
+    schema_version: 1,
+    track: "staging",
+    channel,
+    version: requiredString(value, "version"),
+    release_tag: requiredString(value, "release_tag"),
+    source_commit: requiredString(value, "source_commit"),
+  });
+  const releaseManifestSha256 = requiredString(value, "release_manifest_sha256");
+  if (!/^[0-9a-f]{64}$/i.test(releaseManifestSha256)) {
+    throw new Error("release manifest SHA-256 must contain exactly 64 hexadecimal characters");
+  }
+  return {
+    schema_version: 1,
+    channel: identity.channel,
+    version: identity.version,
+    release_tag: identity.release_tag,
+    source_commit: identity.source_commit,
+    release_manifest_sha256: releaseManifestSha256.toLowerCase(),
+  };
+}
+
+export function channelPointerRef(channel) {
+  validatePullRequestChannel(channel);
+  return `fennara-staging/${channel}`;
 }
 
 export function channelPointerAssetName(channel) {

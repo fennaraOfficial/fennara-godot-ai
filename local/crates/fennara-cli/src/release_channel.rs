@@ -1,6 +1,6 @@
 use crate::release_client;
 use crate::release_identity::{
-    ReleaseIdentity, ReleaseSelector, ReleaseTrack, channel_pointer_asset_name,
+    ReleaseIdentity, ReleaseSelector, ReleaseTrack, channel_pointer_asset_name, channel_pointer_ref,
 };
 use crate::release_manifest::ReleaseManifest;
 use serde::{Deserialize, Serialize};
@@ -82,15 +82,9 @@ impl ChannelPointer {
 }
 
 pub(crate) fn fetch(channel: &str) -> Result<ChannelPointer, String> {
-    let selector = ReleaseSelector::staging(channel)?;
-    let release = release_client::fetch_release_for_selector(&selector)?;
+    ReleaseSelector::staging(channel)?;
     let asset_name = channel_pointer_asset_name(channel)?;
-    let asset = release.asset_by_name(&asset_name).ok_or_else(|| {
-        format!(
-            "staging channel release {} is missing {asset_name}",
-            release.tag
-        )
-    })?;
-    let bytes = release_client::download_github_api_asset(&asset, &asset_name)?;
+    let reference = channel_pointer_ref(channel)?;
+    let bytes = release_client::download_github_contents(&reference, &asset_name)?;
     ChannelPointer::parse(&bytes, channel)
 }

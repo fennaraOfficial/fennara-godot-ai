@@ -1,6 +1,7 @@
 use crate::app_layout::{AppLayout, arch_name, binary_name, display_path, platform_name};
 use crate::operation::{self, FailureClass};
 use crate::release_client::{self, DownloadAsset, Release};
+use crate::release_identity::{ReleaseIdentity, ReleaseTrack};
 use crate::release_manifest::ReleaseManifest;
 use crate::webview_runtime;
 use std::fs::{self, File};
@@ -512,8 +513,23 @@ fn write_manifest(layout: &AppLayout, version: &str) -> Result<(), String> {
         "current manifest: writing {}",
         display_path(&layout.current_manifest_path)
     );
+    let addon_dir = layout
+        .versions_dir
+        .join(version)
+        .join("addon")
+        .join("addons")
+        .join("fennara");
+    let identity = ReleaseIdentity::load(&addon_dir, version)?;
+    let track = match identity.track {
+        ReleaseTrack::Stable => "stable",
+        ReleaseTrack::Staging => "staging",
+    };
     let manifest = serde_json::json!({
         "version": version,
+        "release_track": track,
+        "release_channel": identity.channel,
+        "release_tag": identity.release_tag,
+        "source_commit": identity.source_commit,
         "mcp_runtime": format!("versions/{version}/{}", binary_name("fennara-mcp-runtime")),
         "daemon_runtime": format!("versions/{version}/{}", binary_name("fennara-daemon-runtime")),
         "addon": format!("versions/{version}/addon/addons/fennara"),
