@@ -598,12 +598,13 @@ jobs:
       - name: Smoke test public release downloads
         env:
           RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+          VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           node scripts/smoke-public-release.mjs \
             --repository "${GITHUB_REPOSITORY}" \
             --release-tag "${RELEASE_TAG}" \
             --expected-dir staging-bundle/release-assets \
-            --download-dir "${RUNNER_TEMP}/public-${{ needs.resolve.outputs.version }}"
+            --download-dir "${RUNNER_TEMP}/public-${VERSION}"
 
       - name: Read current channel pointer
         shell: bash
@@ -626,9 +627,11 @@ jobs:
 
       - name: Check monotonic channel advancement
         id: channel
+        env:
+          CHANNEL: ${{ needs.resolve.outputs.channel }}
         run: |
           node scripts/check-staging-channel-advance.mjs \
-            --current "current-channel/fennara-staging-channel-${{ needs.resolve.outputs.channel }}.json" \
+            --current "current-channel/fennara-staging-channel-${CHANNEL}.json" \
             --next staging-bundle/metadata/channel-pointer.json \
             --github-output "${GITHUB_OUTPUT}"
 

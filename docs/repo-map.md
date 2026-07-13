@@ -50,6 +50,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `local/crates/fennara-cli/src/project_addon.rs` | Existing project-addon version and current-platform GDExtension library validation. |
 | `local/crates/fennara-cli/src/release_identity.rs` | Stable/staging addon identity, exact release selectors, pull-request channel validation, and legacy stable compatibility. |
 | `local/crates/fennara-cli/src/release_channel.rs` | Per-channel staging pointer validation and resolution to an immutable exact release. |
+| `local/crates/fennara-cli/src/release_manifest.rs` | Release manifest parsing, asset hash validation, identity binding, and platform package selection. |
 | `local/crates/fennara-cli/src/release_version.rs` | Shared CLI SemVer parsing and precedence used by manifests and release selection. |
 | `local/crates/fennara-cli/src/existing_addon_install.rs` | Exact-version adoption of an existing Asset Library or release addon without replacing project addon files. |
 | `local/crates/fennara-cli/src/daemon_setup.rs` | Shared daemon health check, exact-version readiness, and startup used by install and doctor. |

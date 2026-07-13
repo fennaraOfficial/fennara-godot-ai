@@ -1,5 +1,8 @@
 use crate::app_layout::{AppLayout, binary_name, display_path};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use hmac::{Hmac, Mac};
 use serde_json::Value;
+use sha2::Sha256;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -12,6 +15,8 @@ const DAEMON_ADDR: &str = "127.0.0.1:41287";
 const HEALTH_TIMEOUT: Duration = Duration::from_millis(500);
 const START_TIMEOUT: Duration = Duration::from_secs(10);
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
+const MAX_CHALLENGE_RESPONSE_BYTES: usize = 4096;
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum HealthErrorKind {
@@ -137,13 +142,8 @@ pub fn shutdown_if_running(layout: &AppLayout) -> Result<(), String> {
         return Ok(());
     }
     let token_path = layout.app_dir.join("daemon-control-token");
-    let token = std::fs::read_to_string(&token_path)
-        .map_err(|error| format!("failed to read {}: {error}", display_path(&token_path)))?
-        .trim()
-        .to_string();
-    if token.is_empty() || token.contains(['\r', '\n']) {
-        return Err("the local daemon control token is invalid".to_string());
-    }
+    let token = read_control_token(&token_path)?;
+    verify_daemon_control(&token)?;
     let mut stream = TcpStream::connect(DAEMON_ADDR)
         .map_err(|error| format!("failed to connect to the running daemon: {error}"))?;
     stream
@@ -201,13 +201,8 @@ pub fn ensure_switch_available(
         return Ok(());
     }
     let token_path = layout.app_dir.join("daemon-control-token");
-    let token = std::fs::read_to_string(&token_path)
-        .map_err(|error| format!("failed to read {}: {error}", display_path(&token_path)))?
-        .trim()
-        .to_string();
-    if token.is_empty() || token.contains(['\r', '\n']) {
-        return Err("the local daemon control token is invalid".to_string());
-    }
+    let token = read_control_token(&token_path)?;
+    verify_daemon_control(&token)?;
     let mut stream = TcpStream::connect(DAEMON_ADDR)
         .map_err(|error| format!("failed to connect to the running daemon: {error}"))?;
     stream
@@ -285,6 +280,67 @@ fn parse_success_response(response: &str) -> Result<Value, String> {
         return Err("daemon returned non-200 status".to_string());
     }
     serde_json::from_str(body).map_err(|error| format!("invalid daemon status JSON: {error}"))
+}
+
+fn read_control_token(path: &Path) -> Result<String, String> {
+    let raw = std::fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", display_path(path)))?;
+    let token = raw.trim();
+    let valid = URL_SAFE_NO_PAD
+        .decode(token)
+        .is_ok_and(|bytes| bytes.len() == 32);
+    if !valid {
+        return Err("the local daemon control token is invalid".to_string());
+    }
+    Ok(token.to_string())
+}
+
+fn verify_daemon_control(control_token: &str) -> Result<(), String> {
+    let mut nonce = [0_u8; 32];
+    getrandom::fill(&mut nonce)
+        .map_err(|error| format!("failed to create daemon challenge: {error}"))?;
+    let encoded_nonce = URL_SAFE_NO_PAD.encode(nonce);
+    let mut stream = TcpStream::connect(DAEMON_ADDR)
+        .map_err(|error| format!("failed to connect to the running daemon: {error}"))?;
+    stream
+        .set_read_timeout(Some(HEALTH_TIMEOUT))
+        .map_err(|error| error.to_string())?;
+    stream
+        .set_write_timeout(Some(HEALTH_TIMEOUT))
+        .map_err(|error| error.to_string())?;
+    let request = format!(
+        "GET /control/challenge?nonce={encoded_nonce} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("failed to request daemon identity proof: {error}"))?;
+    let mut response = String::new();
+    stream
+        .take(MAX_CHALLENGE_RESPONSE_BYTES as u64 + 1)
+        .read_to_string(&mut response)
+        .map_err(|error| format!("failed to read daemon identity proof: {error}"))?;
+    if response.len() > MAX_CHALLENGE_RESPONSE_BYTES {
+        return Err("daemon identity proof exceeded the local size limit".to_string());
+    }
+    let challenge = parse_success_response(&response)?;
+    let proof = challenge
+        .get("proof")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            "the process on the Fennara daemon port did not prove its identity".to_string()
+        })?;
+    let proof = URL_SAFE_NO_PAD.decode(proof).map_err(|_| {
+        "the process on the Fennara daemon port returned an invalid proof".to_string()
+    })?;
+    let token_bytes = URL_SAFE_NO_PAD
+        .decode(control_token)
+        .map_err(|_| "the local daemon control token is invalid".to_string())?;
+    let mut mac = HmacSha256::new_from_slice(&token_bytes)
+        .map_err(|_| "the local daemon control token is invalid".to_string())?;
+    mac.update(&nonce);
+    mac.verify_slice(&proof).map_err(|_| {
+        "the process on the Fennara daemon port failed identity verification".to_string()
+    })
 }
 
 fn conflicting_project_count(
@@ -384,5 +440,17 @@ mod tests {
             1
         );
         assert_eq!(conflicting_project_count(&status, None).unwrap(), 2);
+    }
+
+    #[test]
+    fn rejects_malformed_control_tokens_before_use() {
+        let path = std::env::temp_dir().join(format!(
+            "fennara-invalid-control-token-{}",
+            std::process::id()
+        ));
+        std::fs::write(&path, "not-a-token\n").unwrap();
+        let error = read_control_token(&path).unwrap_err();
+        assert!(error.contains("control token is invalid"));
+        let _ = std::fs::remove_file(path);
     }
 }

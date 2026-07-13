@@ -414,6 +414,7 @@ jobs:
 
           Built from ${GITHUB_SHA}."
           promotion_assets=("${assets[@]}")
+          reconcile_draft=false
 
           if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             read -r exact_immutable exact_draft exact_prerelease < <(
@@ -423,17 +424,63 @@ jobs:
                 --jq '[.isImmutable, .isDraft, .isPrerelease] | @tsv'
             )
             exact_tag_sha="$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')"
+            exact_target="$(
+              gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" \
+                --jq '.target_commitish'
+            )"
             mapfile -t published_exact_assets < <(
               gh release view "${tag}" \
                 --repo "${GITHUB_REPOSITORY}" \
                 --json assets \
                 --jq '.assets[].name' | sort
             )
-            if [[ "${exact_immutable}" != "true" || "${exact_draft}" != "false" || "${exact_prerelease}" != "false" || "${exact_tag_sha}" != "${GITHUB_SHA}" ]] ||
+            if [[ "${exact_immutable}" == "false" && "${exact_draft}" == "true" && "${exact_prerelease}" == "false" && "${exact_target}" == "${GITHUB_SHA}" ]]; then
+              reconcile_draft=true
+              echo "Resuming matching draft release ${tag}."
+            elif [[ "${exact_immutable}" != "true" || "${exact_draft}" != "false" || "${exact_prerelease}" != "false" || "${exact_tag_sha}" != "${GITHUB_SHA}" ]] ||
               ! diff -u <(printf '%s\n' "${desired_assets[@]}") <(printf '%s\n' "${published_exact_assets[@]}"); then
               echo "::error::Existing ${tag} release does not match this immutable release request."
               exit 1
+            else
+              exact_assets_dir="${RUNNER_TEMP}/exact-release-${VERSION}"
+              rm -rf "${exact_assets_dir}"
+              mkdir -p "${exact_assets_dir}"
+              gh release download "${tag}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --dir "${exact_assets_dir}"
+              node scripts/verify-published-assets.mjs \
+                --expected-dir release-assets \
+                --actual-dir "${exact_assets_dir}"
+              mapfile -t promotion_assets < <(find "${exact_assets_dir}" -maxdepth 1 -type f | sort)
+              echo "Resuming promotion from matching immutable release ${tag}."
             fi
+          else
+            gh release create "${tag}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${GITHUB_SHA}" \
+              --title "Fennara Godot AI ${tag}" \
+              --notes "${notes}" \
+              --draft
+            reconcile_draft=true
+          fi
+
+          if [[ "${reconcile_draft}" == "true" ]]; then
+            gh release upload "${tag}" "${assets[@]}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber
+            mapfile -t draft_assets < <(
+              gh release view "${tag}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --json assets \
+                --jq '.assets[].name' | sort
+            )
+            for draft_asset in "${draft_assets[@]}"; do
+              if ! printf '%s\n' "${desired_assets[@]}" | grep -Fxq "${draft_asset}"; then
+                gh release delete-asset "${tag}" "${draft_asset}" \
+                  --repo "${GITHUB_REPOSITORY}" \
+                  --yes
+              fi
+            done
             exact_assets_dir="${RUNNER_TEMP}/exact-release-${VERSION}"
             rm -rf "${exact_assets_dir}"
             mkdir -p "${exact_assets_dir}"
@@ -443,27 +490,14 @@ jobs:
             node scripts/verify-published-assets.mjs \
               --expected-dir release-assets \
               --actual-dir "${exact_assets_dir}"
-            mapfile -t promotion_assets < <(find "${exact_assets_dir}" -maxdepth 1 -type f | sort)
-            echo "Resuming promotion from matching immutable release ${tag}."
-          else
-            gh release create "${tag}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --target "${GITHUB_SHA}" \
-              --title "Fennara Godot AI ${tag}" \
-              --notes "${notes}" \
-              --draft
-            gh release upload "${tag}" "${assets[@]}" \
-              --repo "${GITHUB_REPOSITORY}"
             gh release edit "${tag}" \
               --repo "${GITHUB_REPOSITORY}" \
               --draft=false
+            mapfile -t promotion_assets < <(find "${exact_assets_dir}" -maxdepth 1 -type f | sort)
           fi
           gh release verify "${tag}" --repo "${GITHUB_REPOSITORY}"
 
           if [[ "${PROMOTE_LATEST}" == "true" ]]; then
-            git tag --force latest "${GITHUB_SHA}"
-            git push --force origin refs/tags/latest
-
             latest_notes="Latest Fennara Godot AI release.
 
             Currently points to ${tag}, built from ${GITHUB_SHA}."
@@ -482,13 +516,24 @@ jobs:
               if ! printf '%s\n' "${desired_latest_assets[@]}" | grep -Fxq "${published_asset}"; then
                 gh release delete-asset latest "${published_asset}" \
                   --repo "${GITHUB_REPOSITORY}" \
-                  --yes
+                --yes
               fi
             done
+            latest_assets_dir="${RUNNER_TEMP}/latest-release-${VERSION}"
+            rm -rf "${latest_assets_dir}"
+            mkdir -p "${latest_assets_dir}"
+            gh release download latest \
+              --repo "${GITHUB_REPOSITORY}" \
+              --dir "${latest_assets_dir}"
+            node scripts/verify-published-assets.mjs \
+              --expected-dir "$(dirname "${promotion_assets[0]}")" \
+              --actual-dir "${latest_assets_dir}"
             gh release edit latest \
               --repo "${GITHUB_REPOSITORY}" \
               --target "${GITHUB_SHA}" \
               --title "Fennara Godot AI latest" \
               --notes "${latest_notes}" \
               --latest
+            git tag --force latest "${GITHUB_SHA}"
+            git push --force origin refs/tags/latest
           fi

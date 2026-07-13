@@ -7,6 +7,7 @@ import {
   assertSameNames,
   assertVersion,
   inspectZip,
+  requiredSafeFileName,
   requiredSha256,
   requiredString,
   sha256File,
@@ -38,10 +39,11 @@ export function validateReleaseManifest(candidate, manifest, assetsDir, linuxCef
     "release manifest assets",
   );
   for (const asset of manifestAssets) {
-    const file = path.join(assetsDir, asset.name);
-    assertFile(file, `release asset ${asset.name}`);
-    if (sha256File(file) !== requiredSha256(asset.sha256, `manifest hash for ${asset.name}`)) {
-      throw new Error(`release manifest hash mismatch for ${asset.name}`);
+    const name = requiredSafeFileName(asset.name, "release manifest asset name");
+    const file = path.join(assetsDir, name);
+    assertFile(file, `release asset ${name}`);
+    if (sha256File(file) !== requiredSha256(asset.sha256, `manifest hash for ${name}`)) {
+      throw new Error(`release manifest hash mismatch for ${name}`);
     }
   }
 
@@ -79,8 +81,9 @@ export function validatePlatformArchives(candidate, assetsDir) {
 }
 
 export function validateLinuxCefArchive(assetsDir, linuxCef) {
-  const name = requiredString(linuxCef.archive?.name, "Linux CEF archive name");
+  const name = requiredSafeFileName(linuxCef.archive?.name, "Linux CEF archive name");
   const file = path.join(assetsDir, name);
+  assertFile(file, `Linux CEF archive ${name}`);
   if (sha256File(file) !== requiredSha256(linuxCef.archive?.sha256, "Linux CEF hash")) {
     throw new Error(`Linux CEF archive hash mismatch for ${name}`);
   }
@@ -95,7 +98,7 @@ function expectedArchiveNames(candidate, linuxCef) {
       ({ platform, arch }) => `fennara-release-local-${platform}-${arch}-v${candidate.version}.zip`,
     ),
     `fennara-release-addon-v${candidate.version}.zip`,
-    requiredString(linuxCef.archive?.name, "Linux CEF archive name"),
+    requiredSafeFileName(linuxCef.archive?.name, "Linux CEF archive name"),
   ]);
 }
 

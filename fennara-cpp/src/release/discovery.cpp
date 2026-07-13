@@ -47,6 +47,7 @@ godot::String addon_version() {
 HttpResponse request_github(const godot::String &path, const godot::String &accept,
                             int timeout_ms, const godot::String &etag = "") {
     HttpResponse result;
+    godot::PackedByteArray response_body;
     godot::Ref<godot::HTTPClient> http;
     http.instantiate();
     if (http->connect_to_host("https://api.github.com", 443,
@@ -82,10 +83,10 @@ HttpResponse request_github(const godot::String &path, const godot::String &acce
         if (status == godot::HTTPClient::STATUS_BODY) {
             const godot::PackedByteArray chunk = http->read_response_body_chunk();
             if (!chunk.is_empty()) {
-                result.body += chunk.get_string_from_utf8();
+                response_body.append_array(chunk);
             }
             if (http->get_response_body_length() >= 0 &&
-                result.body.to_utf8_buffer().size() >= http->get_response_body_length()) {
+                response_body.size() >= http->get_response_body_length()) {
                 break;
             }
         }
@@ -95,6 +96,7 @@ HttpResponse request_github(const godot::String &path, const godot::String &acce
         result.error = "Timed out waiting for GitHub.";
         return result;
     }
+    result.body = response_body.get_string_from_utf8();
     result.code = http->get_response_code();
     const godot::PackedStringArray response_headers = http->get_response_headers();
     for (int index = 0; index < response_headers.size(); index++) {

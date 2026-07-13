@@ -29,13 +29,21 @@ function readJson(file) {
 
 function parseArgs(rawArgs) {
   const parsed = {};
+  const allowed = new Set(["candidate", "manifest", "out"]);
   for (let index = 0; index < rawArgs.length; index += 2) {
     const option = rawArgs[index];
     const value = rawArgs[index + 1];
     if (!option?.startsWith("--") || value === undefined) {
       throw new Error(`Invalid argument ${JSON.stringify(option)}`);
     }
-    parsed[option.slice(2)] = value;
+    const name = option.slice(2);
+    if (!allowed.has(name)) {
+      throw new Error(`Unknown option ${option}`);
+    }
+    if (parsed[name] !== undefined) {
+      throw new Error(`Duplicate option ${option}`);
+    }
+    parsed[name] = value;
   }
   return parsed;
 }

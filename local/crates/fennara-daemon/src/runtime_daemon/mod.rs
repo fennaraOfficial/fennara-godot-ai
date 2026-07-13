@@ -116,9 +116,9 @@ async fn shutdown(
         return (StatusCode::CONFLICT, Json(error));
     }
     if let Some(sender) = state.shutdown_sender.lock().await.take() {
+        let shutdown_state = state.clone();
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            let _ = sender.send(());
+            finish_deferred_shutdown(shutdown_state, sender, Duration::from_millis(100)).await;
         });
 
         (
@@ -136,6 +136,20 @@ async fn shutdown(
                 "message": "daemon shutdown already requested"
             })),
         )
+    }
+}
+
+async fn finish_deferred_shutdown(state: AppState, sender: oneshot::Sender<()>, delay: Duration) {
+    tokio::time::sleep(delay).await;
+    let projects = state.projects.read().await;
+    if connected_shutdown_error(projects.len()).is_none() {
+        let _ = sender.send(());
+        return;
+    }
+    drop(projects);
+    let mut shutdown_sender = state.shutdown_sender.lock().await;
+    if shutdown_sender.is_none() {
+        *shutdown_sender = Some(sender);
     }
 }
 

@@ -35,3 +35,15 @@ test("public smoke validation precedes monotonic pointer advancement", () => {
   assert.ok(publicSmoke > 0 && publicSmoke < monotonicCheck && monotonicCheck < pointerAdvance);
   assert.doesNotMatch(workflow, /gh release (create|edit|upload) latest/);
 });
+
+test("write-capable publication scripts do not interpolate resolve outputs directly", () => {
+  const publish = workflow.slice(workflow.indexOf("\n  publish:"));
+  assert.doesNotMatch(
+    publish,
+    /--download-dir[^\n]*\$\{\{ needs\.resolve\.outputs\./,
+  );
+  assert.doesNotMatch(
+    publish,
+    /--current[^\n]*\$\{\{ needs\.resolve\.outputs\./,
+  );
+});

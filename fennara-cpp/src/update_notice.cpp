@@ -5,80 +5,114 @@
 
 #include <godot_cpp/variant/variant.hpp>
 
+#include <mutex>
+
 namespace fennara::update_notice {
 namespace {
 
+bool g_check_started = false;
 bool g_checked = false;
 release_discovery::Result g_result;
+std::mutex g_mutex;
+
+struct Snapshot {
+    bool check_started = false;
+    bool checked = false;
+    release_discovery::Result result;
+};
+
+Snapshot snapshot() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return {g_check_started, g_checked, g_result};
+}
+
+godot::String warning_text_for(const release_discovery::Result &result) {
+    if (!result.update_available) {
+        return "";
+    }
+    const godot::String label = result.current.is_staging()
+                                    ? result.current.channel + godot::String(" staging")
+                                    : godot::String("stable");
+    return "Fennara " + label + " is out of date. Current addon: " +
+           result.current.version + ". Available release: " + result.target_version + ".";
+}
 
 } // namespace
 
 void check_once() {
-    if (g_checked) {
-        return;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (g_check_started) {
+            return;
+        }
+        g_check_started = true;
     }
-    g_checked = true;
-    g_result = release_discovery::check(5000);
-    if (!g_result.success) {
-        FLOG_TOOL("Update check skipped: " + g_result.error);
+    release_discovery::Result result = release_discovery::check(5000);
+    if (!result.success) {
+        FLOG_TOOL("Update check skipped: " + result.error);
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_result = result;
+        g_checked = true;
     }
 }
 
 bool is_update_available() {
-    return g_result.update_available;
+    return snapshot().result.update_available;
 }
 
 godot::String current_version() {
-    return g_result.current.version;
+    return snapshot().result.current.version;
 }
 
 godot::String latest_version() {
-    return g_result.target_version;
+    return snapshot().result.target_version;
 }
 
 godot::String channel() {
-    return g_result.current.channel;
+    return snapshot().result.current.channel;
 }
 
 godot::String track() {
-    return g_result.current.track;
+    return snapshot().result.current.track;
 }
 
 godot::String target_release_tag() {
-    return g_result.target_release_tag;
+    return snapshot().result.target_release_tag;
 }
 
 godot::String source_commit() {
-    return g_result.target_source_commit.is_empty() ? g_result.current.source_commit
-                                                    : g_result.target_source_commit;
+    const release_discovery::Result result = snapshot().result;
+    return result.target_source_commit.is_empty() ? result.current.source_commit
+                                                  : result.target_source_commit;
 }
 
 godot::String warning_text() {
-    if (!g_result.update_available) {
-        return "";
-    }
-    const godot::String label = g_result.current.is_staging()
-                                    ? g_result.current.channel + " staging"
-                                    : godot::String("stable");
-    return "Fennara " + label + " is out of date. Current addon: " +
-           current_version() + ". Available release: " + latest_version() + ".";
+    return warning_text_for(snapshot().result);
 }
 
 godot::Dictionary status() {
+    const Snapshot state = snapshot();
+    const release_discovery::Result &result_state = state.result;
     godot::Dictionary result;
-    result["checked"] = g_checked;
-    result["check_failed"] = g_checked && !g_result.success;
-    result["track"] = track();
-    result["channel"] = channel();
-    result["current_version"] = current_version();
-    result["latest_version"] = latest_version();
-    result["target_release_tag"] = target_release_tag();
-    result["source_commit"] = source_commit();
-    result["installed_source_commit"] = g_result.current.source_commit;
-    result["outdated"] = g_result.update_available;
-    result["message"] = g_result.update_available ? warning_text() : g_result.detail;
-    if (!g_result.error.is_empty()) {
-        result["error"] = g_result.error;
+    result["checking"] = state.check_started && !state.checked;
+    result["checked"] = state.checked;
+    result["check_failed"] = state.checked && !result_state.success;
+    result["track"] = result_state.current.track;
+    result["channel"] = result_state.current.channel;
+    result["current_version"] = result_state.current.version;
+    result["latest_version"] = result_state.target_version;
+    result["target_release_tag"] = result_state.target_release_tag;
+    result["source_commit"] = result_state.target_source_commit.is_empty()
+                                  ? result_state.current.source_commit
+                                  : result_state.target_source_commit;
+    result["installed_source_commit"] = result_state.current.source_commit;
+    result["outdated"] = result_state.update_available;
+    result["message"] = result_state.update_available ? warning_text_for(result_state)
+                                                       : result_state.detail;
+    if (!result_state.error.is_empty()) {
+        result["error"] = result_state.error;
     }
     return result;
 }

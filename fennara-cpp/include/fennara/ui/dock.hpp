@@ -56,6 +56,7 @@ private:
     void _release_webview_keyboard_focus();
     bool _event_is_inside_webview_region(const godot::Ref<godot::InputEvent> &event);
     void _refresh_status();
+    void _refresh_staging_badge();
     void _on_mcp_target_state_changed(bool active);
     void _on_setup_succeeded();
     void _on_update_requested();

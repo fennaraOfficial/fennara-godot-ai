@@ -11,6 +11,9 @@ name = "fennara"
 path = "src/main.rs"
 
 [dependencies]
+base64 = "0.22"
+getrandom = "0.3"
+hmac = "0.12"
 json5 = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

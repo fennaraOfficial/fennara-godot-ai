@@ -7,12 +7,14 @@ const repository = requiredArg("repository");
 const releaseTag = requiredArg("release-tag");
 const expectedDir = path.resolve(requiredArg("expected-dir"));
 const downloadDir = path.resolve(requiredArg("download-dir"));
+const METADATA_TIMEOUT_MS = 30_000;
+const ASSET_TIMEOUT_MS = 60_000;
 
 if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
   throw new Error("repository must use owner/name format");
 }
 
-const response = await fetch(
+const metadata = await fetchJson(
   `https://api.github.com/repos/${repository}/releases/tags/${encodeURIComponent(releaseTag)}`,
   {
     headers: {
@@ -21,11 +23,13 @@ const response = await fetch(
       "X-GitHub-Api-Version": "2026-03-10",
     },
   },
+  METADATA_TIMEOUT_MS,
+  "public release metadata",
 );
-if (!response.ok) {
-  throw new Error(`public release metadata returned HTTP ${response.status}`);
+if (!metadata.response.ok) {
+  throw new Error(`public release metadata returned HTTP ${metadata.response.status}`);
 }
-const release = await response.json();
+const release = metadata.body;
 if (release.draft || !release.prerelease || release.tag_name !== releaseTag) {
   throw new Error("public release metadata does not describe the expected published prerelease");
 }
@@ -43,14 +47,19 @@ for (const [name, expectedHash] of expectedManifest) {
   if (typeof url !== "string" || !url.startsWith("https://github.com/")) {
     throw new Error(`release asset ${name} has no public GitHub browser download URL`);
   }
-  const assetResponse = await fetch(url, {
-    headers: { "User-Agent": "fennara-staging-public-smoke" },
-    redirect: "follow",
-  });
-  if (!assetResponse.ok) {
-    throw new Error(`public download for ${name} returned HTTP ${assetResponse.status}`);
+  const download = await fetchBytes(
+    url,
+    {
+      headers: { "User-Agent": "fennara-staging-public-smoke" },
+      redirect: "follow",
+    },
+    ASSET_TIMEOUT_MS,
+    `public download for ${name}`,
+  );
+  if (!download.response.ok) {
+    throw new Error(`public download for ${name} returned HTTP ${download.response.status}`);
   }
-  const bytes = Buffer.from(await assetResponse.arrayBuffer());
+  const bytes = download.body;
   const actualHash = createHash("sha256").update(bytes).digest("hex");
   if (actualHash !== expectedHash) {
     throw new Error(`public download hash mismatch for ${name}`);
@@ -137,4 +146,31 @@ function requiredArg(name) {
     throw new Error(`missing --${name}`);
   }
   return args[name];
+}
+
+async function fetchJson(url, options, timeoutMs, label) {
+  return fetchBody(url, options, timeoutMs, label, async (response) =>
+    response.ok ? response.json() : undefined,
+  );
+}
+
+async function fetchBytes(url, options, timeoutMs, label) {
+  return fetchBody(url, options, timeoutMs, label, async (response) =>
+    response.ok ? Buffer.from(await response.arrayBuffer()) : undefined,
+  );
+}
+
+async function fetchBody(url, options, timeoutMs, label, readBody) {
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return { response, body: await readBody(response) };
+  } catch (error) {
+    if (error?.name === "TimeoutError") {
+      throw new Error(`${label} timed out after ${timeoutMs} ms`, { cause: error });
+    }
+    throw new Error(`${label} failed: ${error?.message ?? error}`, { cause: error });
+  }
 }

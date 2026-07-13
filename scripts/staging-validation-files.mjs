@@ -3,8 +3,11 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
+let cachedPython;
+
 export function inspectZip(file, versionEntry, releaseEntry) {
   assertFile(file, "release archive");
+  const python = resolvePython();
   const script = [
     "import json, sys, zipfile",
     "archive, version_entry, release_entry = sys.argv[1:4]",
@@ -16,9 +19,11 @@ export function inspectZip(file, versionEntry, releaseEntry) {
     "        result['release'] = zf.read(release_entry).decode('utf-8')",
     "    print(json.dumps(result))",
   ].join("\n");
-  const result = spawnSync("python", ["-c", script, file, versionEntry, releaseEntry ?? ""], {
-    encoding: "utf8",
-  });
+  const result = spawnSync(
+    python.command,
+    [...python.prefixArgs, "-c", script, file, versionEntry, releaseEntry ?? ""],
+    { encoding: "utf8", windowsHide: true },
+  );
   if (result.status !== 0) {
     throw new Error(`failed to inspect ${file}: ${result.stderr.trim()}`);
   }
@@ -96,6 +101,21 @@ export function requiredString(value, label) {
   return value;
 }
 
+export function requiredSafeFileName(value, label) {
+  const name = requiredString(value, label);
+  if (
+    name === "." ||
+    name === ".." ||
+    path.isAbsolute(name) ||
+    name.includes("/") ||
+    name.includes("\\") ||
+    path.basename(name) !== name
+  ) {
+    throw new Error(`${label} must be a plain file name`);
+  }
+  return name;
+}
+
 export function requiredSha256(value, label) {
   if (typeof value !== "string" || !/^[0-9a-f]{64}$/i.test(value)) {
     throw new Error(`${label} must be a SHA-256 value`);
@@ -114,4 +134,33 @@ function exists(file) {
   } catch {
     return false;
   }
+}
+
+function resolvePython() {
+  if (cachedPython) {
+    return cachedPython;
+  }
+  const candidates =
+    process.platform === "win32"
+      ? [
+          { command: "py", prefixArgs: ["-3"] },
+          { command: "python3", prefixArgs: [] },
+          { command: "python", prefixArgs: [] },
+        ]
+      : [
+          { command: "python3", prefixArgs: [] },
+          { command: "python", prefixArgs: [] },
+        ];
+  for (const candidate of candidates) {
+    const result = spawnSync(
+      candidate.command,
+      [...candidate.prefixArgs, "--version"],
+      { encoding: "utf8", windowsHide: true },
+    );
+    if (!result.error && result.status === 0) {
+      cachedPython = candidate;
+      return cachedPython;
+    }
+  }
+  throw new Error("Python 3 is required to inspect release archives");
 }
