@@ -1,6 +1,6 @@
 use crate::app_layout::{AppLayout, arch_name, binary_name, display_path, platform_name};
 use crate::operation::{self, FailureClass};
-use crate::release_client::{self, DownloadAsset, Release};
+use crate::release_client::{self, DownloadAsset, Release, ReleaseAsset};
 use crate::release_identity::{ReleaseIdentity, ReleaseTrack};
 use crate::release_manifest::ReleaseManifest;
 use crate::webview_runtime;
@@ -299,11 +299,8 @@ fn ensure_legacy_package(
     release: &Release,
 ) -> Result<InstalledPackage, String> {
     println!("package: using legacy release assets");
-    let local_prefix = format!("fennara-local-{}-{}-v", platform_name(), arch_name());
     let addon_prefix = "fennara-addon-v".to_string();
-    let local_asset = release
-        .asset(&local_prefix)
-        .ok_or_else(|| format!("release {} is missing {local_prefix}*.zip", release.tag))?;
+    let local_asset = legacy_local_asset(release)?;
     let addon_asset = release
         .asset(&addon_prefix)
         .ok_or_else(|| format!("release {} is missing {addon_prefix}*.zip", release.tag))?;
@@ -336,13 +333,17 @@ fn ensure_legacy_package(
 }
 
 fn legacy_version(release: &Release) -> Result<String, String> {
-    let local_prefix = format!("fennara-local-{}-{}-v", platform_name(), arch_name());
-    let local_asset = release
-        .asset(&local_prefix)
-        .ok_or_else(|| format!("release {} is missing {local_prefix}*.zip", release.tag))?;
+    let local_asset = legacy_local_asset(release)?;
     local_asset
         .version
         .ok_or_else(|| format!("could not parse version from {}", local_asset.name))
+}
+
+fn legacy_local_asset(release: &Release) -> Result<ReleaseAsset, String> {
+    let local_prefix = format!("fennara-local-{}-{}-v", platform_name(), arch_name());
+    release
+        .asset(&local_prefix)
+        .ok_or_else(|| format!("release {} is missing {local_prefix}*.zip", release.tag))
 }
 
 fn ensure_selected_package(
