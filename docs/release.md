@@ -263,7 +263,7 @@ When publication is enabled, the trusted final job:
 7. Downloads the active pointer and verifies its exact contents.
 
 Runs for one pull request are serialized. Different pull requests use separate
-concurrency groups, release tags, and pointer refs. Retrying the same exact
+concurrency groups, release tags, and pointer refs. Retrying the same
 candidate verifies the existing immutable release instead of mixing files into
 it. The workflow never creates, uploads to, or promotes stable `latest`.
 

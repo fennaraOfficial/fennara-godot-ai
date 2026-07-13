@@ -15,14 +15,33 @@ pub struct InstalledPackage {
     pub addon_dir: PathBuf,
 }
 
+pub(crate) struct ResolvedPackage {
+    release: Release,
+    manifest: Option<ReleaseManifest>,
+    version: String,
+    identity: Option<ReleaseIdentity>,
+}
+
+impl ResolvedPackage {
+    pub(crate) fn version(&self) -> &str {
+        &self.version
+    }
+
+    pub(crate) fn identity(&self) -> Option<&ReleaseIdentity> {
+        self.identity.as_ref()
+    }
+}
+
 pub struct ActivationReceipt {
     previous_manifest: Option<Vec<u8>>,
 }
 
 pub fn ensure_package(version_request: &str) -> Result<InstalledPackage, String> {
-    let layout = AppLayout::detect()?;
-    layout.ensure_base_dirs()?;
+    let resolved = resolve_package(version_request)?;
+    ensure_resolved_package(resolved)
+}
 
+pub(crate) fn resolve_package(version_request: &str) -> Result<ResolvedPackage, String> {
     println!("package: resolving release {version_request}");
     let release = release_client::fetch_release(version_request)?;
     if let Some(manifest_asset) = release.manifest_asset() {
@@ -31,11 +50,81 @@ pub fn ensure_package(version_request: &str) -> Result<InstalledPackage, String>
         manifest
             .validate_for_install()
             .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
-        return ensure_manifest_package(&layout, &release, &manifest, None, true, true);
+        let selection = manifest
+            .select_for_current_platform()
+            .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+        let identity = manifest
+            .release_identity()
+            .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+        record_target_provenance(identity.as_ref())?;
+        return Ok(ResolvedPackage {
+            release,
+            manifest: Some(manifest),
+            version: selection.version,
+            identity,
+        });
     }
 
     validate_legacy_fallback_allowed(&release)?;
-    ensure_legacy_package(&layout, &release)
+    record_target_provenance(None)?;
+    let version = legacy_version(&release)?;
+    Ok(ResolvedPackage {
+        release,
+        manifest: None,
+        version,
+        identity: None,
+    })
+}
+
+fn record_target_provenance(identity: Option<&ReleaseIdentity>) -> Result<(), String> {
+    let (track, channel, source_commit) = release_provenance(identity);
+    operation::set_component("release_track", track)?;
+    if let Some(channel) = channel {
+        operation::set_component("release_channel", channel)?;
+    }
+    if let Some(source_commit) = source_commit {
+        operation::set_component("source_commit", source_commit)?;
+    }
+    Ok(())
+}
+
+fn record_manifest_target_provenance(manifest: &ReleaseManifest) -> Result<(), String> {
+    let identity = manifest
+        .release_identity()
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    record_target_provenance(identity.as_ref())
+}
+
+pub(crate) fn release_provenance(
+    identity: Option<&ReleaseIdentity>,
+) -> (&'static str, Option<&str>, Option<&str>) {
+    match identity {
+        Some(identity) if identity.track == ReleaseTrack::Staging => (
+            "staging",
+            identity.channel.as_deref(),
+            identity.source_commit.as_deref(),
+        ),
+        Some(_) | None => ("stable", None, None),
+    }
+}
+
+pub(crate) fn ensure_resolved_package(
+    resolved: ResolvedPackage,
+) -> Result<InstalledPackage, String> {
+    let layout = AppLayout::detect()?;
+    layout.ensure_base_dirs()?;
+
+    if let Some(manifest) = resolved.manifest {
+        return ensure_manifest_package(
+            &layout,
+            &resolved.release,
+            &manifest,
+            Some(&resolved.version),
+            true,
+            true,
+        );
+    }
+    ensure_legacy_package(&layout, &resolved.release)
 }
 
 pub(crate) fn validate_legacy_fallback_allowed(release: &Release) -> Result<(), String> {
@@ -71,6 +160,7 @@ pub fn stage_exact_package(version: &str) -> Result<InstalledPackage, String> {
     manifest
         .validate_for_install()
         .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    record_manifest_target_provenance(&manifest)?;
     ensure_manifest_package(&layout, &release, &manifest, Some(version), false, true)
 }
 
@@ -94,6 +184,7 @@ pub fn prepare_package(version_request: &str) -> Result<InstalledPackage, String
     manifest
         .validate_for_install()
         .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    record_manifest_target_provenance(&manifest)?;
     ensure_manifest_package(&layout, &release, &manifest, None, false, false)
 }
 
@@ -216,10 +307,7 @@ fn ensure_legacy_package(
     let addon_asset = release
         .asset(&addon_prefix)
         .ok_or_else(|| format!("release {} is missing {addon_prefix}*.zip", release.tag))?;
-    let version = local_asset
-        .version
-        .clone()
-        .ok_or_else(|| format!("could not parse version from {}", local_asset.name))?;
+    let version = legacy_version(release)?;
 
     let installed = ensure_selected_package(
         layout,
@@ -245,6 +333,16 @@ fn ensure_legacy_package(
     }
 
     Ok(installed)
+}
+
+fn legacy_version(release: &Release) -> Result<String, String> {
+    let local_prefix = format!("fennara-local-{}-{}-v", platform_name(), arch_name());
+    let local_asset = release
+        .asset(&local_prefix)
+        .ok_or_else(|| format!("release {} is missing {local_prefix}*.zip", release.tag))?;
+    local_asset
+        .version
+        .ok_or_else(|| format!("could not parse version from {}", local_asset.name))
 }
 
 fn ensure_selected_package(

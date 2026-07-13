@@ -49,10 +49,6 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             display_path(&addon_dir)
         );
     }
-    let layout = crate::app_layout::AppLayout::detect()?;
-    daemon_setup::ensure_switch_available(&layout, Some(&project_dir))
-        .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
-
     let (version, source) = match options.source_dir {
         Some(path) => {
             if options.channel.is_some() {
@@ -73,12 +69,18 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
                     .unwrap_or_else(|| "latest".to_string())
             });
             println!("requested version: {requested_version}");
-            let package = release_package::ensure_package(&requested_version)?;
-            validate_requested_channel(
-                &package.addon_dir,
-                &package.version,
+            let resolved = release_package::resolve_package(&requested_version)?;
+            validate_resolved_channel(
+                resolved.identity(),
+                resolved.version(),
                 options.channel.as_deref(),
             )?;
+            let layout = crate::app_layout::AppLayout::detect()?;
+            if active_version(&layout).as_deref() != Some(resolved.version()) {
+                daemon_setup::ensure_switch_available(&layout, Some(&project_dir))
+                    .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
+            }
+            let package = release_package::ensure_resolved_package(resolved)?;
             (package.version, package.addon_dir)
         }
     };
@@ -275,14 +277,28 @@ fn validate_requested_channel(
 ) -> Result<(), String> {
     let identity = ReleaseIdentity::load(addon_dir, version)
         .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
+    validate_resolved_channel(Some(&identity), version, requested_channel)
+}
+
+fn validate_resolved_channel(
+    identity: Option<&ReleaseIdentity>,
+    version: &str,
+    requested_channel: Option<&str>,
+) -> Result<(), String> {
     if let Some(channel) = requested_channel {
-        let actual = identity.channel.as_deref().ok_or_else(|| {
-            operation::failure(
-                FailureClass::ProjectInvalid,
-                format!("--channel requested {channel}, but the addon is on the stable track"),
-            )
-        })?;
-        if identity.track != ReleaseTrack::Staging || actual != channel {
+        let actual = identity
+            .and_then(|value| value.channel.as_deref())
+            .ok_or_else(|| {
+                operation::failure(
+                    FailureClass::ProjectInvalid,
+                    format!("--channel requested {channel}, but the addon is on the stable track"),
+                )
+            })?;
+        if !matches!(
+            identity.map(|value| &value.track),
+            Some(ReleaseTrack::Staging)
+        ) || actual != channel
+        {
             return Err(operation::failure(
                 FailureClass::ProjectInvalid,
                 format!("--channel requested {channel}, but the addon belongs to {actual}"),
@@ -291,16 +307,17 @@ fn validate_requested_channel(
     }
     operation::set_component(
         "release_track",
-        match identity.track {
-            ReleaseTrack::Stable => "stable",
-            ReleaseTrack::Staging => "staging",
+        match identity.map(|value| &value.track) {
+            Some(ReleaseTrack::Staging) => "staging",
+            Some(ReleaseTrack::Stable) | None => "stable",
         },
     )?;
+    operation::set_requested_version(version)?;
     operation::set_component("activation_reason", "project_install")?;
-    if let Some(channel) = identity.channel.as_deref() {
+    if let Some(channel) = identity.and_then(|value| value.channel.as_deref()) {
         operation::set_component("release_channel", channel)?;
     }
-    if let Some(source_commit) = identity.source_commit.as_deref() {
+    if let Some(source_commit) = identity.and_then(|value| value.source_commit.as_deref()) {
         operation::set_component("source_commit", source_commit)?;
     }
     Ok(())

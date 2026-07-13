@@ -8,10 +8,11 @@ const workflow = readFileSync(
 );
 
 test("stable publication reconciles matching drafts before immutable promotion", () => {
-  assert.match(workflow, /reconcile_draft=false/);
-  assert.match(workflow, /Resuming matching draft release/);
+  const publishStep = namedStep(jobBlock(workflow, "publish"), "Publish release");
+  assert.match(publishStep, /reconcile_draft=false/);
+  assert.match(publishStep, /Resuming matching draft release/);
   assert.match(
-    workflow,
+    publishStep,
     /verify-published-assets\.mjs[\s\S]*?--actual-dir "\$\{exact_assets_dir\}"[\s\S]*?--draft=false/,
   );
 });
@@ -25,3 +26,16 @@ test("latest promotion verifies exact bytes and moves the tag last", () => {
     latestUpload > 0 && latestUpload < latestVerify && latestVerify < latestEdit && latestEdit < tagPush,
   );
 });
+
+function jobBlock(source, jobName) {
+  const match = new RegExp(`^  ${jobName}:\\r?\\n([\\s\\S]*?)(?=^  [a-zA-Z0-9_-]+:|(?![\\s\\S]))`, "m").exec(source);
+  assert.ok(match, `missing ${jobName} job`);
+  return match[0];
+}
+
+function namedStep(job, stepName) {
+  const escaped = stepName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`^      - name: ${escaped}\\r?\\n([\\s\\S]*?)(?=^      - name:|(?![\\s\\S]))`, "m").exec(job);
+  assert.ok(match, `missing ${stepName} step`);
+  return match[0];
+}

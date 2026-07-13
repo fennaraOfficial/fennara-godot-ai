@@ -3,9 +3,11 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
 
+#include <atomic>
+
 namespace fennara::update_notice {
 
-void check_once();
+void check_once(const std::atomic_bool *cancelled = nullptr);
 bool is_update_available();
 godot::String current_version();
 godot::String latest_version();

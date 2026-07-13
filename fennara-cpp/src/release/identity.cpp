@@ -100,13 +100,16 @@ std::optional<Identity> parse(const godot::Dictionary &value,
         return std::nullopt;
     }
     const godot::String pull_request = identity.channel.substr(3);
-    const godot::String prefix = "-pr." + pull_request + ".";
-    const int prefix_index = identity.version.find(prefix);
-    if (prefix_index < 0 || prefix_index + prefix.length() >= identity.version.length()) {
+    const int prerelease_index = identity.version.find("-");
+    const godot::String prefix = "pr." + pull_request + ".";
+    const godot::String prerelease = prerelease_index >= 0
+                                         ? identity.version.substr(prerelease_index + 1)
+                                         : godot::String();
+    if (!prerelease.begins_with(prefix) || prerelease.length() <= prefix.length()) {
         error = "The staging addon version does not belong to its channel.";
         return std::nullopt;
     }
-    const godot::String candidate = identity.version.substr(prefix_index + prefix.length());
+    const godot::String candidate = prerelease.substr(prefix.length());
     if (!candidate.is_valid_int() || candidate.begins_with("0") || candidate.to_int() <= 0) {
         error = "The staging addon candidate number is invalid.";
         return std::nullopt;

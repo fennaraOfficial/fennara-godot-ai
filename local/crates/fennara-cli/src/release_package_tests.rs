@@ -1,9 +1,10 @@
 use crate::app_layout::{AppLayout, binary_name};
 use crate::release_channel::ChannelPointer;
 use crate::release_client::Release;
+use crate::release_identity::{ReleaseIdentity, ReleaseTrack};
 use crate::release_package::{
-    activate_package_at, package_complete, restore_activation_at, shared_runtime_component_key,
-    validate_expected_version, validate_legacy_fallback_allowed,
+    activate_package_at, package_complete, release_provenance, restore_activation_at,
+    shared_runtime_component_key, validate_expected_version, validate_legacy_fallback_allowed,
 };
 use std::fs;
 use std::ops::Deref;
@@ -14,6 +15,25 @@ fn complete_package_requires_launchers_runtimes_and_cached_addon() {
     let layout = test_layout("complete");
     write_complete_package(&layout, "1.2.3");
     assert!(package_complete(&layout, "1.2.3"));
+}
+
+#[test]
+fn resolved_manifest_identity_describes_target_provenance() {
+    let source_commit = "0123456789abcdef0123456789abcdef01234567";
+    let identity = ReleaseIdentity {
+        schema_version: 1,
+        track: ReleaseTrack::Staging,
+        version: "1.2.3-pr.101.2".into(),
+        release_tag: "v1.2.3-pr.101.2".into(),
+        channel: Some("pr-101".into()),
+        source_commit: Some(source_commit.into()),
+    };
+
+    assert_eq!(
+        release_provenance(Some(&identity)),
+        ("staging", Some("pr-101"), Some(source_commit))
+    );
+    assert_eq!(release_provenance(None), ("stable", None, None));
 }
 
 #[test]

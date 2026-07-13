@@ -22,6 +22,7 @@ constexpr uint64_t kChannelCacheSeconds = 300;
 
 struct HttpResponse {
     int code = 0;
+    bool cancelled = false;
     godot::String body;
     godot::String etag;
     godot::String error;
@@ -35,6 +36,10 @@ struct ChannelCache {
     godot::String body;
 };
 
+bool is_cancelled(const std::atomic_bool *cancelled) {
+    return cancelled != nullptr && cancelled->load(std::memory_order_acquire);
+}
+
 godot::String addon_version() {
     const godot::String path = "res://addons/fennara/VERSION";
     const godot::String value =
@@ -45,8 +50,14 @@ godot::String addon_version() {
 }
 
 HttpResponse request_github(const godot::String &path, const godot::String &accept,
-                            int timeout_ms, const godot::String &etag = "") {
+                            int timeout_ms, const godot::String &etag,
+                            const std::atomic_bool *cancelled) {
     HttpResponse result;
+    if (is_cancelled(cancelled)) {
+        result.cancelled = true;
+        result.error = "Update check cancelled.";
+        return result;
+    }
     godot::PackedByteArray response_body;
     godot::Ref<godot::HTTPClient> http;
     http.instantiate();
@@ -65,6 +76,11 @@ HttpResponse request_github(const godot::String &path, const godot::String &acce
         godot::Time::get_singleton()->get_ticks_msec() + static_cast<uint64_t>(timeout_ms);
     bool sent = false;
     while (godot::Time::get_singleton()->get_ticks_msec() < deadline) {
+        if (is_cancelled(cancelled)) {
+            result.cancelled = true;
+            result.error = "Update check cancelled.";
+            return result;
+        }
         http->poll();
         const godot::HTTPClient::Status status = http->get_status();
         if (status == godot::HTTPClient::STATUS_CANT_CONNECT ||
@@ -212,11 +228,14 @@ godot::String stable_version(const godot::Dictionary &release) {
     return "";
 }
 
-Result stable_result(const release_identity::Identity &current, int timeout_ms) {
+Result stable_result(const release_identity::Identity &current, int timeout_ms,
+                     const std::atomic_bool *cancelled) {
     Result result;
     result.current = current;
     const HttpResponse response =
-        request_github(kLatestReleasePath, "application/vnd.github+json", timeout_ms);
+        request_github(kLatestReleasePath, "application/vnd.github+json", timeout_ms, "",
+                       cancelled);
+    result.cancelled = response.cancelled;
     if (!response.error.is_empty() || response.code != 200) {
         result.error = response.error.is_empty() ? "Stable release lookup failed." : response.error;
         return result;
@@ -238,7 +257,8 @@ Result stable_result(const release_identity::Identity &current, int timeout_ms) 
     return result;
 }
 
-Result staging_result(const release_identity::Identity &current, int timeout_ms) {
+Result staging_result(const release_identity::Identity &current, int timeout_ms,
+                      const std::atomic_bool *cancelled) {
     Result result;
     result.current = current;
     const godot::String pointer_name = release_identity::channel_pointer_name(current);
@@ -256,13 +276,14 @@ Result staging_result(const release_identity::Identity &current, int timeout_ms)
     } else {
         refresh_cache = true;
         response = request_github(path, "application/vnd.github.raw+json", timeout_ms,
-                                  cache.valid ? cache.etag : godot::String());
+                                  cache.valid ? cache.etag : godot::String(), cancelled);
         if (response.code == 304 && cache.valid) {
             response.code = cache.code;
             response.body = cache.body;
             response.etag = cache.etag;
         }
     }
+    result.cancelled = response.cancelled;
     if (response.code == 404) {
         if (refresh_cache) {
             save_channel_cache(current.channel, 404, response.etag, "");
@@ -320,8 +341,13 @@ Result staging_result(const release_identity::Identity &current, int timeout_ms)
 
 } // namespace
 
-Result check(int timeout_ms) {
+Result check(int timeout_ms, const std::atomic_bool *cancelled) {
     Result result;
+    if (is_cancelled(cancelled)) {
+        result.cancelled = true;
+        result.error = "Update check cancelled.";
+        return result;
+    }
     const godot::String version = release_version::normalize(addon_version());
     godot::String identity_error;
     const std::optional<release_identity::Identity> identity =
@@ -330,8 +356,8 @@ Result check(int timeout_ms) {
         result.error = identity_error;
         return result;
     }
-    return identity->is_staging() ? staging_result(*identity, timeout_ms)
-                                  : stable_result(*identity, timeout_ms);
+    return identity->is_staging() ? staging_result(*identity, timeout_ms, cancelled)
+                                  : stable_result(*identity, timeout_ms, cancelled);
 }
 
 } // namespace fennara::release_discovery

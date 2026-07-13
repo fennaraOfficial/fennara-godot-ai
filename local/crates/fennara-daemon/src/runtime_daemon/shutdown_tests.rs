@@ -1,7 +1,7 @@
 use super::{connected_shutdown_error, finish_deferred_shutdown};
 use crate::runtime_daemon::state::{AppState, GodotProjectStatus};
 use std::time::Duration;
-use tokio::sync::oneshot;
+use tokio::sync::oneshot::{self, error::TryRecvError};
 
 #[test]
 fn shutdown_is_allowed_without_connected_godot_projects() {
@@ -44,7 +44,7 @@ async fn deferred_shutdown_is_cancelled_and_rearmed_when_a_project_connects() {
 
     shutdown.await.unwrap();
 
-    assert!(receiver.try_recv().is_err());
+    assert_eq!(receiver.try_recv(), Err(TryRecvError::Empty));
     assert!(state.shutdown_sender.lock().await.is_some());
 }
 

@@ -40,7 +40,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
                 "The project does not contain a complete Fennara addon to update.",
             )
         })?;
-    let project_version = Some(existing.version.clone());
+    let project_version = existing.version.clone();
     let identity = ReleaseIdentity::load(
         &project_install::project_addon_dir(&project_dir),
         &existing.version,
@@ -60,6 +60,20 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             ),
         };
     }
+    operation::set_component(
+        "installed_release_track",
+        match identity.track {
+            ReleaseTrack::Stable => "stable",
+            ReleaseTrack::Staging => "staging",
+        },
+    )?;
+    operation::set_component("activation_reason", "project_update")?;
+    if let Some(channel) = identity.channel.as_deref() {
+        operation::set_component("installed_release_channel", channel)?;
+    }
+    if let Some(source_commit) = identity.source_commit.as_deref() {
+        operation::set_component("installed_source_commit", source_commit)?;
+    }
     options.version = resolve_exact_target(&options.version)?;
     if options.version != existing.version {
         let layout = crate::app_layout::AppLayout::detect()?;
@@ -71,20 +85,6 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     }
     operation::set_requested_version(&options.version)?;
     println!("requested version: {}", options.version);
-    operation::set_component(
-        "release_track",
-        match identity.track {
-            ReleaseTrack::Stable => "stable",
-            ReleaseTrack::Staging => "staging",
-        },
-    )?;
-    operation::set_component("activation_reason", "project_update")?;
-    if let Some(channel) = identity.channel.as_deref() {
-        operation::set_component("release_channel", channel)?;
-    }
-    if let Some(source_commit) = identity.source_commit.as_deref() {
-        operation::set_component("source_commit", source_commit)?;
-    }
 
     if !options.no_self_update {
         println!("self-update: checking installed CLI");
@@ -103,7 +103,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     } else {
         release_package::ensure_package(&options.version)?
     };
-    if project_version.as_deref() == Some(package.version.as_str()) {
+    if project_version == package.version {
         if !options.prepare {
             println!("guidance: refreshing AGENTS.md and addons/fennara/ai/guidelines.md");
             project_guidance::write(&project_dir)?;
@@ -127,7 +127,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             .ok_or_else(|| "update staging requires an operation ID".to_string())?;
         let staged = update_stage::prepare(
             &project_dir,
-            project_version.as_deref().unwrap_or("unknown"),
+            &project_version,
             &package,
             &operation_id,
             observed_godot_process(options.godot_pid, options.godot_executable.as_deref())?,
@@ -154,10 +154,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
         .map_err(|error| operation::failure(FailureClass::StageFilesystem, error))?;
     operation::phase(Phase::Validating, "Checking the updated installation")?;
     println!("Updated Fennara");
-    println!(
-        "from: {}",
-        project_version.unwrap_or_else(|| "unknown".to_string())
-    );
+    println!("from: {project_version}");
     println!("to: {}", package.version);
     println!("project: {}", display_path(&project_dir));
     println!("guidance: refreshed AGENTS.md and addons/fennara/ai/guidelines.md");
@@ -174,6 +171,7 @@ fn resolve_exact_target(request: &str) -> Result<String, String> {
     }
     let release = release_client::fetch_release(request)?;
     if let Some(pointer) = release.channel_pointer.as_ref() {
+        operation::set_component("release_track", "staging")?;
         operation::set_component("release_channel", &pointer.channel)?;
         operation::set_component("source_commit", &pointer.source_commit)?;
         return Ok(pointer.version.clone());

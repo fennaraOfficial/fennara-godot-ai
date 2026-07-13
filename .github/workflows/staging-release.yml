@@ -239,11 +239,15 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Stamp candidate version in the runner workspace
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          CHANNEL: ${{ needs.resolve.outputs.channel }}
+          SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
         run: |
-          node scripts/set-version.mjs "${{ needs.resolve.outputs.version }}" \
+          node scripts/set-version.mjs "${VERSION}" \
             --track staging \
-            --channel "${{ needs.resolve.outputs.channel }}" \
-            --source-commit "${{ needs.resolve.outputs.source_commit }}"
+            --channel "${CHANNEL}" \
+            --source-commit "${SOURCE_COMMIT}"
 
       - name: Check candidate version sync
         run: node scripts/check-version.mjs
@@ -345,10 +349,12 @@ jobs:
           pattern: fennara-addon-part-*
 
       - name: Assemble all-platform addon archive
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           node scripts/package-addon-all.mjs \
             --parts-dir addon-parts \
-            --version "${{ needs.resolve.outputs.version }}"
+            --version "${VERSION}"
 
       - name: Upload all-platform addon archive
         uses: actions/upload-artifact@v4
@@ -433,30 +439,37 @@ jobs:
           node scripts/check-linux-cef-runtime-release.mjs --assets-dir release-assets
 
       - name: Write exact release manifest
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           node scripts/write-release-manifest.mjs \
-            --version "${{ needs.resolve.outputs.version }}" \
+            --version "${VERSION}" \
             --assets-dir release-assets \
             --linux-cef-manifest generated-linux-cef-manifest/linux-cef.json \
             --release-identity staging-metadata/candidate.json \
             --minimum-cli-version 0.3.8 \
-            --out "release-assets/fennara-release-manifest-v${{ needs.resolve.outputs.version }}.json"
+            --out "release-assets/fennara-release-manifest-v${VERSION}.json"
 
       - name: Validate complete candidate asset set
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           node scripts/validate-staging-build.mjs \
             --candidate staging-metadata/candidate.json \
             --assets-dir release-assets \
             --addon-parts-dir addon-parts \
-            --release-manifest "release-assets/fennara-release-manifest-v${{ needs.resolve.outputs.version }}.json" \
+            --release-manifest "release-assets/fennara-release-manifest-v${VERSION}.json" \
             --linux-cef-manifest generated-linux-cef-manifest/linux-cef.json
 
       - name: Write channel pointer
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          CHANNEL: ${{ needs.resolve.outputs.channel }}
         run: |
           node scripts/write-staging-pointer.mjs \
             --candidate staging-metadata/candidate.json \
-            --manifest "release-assets/fennara-release-manifest-v${{ needs.resolve.outputs.version }}.json" \
-            --out "staging-metadata/fennara-staging-channel-${{ needs.resolve.outputs.channel }}.json"
+            --manifest "release-assets/fennara-release-manifest-v${VERSION}.json" \
+            --out "staging-metadata/fennara-staging-channel-${CHANNEL}.json"
 
       - name: Assemble publication bundle
         shell: bash

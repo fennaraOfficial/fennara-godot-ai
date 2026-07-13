@@ -2,6 +2,7 @@
 
 #include <godot_cpp/classes/editor_plugin.hpp>
 #include "fennara/ui/dock.hpp"
+#include <atomic>
 #include <thread>
 
 namespace fennara {
@@ -21,7 +22,9 @@ private:
     godot::Ref<FennaraScriptContextMenuPlugin> script_context_menu_plugin;
     bool csharp_preparation_pending = false;
     bool initial_filesystem_scan_completed = false;
+    std::atomic_bool update_check_cancelled{false};
     std::thread update_check_thread;
+    void _stop_update_check();
     void _configure_editor_settings();
     void _ensure_export_presets_exclude_fennara();
     bool _is_export_preset_section(const godot::String &section) const;

@@ -188,11 +188,11 @@ void UpdateCoordinator::copy_report() {
     const godot::String cli = components.get("cli", "unknown");
     const godot::String runtime = components.get("installed_runtime", "unknown");
     godot::String report = "Fennara update report\nOperation: " + operation_id +
-                           "\nTrack: " + release_track +
+                           "\nTrack: " + (release_track.is_empty() ? "unknown" : release_track) +
                            "\nChannel: " + (release_channel.is_empty() ? "none" : release_channel) +
                            "\nInstalled addon: " + addon + "\nActive CLI: " + cli +
                            "\nActive runtime: " + runtime + "\nResolved target: " + target_version +
-                           "\nRelease tag: " + release_tag +
+                           "\nRelease tag: " + (release_tag.is_empty() ? "none" : release_tag) +
                            "\nSource commit: " + (source_commit.is_empty() ? "unknown" : source_commit) +
                            "\nLast stage: " + phase + "\nStatus: " + status_text +
                            "\nDetail: " + detail_text +

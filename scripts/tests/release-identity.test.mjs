@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -49,9 +50,27 @@ test("rejects ambiguous or mismatched staging identity", () => {
     /must end with -pr\.101/,
   );
   assert.throws(
+    () => createReleaseIdentity({
+      version: "0.3.9-preview-pr.101.2",
+      track: "staging",
+      channel: "pr-101",
+      sourceCommit: SOURCE_COMMIT,
+    }),
+    /must end with -pr\.101/,
+  );
+  assert.throws(
     () => createReleaseIdentity({ version: "0.3.9-rc.1" }),
     /stable release versions/,
   );
+});
+
+test("native identity validation anchors the PR marker to the prerelease start", () => {
+  const source = readFileSync(
+    new URL("../../fennara-cpp/src/release/identity.cpp", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /prerelease\.begins_with\(prefix\)/);
+  assert.doesNotMatch(source, /identity\.version\.find\(prefix\)/);
 });
 
 test("validates identity tag and VERSION agreement", () => {

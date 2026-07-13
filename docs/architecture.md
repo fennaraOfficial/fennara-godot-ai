@@ -308,9 +308,9 @@ still apply in both modes.
 `fennara update` is the normal project update command. It reads the installed
 addon release identity, resolves stable latest or that addon's isolated staging
 channel, and freezes the result to one exact immutable version. It first checks
-that release manifest's per-platform CLI asset and, when newer, stages that CLI,
-lets the old process exit, replaces the installed CLI, and resumes with the same
-exact target. It then uses the same manifest-driven resolver and installer as
+the version of that release manifest's per-platform CLI asset and, when newer,
+stages that CLI, lets the old process exit, replaces the installed CLI, and
+resumes with the same target. It then uses the same manifest-driven resolver and installer as
 `fennara install`.
 
 Native staging discovery caches validated channel pointers for five minutes in

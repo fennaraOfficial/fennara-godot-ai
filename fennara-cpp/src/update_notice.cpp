@@ -39,7 +39,7 @@ godot::String warning_text_for(const release_discovery::Result &result) {
 
 } // namespace
 
-void check_once() {
+void check_once(const std::atomic_bool *cancelled) {
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (g_check_started) {
@@ -47,12 +47,17 @@ void check_once() {
         }
         g_check_started = true;
     }
-    release_discovery::Result result = release_discovery::check(5000);
+    release_discovery::Result result = release_discovery::check(5000, cancelled);
     if (!result.success) {
         FLOG_TOOL("Update check skipped: " + result.error);
     }
     {
         std::lock_guard<std::mutex> lock(g_mutex);
+        if (result.cancelled) {
+            g_check_started = false;
+            g_checked = false;
+            return;
+        }
         g_result = result;
         g_checked = true;
     }

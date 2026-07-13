@@ -166,6 +166,28 @@ mod tests {
     }
 
     #[test]
+    fn rejects_addon_identity_that_does_not_match_version() {
+        let root = test_root("identity-version-mismatch");
+        let project = root.join("project");
+        let addon = write_addon(&project, Some("1.2.3"), true);
+        fs::write(
+            addon.join("release.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schema_version": 1,
+                "track": "stable",
+                "version": "1.2.4",
+                "release_tag": "v1.2.4"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let error = inspect(&project).unwrap_err();
+        assert!(error.contains("does not match VERSION"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn rejects_existing_addon_without_current_library() {
         let root = test_root("missing-library");
         let project = root.join("project");
