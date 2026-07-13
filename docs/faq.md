@@ -1,5 +1,15 @@
 # FAQ
 
+Start with [Setup](setup.md) for installation and updates. Use this page for
+short answers and links to the detailed reference.
+
+| Question | Short answer |
+| --- | --- |
+| Do I need a provider key? | Only for a cloud provider in the built-in chat |
+| Can I use an external MCP app instead? | Yes, it uses its own model account |
+| Does Fennara upload my project to a Fennara server? | No |
+| Can multiple Godot editors be open? | Yes, choose the external MCP target in the dock |
+
 ## Is Fennara only a code generator?
 
 No. Fennara is a Godot-aware agent workflow. It can work with project files, scenes, diagnostics, runtime errors, screenshots, and Godot editor context.
@@ -14,22 +24,15 @@ No. Fennara is not trying to make Godot optional. It is designed to make AI agen
 
 ## How should I install Fennara?
 
-Use [Setup](setup.md) for the normal install path:
-
-```bash
-fennara install
-fennara mcp-setup --help
-```
-
-The setup flow installs the Godot addon, downloads the local MCP runtime package, writes generated project guidance, and configures supported MCP apps.
+Add the addon, open the Fennara dock, and press **Set Up Fennara**. You can also
+install from the terminal. See [Setup](setup.md) for both paths.
 
 ## Do I need a chat provider API key?
 
 Only if you want to use a cloud provider in the built-in Fennara chat dock. External MCP clients use their own model/app configuration and can use Fennara MCP tools without putting any provider key into Fennara chat.
 
-The built-in chat can also use local providers such as Ollama or LM Studio, which do not require a cloud API key.
-
-Supported built-in chat providers are OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, local Ollama, and LM Studio. See [Built-In Chat Providers](providers.md).
+The built-in chat can also use local Ollama or LM Studio without a cloud API
+key. See [Built-In Chat Providers](providers.md).
 
 ## Why does the dock ask for a provider if I already ran `mcp-setup --claude`?
 

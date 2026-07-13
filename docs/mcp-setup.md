@@ -1,48 +1,44 @@
 # MCP Setup
 
-Use this guide when connecting Fennara to an external MCP app such as Claude
-Code, Claude Desktop, Codex, Cursor, Cline, VS Code, Gemini, Antigravity,
-OpenCode, Windsurf, Kiro, or another MCP client.
+Connect an external AI app to Fennara's Godot tools. The app keeps using its own
+model account, subscription, or API setup.
 
-External MCP apps use their own model account, subscription, or API setup.
-Fennara supplies the local Godot-aware tools. The built-in Fennara chat dock is
-configured separately inside Godot.
+> [!NOTE]
+> This does not configure the built-in Fennara chat. See
+> [MCP Apps And Built-In Chat](chat-vs-mcp.md) if you are unsure which path you
+> need.
 
-## Preferred Setup
+## Quick Setup
 
-Finish **Set Up Fennara** in the Godot dock first. Then open **Chat Settings >
-MCP Apps**, find the external app, and press **Set Up**. The dock asks the local
-daemon to run the matching `fennara mcp-setup` command. The CLI remains the only
-component that edits MCP app configuration and creates backups.
+1. Finish **Set Up Fennara** in the Godot dock.
+2. Open **Chat Settings > MCP Apps**.
+3. Find your app and press **Set Up**.
+4. Restart the app.
 
-Restart the selected MCP app after setup so it reloads Fennara. The combined
-**Claude** option configures Claude Code and Claude Desktop. **Gemini &
-Antigravity** configures the shared Gemini and Antigravity targets.
+Fennara creates a backup before changing an app's MCP configuration. The
+combined **Claude** option configures Claude Code and Claude Desktop. **Gemini
+& Antigravity** configures both shared targets.
 
-The terminal workflow remains available. Run `fennara install` inside the Godot
-project first, then configure the external app directly:
+### Terminal Alternative
 
-Then configure your MCP app:
+Run `fennara install` inside the Godot project first, then choose a target:
 
-```bash
-fennara mcp-setup --claude
-fennara mcp-setup --codex
-fennara mcp-setup --cursor
-fennara mcp-setup --gemini
-```
+| App | Command |
+| --- | --- |
+| Claude Code and Claude Desktop | `fennara mcp-setup --claude` |
+| Claude Code only | `fennara mcp-setup --claude-code` |
+| Claude Desktop only | `fennara mcp-setup --claude-desktop` |
+| Codex | `fennara mcp-setup --codex` |
+| Cursor | `fennara mcp-setup --cursor` |
+| Gemini and Antigravity | `fennara mcp-setup --gemini` or `fennara mcp-setup --antigravity` |
+| Cline | `fennara mcp-setup --cline` |
+| VS Code | `fennara mcp-setup --vscode` |
+| OpenCode | `fennara mcp-setup --opencode` |
+| Windsurf | `fennara mcp-setup --windsurf` |
+| Kiro | `fennara mcp-setup --kiro` |
 
-Other supported targets:
-
-```bash
-fennara mcp-setup --claude-code
-fennara mcp-setup --claude-desktop
-fennara mcp-setup --cline
-fennara mcp-setup --vscode
-fennara mcp-setup --opencode
-fennara mcp-setup --windsurf
-fennara mcp-setup --kiro
-fennara mcp-setup --help
-```
+Run `fennara mcp-setup --help` for the target list supported by your installed
+CLI.
 
 ## Manual Setup
 

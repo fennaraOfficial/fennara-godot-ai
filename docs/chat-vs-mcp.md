@@ -1,75 +1,55 @@
-# MCP Apps And Built-In Chat
+# MCP Apps Or Built-In Chat?
 
-Fennara has two related but separate ways to use AI with Godot.
+Fennara supports both. Choose where you want the conversation to happen.
 
-| Path | Where You Chat | Who Provides The Model | What Fennara Provides |
-| --- | --- | --- | --- |
-| External MCP app | Claude Code, Claude Desktop, Codex, Cursor, Gemini, Antigravity, or another MCP client | That app's own model account, subscription, or API setup | Godot-aware MCP tools |
-| Built-in Fennara chat | The Fennara dock inside Godot | The provider configured in Fennara chat settings | A local in-editor chat UI plus the same Godot-aware tools |
+| | External MCP app | Built-in Fennara chat |
+| --- | --- | --- |
+| Where you chat | Codex, Claude, Cursor, Gemini, or another MCP app | The Fennara dock or your system browser |
+| Model account | The external app's account or subscription | A provider connected in Fennara Chat Settings |
+| What Fennara adds | Godot-aware MCP tools | Chat UI, the same core Godot tools, and chat-only file and shell tools |
+| Setup | **Chat Settings > MCP Apps** | **Chat Settings > Chat > Open providers** |
 
-The built-in chat can be displayed inside the Godot dock or opened in your system browser, depending on the Chat Settings display option. Both display modes are still the same Fennara chat path and use the provider configured in Fennara settings.
+> [!TIP]
+> You can use both paths. Their model settings remain separate.
 
-## What `mcp-setup` Does
+## External MCP Apps
 
-`fennara mcp-setup --claude` edits Claude's MCP configuration so Claude can start the local Fennara MCP server and call Fennara tools.
+Connecting an MCP app lets that app start the local Fennara MCP server and call
+Godot tools. It does not share the app's subscription or login with the
+built-in chat.
 
-It does not make the built-in Fennara chat use Claude. It also does not share your Claude subscription, Claude Code login, or Claude Desktop account with the Fennara dock.
-
-The same applies to:
+Set up an app from **Chat Settings > MCP Apps**, or use the CLI:
 
 ```bash
 fennara mcp-setup --codex
-fennara mcp-setup --cursor
-fennara mcp-setup --gemini
+fennara mcp-setup --help
 ```
 
-Those commands connect external apps to Fennara's Godot tools. They do not configure the in-editor chat model.
+No Fennara chat provider key is required. Restart the external app after setup.
+See [MCP Setup](mcp-setup.md) for every target and manual configuration.
 
-## Do I Need An API Key?
+## Built-In Chat
 
-You do not need a Fennara chat provider key to use Fennara through an external MCP app. If you use Claude Code with `fennara mcp-setup --claude`, Claude uses its own model setup and Fennara supplies Godot tools.
+The built-in chat needs a provider connected in Fennara Chat Settings. Use your
+own key for a cloud provider, or connect a local Ollama or LM Studio server.
 
-You only need a chat provider in Fennara settings if you want to use the built-in chat dock inside Godot.
+The same chat can appear inside the Godot dock or in your system browser. This
+display choice does not change its provider, model, history, or project.
 
-Built-in chat can use:
+To attach code, select it in Godot's script editor, open the context menu, and
+choose **Add to Chat**. See [Built-In Chat Providers](providers.md) for provider
+and model setup.
 
-- cloud providers with your own API key, such as OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, or MiniMax
-- local providers, such as Ollama or LM Studio
+## Project Routing
 
-Provider keys and local provider URLs are stored locally by the daemon outside the Godot project.
+Both paths use the local Fennara daemon for Godot feedback.
 
-## Common Examples
+- External MCP calls go to the project selected by the dock's **MCP target**
+  control.
+- Built-in chat stays bound to the Godot editor that opened the chat.
 
-If you ask Claude Code to edit your Godot project, run:
-
-```bash
-fennara mcp-setup --claude
-```
-
-Then ask Claude:
+To verify an external MCP connection, ask:
 
 ```text
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
-
-No Fennara chat API key is required for that flow.
-
-If you want to chat inside Godot's Fennara dock, open the dock settings and choose a chat provider. Use an API key for a cloud provider, or run a local server and select a local model such as:
-
-```text
-ollama/llama3.1:8b
-lmstudio/openai/gpt-oss-20b
-```
-
-The built-in dock can also receive selected code from Godot's script editor.
-Select script text, open the script editor context menu, choose **Add to Chat**,
-then send your next chat message. The selected `res://` path, line range, and
-code are attached only to that built-in chat request.
-
-For provider setup details, see [Built-In Chat Providers](providers.md). For dock shortcuts, see [Built-In Chat Slash Commands](slash-commands.md).
-
-## Shared Godot Target
-
-External MCP apps and the built-in chat both talk to the local Fennara daemon, so they can use the same Godot feedback loop. The model account is the part that differs.
-
-When multiple Godot editors are open, use the Fennara dock's MCP target control to choose which project receives external MCP tool calls. Built-in chat sessions stay bound to the Godot editor that opened that chat.
