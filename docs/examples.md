@@ -1,5 +1,16 @@
 # Examples
 
+Copy a prompt, replace its project details, and send it from an MCP app or the
+built-in Fennara chat.
+
+| Goal | Example |
+| --- | --- |
+| Confirm the connected editor | [Check Connection](#check-connection) |
+| Understand an existing project | [Inspect Before Editing](#inspect-a-project-before-editing) |
+| Make a focused change | [Architecture-Aware Change](#make-a-small-architecture-aware-change) |
+| Diagnose a running project | [Runtime Error](#debug-a-runtime-error) |
+| Inspect rendered output | [Visual Feedback](#visual-feedback) |
+
 ## Check Connection
 
 ```text

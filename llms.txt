@@ -20,17 +20,22 @@ Core positioning:
 
 Start here:
 - README.md
+- docs/README.md
 - AGENTS.md
 - CONTEXT.md
+
+User guides:
 - docs/setup.md
 - docs/cli.md
-- docs/repo-map.md
-- docs/architecture.md
 - docs/mcp-setup.md
 - docs/chat-vs-mcp.md
 - docs/providers.md
 - docs/slash-commands.md
 - docs/manual-install.md
+
+Contributor reference:
+- docs/repo-map.md
+- docs/architecture.md
 - docs/release.md
 - CONTRIBUTING.md
 

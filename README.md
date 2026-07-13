@@ -44,75 +44,88 @@ External MCP apps and the built-in chat use separate model settings. See [MCP Ap
 
 For the full install walkthrough, see [Setup](docs/setup.md).
 
-## What Fennara Installs
+## What Setup Adds
 
-- a small `fennara` CLI
+- the Fennara addon kept in `res://addons/fennara/`
+- a small `fennara` CLI installed in Fennara app data
 - a local MCP server used by AI coding apps
 - a local daemon that bridges MCP/chat requests to the open Godot editor
-- a Godot addon copied into `res://addons/fennara/`
 - generated project guidance for AI agents
 
 The built-in chat dock uses the platform webview: Microsoft Edge WebView2 on Windows, WKWebView/WebKit on macOS, and a Fennara-managed shared CEF runtime on Linux. MCP tools still work if the optional chat dock cannot start.
 
-## Quick Start
+## Install
 
-Get the addon using either option:
+Choose either the addon or CLI install.
+
+### Add The Addon To Your Project
 
 - Install **Fennara** from the Godot Asset Library.
-- Open the [Latest Release](https://github.com/fennaraOfficial/fennara-godot-ai/releases/latest), download `fennara-addon-latest.zip`, and extract its `addons/fennara/` folder into your Godot project.
+- Or open the [Latest Release](https://github.com/fennaraOfficial/fennara-godot-ai/releases/latest), download `fennara-addon-latest.zip`, and extract its `addons/fennara/` folder into your project.
 
-Open the project, select the Fennara dock, and use the native setup panel:
+Open the project, select the Fennara dock, and press **Set Up Fennara**.
 
-```text
-Fennara needs to finish setup.
+### Alternative: Install With The CLI
 
-[Set Up Fennara]
+You do not need this if you used the addon option above. Use the CLI only if
+you prefer installing Fennara from the terminal.
+
+Install the CLI on Windows:
+
+```powershell
+irm https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.ps1 | iex
 ```
 
-The addon verifies and installs the matching CLI, then the CLI installs the
-local components required by that addon. The active project addon is left
-unchanged during first-run setup.
-
-After setup, use the built-in chat, connect an external MCP app, or use both.
-The full user walkthrough is in [Setup](docs/setup.md).
-
-### Prefer The Terminal?
-
-The terminal uses the same installer and maintenance logic as the Godot setup
-panel. Follow [Fennara CLI](docs/cli.md#install-the-cli) to install it, then run:
+Or on macOS and Linux:
 
 ```bash
-fennara install --project path/to/your-godot-project
+curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.sh | sh
 ```
 
-Configure an external MCP app only if you want one. The supported app commands
-and manual configuration path are in [MCP Setup](docs/mcp-setup.md).
-
-With Godot open, verify the connection from your MCP app:
-
-```text
-Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
-```
-
-For every CLI command, update behavior, recovery, diagnostics, app-data paths,
-and automation guidance, see [Fennara CLI](docs/cli.md).
-
-## Updates
-
-When an update is available, the Fennara dock shows an **Update** button. It
-verifies and stages the release while Godot remains open, then asks before
-closing the editor. The detached updater replaces the addon, reopens the same
-project, validates the new addon and daemon, and retains the previous working
-version until validation succeeds.
-
-Terminal users can close Godot and run:
+Then run Fennara from your Godot project:
 
 ```bash
-fennara update --project path/to/your-godot-project
+cd path/to/your-godot-project
+fennara install
 ```
 
-See [Setup](docs/setup.md#update-fennara) for the user-facing flow and
-[Fennara CLI](docs/cli.md#update-a-project) for terminal and recovery commands.
+See [Setup](docs/setup.md) for troubleshooting and [Fennara CLI](docs/cli.md)
+for the complete command reference.
+
+## Set Up A Provider Or Connect An MCP App
+
+### Built-In Chat
+
+Open **Chat Settings > Chat**, select **Open providers**, and connect a provider.
+Fennara uses your own key for cloud providers (BYOK). You can also use a local
+Ollama or LM Studio server. See the [supported provider list](docs/providers.md).
+
+### MCP Apps
+
+Open **Chat Settings > MCP Apps**, find your app, and press **Set Up**.
+
+You can also connect an app from the terminal:
+
+```bash
+fennara mcp-setup --codex
+fennara mcp-setup --help
+```
+
+If your MCP app is not listed in Chat Settings, see [MCP Setup](docs/mcp-setup.md)
+for the complete app list and manual configuration instructions.
+
+## Update
+
+When the Fennara dock shows **Update**, press it and follow the prompts.
+
+To update from the terminal, close Godot and run:
+
+```bash
+cd path/to/your-godot-project
+fennara update
+```
+
+See [Update Fennara](docs/setup.md#update-fennara) for recovery and diagnostics.
 
 ## Tools
 
@@ -127,18 +140,6 @@ Fennara exposes a small set of Godot-aware tools:
 - run small runtime scripts against a live scene
 
 The goal is not to replace an agent's normal file tools. Fennara gives the missing Godot feedback loop.
-
-## Built-In Chat
-
-The Fennara dock includes a native web chat surface inside Godot. It talks to the local daemon, not a hosted Fennara backend.
-
-- bring your own model provider key, or use local Ollama / LM Studio
-- use `/provider` and `/model` to switch models from inside Godot
-- attach selected script ranges and supported image context
-- keep chat history, provider keys, and local URLs on your machine
-- open the chat embedded in Godot or in your system browser
-
-More detail: [Built-In Chat Providers](docs/providers.md), [Built-In Chat Slash Commands](docs/slash-commands.md).
 
 ## Demos
 
@@ -163,22 +164,16 @@ See [Demos](docs/demos.md) for more videos from the Fennara channel.
  </picture>
 </a>
 
-## Repository
+## Documentation
 
-Useful starting points:
-
-- [Setup](docs/setup.md)
-- [Fennara CLI](docs/cli.md)
-- [MCP setup](docs/mcp-setup.md)
-- [Repo map](docs/repo-map.md)
-- [Architecture](docs/architecture.md)
-- [Tools](docs/tools.md)
-- [FAQ](docs/faq.md)
-- [Demos](docs/demos.md)
-- [Manual install notes](docs/manual-install.md)
-- [Release process](docs/release.md)
-- [Contributing](CONTRIBUTING.md)
-- [Security](SECURITY.md)
+| Start with... | When you need... |
+| --- | --- |
+| [Documentation home](docs/README.md) | Every guide and reference page |
+| [Setup](docs/setup.md) | Installation, updates, and troubleshooting |
+| [Chat providers](docs/providers.md) | Built-in chat models and keys |
+| [MCP setup](docs/mcp-setup.md) | Codex, Claude, Cursor, and other MCP apps |
+| [Tools](docs/tools.md) | The Godot feedback available to agents |
+| [Contributing](CONTRIBUTING.md) | Development and pull request guidance |
 
 ## Community
 

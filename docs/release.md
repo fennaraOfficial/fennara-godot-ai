@@ -2,6 +2,20 @@
 
 Releases are manual. Do not publish from pull request workflows.
 
+> [!IMPORTANT]
+> Run releases from `main`, keep `VERSION` and the workflow input identical, and
+> explicitly decide whether the release needs a higher minimum CLI version.
+
+## Release At A Glance
+
+| Step | Result |
+| --- | --- |
+| Prepare and merge the version change | Repository version sources agree |
+| Run Package Preview | Release-shaped artifacts are built without publishing |
+| Inspect the preview | Archives, manifest, hashes, and Linux CEF layout are verified |
+| Run Release from `main` | Tag and GitHub Release are published |
+| Smoke test install and update | The public user flow is verified |
+
 ## Versioning
 
 `VERSION` is the source of truth.
@@ -9,7 +23,7 @@ Releases are manual. Do not publish from pull request workflows.
 To bump the repo version:
 
 ```bash
-node scripts/set-version.mjs 0.3.1
+node scripts/set-version.mjs X.Y.Z
 ```
 
 The script updates:
@@ -89,7 +103,7 @@ Actions > Release > Run workflow
 Inputs:
 
 ```text
-version: 0.3.1
+version: X.Y.Z
 promote_latest: true
 ```
 
@@ -119,54 +133,26 @@ Preview is not the user-facing release channel.
 
 Each release should contain per-platform CLI/local runtime packages and one shared all-platform addon package.
 
-Windows:
-
-```text
-fennara-cli-windows-x86_64-v<version>.zip
-fennara-release-local-windows-x86_64-v<version>.zip
-```
-
-Linux:
-
-```text
-fennara-cli-linux-x86_64-v<version>.zip
-fennara-release-local-linux-x86_64-v<version>.zip
-```
-
-macOS:
-
-```text
-fennara-cli-macos-arm64-v<version>.zip
-fennara-release-local-macos-arm64-v<version>.zip
-```
-
-Shared addon:
-
-```text
-fennara-release-addon-v<version>.zip
-fennara-addon-latest.zip
-```
-
-Linux webview runtime:
-
-```text
-fennara-webview-cef-linux-x64-<cef-version>.zip
-```
-
-Release manifest:
-
-```text
-fennara-release-manifest-v<version>.json
-```
+| Target | Assets |
+| --- | --- |
+| Windows x86_64 | `fennara-cli-windows-x86_64-v<version>.zip`<br>`fennara-release-local-windows-x86_64-v<version>.zip` |
+| Linux x86_64 | `fennara-cli-linux-x86_64-v<version>.zip`<br>`fennara-release-local-linux-x86_64-v<version>.zip`<br>`fennara-webview-cef-linux-x64-<cef-version>.zip` |
+| macOS arm64 | `fennara-cli-macos-arm64-v<version>.zip`<br>`fennara-release-local-macos-arm64-v<version>.zip` |
+| All platforms | `fennara-release-addon-v<version>.zip`<br>`fennara-addon-latest.zip`<br>`fennara-release-manifest-v<version>.json` |
 
 Package roles:
 
-- `fennara-cli-*`: install script payload; contains only the `fennara` CLI for one platform.
-- `fennara-release-local-*`: local MCP and daemon launchers plus versioned runtime binaries for one platform. Release uses the `fennara-release-local-*` prefix so older CLIs cannot silently bypass the manifest.
-- `fennara-release-addon-v*`: versioned all-platform Godot addon payload copied into projects by the CLI through the release manifest.
-- `fennara-addon-latest.zip`: stable all-platform addon URL for the Godot Asset Library and docs links.
-- `fennara-webview-cef-linux-x64-*`: Linux-only shared CEF runtime installed once into Fennara app data by the CLI.
-- `fennara-release-manifest-v*`: schema-versioned install/update plan used by the CLI to resolve assets, verify SHA-256 hashes, and install shared runtimes.
+| Pattern | Role |
+| --- | --- |
+| `fennara-cli-*` | Install script payload containing only the `fennara` CLI for one platform |
+| `fennara-release-local-*` | MCP and daemon launchers plus versioned runtime binaries for one platform |
+| `fennara-release-addon-v*` | Versioned all-platform addon resolved through the release manifest |
+| `fennara-addon-latest.zip` | Stable all-platform addon URL for the Godot Asset Library and documentation |
+| `fennara-webview-cef-linux-x64-*` | Linux-only shared CEF runtime installed once in Fennara app data |
+| `fennara-release-manifest-v*` | Install and update plan containing asset names, SHA-256 values, install primitives, and shared runtimes |
+
+The `fennara-release-local-*` prefix prevents older CLIs from silently bypassing
+the manifest-managed package path.
 
 ## Release Manifest
 
@@ -181,12 +167,11 @@ manifest whenever the release publishes one. The manifest records:
 - the shared addon asset with SHA-256
 - platform-specific shared runtime assets, currently Linux CEF
 
-The 0.3.3 manifest uses `minimum_cli_version: 0.3.3` by default because this
-release includes CLI update/install behavior that should travel with the
-packages. Future normal package layout or asset name changes should be handled
-by manifest data, not by changing the outer CLI. Raise `minimum_cli_version`
-only when a release needs a new manifest schema or install primitive that older
-CLIs truly cannot perform.
+The current manifest generator and release workflows use
+`minimum_cli_version: 0.3.3` by default. Normal package layout or asset name
+changes should be handled by manifest data, not by changing the outer CLI.
+Raise `minimum_cli_version` only when a release needs a new manifest schema or
+install primitive that older CLIs truly cannot perform.
 
 When the CLI is too old, `fennara update` should use the manifest's
 per-platform `assets.cli` entry to update the installed CLI first, then resume

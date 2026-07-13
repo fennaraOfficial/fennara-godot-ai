@@ -1,6 +1,8 @@
 # Tools
 
-Fennara tools are built around Godot feedback.
+Fennara tools provide Godot-aware inspection, editing, validation, and runtime
+feedback. The exact tool set depends on whether you use an external MCP app or
+the built-in Fennara chat.
 
 The MCP client should still use its normal repository search, read, and diff
 tools for broad code navigation. Fennara is for the parts that need Godot
@@ -12,12 +14,22 @@ generated Fennara block in `AGENTS.md`. Agents should read that project guidance
 before doing Godot-specific work. The live MCP tool schemas remain the exact
 source of truth for arguments, limits, and result fields.
 
+## Tool Surfaces
+
+| Surface | Tools |
+| --- | --- |
+| External MCP apps | `fennara_status` and the 12 Godot tools in the table below |
+| Built-in Fennara chat | The same 12 Godot tools, plus `read_file` and `exec_command` |
+
+> [!NOTE]
+> `fennara_status` belongs to the external MCP server. The built-in chat already
+> receives connection and project status from the local daemon.
+
 ## External MCP Tools
 
 | Tool | Use It For |
 | --- | --- |
-| `fennara_status` | Check the active Godot project, daemon bridge, app-data paths, local runtime state, chat/webview support, and available MCP tools. |
-| `read_file` | Read project-scoped text files and selected images through Godot path normalization and project boundaries. |
+| `fennara_status` | Check daemon and Godot connectivity, the active project, connected editors, versions, rendering context, and advertised Godot tools. |
 | `get_scene_tree` | Inspect real scene node structure, node types, scripts, and instanced subscenes before using node paths. |
 | `get_node_properties` | Read properties changed from defaults for up to 5 scene nodes, including recursive SubResource summaries. |
 | `get_class_info` | Look up real Godot class methods, properties, signals, enums, constants, inheritance, and docs before writing Godot API code. |
@@ -31,13 +43,19 @@ source of truth for arguments, limits, and result fields.
 | `runtime_script` | Run a small GDScript probe or input-driver inside an active managed runtime session. |
 | `scrape_editor` | Read a narrow Godot editor debugger snapshot when the user manually ran a scene in the editor. |
 
-These are the tools exposed to external MCP clients through the local
-`fennara-mcp` process.
+These are the tools exposed through the local `fennara-mcp` process. External
+MCP apps should use their own file readers and repository search tools for normal
+source navigation.
 
 ## Built-In Chat Tool Use
 
-The in-editor Fennara chat uses the same local daemon and can call the same
-Godot-side tools, including `read_file`.
+The in-editor Fennara chat uses the same local daemon and can call the 12
+Godot-side tools listed above. It also provides two chat-only tools:
+
+| Tool | Use It For |
+| --- | --- |
+| `read_file` | Read project-scoped text files and selected images through Godot path normalization and project boundaries. |
+| `exec_command` | Run one non-interactive shell command inside the active project root. |
 
 It does not use the external MCP app's model account. Claude Code, Codex,
 Cursor, Gemini, and other MCP clients use their own model setup when they call
@@ -74,11 +92,10 @@ also writes a daemon-side raw log and result envelope under Fennara app data so
 older compacted chat history can point to exact stdout/stderr without replaying
 large command output into model context.
 
-The difference is presentation, not tool identity. External MCP clients receive
-compact markdown tool results over MCP. The built-in chat may add UI-specific
-handling around the same raw results, such as showing image previews from
-`read_file`, collapsing large output, or attaching screenshots/image context to
-the model request.
+For shared Godot tools, the difference is presentation. External MCP clients
+receive compact Markdown results over MCP. The built-in chat may add UI-specific
+handling, such as collapsing large output or attaching screenshots and image
+context to the model request.
 
 ### Selected Script Context
 
@@ -108,7 +125,7 @@ repository reading/search when Godot feedback is not needed.
 
 ## Normal Workflow
 
-For most tasks, use tools in this order:
+For most external MCP tasks, use tools in this order:
 
 ```text
 fennara_status
@@ -118,13 +135,22 @@ run diagnostics or validation
 use runtime tools or screenshots when behavior/visuals matter
 ```
 
+The built-in chat already receives project connection context, so it begins at
+the inspection step instead of calling `fennara_status`.
+
 ## Connection
 
 ### `fennara_status`
 
 Use this first when the MCP client is not sure which Godot project is connected.
-It reports the active project, Godot/addon bridge reachability, app-data paths,
-daemon/runtime state, local chat/webview support, and available Fennara tools.
+It reports daemon and Godot bridge reachability, the active project, connected
+editors, Godot and addon versions, rendering context, and the tools advertised
+by each connected editor.
+
+The editor advertisement describes the Godot bridge and currently includes
+`read_file`, which the built-in chat can use. For an external MCP app, the
+**External MCP Tools** table above and the live MCP `tools/list` response are
+the callable surface.
 
 Example prompt:
 
@@ -134,7 +160,7 @@ Use Fennara MCP to run fennara_status and tell me which Godot project is connect
 
 ## Inspection
 
-### `read_file`
+### `read_file` (Built-In Chat)
 
 Use this when Godot-side path normalization or image handling matters. It is
 project-scoped and accepts Godot-style paths such as `res://scripts/player.gd`.
