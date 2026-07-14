@@ -3,6 +3,7 @@
 #include "fennara/app_paths.hpp"
 #include "fennara/control_auth.hpp"
 #include "fennara/logger.hpp"
+#include "fennara/setup/first_run_setup.hpp"
 #include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/classes/json.hpp>
@@ -156,6 +157,10 @@ void FennaraLocalBridge::_exit_tree() {
 }
 
 void FennaraLocalBridge::_connect_socket() {
+    if (!installed_components_match_addon()) {
+        _reconnect_timer = RECONNECT_DELAY_SECONDS;
+        return;
+    }
     if (_ws.is_valid()) {
         godot::WebSocketPeer::State state = _ws->get_ready_state();
         if (state == godot::WebSocketPeer::STATE_OPEN || state == godot::WebSocketPeer::STATE_CONNECTING) {

@@ -37,10 +37,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             options.channel.as_deref(),
         )?;
         let layout = crate::app_layout::AppLayout::detect()?;
-        if active_version(&layout).as_deref() != Some(existing.version.as_str()) {
-            daemon_setup::ensure_switch_available(&layout, Some(&project_dir))
-                .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
-        }
+        prepare_version_switch(&layout, &project_dir, &existing.version)?;
         return existing_addon_install::run(&project_dir, existing, options.version.as_deref());
     }
     if addon_dir.exists() {
@@ -76,10 +73,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
                 options.channel.as_deref(),
             )?;
             let layout = crate::app_layout::AppLayout::detect()?;
-            if active_version(&layout).as_deref() != Some(resolved.version()) {
-                daemon_setup::ensure_switch_available(&layout, Some(&project_dir))
-                    .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
-            }
+            prepare_version_switch(&layout, &project_dir, resolved.version())?;
             let package = release_package::ensure_resolved_package(resolved)?;
             (package.version, package.addon_dir)
         }
@@ -97,6 +91,19 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     webview_prereq::warn_for_current_platform()?;
     println!("next: run `fennara update` inside this project when a new release is available");
     Ok(())
+}
+
+fn prepare_version_switch(
+    layout: &crate::app_layout::AppLayout,
+    project_dir: &Path,
+    target_version: &str,
+) -> Result<(), String> {
+    if active_version(layout).as_deref() == Some(target_version) {
+        return Ok(());
+    }
+    daemon_setup::ensure_switch_available(layout, Some(project_dir))
+        .and_then(|()| daemon_setup::shutdown_if_running(layout))
+        .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))
 }
 
 fn active_version(layout: &crate::app_layout::AppLayout) -> Option<String> {
