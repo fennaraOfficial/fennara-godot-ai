@@ -60,7 +60,6 @@ std::vector<std::string> split(const std::string &value, char delimiter) {
 }
 
 std::optional<Version> parse(godot::String input) {
-    input = normalize(input);
     const std::string raw = input.utf8().get_data();
     if (raw.empty()) {
         return std::nullopt;

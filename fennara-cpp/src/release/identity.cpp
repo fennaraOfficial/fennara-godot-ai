@@ -69,7 +69,10 @@ std::optional<Identity> parse(const godot::Dictionary &value,
                               const godot::String &expected_version,
                               godot::String &error) {
     Identity identity;
-    if ((int64_t)value.get("schema_version", 0) != 1) {
+    const godot::Variant schema_version = value.get("schema_version", godot::Variant());
+    const godot::Variant::Type schema_type = schema_version.get_type();
+    if ((schema_type != godot::Variant::INT && schema_type != godot::Variant::FLOAT) ||
+        (double)schema_version != 1.0) {
         error = "The addon release identity uses an unsupported schema.";
         return std::nullopt;
     }

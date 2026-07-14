@@ -188,7 +188,7 @@ manifest whenever the release publishes one. The manifest records:
 - platform-specific shared runtime assets, currently Linux CEF
 
 The current manifest generator and release workflows use
-`minimum_cli_version: 0.3.3` by default. Normal package layout or asset name
+`minimum_cli_version: 0.3.8` by default. Normal package layout or asset name
 changes should be handled by manifest data, not by changing the outer CLI.
 Raise `minimum_cli_version` only when a release needs a new manifest schema or
 install primitive that older CLIs truly cannot perform.
@@ -274,6 +274,11 @@ The stable Release workflow updates that release in place and fails if it is
 missing or immutable. Exact stable and staging releases are created as drafts,
 receive all assets before publication, and must pass `gh release verify` after
 publication.
+
+The stable and staging publication jobs use the `RELEASE_ADMIN_TOKEN` repository
+secret only for the immutable-release preflight. Configure it as a fine-grained
+token with repository Administration read access. Asset publication continues
+to use the job-scoped `GITHUB_TOKEN` with contents write access.
 
 Staging-capable and stable release workflows use `minimum_cli_version: 0.3.8`.
 Channel handoff, exact-target preservation across CLI replacement, and safe

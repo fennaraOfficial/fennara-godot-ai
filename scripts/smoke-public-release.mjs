@@ -1,12 +1,17 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { requireDescendantPath } from "./staging-validation-files.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const repository = requiredArg("repository");
 const releaseTag = requiredArg("release-tag");
 const expectedDir = path.resolve(requiredArg("expected-dir"));
-const downloadDir = path.resolve(requiredArg("download-dir"));
+const downloadDir = requireDescendantPath(
+  process.env.RUNNER_TEMP,
+  requiredArg("download-dir"),
+  "--download-dir",
+);
 const METADATA_TIMEOUT_MS = 30_000;
 const ASSET_TIMEOUT_MS = 60_000;
 

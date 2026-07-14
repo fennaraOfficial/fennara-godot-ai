@@ -96,3 +96,19 @@ test("advances a channel monotonically and makes exact retries idempotent", () =
     /refusing to move pr-101 backward/,
   );
 });
+
+test("rejects same-sequence channel pointers with different provenance", () => {
+  const candidate = createStagingCandidate({
+    baseVersion: "0.3.9",
+    pullRequest: "101",
+    candidateNumber: "1",
+    sourceCommit: SOURCE_COMMIT,
+    sourceRepository: "fennaraOfficial/fennara-godot-ai",
+  });
+  const current = createChannelPointer(candidate, "1".repeat(64));
+  const conflicting = createChannelPointer(candidate, "2".repeat(64));
+  assert.throws(
+    () => decideChannelAdvance(current, conflicting),
+    /already exists with different provenance/,
+  );
+});

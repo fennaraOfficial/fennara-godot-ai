@@ -170,13 +170,21 @@ fn resolve_exact_target(request: &str) -> Result<String, String> {
         return Ok(request.to_string());
     }
     let release = release_client::fetch_release(request)?;
+    operation::set_component("release_track", resolved_release_track(&release))?;
     if let Some(pointer) = release.channel_pointer.as_ref() {
-        operation::set_component("release_track", "staging")?;
         operation::set_component("release_channel", &pointer.channel)?;
         operation::set_component("source_commit", &pointer.source_commit)?;
         return Ok(pointer.version.clone());
     }
     exact_version_from_stable_release(&release)
+}
+
+pub(crate) fn resolved_release_track(release: &release_client::Release) -> &'static str {
+    if release.channel_pointer.is_some() {
+        "staging"
+    } else {
+        "stable"
+    }
 }
 
 fn exact_version_from_stable_release(release: &release_client::Release) -> Result<String, String> {

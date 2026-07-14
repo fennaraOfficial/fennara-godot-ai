@@ -5,10 +5,10 @@ import {
   validatePlatformArchives,
   validateReleaseManifest,
 } from "./staging-release-validation.mjs";
-import { readJson } from "./staging-validation-files.mjs";
+import { parseArgs, readJson } from "./staging-validation-files.mjs";
 import { validateStagingCandidate } from "./staging-candidate.mjs";
 
-const args = parseArgs(process.argv.slice(2));
+const args = parseArgs(process.argv.slice(2), ["bundle"]);
 const root = path.resolve(requiredArg("bundle"));
 const assetsDir = path.join(root, "release-assets");
 const candidate = validateStagingCandidate(readJson(path.join(root, "metadata", "candidate.json")));
@@ -25,19 +25,6 @@ validateAddonArchive(
 );
 validateLinuxCefArchive(assetsDir, linuxCef);
 console.log(`Validated publish bundle ${candidate.version}`);
-
-function parseArgs(rawArgs) {
-  const parsed = {};
-  for (let index = 0; index < rawArgs.length; index += 2) {
-    const option = rawArgs[index];
-    const value = rawArgs[index + 1];
-    if (!option?.startsWith("--") || value === undefined) {
-      throw new Error(`Invalid argument ${JSON.stringify(option)}`);
-    }
-    parsed[option.slice(2)] = value;
-  }
-  return parsed;
-}
 
 function requiredArg(name) {
   if (!args[name]) {

@@ -18,13 +18,20 @@ test("stable publication reconciles matching drafts before immutable promotion",
 });
 
 test("latest promotion verifies exact bytes and moves the tag last", () => {
-  const latestUpload = workflow.indexOf('gh release upload latest "${promotion_assets[@]}"');
-  const latestVerify = workflow.indexOf('--actual-dir "${latest_assets_dir}"');
-  const latestEdit = workflow.indexOf("gh release edit latest");
-  const tagPush = workflow.indexOf("git push --force origin refs/tags/latest");
+  const publishStep = namedStep(jobBlock(workflow, "publish"), "Publish release");
+  const latestUpload = publishStep.indexOf('gh release upload latest "${promotion_assets[@]}"');
+  const latestVerify = publishStep.indexOf('--actual-dir "${latest_assets_dir}"');
+  const latestEdit = publishStep.indexOf("gh release edit latest");
+  const tagPush = publishStep.indexOf("git push --force origin refs/tags/latest");
   assert.ok(
     latestUpload > 0 && latestUpload < latestVerify && latestVerify < latestEdit && latestEdit < tagPush,
   );
+});
+
+test("immutable-release preflight uses an administration token", () => {
+  const preflight = namedStep(jobBlock(workflow, "publish"), "Require immutable GitHub releases");
+  assert.match(preflight, /GH_TOKEN: \$\{\{ secrets\.RELEASE_ADMIN_TOKEN \}\}/);
+  assert.match(preflight, /RELEASE_ADMIN_TOKEN must provide repository Administration read access/);
 });
 
 function jobBlock(source, jobName) {

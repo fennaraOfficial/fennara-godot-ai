@@ -15,7 +15,7 @@ test("dry runs cannot enter the publication job", () => {
 
 test("candidate builds are pinned and isolated per pull request", () => {
   assert.match(workflow, /group: staging-release-pr-\$\{\{ inputs\.pull_request \}\}/);
-  assert.match(workflow, /cancel-in-progress: true/);
+  assert.match(workflow, /cancel-in-progress: false/);
   const checkouts = checkoutSteps(workflow);
   assert.ok(checkouts.length >= 2, "workflow must contain trusted and candidate checkouts");
   for (const checkout of checkouts) {
@@ -59,6 +59,13 @@ test("shell commands do not interpolate resolve outputs directly", () => {
   }
 });
 
+test("immutable-release preflight uses an administration token", () => {
+  assert.match(
+    workflow,
+    /name: Require immutable GitHub releases[\s\S]*?GH_TOKEN: \$\{\{ secrets\.RELEASE_ADMIN_TOKEN \}\}/,
+  );
+});
+
 function runBlocks(source) {
   const lines = source.split(/\r?\n/);
   const blocks = [];
@@ -84,7 +91,7 @@ function runBlocks(source) {
 
 function checkoutSteps(source) {
   return source
-    .split(/(?=^      - name:)/m)
+    .split(/(?=^      - )/m)
     .filter((block) => /uses: actions\/checkout@/.test(block));
 }
 

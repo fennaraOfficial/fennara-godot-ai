@@ -285,26 +285,8 @@ fn validate_resolved_channel(
     version: &str,
     requested_channel: Option<&str>,
 ) -> Result<(), String> {
-    if let Some(channel) = requested_channel {
-        let actual = identity
-            .and_then(|value| value.channel.as_deref())
-            .ok_or_else(|| {
-                operation::failure(
-                    FailureClass::ProjectInvalid,
-                    format!("--channel requested {channel}, but the addon is on the stable track"),
-                )
-            })?;
-        if !matches!(
-            identity.map(|value| &value.track),
-            Some(ReleaseTrack::Staging)
-        ) || actual != channel
-        {
-            return Err(operation::failure(
-                FailureClass::ProjectInvalid,
-                format!("--channel requested {channel}, but the addon belongs to {actual}"),
-            ));
-        }
-    }
+    validate_channel_selection(identity, requested_channel)
+        .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
     operation::set_component(
         "release_track",
         match identity.map(|value| &value.track) {
@@ -319,6 +301,39 @@ fn validate_resolved_channel(
     }
     if let Some(source_commit) = identity.and_then(|value| value.source_commit.as_deref()) {
         operation::set_component("source_commit", source_commit)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_channel_selection(
+    identity: Option<&ReleaseIdentity>,
+    requested_channel: Option<&str>,
+) -> Result<(), String> {
+    if matches!(
+        identity.map(|value| &value.track),
+        Some(ReleaseTrack::Staging)
+    ) && identity
+        .and_then(|value| value.channel.as_deref())
+        .is_none()
+    {
+        return Err("staging addon release identity is missing its channel".into());
+    }
+    let Some(channel) = requested_channel else {
+        return Ok(());
+    };
+    let actual = identity
+        .and_then(|value| value.channel.as_deref())
+        .ok_or_else(|| {
+            format!("--channel requested {channel}, but the addon is on the stable track")
+        })?;
+    if !matches!(
+        identity.map(|value| &value.track),
+        Some(ReleaseTrack::Staging)
+    ) || actual != channel
+    {
+        return Err(format!(
+            "--channel requested {channel}, but the addon belongs to {actual}"
+        ));
     }
     Ok(())
 }

@@ -126,7 +126,11 @@ This is the quick map for contributors and coding agents working in this reposit
 | `scripts/check-version.mjs` | Checks version sync. |
 | `scripts/release-identity.mjs` | Shared Node validation and generation for SemVer release identity and per-PR staging pointers. |
 | `scripts/staging-candidate.mjs` | Trusted staging candidate identity generation and monotonic per-PR pointer decisions. |
-| `scripts/staging-*-validation.mjs` | Focused staging addon, archive, manifest, and publication-bundle validation. |
+| `scripts/staging-*-validation.mjs` / `scripts/staging-validation-files.mjs` | Focused staging addon, archive, manifest, shared filesystem, and publication-bundle validation. |
+| `scripts/validate-staging-build.mjs` / `scripts/validate-staging-publish-bundle.mjs` | Strict validation entrypoints for untrusted build outputs and the trusted publication bundle. |
+| `scripts/check-staging-channel-advance.mjs` | Applies monotonic and provenance checks before a staging channel pointer advances. |
+| `scripts/verify-published-assets.mjs` / `scripts/smoke-public-release.mjs` | Verify published asset bytes and public download behavior before pointer promotion. |
+| `scripts/release-targets.mjs` | Defines supported platform release targets and their packaged asset names. |
 | `scripts/write-staging-candidate.mjs` / `scripts/write-staging-pointer.mjs` | Write the frozen candidate identity and its small channel pointer. |
 | `scripts/sync-chat-ui.mjs` | Copies the buildless chat UI source into the addon payload. |
 | `scripts/sync-runtime.mjs` | Copies repo-root runtime helper source into the addon payload. |

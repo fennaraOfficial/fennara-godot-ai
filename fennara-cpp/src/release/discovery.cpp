@@ -61,7 +61,7 @@ HttpResponse request_github(const godot::String &path, const godot::String &acce
     godot::PackedByteArray response_body;
     godot::Ref<godot::HTTPClient> http;
     http.instantiate();
-    if (http->connect_to_host("https://api.github.com", 443,
+    if (http->connect_to_host("api.github.com", 443,
                               godot::TLSOptions::client()) != godot::OK) {
         result.error = "Failed to connect to GitHub.";
         return result;
@@ -75,6 +75,7 @@ HttpResponse request_github(const godot::String &path, const godot::String &acce
     const uint64_t deadline =
         godot::Time::get_singleton()->get_ticks_msec() + static_cast<uint64_t>(timeout_ms);
     bool sent = false;
+    bool response_complete = false;
     while (godot::Time::get_singleton()->get_ticks_msec() < deadline) {
         if (is_cancelled(cancelled)) {
             result.cancelled = true;
@@ -103,13 +104,21 @@ HttpResponse request_github(const godot::String &path, const godot::String &acce
             }
             if (http->get_response_body_length() >= 0 &&
                 response_body.size() >= http->get_response_body_length()) {
+                response_complete = true;
                 break;
             }
         }
+        if (sent && http->has_response() &&
+            (http->get_response_body_length() == 0 ||
+             status == godot::HTTPClient::STATUS_CONNECTED)) {
+            response_complete = true;
+            break;
+        }
         godot::OS::get_singleton()->delay_usec(10000);
     }
-    if (!http->has_response()) {
-        result.error = "Timed out waiting for GitHub.";
+    if (!response_complete) {
+        result.error = http->has_response() ? "Timed out reading the GitHub response."
+                                            : "Timed out waiting for GitHub.";
         return result;
     }
     result.body = response_body.get_string_from_utf8();

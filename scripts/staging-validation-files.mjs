@@ -5,6 +5,42 @@ import { spawnSync } from "node:child_process";
 
 let cachedPython;
 
+export function parseArgs(rawArgs, allowedOptions) {
+  const allowed = new Set(allowedOptions);
+  const parsed = {};
+  for (let index = 0; index < rawArgs.length; index += 2) {
+    const option = rawArgs[index];
+    const value = rawArgs[index + 1];
+    if (!option?.startsWith("--") || value === undefined) {
+      throw new Error(`Invalid argument ${JSON.stringify(option)}`);
+    }
+    const name = option.slice(2);
+    if (!allowed.has(name)) {
+      throw new Error(`Unknown option ${option}`);
+    }
+    if (parsed[name] !== undefined) {
+      throw new Error(`Duplicate option ${option}`);
+    }
+    parsed[name] = value;
+  }
+  return parsed;
+}
+
+export function requireDescendantPath(root, candidate, label) {
+  const resolvedRoot = path.resolve(requiredString(root, "RUNNER_TEMP"));
+  const resolvedCandidate = path.resolve(requiredString(candidate, label));
+  const relative = path.relative(resolvedRoot, resolvedCandidate);
+  if (
+    !relative ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    throw new Error(`${label} must be inside RUNNER_TEMP without naming RUNNER_TEMP itself`);
+  }
+  return resolvedCandidate;
+}
+
 export function inspectZip(file, versionEntry, releaseEntry) {
   assertFile(file, "release archive");
   const python = resolvePython();

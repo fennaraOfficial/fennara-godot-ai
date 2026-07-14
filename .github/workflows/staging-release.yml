@@ -32,7 +32,7 @@ permissions:
 
 concurrency:
   group: staging-release-pr-${{ inputs.pull_request }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   resolve:
@@ -526,9 +526,13 @@ jobs:
       - name: Require immutable GitHub releases
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_ADMIN_TOKEN }}
         run: |
           set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error::RELEASE_ADMIN_TOKEN must provide repository Administration read access for the immutable-release preflight."
+            exit 1
+          fi
           if ! gh api \
             -H "X-GitHub-Api-Version: 2026-03-10" \
             "repos/${GITHUB_REPOSITORY}/immutable-releases" >/dev/null 2>&1; then

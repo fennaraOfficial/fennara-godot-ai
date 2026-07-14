@@ -3,7 +3,11 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { requiredSafeFileName } from "../staging-validation-files.mjs";
+import {
+  parseArgs,
+  requireDescendantPath,
+  requiredSafeFileName,
+} from "../staging-validation-files.mjs";
 
 test("release validation accepts only plain asset file names", () => {
   assert.equal(requiredSafeFileName("fennara-release.zip", "asset"), "fennara-release.zip");
@@ -27,4 +31,28 @@ test("staging pointer writer rejects unknown and duplicate options", () => {
   );
   assert.notEqual(duplicate.status, 0);
   assert.match(duplicate.stderr, /Duplicate option --candidate/);
+});
+
+test("shared staging argument parsing rejects unknown and duplicate options", () => {
+  assert.deepEqual(parseArgs(["--bundle", "candidate"], ["bundle"]), {
+    bundle: "candidate",
+  });
+  assert.throws(() => parseArgs(["--unknown", "value"], ["bundle"]), /Unknown option/);
+  assert.throws(
+    () => parseArgs(["--bundle", "one", "--bundle", "two"], ["bundle"]),
+    /Duplicate option/,
+  );
+});
+
+test("recursive release smoke output must stay below RUNNER_TEMP", () => {
+  const root = fileURLToPath(new URL("../../temp/smoke-root/", import.meta.url));
+  assert.equal(
+    requireDescendantPath(root, `${root}/candidate`, "--download-dir"),
+    fileURLToPath(new URL("../../temp/smoke-root/candidate", import.meta.url)),
+  );
+  assert.throws(() => requireDescendantPath(root, root, "--download-dir"), /inside RUNNER_TEMP/);
+  assert.throws(
+    () => requireDescendantPath(root, `${root}/../outside`, "--download-dir"),
+    /inside RUNNER_TEMP/,
+  );
 });
