@@ -8,15 +8,11 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseReleaseVersion, validateReleaseIdentity } from "./release-identity.mjs";
+import { RELEASE_TARGETS } from "./release-targets.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_MINIMUM_CLI_VERSION = "0.3.3";
-const RELEASE_PLATFORMS = [
-  { key: "windows-x86_64", platform: "windows", arch: "x86_64" },
-  { key: "linux-x86_64", platform: "linux", arch: "x86_64" },
-  { key: "macos-arm64", platform: "macos", arch: "arm64" },
-];
-
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   printHelp();
   process.exit(0);
@@ -34,6 +30,10 @@ const linuxCefManifestPath = path.resolve(
   args["linux-cef-manifest"] ?? path.join("local", "webview-runtimes", "linux-cef.json"),
 );
 const minimumCliVersion = args["minimum-cli-version"] ?? DEFAULT_MINIMUM_CLI_VERSION;
+const releaseIdentityPath = path.resolve(
+  root,
+  args["release-identity"] ?? path.join("godot_demo", "addons", "fennara", "release.json"),
+);
 
 validateVersion(version, "version");
 validateVersion(minimumCliVersion, "minimum CLI version");
@@ -49,13 +49,14 @@ writeFileSync(outPath, `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`Created ${path.relative(root, outPath)}`);
 
 function buildManifest() {
+  const release = readReleaseIdentity();
   const assets = {
     cli: {},
     local: {},
     addon: assetRecord(`fennara-release-addon-v${version}.zip`),
   };
 
-  for (const target of RELEASE_PLATFORMS) {
+  for (const target of RELEASE_TARGETS) {
     assets.cli[target.key] = assetRecord(
       `fennara-cli-${target.platform}-${target.arch}-v${version}.zip`,
       target,
@@ -75,11 +76,17 @@ function buildManifest() {
   return {
     schema_version: 1,
     version,
+    release,
     minimum_cli_version: minimumCliVersion,
     install_primitives: installPrimitives,
     assets,
     shared_runtimes: sharedRuntimes,
   };
+}
+
+function readReleaseIdentity() {
+  const identity = JSON.parse(readFileSync(releaseIdentityPath, "utf8"));
+  return validateReleaseIdentity(identity, version);
 }
 
 function sharedRuntimeRecords() {
@@ -186,8 +193,9 @@ function requiredArray(value, label) {
 }
 
 function validateVersion(value, label) {
-  if (!/^\d+\.\d+\.\d+$/.test(value)) {
-    throw new Error(`Invalid ${label}: ${value}`);
+  const parsed = parseReleaseVersion(value, label);
+  if (parsed.build) {
+    throw new Error(`${label} must not contain SemVer build metadata`);
   }
 }
 
@@ -217,11 +225,12 @@ Usage:
   node scripts/write-release-manifest.mjs --assets-dir release-assets --linux-cef-manifest generated-linux-cef-manifest/linux-cef.json
 
 Options:
-  --version <x.y.z>                Release version. Default: VERSION.
+  --version <semver>               Release version. Default: VERSION.
   --assets-dir <dir>               Directory containing release zip assets. Default: release-assets.
                                    Release local/addon assets must use fennara-release-local-* and fennara-release-addon-* names.
   --linux-cef-manifest <path>      Generated enabled Linux CEF manifest. Default: local/webview-runtimes/linux-cef.json.
-  --minimum-cli-version <x.y.z>    Minimum CLI for schema/primitives. Default: ${DEFAULT_MINIMUM_CLI_VERSION}.
+  --release-identity <path>        Release identity JSON. Default: godot_demo/addons/fennara/release.json.
+  --minimum-cli-version <semver>   Minimum CLI for schema/primitives. Default: ${DEFAULT_MINIMUM_CLI_VERSION}.
   --out <path>                     Output manifest path. Default: dist/fennara-release-manifest-v<version>.json.
 `);
 }

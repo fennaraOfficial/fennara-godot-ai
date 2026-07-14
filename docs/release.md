@@ -20,6 +20,11 @@ Releases are manual. Do not publish from pull request workflows.
 
 `VERSION` is the source of truth.
 
+Release tooling accepts SemVer values. Stable releases use `X.Y.Z`. Staging
+candidates use an isolated pull-request prerelease such as
+`0.3.9-pr.101.2`, where `pr-101` is the staging channel and `2` is that
+channel's candidate number.
+
 To bump the repo version:
 
 ```bash
@@ -33,6 +38,21 @@ The script updates:
 - plugin version constants
 - Rust workspace package version under `local/`
 - `local/Cargo.lock`
+
+The addon also carries `addons/fennara/release.json`. Stable identity is
+written automatically by the normal command above. A staging build workspace
+uses the explicit identity inputs:
+
+```bash
+node scripts/set-version.mjs 0.3.9-pr.101.2 \
+  --track staging \
+  --channel pr-101 \
+  --source-commit <full-commit-sha>
+```
+
+The staging version, channel, source commit, and immutable release tag must
+agree. A prerelease addon without this identity is rejected. Existing stable
+addons from before `release.json` continue to default to the stable track.
 
 Check version sync:
 
@@ -168,7 +188,7 @@ manifest whenever the release publishes one. The manifest records:
 - platform-specific shared runtime assets, currently Linux CEF
 
 The current manifest generator and release workflows use
-`minimum_cli_version: 0.3.3` by default. Normal package layout or asset name
+`minimum_cli_version: 0.3.8` by default. Normal package layout or asset name
 changes should be handled by manifest data, not by changing the outer CLI.
 Raise `minimum_cli_version` only when a release needs a new manifest schema or
 install primitive that older CLIs truly cannot perform.
@@ -178,6 +198,91 @@ per-platform `assets.cli` entry to update the installed CLI first, then resume
 the package update with `--no-self-update`. If self-update is not available for
 that release or install location, it should fail before installing packages and
 print a clear instruction to rerun `install.sh` or `install.ps1`.
+
+The optional release identity added to manifest schema 1 does not require a
+minimum CLI increase. Older schema-1 clients ignore unknown fields, while
+staging-aware clients validate the identity when it is present. A future
+release that depends on channel-aware activation or updater handoff must
+revisit the minimum CLI before publication.
+
+## Staging Identity And Discovery Contract
+
+Staging channels are isolated per pull request:
+
+| Value | PR 101 example |
+| --- | --- |
+| Channel | `pr-101` |
+| Candidate version | `0.3.9-pr.101.2` |
+| Immutable release | `v0.3.9-pr.101.2` |
+| Channel ref | `fennara-staging/pr-101` |
+| Pointer file | `fennara-staging-channel-pr-101.json` |
+
+The per-channel Git ref contains only a small pointer file to an immutable
+exact release. Release binaries never live under the moving channel ref. The
+CLI can resolve this pointer with the internal version request
+`channel:pr-101`, then continues using only the exact immutable version.
+
+PR 101 and PR 125 therefore use different release tags and pointer assets.
+Updating one channel cannot redirect testers on the other channel. Publishing
+one channel never changes stable `latest` or another pull request's channel.
+
+## Staging Candidate Workflow
+
+The manual **Staging Release** workflow builds a candidate from the current
+head of an open pull request. Run it from `main` and provide:
+
+| Input | Meaning |
+| --- | --- |
+| `pull_request` | Open pull request to build |
+| `base_version` | Planned stable version, such as `0.3.9` |
+| `candidate` | Increasing candidate number for this pull request |
+| `source_commit` | Optional full SHA that must still be the pull request head |
+| `publish` | Off for artifact-only validation, on to publish the candidate |
+
+The workflow freezes the pull request head SHA before any platform build. The
+Windows, Linux, and macOS jobs check out that exact commit with read-only
+permissions, no persisted Git credentials, no release credentials, and no
+shared dependency caches. Candidate code can produce build artifacts, but it
+cannot publish a GitHub Release.
+
+Trusted repository scripts then validate the candidate identity, exact archive
+inventory, addon contents, platform package layout, release manifest, and every
+SHA-256 value. Publication remains disabled unless `publish` is explicitly
+selected.
+
+When publication is enabled, the trusted final job:
+
+1. Requires GitHub release immutability to be enabled for the repository.
+2. Revalidates the candidate artifacts as data.
+3. Creates a draft, uploads every asset, publishes it as the immutable
+   `v<exact-version>` prerelease, and verifies its release attestation.
+4. Downloads the published assets and compares their names and hashes.
+5. Rejects a backward or conflicting channel change.
+6. Updates the small `fennara-staging/pr-<number>` pointer ref last through a
+   conditional GitHub Contents API write.
+7. Downloads the active pointer and verifies its exact contents.
+
+Runs for one pull request are serialized. Different pull requests use separate
+concurrency groups, release tags, and pointer refs. Retrying the same
+candidate verifies the existing immutable release instead of mixing files into
+it. The workflow never creates, uploads to, or promotes stable `latest`.
+
+GitHub release immutability applies only to releases created after the setting
+is enabled. Fennara intentionally preserves the existing pre-policy `latest`
+release as the one mutable compatibility endpoint used by current installers.
+The stable Release workflow updates that release in place and fails if it is
+missing or immutable. Exact stable and staging releases are created as drafts,
+receive all assets before publication, and must pass `gh release verify` after
+publication.
+
+The stable and staging publication jobs use the `RELEASE_ADMIN_TOKEN` repository
+secret only for the immutable-release preflight. Configure it as a fine-grained
+token with repository Administration read access. Asset publication continues
+to use the job-scoped `GITHUB_TOKEN` with contents write access.
+
+Staging-capable and stable release workflows use `minimum_cli_version: 0.3.8`.
+Channel handoff, exact-target preservation across CLI replacement, and safe
+shared-runtime activation depend on the updater behavior introduced in that CLI.
 
 The shared addon zip contains every built GDExtension binary referenced by `godot_demo/addons/fennara/fennara.gdextension`. Godot loads the matching library for the user's OS and ignores the others.
 

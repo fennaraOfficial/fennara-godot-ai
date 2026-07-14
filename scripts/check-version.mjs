@@ -1,13 +1,28 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseReleaseVersion, validateReleaseIdentity } from "./release-identity.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const version = read("VERSION").trim();
 const failures = [];
 
-if (!/^\d+\.\d+\.\d+$/.test(version)) {
-  failures.push(`VERSION must use x.y.z format, got "${version}"`);
+try {
+  const parsed = parseReleaseVersion(version, "VERSION");
+  if (parsed.build) {
+    failures.push("VERSION must not contain SemVer build metadata");
+  }
+} catch (error) {
+  failures.push(error.message);
+}
+
+try {
+  validateReleaseIdentity(
+    JSON.parse(read("godot_demo/addons/fennara/release.json")),
+    version,
+  );
+} catch (error) {
+  failures.push(`godot_demo/addons/fennara/release.json: ${error.message}`);
 }
 
 expect(

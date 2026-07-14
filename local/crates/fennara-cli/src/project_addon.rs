@@ -1,5 +1,6 @@
 use crate::app_layout::{arch_name, display_path, platform_name};
 use crate::project_install::project_addon_dir;
+use crate::release_identity::ReleaseIdentity;
 use crate::release_manifest::compare_versions;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -44,6 +45,7 @@ pub fn validate(addon_dir: &Path) -> Result<ExistingAddon, String> {
             display_path(&version_path)
         ));
     }
+    ReleaseIdentity::load(addon_dir, &version)?;
 
     let library_path = current_library_path(addon_dir, &manifest_path)?;
     if !library_path.is_file() {
@@ -160,6 +162,28 @@ mod tests {
 
         let error = inspect(&project).unwrap_err();
         assert!(error.contains("missing a readable VERSION"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_addon_identity_that_does_not_match_version() {
+        let root = test_root("identity-version-mismatch");
+        let project = root.join("project");
+        let addon = write_addon(&project, Some("1.2.3"), true);
+        fs::write(
+            addon.join("release.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schema_version": 1,
+                "track": "stable",
+                "version": "1.2.4",
+                "release_tag": "v1.2.4"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let error = inspect(&project).unwrap_err();
+        assert!(error.contains("does not match VERSION"));
         fs::remove_dir_all(root).unwrap();
     }
 

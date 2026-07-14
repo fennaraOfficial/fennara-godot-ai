@@ -157,6 +157,14 @@ void FirstRunSetup::start(const godot::String &next_project_path,
               "The project path or addon version is missing or invalid.");
         return;
     }
+    godot::String identity_error;
+    const std::optional<release_identity::Identity> identity =
+        release_identity::load_addon(addon_version, identity_error);
+    if (!identity.has_value()) {
+        _fail("FEN-SETUP-IDENTITY-INVALID", identity_error);
+        return;
+    }
+    addon_identity = *identity;
     if (!_try_acquire_lock()) {
         if (!has_failed()) {
             step = Step::WaitingForLock;
@@ -256,7 +264,7 @@ void FirstRunSetup::_fail(const godot::String &code, const godot::String &messag
 }
 
 godot::String FirstRunSetup::_release_asset_url(const godot::String &asset_name) const {
-    return godot::String(kReleaseBase) + "/v" + addon_version + "/" + asset_name;
+    return godot::String(kReleaseBase) + "/" + addon_identity.release_tag + "/" + asset_name;
 }
 
 godot::String FirstRunSetup::_platform_key() const {

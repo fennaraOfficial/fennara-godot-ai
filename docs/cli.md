@@ -105,10 +105,13 @@ For a normal terminal update, close Godot for that project and run:
 fennara update --project path/to/project
 ```
 
-The CLI resolves the selected release, self-updates when the release requires a
-newer CLI, verifies the release assets, refreshes the addon and versioned local
-components, updates project guidance, and checks the platform webview
-prerequisite. Use `--version <version>` to select an exact release.
+Without `--version`, the CLI reads the installed addon identity. Stable addons
+resolve stable latest, while staging addons resolve only their `pr-<number>`
+channel. The moving selector is immediately frozen to one exact immutable
+version, including across CLI self-replacement. The CLI then verifies the
+release assets, refreshes the addon and versioned local components, updates
+project guidance, and checks the platform webview prerequisite. Use
+`--version <version>` to select an exact release explicitly.
 
 `--no-self-update` is intended for controlled automation or continuation after
 the CLI has already been replaced. Do not use it to bypass a release's minimum
@@ -126,6 +129,13 @@ Preparation downloads, verifies, and durably stages the addon. It does not
 close Godot, replace the live addon, switch the active runtime manifest, or
 restart the daemon. The Godot dock observes the operation receipt and asks the
 user before starting the detached close, replace, reopen, and validation step.
+The dock passes the exact version it already discovered, so pointer movement
+cannot change an in-progress update.
+
+Fennara supports one active shared runtime version at a time. Activation is
+blocked if another Fennara-enabled Godot editor remains connected to the shared
+daemon. Close the other editor, then retry. The previous local version and
+runtime pointer remain available for recovery without network access.
 
 `--prepare` is a low-level primitive for the Godot integration. Terminal users
 normally use `fennara update` with Godot already closed.
@@ -210,6 +220,13 @@ installed CLI:
 fennara self-update
 fennara self-update --version <version>
 ```
+
+Without `--version`, self-update preserves the active installation track:
+stable uses stable latest, and staging uses only its recorded PR channel.
+
+Staging never crosses into stable automatically. To leave staging deliberately,
+close Godot and run `fennara update --version <stable-version> --project <path>`.
+That exact stable release is validated before the shared active version changes.
 
 Use this when support requests it or when a project update reports that the
 installed CLI is too old to continue safely.

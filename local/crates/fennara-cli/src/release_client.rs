@@ -1,5 +1,8 @@
 use crate::app_layout::display_path;
 use crate::operation::{self, FailureClass, Phase};
+use crate::release_channel::ChannelPointer;
+use crate::release_identity::ReleaseSelector;
+use crate::release_manifest::ReleaseManifest;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::env;
@@ -24,9 +27,16 @@ pub struct ReleaseAsset {
 pub struct Release {
     pub tag: String,
     pub assets: Value,
+    pub(crate) channel_pointer: Option<ChannelPointer>,
 }
 
 impl Release {
+    pub(crate) fn is_channel_release(&self) -> bool {
+        self.channel_pointer.is_some()
+            || crate::release_version::parse_release_version(self.tag.trim_start_matches('v'))
+                .is_ok_and(|version| !version.pre.is_empty())
+    }
+
     pub fn asset(&self, prefix: &str) -> Option<ReleaseAsset> {
         self.asset_by_prefix_suffix(prefix, ".zip")
     }
@@ -73,11 +83,20 @@ pub struct DownloadAsset<'a> {
 }
 
 pub fn fetch_release(version: &str) -> Result<Release, String> {
-    let tag = if version == "latest" {
-        "latest".to_string()
-    } else {
-        format!("v{version}")
-    };
+    let selector = ReleaseSelector::from_version_request(version)?;
+    match &selector {
+        ReleaseSelector::StagingChannel(channel) => {
+            let pointer = crate::release_channel::fetch(channel)?;
+            let mut release = fetch_release_for_selector(&pointer.exact_selector()?)?;
+            release.channel_pointer = Some(pointer);
+            Ok(release)
+        }
+        _ => fetch_release_for_selector(&selector),
+    }
+}
+
+pub(crate) fn fetch_release_for_selector(selector: &ReleaseSelector) -> Result<Release, String> {
+    let tag = selector.github_tag();
     let url = format!("https://api.github.com/repos/{REPO}/releases/tags/{tag}");
     operation::phase(Phase::Checking, "Fetching release metadata")?;
     println!("release: fetching metadata from {url}");
@@ -105,10 +124,71 @@ pub fn fetch_release(version: &str) -> Result<Release, String> {
             .unwrap_or(&tag)
             .to_string(),
         assets: value.get("assets").cloned().unwrap_or(Value::Null),
+        channel_pointer: None,
     };
     println!("release: {}", release.tag);
     operation::set_component("release", release.tag.trim_start_matches('v'))?;
     Ok(release)
+}
+
+pub fn download_release_manifest(
+    release: &Release,
+    asset: &ReleaseAsset,
+) -> Result<ReleaseManifest, String> {
+    let (bytes, actual_sha256) = download_bytes_with_hash(&asset.url, &asset.name)?;
+    parse_release_manifest(release, &bytes, &actual_sha256, &asset.name)
+}
+
+pub(crate) fn parse_release_manifest(
+    release: &Release,
+    bytes: &[u8],
+    actual_sha256: &str,
+    label: &str,
+) -> Result<ReleaseManifest, String> {
+    if let Some(pointer) = release.channel_pointer.as_ref() {
+        verify_expected_hash(label, &pointer.release_manifest_sha256, actual_sha256)?;
+    }
+    let manifest = ReleaseManifest::parse(bytes)
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    manifest
+        .release_identity()
+        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    if let Some(pointer) = release.channel_pointer.as_ref() {
+        pointer
+            .validate_manifest_identity(&manifest)
+            .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    }
+    Ok(manifest)
+}
+
+pub(crate) fn download_github_contents(reference: &str, label: &str) -> Result<Vec<u8>, String> {
+    let encoded_reference = reference.replace('/', "%2F");
+    let api_url =
+        format!("https://api.github.com/repos/{REPO}/contents/{label}?ref={encoded_reference}");
+    operation::select_asset(label, None)?;
+    operation::phase(Phase::Downloading, &format!("Downloading {label}"))?;
+    let response = http_agent()
+        .get(&api_url)
+        .set("Accept", "application/vnd.github.raw+json")
+        .set("User-Agent", "fennara-cli")
+        .call()
+        .map_err(|error| {
+            operation::failure(
+                FailureClass::AssetDownload,
+                format!("failed to download {label} from staging channel {reference}: {error}"),
+            )
+        })?;
+    let mut bytes = Vec::new();
+    response
+        .into_reader()
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            operation::failure(
+                FailureClass::AssetDownload,
+                format!("failed to read {label} from staging channel {reference}: {error}"),
+            )
+        })?;
+    Ok(bytes)
 }
 
 pub fn download_zip_to_dir(asset: &DownloadAsset<'_>, target: &Path) -> Result<(), String> {
@@ -146,22 +226,28 @@ pub(crate) fn verify_download_hash(
     actual_sha256: &str,
 ) -> Result<(), String> {
     if let Some(expected_sha256) = asset.expected_sha256 {
-        operation::phase(Phase::Verifying, &format!("Verifying {}", asset.label))?;
-        if !actual_sha256.eq_ignore_ascii_case(expected_sha256) {
-            operation::record_asset_hash(asset.label, actual_sha256, Some(false))?;
-            return Err(operation::failure(
-                FailureClass::HashMismatch,
-                format!(
-                    "{} sha256 mismatch: expected {expected_sha256}, got {actual_sha256}",
-                    asset.label
-                ),
-            ));
-        }
-        operation::record_asset_hash(asset.label, actual_sha256, Some(true))?;
-        println!("sha256: verified {}", asset.label);
+        verify_expected_hash(asset.label, expected_sha256, actual_sha256)?;
     } else {
         operation::record_asset_hash(asset.label, actual_sha256, None)?;
     }
+    Ok(())
+}
+
+fn verify_expected_hash(
+    label: &str,
+    expected_sha256: &str,
+    actual_sha256: &str,
+) -> Result<(), String> {
+    operation::phase(Phase::Verifying, &format!("Verifying {label}"))?;
+    if !actual_sha256.eq_ignore_ascii_case(expected_sha256) {
+        operation::record_asset_hash(label, actual_sha256, Some(false))?;
+        return Err(operation::failure(
+            FailureClass::HashMismatch,
+            format!("{label} sha256 mismatch: expected {expected_sha256}, got {actual_sha256}"),
+        ));
+    }
+    operation::record_asset_hash(label, actual_sha256, Some(true))?;
+    println!("sha256: verified {label}");
     Ok(())
 }
 
@@ -222,11 +308,9 @@ fn version_from_asset_name(name: &str) -> Option<String> {
     let marker = "-v";
     let start = name.rfind(marker)? + marker.len();
     let version = name.get(start..)?.strip_suffix(".zip")?;
-    if version.split('.').count() == 3 && version.chars().all(|c| c.is_ascii_digit() || c == '.') {
-        Some(version.to_string())
-    } else {
-        None
-    }
+    crate::release_version::parse_release_version(version)
+        .ok()
+        .map(|_| version.to_string())
 }
 
 fn http_agent() -> ureq::Agent {

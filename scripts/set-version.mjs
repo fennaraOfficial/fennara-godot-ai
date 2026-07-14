@@ -2,17 +2,50 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createReleaseIdentity, parseReleaseVersion } from "./release-identity.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const version = process.argv[2];
+let args;
+try {
+  args = parseArgs(process.argv.slice(3));
+} catch (error) {
+  console.error(error.message);
+  printUsage();
+  process.exit(1);
+}
 
-if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
-  console.error("Usage: node scripts/set-version.mjs <x.y.z>");
+try {
+  const parsed = parseReleaseVersion(version ?? "");
+  if (parsed.build) {
+    throw new Error("release versions must not contain SemVer build metadata");
+  }
+} catch (error) {
+  console.error(error.message);
+  printUsage();
+  process.exit(1);
+}
+
+let identity;
+try {
+  identity = createReleaseIdentity({
+    version,
+    track: args.track ?? "stable",
+    channel: args.channel,
+    sourceCommit: args["source-commit"],
+  });
+} catch (error) {
+  console.error(error.message);
+  printUsage();
   process.exit(1);
 }
 
 write("VERSION", `${version}\n`);
 write("godot_demo/addons/fennara/VERSION", `${version}\n`);
+write(
+  "godot_demo/addons/fennara/release.json",
+  `${JSON.stringify(identity, null, 2)}\n`,
+);
 
 update("local/Cargo.toml", (text) => {
   if (/\[workspace\.package\][\s\S]*?version\s*=/.test(text)) {
@@ -74,4 +107,31 @@ function run(command, args) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+function parseArgs(rawArgs) {
+  const parsed = {};
+  const allowed = new Set(["track", "channel", "source-commit"]);
+  for (let index = 0; index < rawArgs.length; index += 1) {
+    const arg = rawArgs[index];
+    if (!arg.startsWith("--") || !rawArgs[index + 1]?.length) {
+      throw new Error(`Invalid set-version argument: ${arg}`);
+    }
+    const name = arg.slice(2);
+    if (!allowed.has(name)) {
+      throw new Error(`Unknown set-version option: ${arg}`);
+    }
+    if (parsed[name] !== undefined) {
+      throw new Error(`Duplicate set-version option: ${arg}`);
+    }
+    parsed[name] = rawArgs[index + 1];
+    index += 1;
+  }
+  return parsed;
+}
+
+function printUsage() {
+  console.error(
+    "Usage: node scripts/set-version.mjs <semver> [--track staging --channel pr-<number> --source-commit <full-sha>]",
+  );
 }

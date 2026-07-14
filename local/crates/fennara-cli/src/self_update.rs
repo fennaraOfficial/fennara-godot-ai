@@ -1,8 +1,9 @@
 use crate::VERSION;
-use crate::app_layout::{AppLayout, binary_name, display_path};
+use crate::app_layout::{AppLayout, binary_name, display_path, read_current_manifest};
 use crate::operation::{self, FailureClass, Phase};
 use crate::release_client::{self, DownloadAsset};
-use crate::release_manifest::{ReleaseManifest, compare_versions};
+use crate::release_identity::ReleaseSelector;
+use crate::release_manifest::compare_versions;
 use std::cmp::Ordering;
 use std::env;
 use std::fs::{self, File, OpenOptions};
@@ -26,7 +27,13 @@ pub enum StartResult {
 
 pub fn run(args: Vec<&str>) -> Result<(), String> {
     let options = SelfUpdateOptions::parse(args)?;
-    match start(&options.version, Vec::new())? {
+    let layout = AppLayout::detect()?;
+    let version = if options.version.is_empty() {
+        active_release_request(&layout)?
+    } else {
+        options.version
+    };
+    match start(&version, Vec::new())? {
         StartResult::Started => Ok(()),
         StartResult::AlreadyCurrent => {
             println!("Fennara CLI is already up to date.");
@@ -34,6 +41,32 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             Ok(())
         }
         StartResult::Skipped(reason) => Err(reason),
+    }
+}
+
+pub(crate) fn active_release_request(layout: &AppLayout) -> Result<String, String> {
+    let Some(manifest) = read_current_manifest(&layout.current_manifest_path)? else {
+        return Ok("latest".to_string());
+    };
+    match manifest
+        .get("release_track")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("stable")
+    {
+        "stable" => Ok("latest".to_string()),
+        "staging" => {
+            let channel = manifest
+                .get("release_channel")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| {
+                    "active staging installation is missing its release channel".to_string()
+                })?;
+            ReleaseSelector::staging(channel)?;
+            Ok(format!("channel:{channel}"))
+        }
+        other => Err(format!(
+            "active installation has unknown release track {other:?}"
+        )),
     }
 }
 
@@ -50,9 +83,7 @@ pub fn start(version_request: &str, continuation_args: Vec<String>) -> Result<St
             release.tag
         )));
     };
-    let manifest_bytes = release_client::download_bytes(&manifest_asset.url, &manifest_asset.name)?;
-    let manifest = ReleaseManifest::parse(&manifest_bytes)
-        .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
+    let manifest = release_client::download_release_manifest(&release, &manifest_asset)?;
     let selection = manifest
         .select_cli_for_current_platform()
         .map_err(|error| operation::failure(FailureClass::ManifestInvalid, error))?;
@@ -487,7 +518,7 @@ struct SelfUpdateOptions {
 
 impl SelfUpdateOptions {
     fn parse(args: Vec<&str>) -> Result<Self, String> {
-        let mut version = "latest".to_string();
+        let mut version = String::new();
         let mut index = 0;
 
         while index < args.len() {

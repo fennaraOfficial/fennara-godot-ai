@@ -29,6 +29,7 @@ private:
     godot::Control *webview_region = nullptr;
     godot::Control *internal_webview_surface = nullptr;
     godot::Label *fallback_label = nullptr;
+    godot::Label *staging_badge = nullptr;
     godot::Control *browser_fallback_panel = nullptr;
     FirstRunSetup *first_run_setup = nullptr;
     FirstRunSetupPanel *setup_panel = nullptr;
@@ -55,6 +56,7 @@ private:
     void _release_webview_keyboard_focus();
     bool _event_is_inside_webview_region(const godot::Ref<godot::InputEvent> &event);
     void _refresh_status();
+    void _refresh_staging_badge();
     void _on_mcp_target_state_changed(bool active);
     void _on_setup_succeeded();
     void _on_update_requested();

@@ -8,15 +8,32 @@ mod operation;
 mod project_addon;
 mod project_guidance;
 mod project_install;
+#[cfg(test)]
+mod project_install_tests;
+mod release_channel;
+#[cfg(test)]
+mod release_channel_tests;
 mod release_client;
 #[cfg(test)]
 mod release_client_tests;
+mod release_identity;
+#[cfg(test)]
+mod release_identity_tests;
 mod release_manifest;
+#[cfg(test)]
+mod release_manifest_tests;
 mod release_package;
 #[cfg(test)]
 mod release_package_tests;
 mod release_update;
+#[cfg(test)]
+mod release_update_tests;
+mod release_version;
+#[cfg(test)]
+mod release_version_tests;
 mod self_update;
+#[cfg(test)]
+mod self_update_tests;
 mod update_apply;
 mod update_stage;
 mod webview_prereq;
@@ -125,7 +142,7 @@ Fennara CLI {VERSION}
 Usage:
   fennara doctor [--repair]
   fennara diagnostics [--operation <operation-id>] [--json]
-  fennara install [--project <path>] [--version <version>]
+  fennara install [--project <path>] [--version <version>] [--channel pr-<number>]
   fennara mcp-setup <target flags>
   fennara update [--version <version>] [--project <path>] [--no-self-update] [--prepare]
   fennara recover --project <path> [--operation <operation-id>]

@@ -57,6 +57,10 @@ void UpdateCoordinator::_bind_methods() {
                                 &UpdateCoordinator::get_operation_id);
     godot::ClassDB::bind_method(godot::D_METHOD("get_target_version"),
                                 &UpdateCoordinator::get_target_version);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_release_track"),
+                                &UpdateCoordinator::get_release_track);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_release_channel"),
+                                &UpdateCoordinator::get_release_channel);
 }
 
 void UpdateCoordinator::_ready() {
@@ -93,6 +97,14 @@ void UpdateCoordinator::start_prepare() {
     dismissed = false;
     error_code = "";
     target_version = update_notice::latest_version();
+    release_track = update_notice::track();
+    release_channel = update_notice::channel();
+    release_tag = update_notice::target_release_tag();
+    source_commit = update_notice::source_commit();
+    if (target_version.is_empty()) {
+        _fail("FEN-UPDATE-TARGET-MISSING", "No exact Fennara update target was resolved.");
+        return;
+    }
     const uint64_t now = static_cast<uint64_t>(
         godot::Time::get_singleton()->get_unix_time_from_system() * 1000.0);
     operation_id = "update-" + godot::String::num_uint64(now) + "-godot-" +
@@ -102,6 +114,8 @@ void UpdateCoordinator::start_prepare() {
     godot::PackedStringArray args;
     args.append("update");
     args.append("--prepare");
+    args.append("--version");
+    args.append(target_version);
     args.append("--project");
     args.append(_project_path());
     args.append("--operation-id");
@@ -167,8 +181,22 @@ void UpdateCoordinator::copy_report() {
     if (display == nullptr) {
         return;
     }
+    const godot::Dictionary state = _read_operation();
+    const godot::Dictionary components = state.get("components", godot::Dictionary());
+    const godot::String phase = state.get("phase", "unknown");
+    const godot::String addon = components.get("addon", update_notice::current_version());
+    const godot::String cli = components.get("cli", "unknown");
+    const godot::String runtime = components.get("installed_runtime", "unknown");
     godot::String report = "Fennara update report\nOperation: " + operation_id +
-                           "\nStatus: " + status_text + "\nDetail: " + detail_text +
+                           "\nTrack: " + (release_track.is_empty() ? "unknown" : release_track) +
+                           "\nChannel: " + (release_channel.is_empty() ? "none" : release_channel) +
+                           "\nInstalled addon: " + addon + "\nActive CLI: " + cli +
+                           "\nActive runtime: " + runtime + "\nResolved target: " +
+                           (target_version.is_empty() ? "unknown" : target_version) +
+                           "\nRelease tag: " + (release_tag.is_empty() ? "none" : release_tag) +
+                           "\nSource commit: " + (source_commit.is_empty() ? "unknown" : source_commit) +
+                           "\nLast stage: " + phase + "\nStatus: " + status_text +
+                           "\nDetail: " + detail_text +
                            "\nCode: " + (error_code.is_empty() ? "none" : error_code) + "\n";
     display->clipboard_set(report);
 }
@@ -194,6 +222,8 @@ godot::String UpdateCoordinator::get_detail() const { return detail_text; }
 godot::String UpdateCoordinator::get_error_code() const { return error_code; }
 godot::String UpdateCoordinator::get_operation_id() const { return operation_id; }
 godot::String UpdateCoordinator::get_target_version() const { return target_version; }
+godot::String UpdateCoordinator::get_release_track() const { return release_track; }
+godot::String UpdateCoordinator::get_release_channel() const { return release_channel; }
 
 bool UpdateCoordinator::_launch_completion(const godot::String &command) {
     godot::OS *os = godot::OS::get_singleton();

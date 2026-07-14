@@ -1,6 +1,9 @@
 #include "fennara/app_paths.hpp"
 #include "fennara/setup/first_run_setup.hpp"
 
+#include "fennara/release/identity.hpp"
+#include "fennara/release/version.hpp"
+
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/hashing_context.hpp>
@@ -61,6 +64,18 @@ void FirstRunSetup::_on_manifest_request_completed(int64_t result, int64_t respo
               "The release manifest does not match this addon version.");
         return;
     }
+    godot::String identity_error;
+    if (!release_identity::manifest_matches(manifest, addon_identity, identity_error)) {
+        _fail("FEN-SETUP-MANIFEST-IDENTITY", identity_error);
+        return;
+    }
+    const godot::String minimum_cli_version = manifest.get("minimum_cli_version", "");
+    if (!release_version::is_valid(minimum_cli_version) ||
+        release_version::compare(addon_version, minimum_cli_version).value_or(-1) < 0) {
+        _fail("FEN-SETUP-MANIFEST-INVALID",
+              "The release manifest has an incompatible minimum CLI version.");
+        return;
+    }
 
     const godot::Variant assets_value = manifest.get("assets", godot::Dictionary());
     if (assets_value.get_type() != godot::Variant::DICTIONARY) {
@@ -85,7 +100,10 @@ void FirstRunSetup::_on_manifest_request_completed(int64_t result, int64_t respo
     const godot::Dictionary asset = asset_value;
     cli_asset_name = asset.get("name", "");
     expected_cli_sha256 = godot::String(asset.get("sha256", "")).to_lower();
-    if (!valid_asset_name(cli_asset_name) || !valid_sha256(expected_cli_sha256)) {
+    const godot::String expected_cli_name =
+        "fennara-cli-" + platform_key + "-v" + addon_version + ".zip";
+    if (!valid_asset_name(cli_asset_name) || cli_asset_name != expected_cli_name ||
+        !valid_sha256(expected_cli_sha256)) {
         _fail("FEN-SETUP-MANIFEST-INVALID", "The selected CLI asset metadata is invalid.");
         return;
     }

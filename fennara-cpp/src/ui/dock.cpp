@@ -8,6 +8,7 @@
 #include "fennara/ui/update_panel.hpp"
 #include "fennara/ui/webview_host.hpp"
 #include "fennara/update/update_coordinator.hpp"
+#include "fennara/update_notice.hpp"
 
 #include <godot_cpp/classes/h_box_container.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
@@ -189,6 +190,22 @@ void FennaraDock::_build_ui() {
     root->add_child(margin);
     webview_region = margin;
 
+    godot::Control *badge_overlay = memnew(godot::Control);
+    badge_overlay->set_anchors_preset(godot::Control::PRESET_FULL_RECT);
+    badge_overlay->set_mouse_filter(godot::Control::MOUSE_FILTER_IGNORE);
+    root->add_child(badge_overlay);
+
+    staging_badge = memnew(godot::Label);
+    staging_badge->set_anchors_and_offsets_preset(godot::Control::PRESET_TOP_RIGHT);
+    staging_badge->set_offset(godot::SIDE_LEFT, -118);
+    staging_badge->set_offset(godot::SIDE_BOTTOM, 26);
+    staging_badge->set_horizontal_alignment(godot::HORIZONTAL_ALIGNMENT_CENTER);
+    staging_badge->set_mouse_filter(godot::Control::MOUSE_FILTER_IGNORE);
+    staging_badge->set_z_index(20);
+    staging_badge->add_theme_color_override("font_color", godot::Color("#ffd166"));
+    badge_overlay->add_child(staging_badge);
+    _refresh_staging_badge();
+
     fallback_label = make_fallback_label("Starting Fennara chat...");
     fallback_label->set_anchors_preset(godot::Control::PRESET_FULL_RECT);
     margin->add_child(fallback_label);
@@ -356,6 +373,7 @@ void FennaraDock::_try_start_webview() {
 }
 
 void FennaraDock::_refresh_status() {
+    _refresh_staging_badge();
     if (fallback_label == nullptr) {
         return;
     }
@@ -363,6 +381,16 @@ void FennaraDock::_refresh_status() {
         return;
     }
     _try_start_webview();
+}
+
+void FennaraDock::_refresh_staging_badge() {
+    if (staging_badge == nullptr) {
+        return;
+    }
+    const godot::String channel = update_notice::channel();
+    staging_badge->set_text(channel.replace("pr-", "PR ") + " STAGING");
+    staging_badge->set_tooltip_text("Testing candidate " + update_notice::current_version());
+    staging_badge->set_visible(update_notice::track() == "staging");
 }
 
 bool FennaraDock::_show_update_if_needed() {

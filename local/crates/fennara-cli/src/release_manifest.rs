@@ -1,5 +1,8 @@
 use crate::VERSION;
 use crate::app_layout::{arch_name, platform_name};
+use crate::release_identity::ReleaseIdentity;
+pub(crate) use crate::release_version::compare_versions;
+use crate::release_version::parse_release_version;
 use serde_json::Value;
 use std::cmp::Ordering;
 
@@ -38,6 +41,7 @@ impl ReleaseManifest {
 
     pub fn validate_for_install(&self) -> Result<(), String> {
         self.validate_schema()?;
+        self.validate_release_identity()?;
         self.validate_current_cli()?;
         self.validate_install_primitives()
     }
@@ -84,6 +88,26 @@ impl ReleaseManifest {
             ));
         }
         Ok(())
+    }
+
+    pub(crate) fn release_identity(&self) -> Result<Option<ReleaseIdentity>, String> {
+        let version = required_string(&self.value, "version")?;
+        let Some(identity) = self.value.get("release") else {
+            let parsed = parse_release_version(version)?;
+            if parsed.pre.is_empty() {
+                return Ok(None);
+            }
+            return Err(format!(
+                "prerelease manifest version {version:?} requires release identity"
+            ));
+        };
+        let bytes = serde_json::to_vec(identity)
+            .map_err(|error| format!("failed to read release manifest identity: {error}"))?;
+        ReleaseIdentity::parse(&bytes, version).map(Some)
+    }
+
+    fn validate_release_identity(&self) -> Result<(), String> {
+        self.release_identity().map(|_| ())
     }
 
     fn validate_minimum_cli_version(&self, running_cli_version: &str) -> Result<(), String> {
@@ -242,73 +266,10 @@ fn current_webview_platform_arch() -> &'static str {
     }
 }
 
-pub(crate) fn compare_versions(left: &str, right: &str) -> Option<Ordering> {
-    Some(parse_semver_core(left)?.cmp(&parse_semver_core(right)?))
-}
-
-fn parse_semver_core(value: &str) -> Option<[u64; 3]> {
-    let core = value.split_once('-').map(|(core, _)| core).unwrap_or(value);
-    let mut parts = core.split('.');
-    let major = parts.next()?.parse().ok()?;
-    let minor = parts.next()?.parse().ok()?;
-    let patch = parts.next()?.parse().ok()?;
-    if parts.next().is_some() {
-        return None;
-    }
-    Some([major, minor, patch])
-}
-
 fn update_cli_instruction() -> &'static str {
     if cfg!(target_os = "windows") {
         "Update the CLI first: irm https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.ps1 | iex"
     } else {
         "Update the CLI first: curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.sh | sh"
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn compares_semver_core_versions() {
-        assert_eq!(compare_versions("0.3.0", "0.3.0"), Some(Ordering::Equal));
-        assert_eq!(compare_versions("0.3.1", "0.3.0"), Some(Ordering::Greater));
-        assert_eq!(compare_versions("0.2.9", "0.3.0"), Some(Ordering::Less));
-        assert_eq!(
-            compare_versions("0.3.0-beta.1", "0.3.0"),
-            Some(Ordering::Equal)
-        );
-        assert_eq!(compare_versions("0.3", "0.3.0"), None);
-    }
-
-    #[test]
-    fn selects_cli_asset_before_install_validation() {
-        let key = current_platform_key();
-        let mut cli_assets = serde_json::Map::new();
-        cli_assets.insert(
-            key,
-            serde_json::json!({
-                "name": "fennara-cli-current-platform-v9.0.0.zip",
-                "sha256": "a".repeat(64)
-            }),
-        );
-        let manifest = serde_json::json!({
-            "schema_version": 99,
-            "version": "9.0.0",
-            "minimum_cli_version": "9.0.0",
-            "install_primitives": ["future-primitive"],
-            "assets": {
-                "cli": cli_assets
-            }
-        });
-        let raw = serde_json::to_vec(&manifest).unwrap();
-
-        let parsed = ReleaseManifest::parse(&raw).unwrap();
-        let cli = parsed.select_cli_for_current_platform().unwrap();
-
-        assert_eq!(cli.version, "9.0.0");
-        assert_eq!(cli.cli.name, "fennara-cli-current-platform-v9.0.0.zip");
-        assert!(parsed.validate_for_install().is_err());
     }
 }

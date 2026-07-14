@@ -305,11 +305,18 @@ still apply in both modes.
 
 ## Updates
 
-`fennara update` is the normal project update command. It first checks the
-release manifest's per-platform CLI asset and, when newer, stages that CLI,
-lets the old process exit, replaces the installed CLI, and resumes the update
-with the new binary. It then uses the same manifest-driven resolver and
-installer as `fennara install`.
+`fennara update` is the normal project update command. It reads the installed
+addon release identity, resolves stable latest or that addon's isolated staging
+channel, and freezes the result to one exact immutable version. It first checks
+the version of that release manifest's per-platform CLI asset and, when newer,
+stages that CLI, lets the old process exit, replaces the installed CLI, and
+resumes with the same target. It then uses the same manifest-driven resolver and installer as
+`fennara install`.
+
+Native staging discovery caches validated channel pointers for five minutes in
+shared Fennara app data and revalidates them with GitHub ETags. A missing
+channel is treated as no staging update, while malformed or cross-channel data
+fails closed and never replaces a valid cache entry.
 
 It can update:
 
@@ -327,6 +334,12 @@ If an MCP app is currently running a launcher, the update may keep that launcher
 and continue. The versioned runtime package is still updated, and future starts
 use the version from `current.json`. Use `fennara update --no-self-update` only
 when intentionally skipping the outer CLI check.
+
+Shared activation supports one active Fennara version at a time. The daemon
+rejects update shutdown while any other Godot project is still connected, which
+prevents a version switch underneath another editor. Exact version packages,
+the previous `current.json`, launcher snapshots, and the previous project addon
+are retained until the reopened editor validates the new GDExtension.
 
 The daemon currently allows one managed `runtime_session` scene globally across
 all connected Godot editors. A start request runs in the selected or

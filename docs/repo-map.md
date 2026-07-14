@@ -48,6 +48,10 @@ This is the quick map for contributors and coding agents working in this reposit
 | `local/crates/fennara-cli/src/operation.rs` | Public install/update operation coordinator, phases, and CLI handoff entry points. |
 | `local/crates/fennara-cli/src/operation/` | Focused operation journal, durable storage, diagnostic redaction, and test modules. |
 | `local/crates/fennara-cli/src/project_addon.rs` | Existing project-addon version and current-platform GDExtension library validation. |
+| `local/crates/fennara-cli/src/release_identity.rs` | Stable/staging addon identity, exact release selectors, pull-request channel validation, and legacy stable compatibility. |
+| `local/crates/fennara-cli/src/release_channel.rs` | Per-channel staging pointer validation and resolution to an immutable exact release. |
+| `local/crates/fennara-cli/src/release_manifest.rs` | Release manifest parsing, asset hash validation, identity binding, and platform package selection. |
+| `local/crates/fennara-cli/src/release_version.rs` | Shared CLI SemVer parsing and precedence used by manifests and release selection. |
 | `local/crates/fennara-cli/src/existing_addon_install.rs` | Exact-version adoption of an existing Asset Library or release addon without replacing project addon files. |
 | `local/crates/fennara-cli/src/daemon_setup.rs` | Shared daemon health check, exact-version readiness, and startup used by install and doctor. |
 | `local/crates/fennara-cli/tests/operation_failures.rs` | Process-level failure, durable diagnostics, redaction, and fail-closed operation-log tests. |
@@ -73,6 +77,10 @@ This is the quick map for contributors and coding agents working in this reposit
 | `fennara-cpp/include/` | Public C++ headers. |
 | `fennara-cpp/src/` | C++ implementation. |
 | `fennara-cpp/src/setup/` | Native first-run setup state, release-manifest CLI bootstrap, hash verification, CLI launch, and durable operation progress reader. |
+| `fennara-cpp/src/release/version.cpp` | Native SemVer validation and precedence used by release/update discovery. |
+| `fennara-cpp/src/release/identity.cpp` | Packaged stable/staging identity validation and legacy stable compatibility. |
+| `fennara-cpp/src/release/discovery.cpp` | Stable-latest and isolated staging-channel update discovery. |
+| `fennara-cpp/src/update/` | Exact-target update coordination, durable receipt discovery, close/install handoff, and recovery UI state. |
 | `fennara-cpp/src/ui/setup_panel.cpp` | Webview-independent first-run setup panel with progress, retry, logs, and sanitized report actions. |
 | `fennara-cpp/vendor/cef/` | Official CEF 139 header snapshot used by the Linux OSR bridge. Runtime binaries stay outside the addon. |
 | `fennara-cpp/src/ui/webview_host*` | Native in-editor chat webview host and platform backends. |
@@ -91,6 +99,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | --- | --- |
 | `godot_demo/addons/fennara/fennara.gdextension` | Godot GDExtension registration file. |
 | `godot_demo/addons/fennara/VERSION` | Addon package version. |
+| `godot_demo/addons/fennara/release.json` | Packaged stable or staging identity, including exact version, release tag, channel, and staging source commit. |
 | `godot_demo/addons/fennara/bin/` | Built platform libraries. |
 | `godot_demo/addons/fennara/dist/` | Packaged web UI assets used by the in-editor chat webview. |
 | `godot_demo/addons/fennara/runtime/` | Synced packaged copy of `runtime/` shipped inside the addon. |
@@ -115,6 +124,14 @@ This is the quick map for contributors and coding agents working in this reposit
 | --- | --- |
 | `scripts/set-version.mjs` | Updates versioned files across the repo. |
 | `scripts/check-version.mjs` | Checks version sync. |
+| `scripts/release-identity.mjs` | Shared Node validation and generation for SemVer release identity and per-PR staging pointers. |
+| `scripts/staging-candidate.mjs` | Trusted staging candidate identity generation and monotonic per-PR pointer decisions. |
+| `scripts/staging-*-validation.mjs` / `scripts/staging-validation-files.mjs` | Focused staging addon, archive, manifest, shared filesystem, and publication-bundle validation. |
+| `scripts/validate-staging-build.mjs` / `scripts/validate-staging-publish-bundle.mjs` | Strict validation entrypoints for untrusted build outputs and the trusted publication bundle. |
+| `scripts/check-staging-channel-advance.mjs` | Applies monotonic and provenance checks before a staging channel pointer advances. |
+| `scripts/verify-published-assets.mjs` / `scripts/smoke-public-release.mjs` | Verify published asset bytes and public download behavior before pointer promotion. |
+| `scripts/release-targets.mjs` | Defines supported platform release targets and their packaged asset names. |
+| `scripts/write-staging-candidate.mjs` / `scripts/write-staging-pointer.mjs` | Write the frozen candidate identity and its small channel pointer. |
 | `scripts/sync-chat-ui.mjs` | Copies the buildless chat UI source into the addon payload. |
 | `scripts/sync-runtime.mjs` | Copies repo-root runtime helper source into the addon payload. |
 | `scripts/package-preview.mjs` | Assembles addon, CLI, and local runtime preview/release zips after platform builds. |
@@ -128,6 +145,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `.github/workflows/local-build.yml` | Rust local package build check. |
 | `.github/workflows/package-preview.yml` | Manual package preview artifacts, including a test-only Linux CEF runtime artifact for Linux chat smoke tests. |
 | `.github/workflows/release.yml` | Manual GitHub release publishing, including generated Linux CEF runtime packaging, release manifest generation, and final asset validation. |
+| `.github/workflows/staging-release.yml` | Manual exact-SHA staging build, validation-only dry run, immutable prerelease publication, and per-PR pointer advancement. |
 
 ## Where To Change Things
 

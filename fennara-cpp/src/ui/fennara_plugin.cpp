@@ -32,6 +32,17 @@ void FennaraPlugin::_bind_methods() {
 FennaraPlugin::FennaraPlugin() {
 }
 
+FennaraPlugin::~FennaraPlugin() {
+    _stop_update_check();
+}
+
+void FennaraPlugin::_stop_update_check() {
+    update_check_cancelled.store(true, std::memory_order_release);
+    if (update_check_thread.joinable()) {
+        update_check_thread.join();
+    }
+}
+
 void FennaraPlugin::_enter_tree() {
     Logger::init();
     csharp_build::begin_build_lifecycle();
@@ -70,7 +81,9 @@ void FennaraPlugin::_enter_tree() {
     add_context_menu_plugin(godot::EditorContextMenuPlugin::CONTEXT_SLOT_SCRIPT_EDITOR_CODE,
                             script_context_menu_plugin);
     if (godot::FileAccess::file_exists(app_paths::daemon_binary_path())) {
-        update_notice::check_once();
+        update_check_cancelled.store(false, std::memory_order_release);
+        update_check_thread =
+            std::thread([this]() { update_notice::check_once(&update_check_cancelled); });
     } else {
         FLOG_SYS("Update check deferred until first-run setup is complete");
     }
@@ -274,6 +287,7 @@ void FennaraPlugin::_ensure_export_presets_exclude_fennara() {
 
 void FennaraPlugin::_exit_tree() {
     set_process(false);
+    _stop_update_check();
     csharp_preparation_pending = false;
     initial_filesystem_scan_completed = false;
     csharp_build::request_build_shutdown();

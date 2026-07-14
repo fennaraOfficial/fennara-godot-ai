@@ -1,7 +1,11 @@
 use crate::app_layout::{AppLayout, binary_name};
+use crate::release_channel::ChannelPointer;
+use crate::release_client::Release;
+use crate::release_identity::{ReleaseIdentity, ReleaseTrack};
 use crate::release_package::{
-    activate_package_at, package_complete, restore_activation_at, shared_runtime_component_key,
-    validate_expected_version,
+    activate_package_at, expected_manifest_version, package_complete, release_provenance,
+    restore_activation_at, shared_runtime_component_key, validate_expected_version,
+    validate_legacy_fallback_allowed,
 };
 use std::fs;
 use std::ops::Deref;
@@ -12,6 +16,25 @@ fn complete_package_requires_launchers_runtimes_and_cached_addon() {
     let layout = test_layout("complete");
     write_complete_package(&layout, "1.2.3");
     assert!(package_complete(&layout, "1.2.3"));
+}
+
+#[test]
+fn resolved_manifest_identity_describes_target_provenance() {
+    let source_commit = "0123456789abcdef0123456789abcdef01234567";
+    let identity = ReleaseIdentity {
+        schema_version: 1,
+        track: ReleaseTrack::Staging,
+        version: "1.2.3-pr.101.2".into(),
+        release_tag: "v1.2.3-pr.101.2".into(),
+        channel: Some("pr-101".into()),
+        source_commit: Some(source_commit.into()),
+    };
+
+    assert_eq!(
+        release_provenance(Some(&identity)),
+        ("staging", Some("pr-101"), Some(source_commit))
+    );
+    assert_eq!(release_provenance(None), ("stable", None, None));
 }
 
 #[test]
@@ -60,10 +83,51 @@ fn activation_restore_removes_manifest_when_none_existed() {
 }
 
 #[test]
+fn activation_records_staging_identity_for_self_update() {
+    let layout = test_layout("staging-identity");
+    let version = "1.2.3-pr.101.2";
+    write_complete_package(&layout, version);
+    fs::write(
+        layout
+            .versions_dir
+            .join(version)
+            .join("addon/addons/fennara/release.json"),
+        format!(
+            r#"{{"schema_version":1,"track":"staging","version":"{version}","release_tag":"v{version}","channel":"pr-101","source_commit":"0123456789abcdef0123456789abcdef01234567"}}"#
+        ),
+    )
+    .unwrap();
+
+    activate_package_at(&layout, version).unwrap();
+    let active: serde_json::Value =
+        serde_json::from_slice(&fs::read(&layout.current_manifest_path).unwrap()).unwrap();
+    assert_eq!(active["release_track"], "staging");
+    assert_eq!(active["release_channel"], "pr-101");
+    assert_eq!(active["release_tag"], format!("v{version}"));
+    assert_eq!(
+        active["source_commit"],
+        "0123456789abcdef0123456789abcdef01234567"
+    );
+}
+
+#[test]
 fn exact_install_rejects_mismatched_manifest_before_asset_installation() {
     let error = validate_expected_version("v1.2.3", "1.2.4", Some("1.2.3")).unwrap_err();
     assert!(error.contains("release v1.2.3 declares version 1.2.4"));
-    assert!(error.contains("addon requires 1.2.3"));
+    assert!(error.contains("expected 1.2.3"));
+}
+
+#[test]
+fn manifest_version_expectation_is_independent_from_manifest_selection() {
+    assert_eq!(
+        expected_manifest_version("1.2.3", "v1.2.3"),
+        Some("1.2.3".into())
+    );
+    assert_eq!(
+        expected_manifest_version("channel:pr-101", "v1.2.3-pr.101.2"),
+        Some("1.2.3-pr.101.2".into())
+    );
+    assert_eq!(expected_manifest_version("latest", "latest"), None);
 }
 
 #[test]
@@ -77,6 +141,39 @@ fn shared_runtime_component_uses_manifest_identifier() {
         shared_runtime_component_key(&runtime).as_deref(),
         Some("shared_runtime_linux_cef")
     );
+}
+
+#[test]
+fn channel_release_cannot_use_legacy_installation_without_a_manifest() {
+    let release = Release {
+        tag: "v0.3.9-pr.101.2".into(),
+        assets: serde_json::Value::Array(Vec::new()),
+        channel_pointer: Some(ChannelPointer {
+            schema_version: 1,
+            channel: "pr-101".into(),
+            version: "0.3.9-pr.101.2".into(),
+            release_tag: "v0.3.9-pr.101.2".into(),
+            source_commit: "0123456789abcdef0123456789abcdef01234567".into(),
+            release_manifest_sha256: "a".repeat(64),
+        }),
+    };
+
+    let error = validate_legacy_fallback_allowed(&release).unwrap_err();
+    assert!(error.contains("has no release manifest"));
+    assert!(error.contains("refusing unverified legacy installation"));
+}
+
+#[test]
+fn exact_prerelease_cannot_use_legacy_installation_without_a_manifest() {
+    let release = Release {
+        tag: "v0.3.9-pr.101.2".into(),
+        assets: serde_json::Value::Array(Vec::new()),
+        channel_pointer: None,
+    };
+
+    let error = validate_legacy_fallback_allowed(&release).unwrap_err();
+    assert!(error.contains("has no release manifest"));
+    assert!(error.contains("refusing unverified legacy installation"));
 }
 
 fn write_complete_package(layout: &AppLayout, version: &str) {

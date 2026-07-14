@@ -25,8 +25,11 @@ pub(super) fn apply_after_exit(
     )?;
     set_state(receipt_path, receipt, "applying")?;
     let layout = AppLayout::detect()?;
-    daemon_setup::shutdown_if_running(&layout)
-        .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
+    if let Err(error) = daemon_setup::shutdown_if_running(&layout)
+        .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))
+    {
+        return rollback_before_reopen(options, root, receipt_path, receipt, error);
+    }
     update_stage::verify_staged_addon(root, receipt)
         .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
     launchers::snapshot(&layout, root)

@@ -6,6 +6,8 @@
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
+#include "fennara/release/identity.hpp"
+
 namespace godot {
 class HTTPRequest;
 }
@@ -56,6 +58,7 @@ class FirstRunSetup : public godot::Node {
     Step step = Step::Idle;
     godot::String project_path;
     godot::String addon_version;
+    release_identity::Identity addon_identity;
     godot::String cli_asset_name;
     godot::String expected_cli_sha256;
     godot::String download_dir;

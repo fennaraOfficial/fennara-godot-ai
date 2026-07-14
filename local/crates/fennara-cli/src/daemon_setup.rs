@@ -1,8 +1,12 @@
 use crate::app_layout::{AppLayout, binary_name, display_path};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use hmac::{Hmac, Mac};
 use serde_json::Value;
+use sha2::Sha256;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -11,6 +15,8 @@ const DAEMON_ADDR: &str = "127.0.0.1:41287";
 const HEALTH_TIMEOUT: Duration = Duration::from_millis(500);
 const START_TIMEOUT: Duration = Duration::from_secs(10);
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
+const MAX_CHALLENGE_RESPONSE_BYTES: usize = 4096;
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum HealthErrorKind {
@@ -136,13 +142,8 @@ pub fn shutdown_if_running(layout: &AppLayout) -> Result<(), String> {
         return Ok(());
     }
     let token_path = layout.app_dir.join("daemon-control-token");
-    let token = std::fs::read_to_string(&token_path)
-        .map_err(|error| format!("failed to read {}: {error}", display_path(&token_path)))?
-        .trim()
-        .to_string();
-    if token.is_empty() || token.contains(['\r', '\n']) {
-        return Err("the local daemon control token is invalid".to_string());
-    }
+    let token = read_control_token(&token_path)?;
+    verify_daemon_control(&token)?;
     let mut stream = TcpStream::connect(DAEMON_ADDR)
         .map_err(|error| format!("failed to connect to the running daemon: {error}"))?;
     stream
@@ -162,6 +163,12 @@ pub fn shutdown_if_running(layout: &AppLayout) -> Result<(), String> {
         .read_to_string(&mut response)
         .map_err(|error| format!("failed to read daemon shutdown response: {error}"))?;
     if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
+        if response.starts_with("HTTP/1.1 409") || response.starts_with("HTTP/1.0 409") {
+            return Err(
+                "another Godot project is still connected to Fennara; close every other Fennara-enabled editor before switching the active version"
+                    .to_string(),
+            );
+        }
         return Err("daemon rejected the authenticated shutdown request".to_string());
     }
     let deadline = Instant::now() + START_TIMEOUT;
@@ -178,6 +185,52 @@ pub fn shutdown_if_running(layout: &AppLayout) -> Result<(), String> {
         thread::sleep(POLL_INTERVAL);
     }
     Err("the previous Fennara daemon did not stop before update activation".to_string())
+}
+
+pub fn ensure_switch_available(
+    layout: &AppLayout,
+    allowed_project: Option<&Path>,
+) -> Result<(), String> {
+    if matches!(
+        health(),
+        Err(HealthError {
+            kind: HealthErrorKind::NotRunning,
+            ..
+        })
+    ) {
+        return Ok(());
+    }
+    let token_path = layout.app_dir.join("daemon-control-token");
+    let token = read_control_token(&token_path)?;
+    verify_daemon_control(&token)?;
+    let mut stream = TcpStream::connect(DAEMON_ADDR)
+        .map_err(|error| format!("failed to connect to the running daemon: {error}"))?;
+    stream
+        .set_read_timeout(Some(HEALTH_TIMEOUT))
+        .map_err(|error| error.to_string())?;
+    stream
+        .set_write_timeout(Some(HEALTH_TIMEOUT))
+        .map_err(|error| error.to_string())?;
+    let request = format!(
+        "GET /status HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Fennara-Control-Token: {token}\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("failed to request daemon status: {error}"))?;
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .map_err(|error| format!("failed to read daemon status: {error}"))?;
+    let status = parse_success_response(&response)?;
+    let conflicts = conflicting_project_count(&status, allowed_project)?;
+    if conflicts == 0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "{conflicts} other Fennara-enabled Godot project{} still connected; close every other editor before switching the active version",
+            if conflicts == 1 { " is" } else { "s are" }
+        ))
+    }
 }
 
 pub fn health() -> Result<Value, HealthError> {
@@ -217,6 +270,103 @@ fn parse_health_response(response: &str) -> Result<Value, HealthError> {
         return Err(other_health_message("daemon returned non-200 status"));
     }
     serde_json::from_str(body).map_err(|error| other_health_message(error.to_string()))
+}
+
+fn parse_success_response(response: &str) -> Result<Value, String> {
+    let (headers, body) = response
+        .split_once("\r\n\r\n")
+        .ok_or_else(|| "invalid daemon HTTP response".to_string())?;
+    if !headers.starts_with("HTTP/1.1 200") && !headers.starts_with("HTTP/1.0 200") {
+        return Err("daemon returned non-200 status".to_string());
+    }
+    serde_json::from_str(body).map_err(|error| format!("invalid daemon status JSON: {error}"))
+}
+
+fn read_control_token(path: &Path) -> Result<String, String> {
+    let raw = std::fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", display_path(path)))?;
+    let token = raw.trim();
+    let valid = URL_SAFE_NO_PAD
+        .decode(token)
+        .is_ok_and(|bytes| bytes.len() == 32);
+    if !valid {
+        return Err("the local daemon control token is invalid".to_string());
+    }
+    Ok(token.to_string())
+}
+
+fn verify_daemon_control(control_token: &str) -> Result<(), String> {
+    let mut nonce = [0_u8; 32];
+    getrandom::fill(&mut nonce)
+        .map_err(|error| format!("failed to create daemon challenge: {error}"))?;
+    let encoded_nonce = URL_SAFE_NO_PAD.encode(nonce);
+    let mut stream = TcpStream::connect(DAEMON_ADDR)
+        .map_err(|error| format!("failed to connect to the running daemon: {error}"))?;
+    stream
+        .set_read_timeout(Some(HEALTH_TIMEOUT))
+        .map_err(|error| error.to_string())?;
+    stream
+        .set_write_timeout(Some(HEALTH_TIMEOUT))
+        .map_err(|error| error.to_string())?;
+    let request = format!(
+        "GET /control/challenge?nonce={encoded_nonce} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("failed to request daemon identity proof: {error}"))?;
+    let mut response = String::new();
+    stream
+        .take(MAX_CHALLENGE_RESPONSE_BYTES as u64 + 1)
+        .read_to_string(&mut response)
+        .map_err(|error| format!("failed to read daemon identity proof: {error}"))?;
+    if response.len() > MAX_CHALLENGE_RESPONSE_BYTES {
+        return Err("daemon identity proof exceeded the local size limit".to_string());
+    }
+    let challenge = parse_success_response(&response)?;
+    let proof = challenge
+        .get("proof")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            "the process on the Fennara daemon port did not prove its identity".to_string()
+        })?;
+    let proof = URL_SAFE_NO_PAD.decode(proof).map_err(|_| {
+        "the process on the Fennara daemon port returned an invalid proof".to_string()
+    })?;
+    let token_bytes = URL_SAFE_NO_PAD
+        .decode(control_token)
+        .map_err(|_| "the local daemon control token is invalid".to_string())?;
+    let mut mac = HmacSha256::new_from_slice(&token_bytes)
+        .map_err(|_| "the local daemon control token is invalid".to_string())?;
+    mac.update(&nonce);
+    mac.verify_slice(&proof).map_err(|_| {
+        "the process on the Fennara daemon port failed identity verification".to_string()
+    })
+}
+
+fn conflicting_project_count(
+    status: &Value,
+    allowed_project: Option<&Path>,
+) -> Result<usize, String> {
+    let allowed = allowed_project.map(canonical_or_original);
+    let projects = status
+        .get("connected_projects")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "daemon status is missing connected_projects".to_string())?;
+    Ok(projects
+        .iter()
+        .filter(|project| {
+            let Some(path) = project.get("project_path").and_then(Value::as_str) else {
+                return true;
+            };
+            allowed
+                .as_ref()
+                .is_none_or(|allowed| canonical_or_original(Path::new(path)) != *allowed)
+        })
+        .count())
+}
+
+fn canonical_or_original(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn ensure_version(health: &Value, expected_version: &str) -> Result<(), String> {
@@ -274,5 +424,33 @@ mod tests {
     fn rejects_non_success_health_response() {
         let error = parse_health_response("HTTP/1.1 503 Unavailable\r\n\r\n{}").unwrap_err();
         assert!(error.message.contains("non-200"));
+    }
+
+    #[test]
+    fn connected_project_preflight_allows_only_the_selected_project() {
+        let current = std::env::current_dir().unwrap();
+        let status = json!({
+            "connected_projects": [
+                { "project_path": current },
+                { "project_path": current.join("other") }
+            ]
+        });
+        assert_eq!(
+            conflicting_project_count(&status, Some(&current)).unwrap(),
+            1
+        );
+        assert_eq!(conflicting_project_count(&status, None).unwrap(), 2);
+    }
+
+    #[test]
+    fn rejects_malformed_control_tokens_before_use() {
+        let path = std::env::temp_dir().join(format!(
+            "fennara-invalid-control-token-{}",
+            std::process::id()
+        ));
+        std::fs::write(&path, "not-a-token\n").unwrap();
+        let error = read_control_token(&path).unwrap_err();
+        assert!(error.contains("control token is invalid"));
+        let _ = std::fs::remove_file(path);
     }
 }
