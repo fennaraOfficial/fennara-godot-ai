@@ -140,7 +140,14 @@ downloads the addon version's release manifest and CLI archive with Godot's
 HTTP client, verifies the declared SHA-256, and places only the CLI in Fennara
 app data. It then launches `fennara install` and reads the durable operation
 state for progress and diagnostics. Chat and the webview remain inactive until
-setup succeeds and the matching daemon connects.
+setup succeeds and the matching daemon connects. The local bridge does not
+start or connect to an older app-data daemon while setup is required. A version
+switch requires the shared daemon to report zero connected Godot projects. The
+project being set up remains disconnected while its addon and installed
+components differ. After that preflight, the installer stops the idle older
+daemon before activating the matching components. A reported connection leaves
+the existing installation unchanged so the user can close the connected editor
+and retry.
 
 On macOS, user-facing documentation recommends installing through the CLI. The
 in-editor bootstrap can run only after the GDExtension native library loads, so

@@ -14,6 +14,8 @@ class HTTPRequest;
 
 namespace fennara {
 
+bool installed_components_match_addon();
+
 class FirstRunSetup : public godot::Node {
     GDCLASS(FirstRunSetup, godot::Node)
 

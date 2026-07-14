@@ -34,6 +34,12 @@ Install Fennara, choose where you want to chat, and connect your Godot project.
 3. Press **Set Up Fennara**.
 
 Fennara installs the matching local components and connects the open project.
+If an older shared daemon is idle, setup stops it before activating the matching
+version. A version switch requires zero connected projects. The project being
+set up normally stays disconnected while the versions differ. If setup reports
+a connected project, close every other Fennara-enabled editor and retry. If a
+stale connection remains for the current project, close and reopen this editor,
+then retry.
 If setup fails, the dock provides **Retry**, **Copy Report**, and **Open Logs**.
 Copied reports are sanitized and do not include API keys, chat content, or
 project files.

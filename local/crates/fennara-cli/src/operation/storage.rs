@@ -9,6 +9,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const FILE_REPLACE_TIMEOUT: Duration = Duration::from_secs(2);
 const FILE_REPLACE_RETRY_DELAY: Duration = Duration::from_millis(20);
+#[cfg(windows)]
+const ERROR_SHARING_VIOLATION: i32 = 32;
+#[cfg(windows)]
+const ERROR_LOCK_VIOLATION: i32 = 33;
 
 pub(super) fn write_json_atomic(path: &Path, value: &Value) -> Result<(), String> {
     let temp = path.with_extension(format!("json.tmp-{}", std::process::id()));
@@ -61,13 +65,29 @@ fn rename_with_retry(source: &Path, destination: &Path) -> std::io::Result<()> {
         match fs::rename(source, destination) {
             Ok(()) => return Ok(()),
             Err(error)
-                if error.kind() == std::io::ErrorKind::PermissionDenied
-                    && std::time::Instant::now() < deadline =>
+                if retryable_rename_error(&error) && std::time::Instant::now() < deadline =>
             {
                 thread::sleep(FILE_REPLACE_RETRY_DELAY);
             }
             Err(error) => return Err(error),
         }
+    }
+}
+
+fn retryable_rename_error(error: &std::io::Error) -> bool {
+    if error.kind() == std::io::ErrorKind::PermissionDenied {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        matches!(
+            error.raw_os_error(),
+            Some(ERROR_SHARING_VIOLATION | ERROR_LOCK_VIOLATION)
+        )
+    }
+    #[cfg(not(windows))]
+    {
+        false
     }
 }
 

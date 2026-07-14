@@ -2,6 +2,7 @@
 
 #include "fennara/app_paths.hpp"
 #include "fennara/logger.hpp"
+#include "fennara/setup/first_run_setup.hpp"
 
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/os.hpp>
@@ -10,6 +11,10 @@ namespace fennara {
 
 void FennaraLocalBridge::_start_daemon_if_available() {
     if (_daemon_spawn_attempted) {
+        return;
+    }
+    if (!installed_components_match_addon()) {
+        FLOG_NET("Local bridge daemon start deferred until setup installs matching components");
         return;
     }
 

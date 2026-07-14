@@ -18,7 +18,7 @@ godot::String lock_owner_path(const godot::String &lock_path) {
 
 } // namespace
 
-bool FirstRunSetup::_installed_components_match() const {
+bool installed_components_match_addon() {
     const godot::String expected_version =
         godot::FileAccess::get_file_as_string("res://addons/fennara/VERSION").strip_edges();
     if (expected_version.is_empty() ||
@@ -29,6 +29,10 @@ bool FirstRunSetup::_installed_components_match() const {
     const godot::PackedStringArray paths{app_paths::current_manifest_path()};
     const godot::Dictionary current = app_paths::read_json_first_existing(paths);
     return godot::String(current.get("version", "")) == expected_version;
+}
+
+bool FirstRunSetup::_installed_components_match() const {
+    return installed_components_match_addon();
 }
 
 bool FirstRunSetup::_try_acquire_lock() {
