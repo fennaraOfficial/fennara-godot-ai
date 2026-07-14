@@ -32,8 +32,17 @@ test("plugin teardown signals cancellation before joining discovery", () => {
 });
 
 test("first-run setup keeps the local bridge dormant until components match", () => {
-  assert.match(setupLockSource, /bool installed_components_match_addon\(\)/);
-  assert.match(daemonSource, /if \(!installed_components_match_addon\(\)\)/);
+  const readinessStart = setupLockSource.indexOf("bool installed_components_match_addon()");
+  const readinessEnd = setupLockSource.indexOf(
+    "bool FirstRunSetup::_installed_components_match()",
+    readinessStart,
+  );
+  assert.ok(readinessStart >= 0 && readinessEnd > readinessStart, "missing readiness helper");
+  const readinessBody = setupLockSource.slice(readinessStart, readinessEnd);
+  assert.match(readinessBody, /res:\/\/addons\/fennara\/VERSION/);
+  assert.match(readinessBody, /app_paths::cli_binary_path\(\)/);
+  assert.match(readinessBody, /app_paths::daemon_binary_path\(\)/);
+  assert.match(readinessBody, /current\.get\("version", ""\)\) == expected_version/);
 
   const connectStart = bridgeSource.indexOf("void FennaraLocalBridge::_connect_socket()");
   const connectEnd = bridgeSource.indexOf("void FennaraLocalBridge::_close_socket()", connectStart);
@@ -45,6 +54,13 @@ test("first-run setup keeps the local bridge dormant until components match", ()
     readinessGate >= 0 && readinessGate < daemonAuthentication,
     "component readiness must be checked before daemon authentication",
   );
+
+  const spawnGate = daemonSource.indexOf("if (!installed_components_match_addon())");
+  const daemonSpawn = daemonSource.indexOf("create_process", spawnGate);
+  assert.ok(
+    spawnGate >= 0 && daemonSpawn > spawnGate,
+    "component readiness must be checked before daemon spawning",
+  );
 });
 
 test("project install stops an idle old daemon before switching versions", () => {
@@ -54,9 +70,10 @@ test("project install stops an idle old daemon before switching versions", () =>
   const helperBody = projectInstallSource.slice(helperStart, helperEnd);
   const conflictCheck = helperBody.indexOf("daemon_setup::ensure_switch_available");
   const shutdown = helperBody.indexOf("daemon_setup::shutdown_if_running");
+  assert.match(helperBody, /daemon_setup::ensure_switch_available\(layout, None\)/);
   assert.ok(
     conflictCheck >= 0 && conflictCheck < shutdown,
-    "other projects must be rejected before the old daemon is stopped",
+    "all connected projects must be rejected before the old daemon is stopped",
   );
 });
 

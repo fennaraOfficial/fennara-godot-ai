@@ -37,7 +37,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             options.channel.as_deref(),
         )?;
         let layout = crate::app_layout::AppLayout::detect()?;
-        prepare_version_switch(&layout, &project_dir, &existing.version)?;
+        prepare_version_switch(&layout, &existing.version)?;
         return existing_addon_install::run(&project_dir, existing, options.version.as_deref());
     }
     if addon_dir.exists() {
@@ -73,7 +73,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
                 options.channel.as_deref(),
             )?;
             let layout = crate::app_layout::AppLayout::detect()?;
-            prepare_version_switch(&layout, &project_dir, resolved.version())?;
+            prepare_version_switch(&layout, resolved.version())?;
             let package = release_package::ensure_resolved_package(resolved)?;
             (package.version, package.addon_dir)
         }
@@ -95,13 +95,12 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
 
 fn prepare_version_switch(
     layout: &crate::app_layout::AppLayout,
-    project_dir: &Path,
     target_version: &str,
 ) -> Result<(), String> {
     if active_version(layout).as_deref() == Some(target_version) {
         return Ok(());
     }
-    daemon_setup::ensure_switch_available(layout, Some(project_dir))
+    daemon_setup::ensure_switch_available(layout, None)
         .and_then(|()| daemon_setup::shutdown_if_running(layout))
         .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))
 }
