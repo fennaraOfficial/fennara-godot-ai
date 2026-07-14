@@ -6,12 +6,17 @@ const discoveryHeader = read("../../fennara-cpp/include/fennara/release/discover
 const pluginSource = read("../../fennara-cpp/src/ui/fennara_plugin.cpp");
 const updateNoticeSource = read("../../fennara-cpp/src/update_notice.cpp");
 
-test("native update discovery cancellation returns the global check to idle", () => {
+test("native update discovery cancellation returns the shared check to idle", () => {
   assert.match(discoveryHeader, /bool cancelled = false;/);
   assert.match(
     updateNoticeSource,
-    /if \(result\.cancelled\) \{\s*g_check_started = false;\s*g_checked = false;\s*return;/,
+    /if \(result\.cancelled\) \{\s*current\.check_started = false;\s*current\.checked = false;\s*return;/,
   );
+});
+
+test("native update state is initialized lazily after the extension loads", () => {
+  assert.match(updateNoticeSource, /State &state\(\) \{\s*static State instance;/);
+  assert.doesNotMatch(updateNoticeSource, /release_discovery::Result g_[a-z_]+;/);
 });
 
 test("plugin teardown signals cancellation before joining discovery", () => {

@@ -162,16 +162,31 @@ jobs:
 
       - name: Test native first-run setup states
         if: steps.source.outputs.available == 'true' && matrix.platform == 'windows'
+        timeout-minutes: 20
         shell: pwsh
         working-directory: fennara-cpp
         env:
           SCONS_CACHE: ${{ github.workspace }}/fennara-cpp/.scons_cache
         run: |
           scons platform=windows target=editor fennara_setup_tests=yes
-          & "${{ steps.godot.outputs.console }}" `
-            --headless `
-            --path "${{ github.workspace }}\godot_demo" `
-            --script "res://tests/first_run_setup_test.gd"
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
+
+          $testTimeoutSeconds = 120
+          $godot = Start-Process `
+            -FilePath "${{ steps.godot.outputs.console }}" `
+            -ArgumentList @(
+              "--headless",
+              "--path",
+              '"${{ github.workspace }}\godot_demo"',
+              "--script",
+              "res://tests/first_run_setup_test.gd"
+            ) `
+            -NoNewWindow `
+            -PassThru
+          if (-not $godot.WaitForExit($testTimeoutSeconds * 1000)) {
+            Write-Host "::error::Native first-run setup test exceeded ${testTimeoutSeconds} seconds."
+            & taskkill.exe /PID $godot.Id /T /F
+            exit 124
+          }
+          if ($godot.ExitCode -ne 0) {
+            exit $godot.ExitCode
           }

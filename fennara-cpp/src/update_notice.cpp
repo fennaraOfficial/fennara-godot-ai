@@ -10,10 +10,17 @@
 namespace fennara::update_notice {
 namespace {
 
-bool g_check_started = false;
-bool g_checked = false;
-release_discovery::Result g_result;
-std::mutex g_mutex;
+struct State {
+    bool check_started = false;
+    bool checked = false;
+    release_discovery::Result result;
+    std::mutex mutex;
+};
+
+State &state() {
+    static State instance;
+    return instance;
+}
 
 struct Snapshot {
     bool check_started = false;
@@ -22,8 +29,9 @@ struct Snapshot {
 };
 
 Snapshot snapshot() {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    return {g_check_started, g_checked, g_result};
+    State &current = state();
+    std::lock_guard<std::mutex> lock(current.mutex);
+    return {current.check_started, current.checked, current.result};
 }
 
 godot::String warning_text_for(const release_discovery::Result &result) {
@@ -40,26 +48,27 @@ godot::String warning_text_for(const release_discovery::Result &result) {
 } // namespace
 
 void check_once(const std::atomic_bool *cancelled) {
+    State &current = state();
     {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        if (g_check_started) {
+        std::lock_guard<std::mutex> lock(current.mutex);
+        if (current.check_started) {
             return;
         }
-        g_check_started = true;
+        current.check_started = true;
     }
     release_discovery::Result result = release_discovery::check(5000, cancelled);
     if (!result.success) {
         FLOG_TOOL("Update check skipped: " + result.error);
     }
     {
-        std::lock_guard<std::mutex> lock(g_mutex);
+        std::lock_guard<std::mutex> lock(current.mutex);
         if (result.cancelled) {
-            g_check_started = false;
-            g_checked = false;
+            current.check_started = false;
+            current.checked = false;
             return;
         }
-        g_result = result;
-        g_checked = true;
+        current.result = result;
+        current.checked = true;
     }
 }
 

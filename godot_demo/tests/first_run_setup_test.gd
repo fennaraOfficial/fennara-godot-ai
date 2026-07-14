@@ -1,12 +1,37 @@
 extends SceneTree
 
 
+func _on_test_watchdog_timeout() -> void:
+	push_error("Native first-run setup test did not finish within 10 seconds.")
+	quit(1)
+
+
+func _remove_tree(path: String) -> void:
+	var directory := DirAccess.open(path)
+	if directory != null:
+		directory.list_dir_begin()
+		var entry := directory.get_next()
+		while not entry.is_empty():
+			var entry_path := path.path_join(entry)
+			if directory.current_is_dir():
+				_remove_tree(entry_path)
+			else:
+				DirAccess.remove_absolute(entry_path)
+			entry = directory.get_next()
+		directory.list_dir_end()
+	DirAccess.remove_absolute(path)
+
+
 func _initialize() -> void:
+	var watchdog := create_timer(10.0)
+	watchdog.timeout.connect(_on_test_watchdog_timeout)
 	var original_local_app_data := OS.get_environment("LOCALAPPDATA")
+	var original_user_profile := OS.get_environment("USERPROFILE")
 	var test_local_app_data := ProjectSettings.globalize_path(
 		"res://.godot/first-run-setup-test-appdata",
 	)
 	OS.set_environment("LOCALAPPDATA", test_local_app_data)
+	OS.set_environment("USERPROFILE", test_local_app_data.path_join("profile"))
 	var extension := load("res://addons/fennara/fennara.gdextension")
 	assert(extension != null)
 	OS.set_environment("FENNARA_FORCE_FIRST_RUN_SETUP", "1")
@@ -41,7 +66,10 @@ func _initialize() -> void:
 
 	setup.start(ProjectSettings.globalize_path("res://"), "0.3.8")
 	assert(setup.has_failed())
-	assert(setup.get_error_code() == "FEN-SETUP-MANIFEST-DOWNLOAD")
+	assert(
+		setup.get_error_code() == "FEN-SETUP-MANIFEST-DOWNLOAD",
+		"Expected manifest download failure, got %s" % setup.get_error_code(),
+	)
 	assert(setup.get_status() == "Fennara setup could not finish.")
 	assert(setup.get_operation_id().is_empty())
 
@@ -67,10 +95,8 @@ func _initialize() -> void:
 	OS.set_environment("FENNARA_SETUP_TEST_SUCCESS", "")
 	OS.set_environment("FENNARA_FORCE_FIRST_RUN_SETUP", "")
 	OS.set_environment("LOCALAPPDATA", original_local_app_data)
+	OS.set_environment("USERPROFILE", original_user_profile)
 	setup.queue_free()
-	DirAccess.remove_absolute(test_local_app_data.path_join("Fennara/cache/setup"))
-	DirAccess.remove_absolute(test_local_app_data.path_join("Fennara/cache"))
-	DirAccess.remove_absolute(test_local_app_data.path_join("Fennara"))
-	DirAccess.remove_absolute(test_local_app_data)
+	_remove_tree(test_local_app_data)
 	print("first-run setup state test passed")
 	quit(0)
