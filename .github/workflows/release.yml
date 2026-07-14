@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       promote_latest:
-        description: "Also update the moving latest release for installers."
+        description: "Mark the exact release as GitHub Latest and seed the frozen legacy latest bootstrap if needed."
         required: true
         default: true
         type: boolean
@@ -381,9 +381,13 @@ jobs:
             echo "::error::RELEASE_ADMIN_TOKEN must provide repository Administration read access for the immutable-release preflight."
             exit 1
           fi
-          if ! gh api \
-            -H "X-GitHub-Api-Version: 2026-03-10" \
-            "repos/${GITHUB_REPOSITORY}/immutable-releases" >/dev/null 2>&1; then
+          immutable_enabled="$(
+            gh api \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}/immutable-releases" \
+              --jq '.enabled' 2>/dev/null || true
+          )"
+          if [[ "${immutable_enabled}" != "true" ]]; then
             echo "::error::Repository release immutability must be enabled before publishing a release."
             exit 1
           fi
@@ -404,23 +408,6 @@ jobs:
             exit 1
           fi
           mapfile -t desired_assets < <(printf '%s\n' "${assets[@]##*/}" | sort)
-
-          if [[ "${PROMOTE_LATEST}" == "true" ]]; then
-            if ! gh release view latest --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-              echo "::error::The legacy mutable latest release is missing and cannot be recreated after enabling release immutability."
-              exit 1
-            fi
-            latest_immutable="$(
-              gh release view latest \
-                --repo "${GITHUB_REPOSITORY}" \
-                --json isImmutable \
-                --jq '.isImmutable'
-            )"
-            if [[ "${latest_immutable}" != "false" ]]; then
-              echo "::error::The moving latest release must remain the pre-policy mutable release."
-              exit 1
-            fi
-          fi
 
           notes="Fennara Godot AI ${tag}
 
@@ -502,50 +489,120 @@ jobs:
             node scripts/verify-published-assets.mjs \
               --expected-dir release-assets \
               --actual-dir "${exact_assets_dir}"
-            gh release edit "${tag}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --draft=false
+            if [[ "${PROMOTE_LATEST}" == "true" ]]; then
+              gh release edit "${tag}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --draft=false \
+                --latest
+            else
+              gh release edit "${tag}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --draft=false \
+                --latest=false
+            fi
             mapfile -t promotion_assets < <(find "${exact_assets_dir}" -maxdepth 1 -type f | sort)
           fi
           gh release verify "${tag}" --repo "${GITHUB_REPOSITORY}"
 
           if [[ "${PROMOTE_LATEST}" == "true" ]]; then
-            latest_notes="Latest Fennara Godot AI release.
+            github_latest_tag="$(
+              gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name'
+            )"
+            if [[ "${github_latest_tag}" != "${tag}" ]]; then
+              echo "::error::GitHub Latest is ${github_latest_tag}, expected ${tag}. Immutable releases must be marked Latest when first published."
+              exit 1
+            fi
 
-            Currently points to ${tag}, built from ${GITHUB_SHA}."
+            legacy_tag_sha="$(git ls-remote origin refs/tags/latest | awk '{print $1}')"
+            if [[ -z "${legacy_tag_sha}" ]]; then
+              echo "::error::The legacy latest tag is missing. Restore it before publishing the one-time compatibility bootstrap."
+              exit 1
+            fi
 
-            gh release upload latest "${promotion_assets[@]}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --clobber
-            mapfile -t desired_latest_assets < <(printf '%s\n' "${promotion_assets[@]##*/}" | sort)
-            mapfile -t published_latest_assets < <(
-              gh release view latest \
-                --repo "${GITHUB_REPOSITORY}" \
-                --json assets \
-                --jq '.assets[].name' | sort
-            )
-            for published_asset in "${published_latest_assets[@]}"; do
-              if ! printf '%s\n' "${desired_latest_assets[@]}" | grep -Fxq "${published_asset}"; then
-                gh release delete-asset latest "${published_asset}" \
+            reconcile_legacy_draft=false
+            if gh release view latest --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              read -r legacy_immutable legacy_draft legacy_prerelease < <(
+                gh release view latest \
                   --repo "${GITHUB_REPOSITORY}" \
-                --yes
+                  --json isImmutable,isDraft,isPrerelease \
+                  --jq '[.isImmutable, .isDraft, .isPrerelease] | @tsv'
+              )
+              if [[ "${legacy_immutable}" == "true" && "${legacy_draft}" == "false" && "${legacy_prerelease}" == "false" ]]; then
+                echo "Legacy latest bootstrap is already frozen; leaving it unchanged."
+              elif [[ "${legacy_immutable}" == "false" && "${legacy_draft}" == "true" && "${legacy_prerelease}" == "false" ]]; then
+                reconcile_legacy_draft=true
+                echo "Seeding the existing legacy latest draft as a one-time compatibility bootstrap."
+              else
+                echo "::error::The legacy latest release must be either a mutable draft awaiting its one-time bootstrap or an already-published immutable release."
+                exit 1
               fi
-            done
-            latest_assets_dir="${RUNNER_TEMP}/latest-release-${VERSION}"
-            rm -rf "${latest_assets_dir}"
-            mkdir -p "${latest_assets_dir}"
-            gh release download latest \
-              --repo "${GITHUB_REPOSITORY}" \
-              --dir "${latest_assets_dir}"
-            node scripts/verify-published-assets.mjs \
-              --expected-dir "$(dirname "${promotion_assets[0]}")" \
-              --actual-dir "${latest_assets_dir}"
-            gh release edit latest \
-              --repo "${GITHUB_REPOSITORY}" \
-              --target "${GITHUB_SHA}" \
-              --title "Fennara Godot AI latest" \
-              --notes "${latest_notes}" \
-              --latest
-            git tag --force latest "${GITHUB_SHA}"
-            git push --force origin refs/tags/latest
+            else
+              legacy_notes="Legacy installer compatibility bootstrap.
+
+              Frozen with Fennara ${tag} assets. Current installers and CLIs discover stable versions through GitHub's Latest release endpoint."
+              gh release create latest \
+                --repo "${GITHUB_REPOSITORY}" \
+                --verify-tag \
+                --title "Fennara legacy installer bootstrap" \
+                --notes "${legacy_notes}" \
+                --draft \
+                --latest=false
+              reconcile_legacy_draft=true
+            fi
+
+            if [[ "${reconcile_legacy_draft}" == "true" ]]; then
+              gh release upload latest "${promotion_assets[@]}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --clobber
+              mapfile -t desired_legacy_assets < <(printf '%s\n' "${promotion_assets[@]##*/}" | sort)
+              mapfile -t published_legacy_assets < <(
+                gh release view latest \
+                  --repo "${GITHUB_REPOSITORY}" \
+                  --json assets \
+                  --jq '.assets[].name' | sort
+              )
+              for published_asset in "${published_legacy_assets[@]}"; do
+                if ! printf '%s\n' "${desired_legacy_assets[@]}" | grep -Fxq "${published_asset}"; then
+                  gh release delete-asset latest "${published_asset}" \
+                    --repo "${GITHUB_REPOSITORY}" \
+                    --yes
+                fi
+              done
+              legacy_assets_dir="${RUNNER_TEMP}/legacy-latest-release-${VERSION}"
+              rm -rf "${legacy_assets_dir}"
+              mkdir -p "${legacy_assets_dir}"
+              gh release download latest \
+                --repo "${GITHUB_REPOSITORY}" \
+                --dir "${legacy_assets_dir}"
+              node scripts/verify-published-assets.mjs \
+                --expected-dir "$(dirname "${promotion_assets[0]}")" \
+                --actual-dir "${legacy_assets_dir}"
+              legacy_notes="Legacy installer compatibility bootstrap.
+
+              Frozen with Fennara ${tag} assets. Current installers and CLIs discover stable versions through GitHub's Latest release endpoint."
+              gh release edit latest \
+                --repo "${GITHUB_REPOSITORY}" \
+                --title "Fennara legacy installer bootstrap" \
+                --notes "${legacy_notes}" \
+                --draft=false \
+                --latest=false
+              read -r legacy_immutable legacy_draft legacy_prerelease < <(
+                gh release view latest \
+                  --repo "${GITHUB_REPOSITORY}" \
+                  --json isImmutable,isDraft,isPrerelease \
+                  --jq '[.isImmutable, .isDraft, .isPrerelease] | @tsv'
+              )
+              if [[ "${legacy_immutable}" != "true" || "${legacy_draft}" != "false" || "${legacy_prerelease}" != "false" ]]; then
+                echo "::error::The legacy latest compatibility bootstrap was not published immutably."
+                exit 1
+              fi
+            fi
+
+            github_latest_tag="$(
+              gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name'
+            )"
+            if [[ "${github_latest_tag}" != "${tag}" ]]; then
+              echo "::error::Publishing the legacy bootstrap changed GitHub Latest to ${github_latest_tag}; expected ${tag}."
+              exit 1
+            fi
           fi
