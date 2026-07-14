@@ -48,7 +48,7 @@ pub fn validate(addon_dir: &Path) -> Result<ExistingAddon, String> {
     ReleaseIdentity::load(addon_dir, &version)?;
 
     let library_path = current_library_path(addon_dir, &manifest_path)?;
-    if !library_path.is_file() {
+    if !editor_library_exists(&library_path, platform_name()) {
         return Err(format!(
             "the existing Fennara addon is missing its {} {} editor library at {}",
             platform_name(),
@@ -66,6 +66,23 @@ pub fn validate(addon_dir: &Path) -> Result<ExistingAddon, String> {
     }
 
     Ok(ExistingAddon { version })
+}
+
+fn editor_library_exists(library_path: &Path, platform: &str) -> bool {
+    if library_path.is_file() {
+        return true;
+    }
+    if platform != "macos"
+        || !library_path.is_dir()
+        || library_path.extension().and_then(|value| value.to_str()) != Some("framework")
+    {
+        return false;
+    }
+
+    let Some(framework_name) = library_path.file_stem() else {
+        return false;
+    };
+    library_path.join(framework_name).is_file()
 }
 
 fn current_library_path(addon_dir: &Path, manifest_path: &Path) -> Result<PathBuf, String> {
@@ -209,6 +226,27 @@ mod tests {
         let error = inspect(&project).unwrap_err();
         assert!(error.contains("missing its"));
         assert!(error.contains("editor library"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn accepts_macos_framework_with_its_executable() {
+        let root = test_root("macos-framework");
+        let framework = root.join("libfennara.macos.editor.framework");
+        fs::create_dir_all(&framework).unwrap();
+        fs::write(framework.join("libfennara.macos.editor"), "library").unwrap();
+
+        assert!(editor_library_exists(&framework, "macos"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_macos_framework_without_its_executable() {
+        let root = test_root("incomplete-macos-framework");
+        let framework = root.join("libfennara.macos.editor.framework");
+        fs::create_dir_all(&framework).unwrap();
+
+        assert!(!editor_library_exists(&framework, "macos"));
         fs::remove_dir_all(root).unwrap();
     }
 
