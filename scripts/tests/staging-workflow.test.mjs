@@ -61,6 +61,16 @@ test("shell commands do not interpolate resolve outputs directly", () => {
   }
 });
 
+test("candidate version stamping uses bash on every platform", () => {
+  const packageJob = jobBlocks(workflow).get("package");
+  assert.ok(packageJob, "workflow must contain the package job");
+  const stampStep = stepBlocks(packageJob).find((block) =>
+    /name: Stamp candidate version in the runner workspace/.test(block),
+  );
+  assert.ok(stampStep, "package job must stamp the staging candidate version");
+  assert.match(stampStep, /^        shell: bash$/m);
+});
+
 test("immutable-release preflight uses an administration token", () => {
   const publish = jobBlocks(workflow).get("publish");
   assert.ok(publish, "workflow must contain the publish job");
@@ -94,9 +104,11 @@ function runBlocks(source) {
 }
 
 function checkoutSteps(source) {
-  return source
-    .split(/(?=^      - )/m)
-    .filter((block) => /uses: actions\/checkout@/.test(block));
+  return stepBlocks(source).filter((block) => /uses: actions\/checkout@/.test(block));
+}
+
+function stepBlocks(source) {
+  return source.split(/(?=^      - )/m);
 }
 
 function jobBlocks(source) {
