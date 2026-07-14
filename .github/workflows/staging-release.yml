@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       base_version:
-        description: "Planned stable version, for example 0.3.9."
+        description: "Planned stable version in X.Y.Z form."
         required: true
         type: string
       candidate:

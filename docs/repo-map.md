@@ -52,7 +52,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `local/crates/fennara-cli/src/release_channel.rs` | Per-channel staging pointer validation and resolution to an exact versioned release. |
 | `local/crates/fennara-cli/src/release_manifest.rs` | Release manifest parsing, asset hash validation, identity binding, and platform package selection. |
 | `local/crates/fennara-cli/src/release_version.rs` | Shared CLI SemVer parsing and precedence used by manifests and release selection. |
-| `local/crates/fennara-cli/src/existing_addon_install.rs` | Exact-version adoption of an existing Asset Library or release addon without replacing project addon files. |
+| `local/crates/fennara-cli/src/existing_addon_install.rs` | Exact-version adoption of an existing complete addon without replacing project addon files. |
 | `local/crates/fennara-cli/src/daemon_setup.rs` | Shared daemon health check, exact-version readiness, and startup used by install and doctor. |
 | `local/crates/fennara-cli/tests/operation_failures.rs` | Process-level failure, durable diagnostics, redaction, and fail-closed operation-log tests. |
 | `local/crates/fennara-cli/src/diagnostics.rs` | User-facing access to the latest or a named sanitized operation report. |
@@ -79,7 +79,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `fennara-cpp/src/setup/` | Native first-run setup state, release-manifest CLI bootstrap, hash verification, CLI launch, and durable operation progress reader. |
 | `fennara-cpp/src/release/version.cpp` | Native SemVer validation and precedence used by release/update discovery. |
 | `fennara-cpp/src/release/identity.cpp` | Packaged stable/staging identity validation and legacy stable compatibility. |
-| `fennara-cpp/src/release/discovery.cpp` | Stable-latest and isolated staging-channel update discovery. |
+| `fennara-cpp/src/release/discovery.cpp` | GitHub Latest and isolated staging-channel update discovery. |
 | `fennara-cpp/src/update/` | Exact-target update coordination, durable receipt discovery, close/install handoff, and recovery UI state. |
 | `fennara-cpp/src/ui/setup_panel.cpp` | Webview-independent first-run setup panel with progress, retry, logs, and sanitized report actions. |
 | `fennara-cpp/vendor/cef/` | Official CEF 139 header snapshot used by the Linux OSR bridge. Runtime binaries stay outside the addon. |

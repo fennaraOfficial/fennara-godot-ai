@@ -123,6 +123,13 @@ project guidance, and checks the platform webview prerequisite. Use
 the CLI has already been replaced. Do not use it to bypass a release's minimum
 CLI requirement.
 
+> [!IMPORTANT]
+> If you are upgrading from Fennara v0.3.8 or older, reinstall the CLI once
+> with the platform installation command in [Setup](setup.md#install-from-the-terminal-recommended-on-macos)
+> before running `fennara update`. Those CLIs query a retired release tag and
+> cannot discover current releases. Reinstalling the CLI does not remove your
+> project addon or settings.
+
 ### Prepare While Godot Is Open
 
 The in-editor update button uses the staging form:
