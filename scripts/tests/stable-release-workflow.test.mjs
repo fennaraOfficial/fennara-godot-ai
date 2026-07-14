@@ -7,7 +7,7 @@ const workflow = readFileSync(
   "utf8",
 );
 
-test("stable publication reconciles matching drafts before immutable promotion", () => {
+test("stable publication reconciles matching drafts and verifies exact bytes", () => {
   const publishStep = namedStep(jobBlock(workflow, "publish"), "Publish release");
   assert.match(publishStep, /reconcile_draft=false/);
   assert.match(publishStep, /Resuming matching draft release/);
@@ -17,21 +17,28 @@ test("stable publication reconciles matching drafts before immutable promotion",
   );
 });
 
-test("latest promotion verifies exact bytes and moves the tag last", () => {
+test("stable promotion marks the exact release as GitHub Latest", () => {
   const publishStep = namedStep(jobBlock(workflow, "publish"), "Publish release");
-  const latestUpload = publishStep.indexOf('gh release upload latest "${promotion_assets[@]}"');
-  const latestVerify = publishStep.indexOf('--actual-dir "${latest_assets_dir}"');
-  const latestEdit = publishStep.indexOf("gh release edit latest");
-  const tagPush = publishStep.indexOf("git push --force origin refs/tags/latest");
-  assert.ok(
-    latestUpload > 0 && latestUpload < latestVerify && latestVerify < latestEdit && latestEdit < tagPush,
+  assert.match(
+    publishStep,
+    /gh release edit "\$\{tag\}"[\s\S]*?--draft=false[\s\S]*?--latest[\s\S]*?releases\/latest[\s\S]*?expected \$\{tag\}/,
   );
 });
 
-test("immutable-release preflight uses an administration token", () => {
-  const preflight = namedStep(jobBlock(workflow, "publish"), "Require immutable GitHub releases");
-  assert.match(preflight, /GH_TOKEN: \$\{\{ secrets\.RELEASE_ADMIN_TOKEN \}\}/);
-  assert.match(preflight, /RELEASE_ADMIN_TOKEN must provide repository Administration read access/);
+test("stable publication safely resumes a matching published release", () => {
+  const publishStep = namedStep(jobBlock(workflow, "publish"), "Publish release");
+  assert.match(publishStep, /resume_published=false/);
+  assert.match(publishStep, /Resuming matching published release/);
+  assert.match(publishStep, /exact_tag_sha[\s\S]*?desired_assets[\s\S]*?published_exact_assets/);
+  assert.match(publishStep, /for attempt in \{1\.\.12\}[\s\S]*?sleep 5/);
+});
+
+test("stable publication does not depend on the retired latest tag or immutability", () => {
+  const publishJob = jobBlock(workflow, "publish");
+  assert.doesNotMatch(publishJob, /Require immutable GitHub releases/);
+  assert.doesNotMatch(publishJob, /gh release verify/);
+  assert.doesNotMatch(publishJob, /release (?:view|create|edit|upload|delete) latest/);
+  assert.doesNotMatch(publishJob, /refs\/tags\/latest/);
 });
 
 function jobBlock(source, jobName) {

@@ -62,8 +62,7 @@ appear after manually downloading and extracting the addon ZIP.
 
 ### Add The Addon To Your Project
 
-- Install **Fennara** from the Godot Asset Library.
-- Or open the [Latest Release](https://github.com/fennaraOfficial/fennara-godot-ai/releases/latest), download `fennara-addon-latest.zip`, and extract its `addons/fennara/` folder into your project.
+- Open the [Latest Release](https://github.com/fennaraOfficial/fennara-godot-ai/releases/latest), download `fennara-addon-latest.zip`, and extract its `addons/fennara/` folder into your project.
 
 Open the project, select the Fennara dock, and press **Set Up Fennara**.
 
@@ -128,6 +127,12 @@ for the complete app list and manual configuration instructions.
 ## Update
 
 When the Fennara dock shows **Update**, press it and follow the prompts.
+
+> **Upgrading from Fennara v0.3.9 or older:** Reinstall the CLI once with the
+> platform install command above before running `fennara update`. Those CLI
+> versions resolve a retired release tag and cannot discover current releases.
+> Reinstalling the CLI switches future updates to GitHub's Latest Release
+> endpoint and does not remove your existing project addon or settings.
 
 To update from the terminal, close Godot and run:
 

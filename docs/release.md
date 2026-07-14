@@ -50,7 +50,7 @@ node scripts/set-version.mjs 0.3.9-pr.101.2 \
   --source-commit <full-commit-sha>
 ```
 
-The staging version, channel, source commit, and immutable release tag must
+The staging version, channel, source commit, and exact release tag must
 agree. A prerelease addon without this identity is rejected. Existing stable
 addons from before `release.json` continue to default to the stable track.
 
@@ -221,14 +221,14 @@ Staging channels are isolated per pull request:
 | --- | --- |
 | Channel | `pr-101` |
 | Candidate version | `0.3.9-pr.101.2` |
-| Immutable release | `v0.3.9-pr.101.2` |
+| Exact release | `v0.3.9-pr.101.2` |
 | Channel ref | `fennara-staging/pr-101` |
 | Pointer file | `fennara-staging-channel-pr-101.json` |
 
-The per-channel Git ref contains only a small pointer file to an immutable
-exact release. Release binaries never live under the moving channel ref. The
+The per-channel Git ref contains only a small pointer file to an exact
+versioned release. Release binaries never live under the moving channel ref. The
 CLI can resolve this pointer with the internal version request
-`channel:pr-101`, then continues using only the exact immutable version.
+`channel:pr-101`, then continues using only the exact version.
 
 PR 101 and PR 125 therefore use different release tags and pointer assets.
 Updating one channel cannot redirect testers on the other channel. Publishing
@@ -264,37 +264,36 @@ selected.
 
 When publication is enabled, the trusted final job:
 
-1. Requires GitHub release immutability to be enabled for the repository.
-2. Revalidates the candidate artifacts as data.
-3. Creates a draft, uploads every asset, publishes it as the immutable
-   `v<exact-version>` prerelease, and verifies its release attestation.
-4. Downloads the published assets and compares their names and hashes.
-5. Rejects a backward or conflicting channel change.
-6. Updates the small `fennara-staging/pr-<number>` pointer ref last through a
+1. Revalidates the candidate artifacts as data.
+2. Creates a draft, uploads every asset, and publishes it as the exact
+   `v<exact-version>` prerelease without changing GitHub Latest.
+3. Downloads the published assets and compares their names and hashes.
+4. Rejects a backward or conflicting channel change.
+5. Updates the small `fennara-staging/pr-<number>` pointer ref last through a
    conditional GitHub Contents API write.
-7. Downloads the active pointer and verifies its exact contents.
+6. Downloads the active pointer and verifies its exact contents.
 
 Runs for one pull request are serialized. Different pull requests use separate
 concurrency groups, release tags, and pointer refs. Retrying the same
-candidate verifies the existing immutable release instead of mixing files into
-it. The workflow never creates, uploads to, or promotes stable `latest`.
+candidate verifies the existing exact release instead of mixing files into it.
+The workflow never creates, uploads to, or promotes stable GitHub Latest.
 
-GitHub release immutability applies only to releases created after the setting
-is enabled. Fennara intentionally preserves the existing pre-policy `latest`
-release as the one mutable compatibility endpoint used by current installers.
-The stable Release workflow updates that release in place and fails if it is
-missing or immutable. Exact stable and staging releases are created as drafts,
-receive all assets before publication, and must pass `gh release verify` after
-publication.
+Stable publication does not use a literal `latest` tag or release. The Release
+workflow creates the exact `v<version>` release as a draft, verifies the uploaded
+assets byte for byte, publishes it as a mutable release, and marks that exact
+release as GitHub Latest when `promote_latest` is true. Installers and stable CLI
+discovery resolve GitHub's Latest Release API endpoint.
 
-The stable and staging publication jobs use the `RELEASE_ADMIN_TOKEN` repository
-secret only for the immutable-release preflight. Configure it as a fine-grained
-token with repository Administration read access. Asset publication continues
-to use the job-scoped `GITHUB_TOKEN` with contents write access.
+Stable and staging releases are mutable while repository release immutability is
+disabled. Both workflows verify release metadata and downloaded asset bytes
+before completing publication or advancing a staging channel. Asset publication
+uses the job-scoped `GITHUB_TOKEN` with contents write access.
 
-Staging-capable and stable release workflows use `minimum_cli_version: 0.3.8`.
-Channel handoff, exact-target preservation across CLI replacement, and safe
-shared-runtime activation depend on the updater behavior introduced in that CLI.
+The stable workflow uses `minimum_cli_version: 0.3.11` because stable discovery
+no longer resolves the retired `latest` tag. The staging workflow uses
+`minimum_cli_version: 0.3.8`. Channel handoff, exact-target preservation across
+CLI replacement, and safe shared-runtime activation depend on the updater
+behavior introduced in that CLI.
 
 The shared addon zip contains every built GDExtension binary referenced by `godot_demo/addons/fennara/fennara.gdextension`. Godot loads the matching library for the user's OS and ignores the others.
 
@@ -402,7 +401,8 @@ When release packaging builds the CLI, those templates are compiled into the bin
 
 ## What `latest` Means
 
-`latest` is the moving release used by normal install and update flows.
+GitHub's Latest Release pointer selects the versioned release used by normal
+install and update flows. Fennara does not create or move a literal `latest` tag.
 
 - `install.ps1` and `install.sh` fetch the latest CLI asset by default.
 - `fennara update` fetches the release manifest from `latest` by default, self-updates the installed CLI when needed, then resolves local/addon/shared runtime assets from it.

@@ -112,9 +112,9 @@ fennara update --project path/to/project
 ```
 
 Without `--version`, the CLI reads the installed addon identity. Stable addons
-resolve stable latest, while staging addons resolve only their `pr-<number>`
-channel. The moving selector is immediately frozen to one exact immutable
-version, including across CLI self-replacement. The CLI then verifies the
+resolve GitHub's Latest release, while staging addons resolve only their
+`pr-<number>` channel. The selector is immediately frozen to one exact version,
+including across CLI self-replacement. The CLI then verifies the
 release assets, refreshes the addon and versioned local components, updates
 project guidance, and checks the platform webview prerequisite. Use
 `--version <version>` to select an exact release explicitly.
@@ -228,7 +228,8 @@ fennara self-update --version <version>
 ```
 
 Without `--version`, self-update preserves the active installation track:
-stable uses stable latest, and staging uses only its recorded PR channel.
+stable uses GitHub's Latest release, and staging uses only its recorded PR
+channel.
 
 Staging never crosses into stable automatically. To leave staging deliberately,
 close Godot and run `fennara update --version <stable-version> --project <path>`.
