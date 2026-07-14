@@ -24,8 +24,23 @@ No. Fennara is not trying to make Godot optional. It is designed to make AI agen
 
 ## How should I install Fennara?
 
-Add the addon, open the Fennara dock, and press **Set Up Fennara**. You can also
-install from the terminal. See [Setup](setup.md) for both paths.
+On Windows and Linux, add the addon, open the Fennara dock, and press **Set Up
+Fennara**, or install from the terminal. On macOS, install through the CLI to
+avoid the security notification that can occur when a browser-downloaded addon
+ZIP is extracted manually. See [Setup](setup.md) for both paths.
+
+## Why does macOS say it cannot verify `libfennara.macos.editor`?
+
+The release addon contains a native library that is not currently
+Apple-notarized. When the addon ZIP is downloaded through a browser and
+extracted manually, Finder can propagate quarantine metadata to that library,
+causing the macOS notification.
+
+To avoid it, use the [CLI installation](setup.md#install-from-the-terminal-recommended-on-macos).
+If the notification already appears, close Godot, remove the manually copied
+`addons/fennara/` folder, install the CLI, and run `fennara install` from the
+project directory. The CLI installs the same addon without that browser and
+Finder quarantine path.
 
 ## Do I need a chat provider API key?
 
