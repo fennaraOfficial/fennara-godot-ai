@@ -279,13 +279,21 @@ concurrency groups, release tags, and pointer refs. Retrying the same
 candidate verifies the existing immutable release instead of mixing files into
 it. The workflow never creates, uploads to, or promotes stable `latest`.
 
-GitHub release immutability applies only to releases created after the setting
-is enabled. Fennara intentionally preserves the existing pre-policy `latest`
-release as the one mutable compatibility endpoint used by current installers.
-The stable Release workflow updates that release in place and fails if it is
-missing or immutable. Exact stable and staging releases are created as drafts,
-receive all assets before publication, and must pass `gh release verify` after
-publication.
+Stable installers, the CLI, and the Godot update check resolve GitHub's Latest
+release endpoint. They do not depend on a movable `latest` Git tag. Exact stable
+and staging releases are created as drafts, receive every asset before
+publication, and become immutable when published. A promoted exact stable
+release is marked as GitHub Latest during that same publication operation and
+must pass `gh release verify` afterward.
+
+The `latest` tag release is a frozen compatibility bootstrap for clients
+installed before `0.3.10`, which still query `/releases/tags/latest`. The first
+promoted release after this migration fills its existing draft with the exact
+release assets, verifies their bytes, publishes it with `--latest=false`, and
+therefore makes it immutable. Later releases leave that bootstrap untouched.
+The workflow never creates, deletes, or moves the `latest` Git tag. Once an old
+CLI downloads the bootstrap's newer CLI asset, its normal self-update handoff
+continues through GitHub's Latest release endpoint.
 
 The stable and staging publication jobs use the `RELEASE_ADMIN_TOKEN` repository
 secret only for the immutable-release preflight. Configure it as a fine-grained
@@ -400,14 +408,15 @@ temp-file rename. Running editors keep using the runtime they already loaded.
 The CLI embeds the generated project guidance templates from `local/templates/`.
 When release packaging builds the CLI, those templates are compiled into the binary with the rest of the CLI code.
 
-## What `latest` Means
+## What Latest Means
 
-`latest` is the moving release used by normal install and update flows.
+GitHub's Latest release is the exact immutable release used by normal install
+and update flows. The literal `latest` tag is not moved.
 
 - `install.ps1` and `install.sh` fetch the latest CLI asset by default.
-- `fennara update` fetches the release manifest from `latest` by default, self-updates the installed CLI when needed, then resolves local/addon/shared runtime assets from it.
+- `fennara update` fetches the release manifest from GitHub's Latest release by default, self-updates the installed CLI when needed, then resolves local/addon/shared runtime assets from it.
 - In-editor updates stage verified assets before shutdown, recheck the complete staged-addon digest before replacement, keep the previous addon, launchers, and runtime manifest until activation validation succeeds, and require the reopened GDExtension handshake before deleting rollback data.
-- `fennara install` fetches the release manifest from `latest` by default, then resolves local/addon/shared runtime assets from it.
+- `fennara install` fetches the release manifest from GitHub's Latest release by default, then resolves local/addon/shared runtime assets from it.
 - The Godot plugin update check compares against GitHub's latest release.
 
 Use `promote_latest: false` only when publishing a version that should not become the default user install.

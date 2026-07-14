@@ -1,7 +1,9 @@
 use crate::release_channel::ChannelPointer;
 use crate::release_client::{
-    DownloadAsset, Release, download_bytes, parse_release_manifest, verify_download_hash,
+    DownloadAsset, Release, download_bytes, parse_release_manifest, release_metadata_url,
+    verify_download_hash,
 };
+use crate::release_identity::ReleaseSelector;
 use sha2::{Digest, Sha256};
 use std::net::TcpListener;
 
@@ -63,6 +65,22 @@ fn staging_pointer_rejects_manifest_from_another_source_commit() {
         .err()
         .unwrap();
     assert!(error.contains("identity does not match channel pointer"));
+}
+
+#[test]
+fn stable_latest_uses_github_latest_while_pinned_versions_use_exact_tags() {
+    assert_eq!(
+        release_metadata_url(&ReleaseSelector::StableLatest),
+        "https://api.github.com/repos/fennaraOfficial/fennara-godot-ai/releases/latest"
+    );
+    assert_eq!(
+        release_metadata_url(&ReleaseSelector::exact("0.3.10").unwrap()),
+        "https://api.github.com/repos/fennaraOfficial/fennara-godot-ai/releases/tags/v0.3.10"
+    );
+    assert_eq!(
+        release_metadata_url(&ReleaseSelector::exact("0.3.10-pr.101.1").unwrap()),
+        "https://api.github.com/repos/fennaraOfficial/fennara-godot-ai/releases/tags/v0.3.10-pr.101.1"
+    );
 }
 
 fn staging_release(release_manifest_sha256: &str) -> Release {

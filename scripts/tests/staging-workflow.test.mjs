@@ -93,6 +93,8 @@ test("immutable-release preflight uses an administration token", () => {
     publish,
     /name: Require immutable GitHub releases[\s\S]*?GH_TOKEN: \$\{\{ secrets\.RELEASE_ADMIN_TOKEN \}\}/,
   );
+  assert.match(publish, /--jq '\.enabled'/);
+  assert.match(publish, /immutable_enabled\}" != "true"/);
 });
 
 function runBlocks(source) {

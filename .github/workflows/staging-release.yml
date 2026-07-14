@@ -596,9 +596,13 @@ jobs:
             echo "::error::RELEASE_ADMIN_TOKEN must provide repository Administration read access for the immutable-release preflight."
             exit 1
           fi
-          if ! gh api \
-            -H "X-GitHub-Api-Version: 2026-03-10" \
-            "repos/${GITHUB_REPOSITORY}/immutable-releases" >/dev/null 2>&1; then
+          immutable_enabled="$(
+            gh api \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}/immutable-releases" \
+              --jq '.enabled' 2>/dev/null || true
+          )"
+          if [[ "${immutable_enabled}" != "true" ]]; then
             echo "::error::Repository release immutability must be enabled before publishing staging candidates."
             exit 1
           fi

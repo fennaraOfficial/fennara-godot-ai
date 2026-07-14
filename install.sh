@@ -120,7 +120,7 @@ case "$machine" in
 esac
 
 if [ "$VERSION" = "latest" ]; then
-  release_api="https://api.github.com/repos/$REPO/releases/tags/latest"
+  release_api="https://api.github.com/repos/$REPO/releases/latest"
 else
   release_api="https://api.github.com/repos/$REPO/releases/tags/v$VERSION"
 fi

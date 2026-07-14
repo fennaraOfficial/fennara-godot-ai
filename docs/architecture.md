@@ -313,8 +313,9 @@ still apply in both modes.
 ## Updates
 
 `fennara update` is the normal project update command. It reads the installed
-addon release identity, resolves stable latest or that addon's isolated staging
-channel, and freezes the result to one exact immutable version. It first checks
+add-on release identity, resolves GitHub's Latest release or the add-on's
+isolated staging channel, and freezes the result to one exact immutable
+version. It first checks
 the version of that release manifest's per-platform CLI asset and, when newer,
 stages that CLI, lets the old process exit, replaces the installed CLI, and
 resumes with the same target. It then uses the same manifest-driven resolver and installer as
@@ -365,8 +366,10 @@ Each public release publishes separate assets so installs can stay modular:
 | `fennara-webview-cef-linux-x64-<cef-version>.zip` | Linux-only shared CEF runtime installed once into Fennara app data. |
 | `fennara-release-manifest-v<version>.json` | Schema-versioned install/update plan with asset names, hashes, minimum CLI version, and shared runtime declarations. |
 
-The moving `latest` release is what normal users should install from. Versioned
-releases such as `v0.2.8` stay available for pinning and debugging.
+GitHub's Latest exact release is what normal users should install from.
+Versioned releases such as `v0.2.8` stay available for pinning and debugging.
+The release attached to the literal `latest` tag is only a frozen compatibility
+bootstrap for clients older than `0.3.10`.
 
 Linux CEF runtime payloads are not part of `fennara-addon-*`. They are selected
 by the release manifest and installed once into the shared app-data
