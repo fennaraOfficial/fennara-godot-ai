@@ -173,6 +173,11 @@ fennara update
 > Reinstalling the CLI switches future updates to GitHub's Latest Release
 > endpoint without removing your project addon or settings.
 
+> [!IMPORTANT]
+> On macOS, reinstall the CLI once before upgrading from Fennara v0.3.11. That
+> CLI rejects the existing framework bundle before reaching self-update. The
+> reinstall replaces only the CLI and preserves the project addon and settings.
+
 If validation fails, use **Restore Previous Version**, **Open Logs**, or
 **Copy Report** in the dock. See the [CLI update reference](cli.md#update-a-project)
 for exact versions, preparation, and interrupted-update recovery.

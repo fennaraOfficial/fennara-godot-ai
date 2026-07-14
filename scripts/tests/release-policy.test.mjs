@@ -22,10 +22,10 @@ const workflows = ["package-preview.yml", "release.yml", "staging-release.yml"].
 
 test("release policy owns the minimum CLI version for every release track", () => {
   assert.deepEqual(RELEASE_POLICY.minimumCliVersionByTrack, {
-    stable: "0.3.11",
+    stable: "0.3.12",
     staging: "0.3.8",
   });
-  assert.equal(minimumCliVersionForTrack("stable"), "0.3.11");
+  assert.equal(minimumCliVersionForTrack("stable"), "0.3.12");
   assert.equal(minimumCliVersionForTrack("staging"), "0.3.8");
   assert.throws(() => minimumCliVersionForTrack("preview"), /does not define track/);
   assert.throws(() => minimumCliVersionForTrack("toString"), /does not define track/);

@@ -293,10 +293,12 @@ disabled. Both workflows verify release metadata and downloaded asset bytes
 before completing publication or advancing a staging channel. Asset publication
 uses the job-scoped `GITHUB_TOKEN` with contents write access.
 
-The release policy currently requires CLI `0.3.11` for stable manifests and
+The release policy currently requires CLI `0.3.12` for stable manifests and
 CLI `0.3.8` for staging manifests. Stable discovery no longer resolves the
-retired `latest` tag. A staging candidate such as `0.3.11-pr.123.1` compares
-lower than stable `0.3.11` under SemVer, so its minimum must remain below the
+retired `latest` tag. Stable `0.3.12` requires the corrected update validation,
+version-switch preflight, and Windows operation-journal handling. A staging
+candidate such as `0.3.12-pr.123.1` compares lower than stable `0.3.12` under
+SemVer, so its minimum must remain below the
 candidate version for first-run setup to install the candidate CLI. Do not
 change either minimum based only on manifest schema compatibility.
 

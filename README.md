@@ -134,6 +134,11 @@ When the Fennara dock shows **Update**, press it and follow the prompts.
 > Reinstalling the CLI switches future updates to GitHub's Latest Release
 > endpoint and does not remove your existing project addon or settings.
 
+> **macOS users upgrading from Fennara v0.3.11:** Reinstall the CLI once with
+> the macOS install command above before updating. The v0.3.11 CLI rejects the
+> existing macOS framework bundle before it can self-update. Reinstalling only
+> replaces the CLI; it does not remove your project addon or settings.
+
 To update from the terminal, close Godot and run:
 
 ```bash
