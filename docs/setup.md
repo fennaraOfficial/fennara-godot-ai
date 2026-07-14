@@ -27,8 +27,7 @@ Install Fennara, choose where you want to chat, and connect your Godot project.
 > [Install From The Terminal](#install-from-the-terminal-recommended-on-macos)
 > to avoid this notification.
 
-1. Install **Fennara** from the Godot Asset Library, or download
-   `fennara-addon-latest.zip` from the
+1. Download `fennara-addon-latest.zip` from the
    [latest release](https://github.com/fennaraOfficial/fennara-godot-ai/releases/latest)
    and copy `addons/fennara/` into your project.
 2. Open the project and select the Fennara dock.
@@ -160,6 +159,13 @@ To update from the terminal, close Godot and run:
 cd path/to/your-godot-project
 fennara update
 ```
+
+> [!IMPORTANT]
+> If you are upgrading from Fennara v0.3.8 or older, reinstall the CLI once
+> with the platform installation command above before running `fennara update`.
+> Those CLIs query a retired release tag and cannot discover current releases.
+> Reinstalling the CLI switches future updates to GitHub's Latest Release
+> endpoint without removing your project addon or settings.
 
 If validation fails, use **Restore Previous Version**, **Open Logs**, or
 **Copy Report** in the dock. See the [CLI update reference](cli.md#update-a-project)

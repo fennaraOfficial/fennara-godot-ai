@@ -128,7 +128,7 @@ for the complete app list and manual configuration instructions.
 
 When the Fennara dock shows **Update**, press it and follow the prompts.
 
-> **Upgrading from Fennara v0.3.9 or older:** Reinstall the CLI once with the
+> **Upgrading from Fennara v0.3.8 or older:** Reinstall the CLI once with the
 > platform install command above before running `fennara update`. Those CLI
 > versions resolve a retired release tag and cannot discover current releases.
 > Reinstalling the CLI switches future updates to GitHub's Latest Release

@@ -108,4 +108,8 @@ The lowest `fennara` CLI version allowed to consume a release manifest. If a rel
 
 **Latest Release**
 
-The moving GitHub release/tag used by installers and default updates. Updating source files after publishing does not change release assets; already-published manifest assets must be replaced explicitly.
+GitHub's Latest Release pointer to an exact versioned release. Installers and
+default updates resolve this pointer through GitHub's API. Fennara does not use
+a literal `latest` tag or release. Updating source files after publishing does
+not change release assets; already-published manifest assets must be replaced
+explicitly.

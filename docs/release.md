@@ -22,7 +22,7 @@ Releases are manual. Do not publish from pull request workflows.
 
 Release tooling accepts SemVer values. Stable releases use `X.Y.Z`. Staging
 candidates use an isolated pull-request prerelease such as
-`0.3.9-pr.101.2`, where `pr-101` is the staging channel and `2` is that
+`1.2.3-pr.101.2`, where `pr-101` is the staging channel and `2` is that
 channel's candidate number.
 
 To bump the repo version:
@@ -44,7 +44,7 @@ written automatically by the normal command above. A staging build workspace
 uses the explicit identity inputs:
 
 ```bash
-node scripts/set-version.mjs 0.3.9-pr.101.2 \
+node scripts/set-version.mjs 1.2.3-pr.101.2 \
   --track staging \
   --channel pr-101 \
   --source-commit <full-commit-sha>
@@ -132,7 +132,7 @@ The `version` input must match `VERSION`.
 The workflow publishes:
 
 - `v<version>`
-- `latest` when `promote_latest` is true
+- marks `v<version>` as GitHub Latest when `promote_latest` is true
 
 The release workflow prepares the Linux CEF runtime before platform packaging.
 It downloads the pinned official CEF 139 Linux minimal SDK, assembles the
@@ -167,7 +167,7 @@ Package roles:
 | `fennara-cli-*` | Install script payload containing only the `fennara` CLI for one platform |
 | `fennara-release-local-*` | MCP and daemon launchers plus versioned runtime binaries for one platform |
 | `fennara-release-addon-v*` | Versioned all-platform addon resolved through the release manifest |
-| `fennara-addon-latest.zip` | Stable all-platform addon URL for the Godot Asset Library and documentation |
+| `fennara-addon-latest.zip` | Stable-name all-platform addon alias for documentation and manual downloads |
 | `fennara-webview-cef-linux-x64-*` | Linux-only shared CEF runtime installed once in Fennara app data |
 | `fennara-release-manifest-v*` | Install and update plan containing asset names, SHA-256 values, install primitives, and shared runtimes |
 
@@ -195,11 +195,12 @@ manifest whenever the release publishes one. The manifest records:
 - the shared addon asset with SHA-256
 - platform-specific shared runtime assets, currently Linux CEF
 
-The current manifest generator and release workflows use
-`minimum_cli_version: 0.3.8` by default. Normal package layout or asset name
-changes should be handled by manifest data, not by changing the outer CLI.
-Raise `minimum_cli_version` only when a release needs a new manifest schema or
-install primitive that older CLIs truly cannot perform.
+Release workflows pass `minimum_cli_version` explicitly instead of relying on
+the manifest generator's fallback. Normal package layout or asset name changes
+should be handled by manifest data, not by changing the outer CLI. Raise the
+minimum when a release needs a newer updater handoff, manifest schema, install
+primitive, self-update behavior, or other CLI capability that an older
+published CLI cannot safely perform.
 
 When the CLI is too old, `fennara update` should use the manifest's
 per-platform `assets.cli` entry to update the installed CLI first, then resume
@@ -220,8 +221,8 @@ Staging channels are isolated per pull request:
 | Value | PR 101 example |
 | --- | --- |
 | Channel | `pr-101` |
-| Candidate version | `0.3.9-pr.101.2` |
-| Exact release | `v0.3.9-pr.101.2` |
+| Candidate version | `1.2.3-pr.101.2` |
+| Exact release | `v1.2.3-pr.101.2` |
 | Channel ref | `fennara-staging/pr-101` |
 | Pointer file | `fennara-staging-channel-pr-101.json` |
 
@@ -232,7 +233,8 @@ CLI can resolve this pointer with the internal version request
 
 PR 101 and PR 125 therefore use different release tags and pointer assets.
 Updating one channel cannot redirect testers on the other channel. Publishing
-one channel never changes stable `latest` or another pull request's channel.
+one channel never changes the stable GitHub Latest designation or another pull
+request's channel.
 
 ## Staging Candidate Workflow
 
@@ -242,7 +244,7 @@ head of an open pull request. Run it from `main` and provide:
 | Input | Meaning |
 | --- | --- |
 | `pull_request` | Open pull request to build |
-| `base_version` | Planned stable version, such as `0.3.9` |
+| `base_version` | Planned stable version in `X.Y.Z` form |
 | `candidate` | Increasing candidate number for this pull request |
 | `source_commit` | Optional full SHA that must still be the pull request head |
 | `publish` | Off for artifact-only validation, on to publish the candidate |
@@ -290,10 +292,10 @@ before completing publication or advancing a staging channel. Asset publication
 uses the job-scoped `GITHUB_TOKEN` with contents write access.
 
 The stable workflow uses `minimum_cli_version: 0.3.11` because stable discovery
-no longer resolves the retired `latest` tag. The staging workflow uses
-`minimum_cli_version: 0.3.8`. Channel handoff, exact-target preservation across
-CLI replacement, and safe shared-runtime activation depend on the updater
-behavior introduced in that CLI.
+no longer resolves the retired `latest` tag. A staging candidate must require
+the oldest published CLI that supports its channel handoff, exact-target
+preservation across CLI replacement, and safe shared-runtime activation. Do not
+lower the minimum based only on manifest schema compatibility.
 
 The shared addon zip contains every built GDExtension binary referenced by `godot_demo/addons/fennara/fennara.gdextension`. Godot loads the matching library for the user's OS and ignores the others.
 
@@ -405,9 +407,9 @@ GitHub's Latest Release pointer selects the versioned release used by normal
 install and update flows. Fennara does not create or move a literal `latest` tag.
 
 - `install.ps1` and `install.sh` fetch the latest CLI asset by default.
-- `fennara update` fetches the release manifest from `latest` by default, self-updates the installed CLI when needed, then resolves local/addon/shared runtime assets from it.
+- `fennara update` fetches the release manifest through GitHub's Latest Release endpoint by default, self-updates the installed CLI when needed, then resolves local/addon/shared runtime assets from it.
 - In-editor updates stage verified assets before shutdown, recheck the complete staged-addon digest before replacement, keep the previous addon, launchers, and runtime manifest until activation validation succeeds, and require the reopened GDExtension handshake before deleting rollback data.
-- `fennara install` fetches the release manifest from `latest` by default, then resolves local/addon/shared runtime assets from it.
+- `fennara install` fetches the release manifest through GitHub's Latest Release endpoint by default, then resolves local/addon/shared runtime assets from it.
 - The Godot plugin update check compares against GitHub's latest release.
 
 Use `promote_latest: false` only when publishing a version that should not become the default user install.
@@ -466,5 +468,5 @@ fennara self-update
 - Release workflow runs from `main` only.
 - Release version input must match `VERSION`.
 - Pull request workflows may build and upload test artifacts, but must not publish releases.
-- Keep `latest` pointed at the newest release intended for normal users.
+- Keep the intended normal-user release designated as GitHub Latest.
 - Do not rewrite published release tags unless maintainers intentionally decide to replace a broken release.

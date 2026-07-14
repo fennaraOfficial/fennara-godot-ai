@@ -40,7 +40,8 @@ Download the release manifest, your platform files, and the shared addon zip.
 | macOS arm64 local runtime | `fennara-release-local-macos-arm64-v<version>.zip` |
 | Versioned all-platform addon | `fennara-release-addon-v<version>.zip` |
 
-For Godot Asset Library links, use the stable latest asset:
+The release also includes this stable-name addon alias for documentation and
+manual downloads:
 
 ```text
 fennara-addon-latest.zip
