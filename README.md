@@ -56,7 +56,9 @@ The built-in chat dock uses the platform webview: Microsoft Edge WebView2 on Win
 
 ## Install
 
-Choose either the addon or CLI install.
+On Windows and Linux, choose either the addon or CLI install. On macOS, use the
+CLI install below if you want to avoid the macOS security notification that can
+appear after manually downloading and extracting the addon ZIP.
 
 ### Add The Addon To Your Project
 
@@ -65,10 +67,19 @@ Choose either the addon or CLI install.
 
 Open the project, select the Fennara dock, and press **Set Up Fennara**.
 
-### Alternative: Install With The CLI
+> **macOS:** The release addon contains a native library that is not currently
+> Apple-notarized. If you download the addon ZIP through a browser and extract
+> it manually, macOS may report that it cannot verify
+> `libfennara.macos.editor` is free of malware. To avoid this notification, use
+> the CLI installation below. If you already see the notification, close Godot,
+> remove the manually copied `addons/fennara/` folder, then install Fennara with
+> the CLI.
 
-You do not need this if you used the addon option above. Use the CLI only if
-you prefer installing Fennara from the terminal.
+### Install With The CLI (Recommended On macOS)
+
+The CLI installs the same Fennara addon. It is the recommended installation
+method on macOS because it avoids the browser and Finder quarantine path that
+causes the notification described above.
 
 Install the CLI on Windows:
 
