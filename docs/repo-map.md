@@ -49,7 +49,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `local/crates/fennara-cli/src/operation/` | Focused operation journal, durable storage, diagnostic redaction, and test modules. |
 | `local/crates/fennara-cli/src/project_addon.rs` | Existing project-addon version and current-platform GDExtension library validation. |
 | `local/crates/fennara-cli/src/release_identity.rs` | Stable/staging addon identity, exact release selectors, pull-request channel validation, and legacy stable compatibility. |
-| `local/crates/fennara-cli/src/release_channel.rs` | Per-channel staging pointer validation and resolution to an immutable exact release. |
+| `local/crates/fennara-cli/src/release_channel.rs` | Per-channel staging pointer validation and resolution to an exact versioned release. |
 | `local/crates/fennara-cli/src/release_manifest.rs` | Release manifest parsing, asset hash validation, identity binding, and platform package selection. |
 | `local/crates/fennara-cli/src/release_version.rs` | Shared CLI SemVer parsing and precedence used by manifests and release selection. |
 | `local/crates/fennara-cli/src/existing_addon_install.rs` | Exact-version adoption of an existing Asset Library or release addon without replacing project addon files. |
@@ -145,7 +145,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `.github/workflows/local-build.yml` | Rust local package build check. |
 | `.github/workflows/package-preview.yml` | Manual package preview artifacts, including a test-only Linux CEF runtime artifact for Linux chat smoke tests. |
 | `.github/workflows/release.yml` | Manual GitHub release publishing, including generated Linux CEF runtime packaging, release manifest generation, and final asset validation. |
-| `.github/workflows/staging-release.yml` | Manual exact-SHA staging build, validation-only dry run, immutable prerelease publication, and per-PR pointer advancement. |
+| `.github/workflows/staging-release.yml` | Manual exact-SHA staging build, validation-only dry run, exact prerelease publication, and per-PR pointer advancement. |
 
 ## Where To Change Things
 

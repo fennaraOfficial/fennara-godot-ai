@@ -86,13 +86,14 @@ test("candidate builds restore trusted caches without saving them", () => {
   assert.match(packageJob, /SCONS_CACHE: \$\{\{ github\.workspace \}\}\/fennara-cpp\/\.scons_cache/);
 });
 
-test("immutable-release preflight uses an administration token", () => {
+test("staging publication supports mutable exact prereleases", () => {
   const publish = jobBlocks(workflow).get("publish");
   assert.ok(publish, "workflow must contain the publish job");
-  assert.match(
-    publish,
-    /name: Require immutable GitHub releases[\s\S]*?GH_TOKEN: \$\{\{ secrets\.RELEASE_ADMIN_TOKEN \}\}/,
-  );
+  assert.doesNotMatch(publish, /Require immutable GitHub releases/);
+  assert.doesNotMatch(publish, /gh release verify/);
+  assert.doesNotMatch(publish, /isImmutable/);
+  assert.match(publish, /git ls-remote origin "refs\/tags\/\$\{RELEASE_TAG\}"/);
+  assert.match(publish, /--prerelease[\s\S]*?--latest=false/);
 });
 
 function runBlocks(source) {

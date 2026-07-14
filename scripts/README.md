@@ -31,7 +31,7 @@ Packaging scripts must keep the addon payload small. In particular, Linux CEF ru
 - `validate-staging-publish-bundle.mjs`: revalidates the final artifact bundle without executing candidate code.
 - `verify-published-assets.mjs`: compares the expected and downloaded GitHub Release asset names and SHA-256 values.
 
-These scripts support `.github/workflows/staging-release.yml`. Candidate build jobs run without release credentials. Only the trusted final job can publish, and it advances the per-channel Git ref after the immutable release has been downloaded and verified.
+These scripts support `.github/workflows/staging-release.yml`. Candidate build jobs run without release credentials. Only the trusted final job can publish, and it advances the per-channel Git ref after the exact release has been downloaded and verified.
 
 ## Linux CEF Scripts
 
