@@ -130,6 +130,11 @@ CLI requirement.
 > cannot discover current releases. Reinstalling the CLI does not remove your
 > project addon or settings.
 
+> [!IMPORTANT]
+> On macOS, reinstall the CLI once before upgrading from Fennara v0.3.11. That
+> CLI rejects the existing framework bundle before reaching self-update. The
+> reinstall replaces only the CLI and preserves the project addon and settings.
+
 ### Prepare While Godot Is Open
 
 The in-editor update button uses the staging form:
