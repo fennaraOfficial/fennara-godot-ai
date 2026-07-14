@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "channel": "pr-104",
+  "version": "0.3.12-pr.104.1",
+  "release_tag": "v0.3.12-pr.104.1",
+  "source_commit": "32429c718e3dc7f61e2d47568211abf09da9ee64",
+  "release_manifest_sha256": "987738ab193c546507baf0e73d877f8be6260bfd523158f1c9a84cb340d4817d"
+}
