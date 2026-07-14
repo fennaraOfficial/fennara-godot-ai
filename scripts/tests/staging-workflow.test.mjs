@@ -46,9 +46,11 @@ test("write credentials are confined to trusted publication", () => {
 });
 
 test("public smoke validation precedes monotonic pointer advancement", () => {
-  const publicSmoke = workflow.indexOf("name: Smoke test public release downloads");
-  const monotonicCheck = workflow.indexOf("name: Check monotonic channel advancement");
-  const pointerAdvance = workflow.indexOf("name: Advance the per-PR staging pointer last");
+  const publish = jobBlocks(workflow).get("publish");
+  assert.ok(publish, "workflow must contain the publish job");
+  const publicSmoke = publish.indexOf("name: Smoke test public release downloads");
+  const monotonicCheck = publish.indexOf("name: Check monotonic channel advancement");
+  const pointerAdvance = publish.indexOf("name: Advance the per-PR staging pointer last");
   assert.ok(publicSmoke > 0 && publicSmoke < monotonicCheck && monotonicCheck < pointerAdvance);
   assert.doesNotMatch(workflow, /gh release (create|edit|upload) latest/);
 });
@@ -60,8 +62,10 @@ test("shell commands do not interpolate resolve outputs directly", () => {
 });
 
 test("immutable-release preflight uses an administration token", () => {
+  const publish = jobBlocks(workflow).get("publish");
+  assert.ok(publish, "workflow must contain the publish job");
   assert.match(
-    workflow,
+    publish,
     /name: Require immutable GitHub releases[\s\S]*?GH_TOKEN: \$\{\{ secrets\.RELEASE_ADMIN_TOKEN \}\}/,
   );
 });

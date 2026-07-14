@@ -362,12 +362,14 @@ jobs:
           node scripts/check-linux-cef-runtime-release.mjs --assets-dir release-assets
 
       - name: Write release manifest
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           node scripts/write-release-manifest.mjs \
             --assets-dir release-assets \
             --linux-cef-manifest generated-linux-cef-manifest/linux-cef.json \
             --minimum-cli-version 0.3.8 \
-            --out "release-assets/fennara-release-manifest-v${{ inputs.version }}.json"
+            --out "release-assets/fennara-release-manifest-v${VERSION}.json"
 
       - name: Require immutable GitHub releases
         env:

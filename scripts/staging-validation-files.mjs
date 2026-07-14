@@ -26,6 +26,14 @@ export function parseArgs(rawArgs, allowedOptions) {
   return parsed;
 }
 
+export function requiredArg(args, name) {
+  const value = args[name];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Missing --${name}`);
+  }
+  return value;
+}
+
 export function requireDescendantPath(root, candidate, label) {
   const resolvedRoot = path.resolve(requiredString(root, "RUNNER_TEMP"));
   const resolvedCandidate = path.resolve(requiredString(candidate, label));
@@ -48,9 +56,10 @@ export function inspectZip(file, versionEntry, releaseEntry) {
     "import json, sys, zipfile",
     "archive, version_entry, release_entry = sys.argv[1:4]",
     "with zipfile.ZipFile(archive, 'r') as zf:",
-    "    names = sorted(name.rstrip('/') for name in zf.namelist() if not name.endswith('/'))",
-    "    modes = {info.filename.rstrip('/'): (info.external_attr >> 16) & 0o777 for info in zf.infolist() if not info.is_dir()}",
-    "    result = {'names': names, 'modes': modes, 'version': zf.read(version_entry).decode('utf-8').strip()}",
+    "    members = [{'name': info.filename, 'mode': (info.external_attr >> 16) & 0xffff, 'create_system': info.create_system, 'is_dir': info.is_dir()} for info in zf.infolist()]",
+    "    names = sorted(member['name'] for member in members if not member['is_dir'])",
+    "    modes = {member['name']: member['mode'] & 0o777 for member in members if not member['is_dir']}",
+    "    result = {'members': members, 'names': names, 'modes': modes, 'version': zf.read(version_entry).decode('utf-8').strip()}",
     "    if release_entry:",
     "        result['release'] = zf.read(release_entry).decode('utf-8')",
     "    print(json.dumps(result))",
@@ -64,6 +73,38 @@ export function inspectZip(file, versionEntry, releaseEntry) {
     throw new Error(`failed to inspect ${file}: ${result.stderr.trim()}`);
   }
   return JSON.parse(result.stdout);
+}
+
+export function assertSafeZipMembers(members) {
+  if (!Array.isArray(members)) {
+    throw new Error("release archive member metadata is missing");
+  }
+  const names = [];
+  const seen = new Set();
+  for (const member of members) {
+    const name = member?.name;
+    if (typeof name !== "string" || name.length === 0) {
+      throw new Error("release archive contains a member without a valid name");
+    }
+    if (
+      name.includes("\\") ||
+      name.startsWith("/") ||
+      /^[A-Za-z]:/.test(name) ||
+      name.split("/").some((segment) => segment === "" || segment === "." || segment === "..")
+    ) {
+      throw new Error(`release archive contains unsafe member path ${JSON.stringify(name)}`);
+    }
+    if (seen.has(name)) {
+      throw new Error(`release archive contains duplicate member ${JSON.stringify(name)}`);
+    }
+    seen.add(name);
+    const fileType = Number(member.mode) & 0o170000;
+    if (member.is_dir || member.create_system !== 3 || fileType !== 0o100000) {
+      throw new Error(`release archive member ${JSON.stringify(name)} is not a regular Unix file`);
+    }
+    names.push(name);
+  }
+  return names.sort();
 }
 
 export function treeHashes(root, excludedTopLevel) {

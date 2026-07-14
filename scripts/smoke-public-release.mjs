@@ -1,15 +1,24 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { requireDescendantPath } from "./staging-validation-files.mjs";
+import {
+  parseArgs,
+  requireDescendantPath,
+  requiredArg,
+} from "./staging-validation-files.mjs";
 
-const args = parseArgs(process.argv.slice(2));
-const repository = requiredArg("repository");
-const releaseTag = requiredArg("release-tag");
-const expectedDir = path.resolve(requiredArg("expected-dir"));
+const args = parseArgs(process.argv.slice(2), [
+  "repository",
+  "release-tag",
+  "expected-dir",
+  "download-dir",
+]);
+const repository = requiredArg(args, "repository");
+const releaseTag = requiredArg(args, "release-tag");
+const expectedDir = path.resolve(requiredArg(args, "expected-dir"));
 const downloadDir = requireDescendantPath(
   process.env.RUNNER_TEMP,
-  requiredArg("download-dir"),
+  requiredArg(args, "download-dir"),
   "--download-dir",
 );
 const METADATA_TIMEOUT_MS = 30_000;
@@ -133,25 +142,6 @@ function assertExactNames(expected, actual) {
   }
 }
 
-function parseArgs(rawArgs) {
-  const parsed = {};
-  for (let index = 0; index < rawArgs.length; index += 2) {
-    const option = rawArgs[index];
-    const value = rawArgs[index + 1];
-    if (!option?.startsWith("--") || value === undefined) {
-      throw new Error(`invalid argument ${JSON.stringify(option)}`);
-    }
-    parsed[option.slice(2)] = value;
-  }
-  return parsed;
-}
-
-function requiredArg(name) {
-  if (!args[name]) {
-    throw new Error(`missing --${name}`);
-  }
-  return args[name];
-}
 
 async function fetchJson(url, options, timeoutMs, label) {
   return fetchBody(url, options, timeoutMs, label, async (response) =>

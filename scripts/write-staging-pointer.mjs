@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { createChannelPointer } from "./release-identity.mjs";
+import { createChannelPointer, validateReleaseIdentity } from "./release-identity.mjs";
 import { validateStagingCandidate } from "./staging-candidate.mjs";
 
 const args = parseArgs(process.argv.slice(2));
@@ -13,6 +13,11 @@ if (manifest.version !== candidate.version) {
   throw new Error(
     `release manifest version ${JSON.stringify(manifest.version)} does not match ${candidate.version}`,
   );
+}
+const manifestIdentity = validateReleaseIdentity(manifest.release, candidate.version);
+const candidateIdentity = validateReleaseIdentity(candidate, candidate.version);
+if (JSON.stringify(manifestIdentity) !== JSON.stringify(candidateIdentity)) {
+  throw new Error("release manifest identity does not match staging candidate");
 }
 const pointer = createChannelPointer(
   candidate,

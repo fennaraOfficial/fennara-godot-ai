@@ -13,6 +13,12 @@ fn validates_requested_staging_channel() {
 }
 
 #[test]
+fn existing_staging_channel_is_inherited_when_rerun_omits_channel() {
+    let identity = staging_identity(Some("pr-101"));
+    assert!(validate_channel_selection(Some(&identity), None).is_ok());
+}
+
+#[test]
 fn rejects_channels_for_stable_or_incomplete_staging_identity() {
     let stable = ReleaseIdentity {
         schema_version: 1,

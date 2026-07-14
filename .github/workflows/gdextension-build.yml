@@ -169,6 +169,9 @@ jobs:
           SCONS_CACHE: ${{ github.workspace }}/fennara-cpp/.scons_cache
         run: |
           scons platform=windows target=editor fennara_setup_tests=yes
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
           $testTimeoutSeconds = 120
           $godot = Start-Process `

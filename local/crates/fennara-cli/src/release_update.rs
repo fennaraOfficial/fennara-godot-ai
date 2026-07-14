@@ -77,11 +77,8 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     options.version = resolve_exact_target(&options.version)?;
     if options.version != existing.version {
         let layout = crate::app_layout::AppLayout::detect()?;
-        daemon_setup::ensure_switch_available(
-            &layout,
-            options.prepare.then_some(project_dir.as_path()),
-        )
-        .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
+        daemon_setup::ensure_switch_available(&layout, Some(project_dir.as_path()))
+            .map_err(|error| operation::failure(FailureClass::ValidationFailed, error))?;
     }
     operation::set_requested_version(&options.version)?;
     println!("requested version: {}", options.version);

@@ -5,6 +5,8 @@ import { RELEASE_TARGETS } from "./release-targets.mjs";
 import {
   assertDirectory,
   assertPath,
+  assertSafeZipMembers,
+  assertSameNames,
   assertZipExecutable,
   assertVersion,
   inspectZip,
@@ -41,6 +43,8 @@ export function validateAddonArchive(candidate, addonFile) {
     "addons/fennara/VERSION",
     "addons/fennara/release.json",
   );
+  const validatedNames = assertSafeZipMembers(addon.members);
+  assertSameNames(validatedNames, addon.names, `${path.basename(addonFile)} ZIP members`);
   assertVersion(addon.version, candidate.version, path.basename(addonFile));
   const addonIdentity = validateReleaseIdentity(JSON.parse(addon.release), candidate.version);
   const candidateIdentity = validateReleaseIdentity(candidate, candidate.version);

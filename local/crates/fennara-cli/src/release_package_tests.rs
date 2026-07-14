@@ -3,8 +3,9 @@ use crate::release_channel::ChannelPointer;
 use crate::release_client::Release;
 use crate::release_identity::{ReleaseIdentity, ReleaseTrack};
 use crate::release_package::{
-    activate_package_at, package_complete, release_provenance, restore_activation_at,
-    shared_runtime_component_key, validate_expected_version, validate_legacy_fallback_allowed,
+    activate_package_at, expected_manifest_version, package_complete, release_provenance,
+    restore_activation_at, shared_runtime_component_key, validate_expected_version,
+    validate_legacy_fallback_allowed,
 };
 use std::fs;
 use std::ops::Deref;
@@ -113,7 +114,20 @@ fn activation_records_staging_identity_for_self_update() {
 fn exact_install_rejects_mismatched_manifest_before_asset_installation() {
     let error = validate_expected_version("v1.2.3", "1.2.4", Some("1.2.3")).unwrap_err();
     assert!(error.contains("release v1.2.3 declares version 1.2.4"));
-    assert!(error.contains("addon requires 1.2.3"));
+    assert!(error.contains("expected 1.2.3"));
+}
+
+#[test]
+fn manifest_version_expectation_is_independent_from_manifest_selection() {
+    assert_eq!(
+        expected_manifest_version("1.2.3", "v1.2.3"),
+        Some("1.2.3".into())
+    );
+    assert_eq!(
+        expected_manifest_version("channel:pr-101", "v1.2.3-pr.101.2"),
+        Some("1.2.3-pr.101.2".into())
+    );
+    assert_eq!(expected_manifest_version("latest", "latest"), None);
 }
 
 #[test]

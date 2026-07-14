@@ -1,15 +1,24 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createStagingCandidate } from "./staging-candidate.mjs";
+import { parseArgs, requiredArg } from "./staging-validation-files.mjs";
 
-const args = parseArgs(process.argv.slice(2));
-const outPath = path.resolve(requiredArg("out"));
+const args = parseArgs(process.argv.slice(2), [
+  "base-version",
+  "pull-request",
+  "candidate",
+  "source-commit",
+  "source-repository",
+  "out",
+  "github-output",
+]);
+const outPath = path.resolve(requiredArg(args, "out"));
 const candidate = createStagingCandidate({
-  baseVersion: requiredArg("base-version"),
-  pullRequest: requiredArg("pull-request"),
-  candidateNumber: requiredArg("candidate"),
-  sourceCommit: requiredArg("source-commit"),
-  sourceRepository: requiredArg("source-repository"),
+  baseVersion: requiredArg(args, "base-version"),
+  pullRequest: requiredArg(args, "pull-request"),
+  candidateNumber: requiredArg(args, "candidate"),
+  sourceCommit: requiredArg(args, "source-commit"),
+  sourceRepository: requiredArg(args, "source-repository"),
 });
 
 mkdirSync(path.dirname(outPath), { recursive: true });
@@ -34,40 +43,3 @@ if (args["github-output"]) {
 
 console.log(`Created ${outPath}`);
 console.log(`Staging candidate ${candidate.version} from ${candidate.source_repository}@${candidate.source_commit}`);
-
-function parseArgs(rawArgs) {
-  const parsed = {};
-  const allowed = new Set([
-    "base-version",
-    "pull-request",
-    "candidate",
-    "source-commit",
-    "source-repository",
-    "out",
-    "github-output",
-  ]);
-  for (let index = 0; index < rawArgs.length; index += 2) {
-    const option = rawArgs[index];
-    const value = rawArgs[index + 1];
-    if (!option?.startsWith("--") || value === undefined) {
-      throw new Error(`Invalid argument ${JSON.stringify(option)}`);
-    }
-    const name = option.slice(2);
-    if (!allowed.has(name)) {
-      throw new Error(`Unknown option ${option}`);
-    }
-    if (parsed[name] !== undefined) {
-      throw new Error(`Duplicate option ${option}`);
-    }
-    parsed[name] = value;
-  }
-  return parsed;
-}
-
-function requiredArg(name) {
-  const value = args[name];
-  if (!value) {
-    throw new Error(`Missing --${name}`);
-  }
-  return value;
-}

@@ -3,6 +3,7 @@ use crate::operation::{self, FailureClass};
 use crate::release_client::{self, DownloadAsset, Release, ReleaseAsset};
 use crate::release_identity::{ReleaseIdentity, ReleaseTrack};
 use crate::release_manifest::ReleaseManifest;
+use crate::release_version::parse_release_version;
 use crate::webview_runtime;
 use std::fs::{self, File};
 use std::io::Write;
@@ -19,6 +20,7 @@ pub(crate) struct ResolvedPackage {
     release: Release,
     manifest: Option<ReleaseManifest>,
     version: String,
+    expected_version: Option<String>,
     identity: Option<ReleaseIdentity>,
 }
 
@@ -44,6 +46,7 @@ pub fn ensure_package(version_request: &str) -> Result<InstalledPackage, String>
 pub(crate) fn resolve_package(version_request: &str) -> Result<ResolvedPackage, String> {
     println!("package: resolving release {version_request}");
     let release = release_client::fetch_release(version_request)?;
+    let expected_version = expected_manifest_version(version_request, &release.tag);
     if let Some(manifest_asset) = release.manifest_asset() {
         println!("manifest: {}", manifest_asset.name);
         let manifest = release_client::download_release_manifest(&release, &manifest_asset)?;
@@ -61,6 +64,7 @@ pub(crate) fn resolve_package(version_request: &str) -> Result<ResolvedPackage, 
             release,
             manifest: Some(manifest),
             version: selection.version,
+            expected_version,
             identity,
         });
     }
@@ -72,6 +76,7 @@ pub(crate) fn resolve_package(version_request: &str) -> Result<ResolvedPackage, 
         release,
         manifest: None,
         version,
+        expected_version,
         identity: None,
     })
 }
@@ -119,7 +124,7 @@ pub(crate) fn ensure_resolved_package(
             &layout,
             &resolved.release,
             &manifest,
-            Some(&resolved.version),
+            resolved.expected_version.as_deref(),
             true,
             true,
         );
@@ -287,11 +292,21 @@ pub(crate) fn validate_expected_version(
         return Err(operation::failure(
             FailureClass::ManifestInvalid,
             format!(
-                "release {release_tag} declares version {selected_version}, but the existing addon requires {expected}"
+                "release {release_tag} declares version {selected_version}, but the resolved request expected {expected}"
             ),
         ));
     }
     Ok(())
+}
+
+pub(crate) fn expected_manifest_version(
+    version_request: &str,
+    release_tag: &str,
+) -> Option<String> {
+    [version_request, release_tag.trim_start_matches('v')]
+        .into_iter()
+        .find(|candidate| parse_release_version(candidate).is_ok())
+        .map(str::to_string)
 }
 
 fn ensure_legacy_package(
