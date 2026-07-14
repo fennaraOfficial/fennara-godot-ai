@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "channel": "pr-104",
-  "version": "0.3.12-pr.104.4",
-  "release_tag": "v0.3.12-pr.104.4",
-  "source_commit": "e5611eed2ba262cdbd49a28840996125c401cee1",
-  "release_manifest_sha256": "7614de6fdf2730c2f3a37f6ed0b40eb008c1db3f3c5a3943f0e909c62a6decf5"
+  "version": "0.3.12-pr.104.5",
+  "release_tag": "v0.3.12-pr.104.5",
+  "source_commit": "bf53333fa397cd98455fa477e465f11cd76764f5",
+  "release_manifest_sha256": "6087e0d8fa4fe19e24afd0149d5658cbe95c7002fb11ce765d42b0e9451ef82b"
 }
