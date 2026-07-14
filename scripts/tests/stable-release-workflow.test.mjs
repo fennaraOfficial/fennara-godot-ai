@@ -33,6 +33,16 @@ test("stable publication safely resumes a matching published release", () => {
   assert.match(publishStep, /for attempt in \{1\.\.12\}[\s\S]*?sleep 5/);
 });
 
+test("stable releases include version, linked source commit, and release date", () => {
+  const publishStep = namedStep(jobBlock(workflow, "publish"), "Publish release");
+  assert.match(publishStep, /short_sha="\$\{GITHUB_SHA:0:7\}"/);
+  assert.match(publishStep, /released_date="\$\(date -u \+'%d-%m-%Y'\)"/);
+  assert.match(
+    publishStep,
+    /Fennara Godot AI %s\\nBuilt from \[%s\]\(https:\/\/github\.com\/%s\/commit\/%s\)\.\\nReleased: %s/,
+  );
+});
+
 test("stable publication does not depend on the retired latest tag or immutability", () => {
   const publishJob = jobBlock(workflow, "publish");
   assert.doesNotMatch(publishJob, /Require immutable GitHub releases/);

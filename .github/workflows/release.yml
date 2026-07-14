@@ -387,9 +387,10 @@ jobs:
           fi
           mapfile -t desired_assets < <(printf '%s\n' "${assets[@]##*/}" | sort)
 
-          notes="Fennara Godot AI ${tag}
-
-          Built from ${GITHUB_SHA}."
+          short_sha="${GITHUB_SHA:0:7}"
+          released_date="$(date -u +'%d-%m-%Y')"
+          printf -v notes 'Fennara Godot AI %s\nBuilt from [%s](https://github.com/%s/commit/%s).\nReleased: %s' \
+            "${tag}" "${short_sha}" "${GITHUB_REPOSITORY}" "${GITHUB_SHA}" "${released_date}"
           reconcile_draft=false
           resume_published=false
 
