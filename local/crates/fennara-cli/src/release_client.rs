@@ -97,7 +97,7 @@ pub fn fetch_release(version: &str) -> Result<Release, String> {
 
 pub(crate) fn fetch_release_for_selector(selector: &ReleaseSelector) -> Result<Release, String> {
     let tag = selector.github_tag();
-    let url = release_metadata_url(selector);
+    let url = format!("https://api.github.com/repos/{REPO}/releases/tags/{tag}");
     operation::phase(Phase::Checking, "Fetching release metadata")?;
     println!("release: fetching metadata from {url}");
     let response = http_agent()
@@ -129,18 +129,6 @@ pub(crate) fn fetch_release_for_selector(selector: &ReleaseSelector) -> Result<R
     println!("release: {}", release.tag);
     operation::set_component("release", release.tag.trim_start_matches('v'))?;
     Ok(release)
-}
-
-pub(crate) fn release_metadata_url(selector: &ReleaseSelector) -> String {
-    match selector {
-        ReleaseSelector::StableLatest => {
-            format!("https://api.github.com/repos/{REPO}/releases/latest")
-        }
-        _ => format!(
-            "https://api.github.com/repos/{REPO}/releases/tags/{}",
-            selector.github_tag()
-        ),
-    }
 }
 
 pub fn download_release_manifest(

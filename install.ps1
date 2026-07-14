@@ -61,7 +61,7 @@ if (-not $InstallDir -and -not $env:LOCALAPPDATA) {
 }
 
 $releaseApi = if ($Version -eq "latest") {
-  "https://api.github.com/repos/$repo/releases/latest"
+  "https://api.github.com/repos/$repo/releases/tags/latest"
 } else {
   "https://api.github.com/repos/$repo/releases/tags/v$Version"
 }
