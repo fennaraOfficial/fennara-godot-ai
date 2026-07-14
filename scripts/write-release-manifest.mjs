@@ -9,10 +9,17 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseReleaseVersion, validateReleaseIdentity } from "./release-identity.mjs";
+import { minimumCliVersionForTrack } from "./release-policy.mjs";
 import { RELEASE_TARGETS } from "./release-targets.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const DEFAULT_MINIMUM_CLI_VERSION = "0.3.3";
+const ALLOWED_ARGS = new Set([
+  "version",
+  "assets-dir",
+  "out",
+  "linux-cef-manifest",
+  "release-identity",
+]);
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   printHelp();
   process.exit(0);
@@ -29,14 +36,12 @@ const linuxCefManifestPath = path.resolve(
   root,
   args["linux-cef-manifest"] ?? path.join("local", "webview-runtimes", "linux-cef.json"),
 );
-const minimumCliVersion = args["minimum-cli-version"] ?? DEFAULT_MINIMUM_CLI_VERSION;
 const releaseIdentityPath = path.resolve(
   root,
   args["release-identity"] ?? path.join("godot_demo", "addons", "fennara", "release.json"),
 );
 
 validateVersion(version, "version");
-validateVersion(minimumCliVersion, "minimum CLI version");
 if (!existsSync(assetsDir) || !statSync(assetsDir).isDirectory()) {
   throw new Error(`--assets-dir must be an existing directory: ${assetsDir}`);
 }
@@ -50,6 +55,8 @@ console.log(`Created ${path.relative(root, outPath)}`);
 
 function buildManifest() {
   const release = readReleaseIdentity();
+  const minimumCliVersion = minimumCliVersionForTrack(release.track);
+  validateVersion(minimumCliVersion, `minimum CLI version for ${release.track}`);
   const assets = {
     cli: {},
     local: {},
@@ -206,11 +213,15 @@ function parseArgs(rawArgs) {
     if (!arg.startsWith("--")) {
       throw new Error(`Unexpected argument: ${arg}`);
     }
+    const name = arg.slice(2);
+    if (!ALLOWED_ARGS.has(name)) {
+      throw new Error(`Unknown option: ${arg}`);
+    }
     const value = rawArgs[index + 1];
     if (value === undefined || value.startsWith("--")) {
       throw new Error(`Missing value for ${arg}`);
     }
-    parsed[arg.slice(2)] = value;
+    parsed[name] = value;
     index += 1;
   }
   return parsed;
@@ -230,7 +241,6 @@ Options:
                                    Release local/addon assets must use fennara-release-local-* and fennara-release-addon-* names.
   --linux-cef-manifest <path>      Generated enabled Linux CEF manifest. Default: local/webview-runtimes/linux-cef.json.
   --release-identity <path>        Release identity JSON. Default: godot_demo/addons/fennara/release.json.
-  --minimum-cli-version <semver>   Minimum CLI for schema/primitives. Default: ${DEFAULT_MINIMUM_CLI_VERSION}.
   --out <path>                     Output manifest path. Default: dist/fennara-release-manifest-v<version>.json.
 `);
 }

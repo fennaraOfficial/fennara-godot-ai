@@ -195,12 +195,14 @@ manifest whenever the release publishes one. The manifest records:
 - the shared addon asset with SHA-256
 - platform-specific shared runtime assets, currently Linux CEF
 
-Release workflows pass `minimum_cli_version` explicitly instead of relying on
-the manifest generator's fallback. Normal package layout or asset name changes
-should be handled by manifest data, not by changing the outer CLI. Raise the
-minimum when a release needs a newer updater handoff, manifest schema, install
-primitive, self-update behavior, or other CLI capability that an older
-published CLI cannot safely perform.
+`scripts/release-policy.mjs` is the source of truth for
+`minimum_cli_version`. The manifest writer selects the policy after validating
+the release identity, so Stable, Package Preview, and Staging cannot choose
+independent values. Normal package layout or asset name changes should be
+handled by manifest data, not by changing the outer CLI. Raise the policy when
+a release needs a newer updater handoff, manifest schema, install primitive,
+self-update behavior, or other CLI capability that an older published CLI
+cannot safely perform.
 
 When the CLI is too old, `fennara update` should use the manifest's
 per-platform `assets.cli` entry to update the installed CLI first, then resume
@@ -291,11 +293,12 @@ disabled. Both workflows verify release metadata and downloaded asset bytes
 before completing publication or advancing a staging channel. Asset publication
 uses the job-scoped `GITHUB_TOKEN` with contents write access.
 
-The stable workflow uses `minimum_cli_version: 0.3.11` because stable discovery
-no longer resolves the retired `latest` tag. A staging candidate must require
-the oldest published CLI that supports its channel handoff, exact-target
-preservation across CLI replacement, and safe shared-runtime activation. Do not
-lower the minimum based only on manifest schema compatibility.
+The release policy currently requires CLI `0.3.11` for stable manifests and
+CLI `0.3.8` for staging manifests. Stable discovery no longer resolves the
+retired `latest` tag. A staging candidate such as `0.3.11-pr.123.1` compares
+lower than stable `0.3.11` under SemVer, so its minimum must remain below the
+candidate version for first-run setup to install the candidate CLI. Do not
+change either minimum based only on manifest schema compatibility.
 
 The shared addon zip contains every built GDExtension binary referenced by `godot_demo/addons/fennara/fennara.gdextension`. Godot loads the matching library for the user's OS and ignores the others.
 

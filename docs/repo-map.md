@@ -125,6 +125,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `scripts/set-version.mjs` | Updates versioned files across the repo. |
 | `scripts/check-version.mjs` | Checks version sync. |
 | `scripts/release-identity.mjs` | Shared Node validation and generation for SemVer release identity and per-PR staging pointers. |
+| `scripts/release-policy.mjs` | Minimum compatible published CLI policy for stable and staging release manifests. |
 | `scripts/staging-candidate.mjs` | Trusted staging candidate identity generation and monotonic per-PR pointer decisions. |
 | `scripts/staging-*-validation.mjs` / `scripts/staging-validation-files.mjs` | Focused staging addon, archive, manifest, shared filesystem, and publication-bundle validation. |
 | `scripts/validate-staging-build.mjs` / `scripts/validate-staging-publish-bundle.mjs` | Strict validation entrypoints for untrusted build outputs and the trusted publication bundle. |
@@ -168,7 +169,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | Change built-in chat providers | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/`, `local/crates/fennara-daemon/src/runtime_daemon/chat/models.rs`, `local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs`, and `ui/chat/` |
 | Change vendored chat UI libraries | `ui/chat/vendor/`, `godot_demo/addons/fennara/dist/vendor/`, and `THIRD_PARTY_NOTICES.md` |
 | Change C# support | `fennara-cpp/src/csharp/`, `fennara-cpp/include/fennara/csharp/`, and the C# tool schemas and guidance |
-| Change release packages or CLI self-update | `local/crates/fennara-cli/src/release_manifest.rs`, `local/crates/fennara-cli/src/release_client.rs`, `local/crates/fennara-cli/src/release_package.rs`, `local/crates/fennara-cli/src/self_update.rs`, `scripts/package-preview.mjs`, `scripts/write-release-manifest.mjs`, and `.github/workflows/release.yml` |
+| Change release packages, minimum CLI policy, or CLI self-update | `local/crates/fennara-cli/src/release_manifest.rs`, `local/crates/fennara-cli/src/release_client.rs`, `local/crates/fennara-cli/src/release_package.rs`, `local/crates/fennara-cli/src/self_update.rs`, `scripts/package-preview.mjs`, `scripts/release-policy.mjs`, `scripts/write-release-manifest.mjs`, and `.github/workflows/release.yml` |
 | Bump version | `node scripts/set-version.mjs <version>` |
 | Update setup/docs for chat vs MCP, providers, or slash commands | `README.md`, `docs/mcp-setup.md`, `docs/chat-vs-mcp.md`, `docs/providers.md`, `docs/slash-commands.md`, `docs/setup.md`, `docs/faq.md`, `docs/manual-install.md`, `docs/tools.md`, `docs/examples.md`, and `llms.txt` |
 

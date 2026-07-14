@@ -368,7 +368,6 @@ jobs:
           node scripts/write-release-manifest.mjs \
             --assets-dir release-assets \
             --linux-cef-manifest generated-linux-cef-manifest/linux-cef.json \
-            --minimum-cli-version 0.3.11 \
             --out "release-assets/fennara-release-manifest-v${VERSION}.json"
 
       - name: Publish release

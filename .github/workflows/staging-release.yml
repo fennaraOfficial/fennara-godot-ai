@@ -510,7 +510,6 @@ jobs:
             --assets-dir release-assets \
             --linux-cef-manifest generated-linux-cef-manifest/linux-cef.json \
             --release-identity staging-metadata/candidate.json \
-            --minimum-cli-version 0.3.8 \
             --out "release-assets/fennara-release-manifest-v${VERSION}.json"
 
       - name: Validate complete candidate asset set

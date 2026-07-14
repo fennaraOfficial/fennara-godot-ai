@@ -104,7 +104,10 @@ The JSON asset named `fennara-release-manifest-v<version>.json`. It maps release
 
 **Minimum CLI Version**
 
-The lowest `fennara` CLI version allowed to consume a release manifest. If a release needs newer install/update logic, this value must be raised in the generated manifest and in the release workflow that writes it.
+The lowest `fennara` CLI version allowed to consume a release manifest. If a
+release needs newer install/update logic, update its track in
+`scripts/release-policy.mjs`. The manifest writer applies that policy after
+validating the release identity; workflows do not choose the value.
 
 **Latest Release**
 
