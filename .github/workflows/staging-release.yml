@@ -241,6 +241,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Stamp candidate version in the runner workspace
+        shell: bash
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
           CHANNEL: ${{ needs.resolve.outputs.channel }}
