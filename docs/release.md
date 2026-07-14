@@ -250,8 +250,12 @@ head of an open pull request. Run it from `main` and provide:
 The workflow freezes the pull request head SHA before any platform build. The
 Windows, Linux, and macOS jobs check out that exact commit with read-only
 permissions, no persisted Git credentials, no release credentials, and no
-shared dependency caches. Candidate code can produce build artifacts, but it
-cannot publish a GitHub Release.
+ability to save shared dependency caches. They may restore compatible
+SCons/godot-cpp and Cargo caches written by trusted default-branch workflows.
+Staging uses the restore-only cache action, so candidate code can consume
+trusted build outputs but cannot replace or poison caches for later runs.
+Candidate code can produce build artifacts, but it cannot publish a GitHub
+Release.
 
 Trusted repository scripts then validate the candidate identity, exact archive
 inventory, addon contents, platform package layout, release manifest, and every
