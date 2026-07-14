@@ -539,7 +539,7 @@ jobs:
             else
               legacy_notes="Legacy installer compatibility bootstrap.
 
-              Frozen with Fennara ${tag} assets. Current installers and CLIs discover stable versions through GitHub's Latest release endpoint."
+          Frozen with Fennara ${tag} assets. Current installers and CLIs discover stable versions through GitHub's Latest release endpoint."
               gh release create latest \
                 --repo "${GITHUB_REPOSITORY}" \
                 --verify-tag \
@@ -579,13 +579,14 @@ jobs:
                 --actual-dir "${legacy_assets_dir}"
               legacy_notes="Legacy installer compatibility bootstrap.
 
-              Frozen with Fennara ${tag} assets. Current installers and CLIs discover stable versions through GitHub's Latest release endpoint."
+          Frozen with Fennara ${tag} assets. Current installers and CLIs discover stable versions through GitHub's Latest release endpoint."
               gh release edit latest \
                 --repo "${GITHUB_REPOSITORY}" \
                 --title "Fennara legacy installer bootstrap" \
                 --notes "${legacy_notes}" \
                 --draft=false \
                 --latest=false
+              gh release verify latest --repo "${GITHUB_REPOSITORY}"
               read -r legacy_immutable legacy_draft legacy_prerelease < <(
                 gh release view latest \
                   --repo "${GITHUB_REPOSITORY}" \

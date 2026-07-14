@@ -313,7 +313,7 @@ still apply in both modes.
 ## Updates
 
 `fennara update` is the normal project update command. It reads the installed
-addon release identity, resolves GitHub's Latest release or that addon's
+add-on release identity, resolves GitHub's Latest release or the add-on's
 isolated staging channel, and freezes the result to one exact immutable
 version. It first checks
 the version of that release manifest's per-platform CLI asset and, when newer,

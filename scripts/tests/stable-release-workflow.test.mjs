@@ -40,7 +40,15 @@ test("latest promotion freezes the legacy bootstrap without moving its tag", () 
       legacyVerify < legacyPublish,
   );
   assert.match(publishStep, /gh release edit "\$\{tag\}"[\s\S]*?--latest/);
-  assert.match(publishStep, /gh release edit latest[\s\S]*?--latest=false/);
+  assert.match(
+    publishStep,
+    /gh release edit latest[\s\S]*?--latest=false[\s\S]*?gh release verify latest --repo "\$\{GITHUB_REPOSITORY\}"[\s\S]*?read -r legacy_immutable/,
+  );
+  const legacyNoteContinuations = [
+    ...publishStep.matchAll(/\n([^\S\r\n]*)Frozen with Fennara/g),
+  ];
+  assert.equal(legacyNoteContinuations.length, 2);
+  assert.ok(legacyNoteContinuations.every((match) => match[1] === "          "));
   assert.match(publishStep, /Legacy latest bootstrap is already frozen; leaving it unchanged/);
   assert.doesNotMatch(publishStep, /git tag --force latest/);
   assert.doesNotMatch(publishStep, /git push --force[^\n]*refs\/tags\/latest/);
