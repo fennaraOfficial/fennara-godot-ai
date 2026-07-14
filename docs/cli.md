@@ -4,8 +4,9 @@ Use the CLI when you prefer the terminal, need diagnostics or recovery, or want
 an automated install with an exact version.
 
 > [!TIP]
-> You do not need to install the CLI manually if **Set Up Fennara** already
-> completed in the Godot dock.
+> The CLI is the recommended installation method on macOS. It avoids the macOS
+> security notification that can occur when a browser-downloaded addon ZIP is
+> extracted manually and its native library inherits Finder quarantine.
 
 ## Common Flow
 
@@ -32,6 +33,11 @@ macOS and Linux:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fennaraOfficial/fennara-godot-ai/main/install.sh | sh
 ```
+
+If a manually extracted macOS addon already triggers a notification for
+`libfennara.macos.editor`, close Godot and remove the manually copied
+`addons/fennara/` folder before running `fennara install`. The CLI otherwise
+preserves an existing complete addon.
 
 Open a new terminal if `fennara` is not immediately available, then check the
 installation:

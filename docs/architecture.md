@@ -142,6 +142,13 @@ app data. It then launches `fennara install` and reads the durable operation
 state for progress and diagnostics. Chat and the webview remain inactive until
 setup succeeds and the matching daemon connects.
 
+On macOS, user-facing documentation recommends installing through the CLI. The
+in-editor bootstrap can run only after the GDExtension native library loads, so
+it cannot remediate a Gatekeeper block caused by manually downloading and
+extracting the non-notarized addon ZIP. Users whose manually copied addon is
+blocked must remove it before running `fennara install`, because the CLI
+preserves a complete existing addon.
+
 A shared app-data bootstrap lock serializes CLI download and activation across
 concurrent Godot editors. Lock ownership transfers to the launched installer
 process, so another editor waits until that exact process exits. The panel

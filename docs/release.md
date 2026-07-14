@@ -171,6 +171,14 @@ Package roles:
 | `fennara-webview-cef-linux-x64-*` | Linux-only shared CEF runtime installed once in Fennara app data |
 | `fennara-release-manifest-v*` | Install and update plan containing asset names, SHA-256 values, install primitives, and shared runtimes |
 
+The macOS addon GDExtension is not currently Apple-notarized. Browser downloads
+and manual Finder extraction can propagate quarantine metadata and trigger the
+macOS verification notification. User-facing installation documentation must
+recommend `fennara install` on macOS, explain the manual ZIP limitation, and
+tell affected users to remove the manually copied addon before reinstalling
+through the CLI. Release validation does not treat ZIP creation alone as macOS
+signing or notarization.
+
 The `fennara-release-local-*` prefix prevents older CLIs from silently bypassing
 the manifest-managed package path.
 

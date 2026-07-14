@@ -4,8 +4,18 @@ Use this page only when you need to assemble Fennara without the Godot setup
 flow or `fennara install`.
 
 > [!TIP]
-> Most users should add `addons/fennara` to the project, open the Fennara dock,
-> and press **Set Up Fennara**. See [Setup](setup.md).
+> On Windows and Linux, most users should add `addons/fennara` to the project,
+> open the Fennara dock, and press **Set Up Fennara**. On macOS, use the CLI.
+> See [Setup](setup.md).
+
+> [!IMPORTANT]
+> Manual addon ZIP installation is not recommended on macOS. The addon contains
+> a native library that is not currently Apple-notarized, and browser download
+> plus Finder extraction can cause macOS to report that it cannot verify
+> `libfennara.macos.editor` is free of malware. Use the
+> [CLI installation](setup.md#install-from-the-terminal-recommended-on-macos)
+> to avoid this notification. If the notification already appears, close Godot,
+> remove the manually copied `addons/fennara/` folder, and run `fennara install`.
 
 Manual installation has four parts: the CLI, the project addon, the shared local
 runtime package, and optional MCP app configuration.

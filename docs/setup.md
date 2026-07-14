@@ -4,7 +4,8 @@ Install Fennara, choose where you want to chat, and connect your Godot project.
 
 > [!TIP]
 > Most users only need to add the addon, open the Fennara dock, and press
-> **Set Up Fennara**.
+> **Set Up Fennara**. On macOS, use the CLI installation below to avoid the
+> security notification that can follow a manually downloaded addon ZIP.
 
 ## Before You Start
 
@@ -17,6 +18,14 @@ Install Fennara, choose where you want to chat, and connect your Godot project.
 | The .NET SDK available as `dotnet` | Only for C# diagnostics and runtime preflight |
 
 ## Install From Godot
+
+> [!IMPORTANT]
+> On macOS, the release addon contains a native library that is not currently
+> Apple-notarized. Downloading the addon ZIP through a browser and extracting it
+> manually can make macOS report that it cannot verify
+> `libfennara.macos.editor` is free of malware. Use
+> [Install From The Terminal](#install-from-the-terminal-recommended-on-macos)
+> to avoid this notification.
 
 1. Install **Fennara** from the Godot Asset Library, or download
    `fennara-addon-latest.zip` from the
@@ -34,9 +43,11 @@ project files.
 > The addon stays in your project. The CLI, daemon, MCP server, logs, and shared
 > browser runtime live in Fennara app data outside the project.
 
-## Alternative: Install From The Terminal
+## Install From The Terminal (Recommended On macOS)
 
-You do not need this if setup from the Godot dock succeeded.
+The CLI installs the same addon and is the recommended installation method on
+macOS. It avoids the browser and Finder quarantine path that causes the native
+library notification described above.
 
 Install the CLI on Windows:
 
@@ -56,6 +67,11 @@ Then run Fennara inside the project:
 cd path/to/your-godot-project
 fennara install
 ```
+
+If you already extracted the addon manually on macOS and see the notification,
+close Godot and remove the manually copied `addons/fennara/` folder before
+running `fennara install`. This matters because the CLI preserves an existing
+complete addon instead of replacing it.
 
 If the project already contains a complete Fennara addon, the CLI keeps it and
 installs the matching local components. Otherwise, it installs the current
