@@ -104,8 +104,15 @@ The JSON asset named `fennara-release-manifest-v<version>.json`. It maps release
 
 **Minimum CLI Version**
 
-The lowest `fennara` CLI version allowed to consume a release manifest. If a release needs newer install/update logic, this value must be raised in the generated manifest and in the release workflow that writes it.
+The lowest `fennara` CLI version allowed to consume a release manifest. If a
+release needs newer install/update logic, update its track in
+`scripts/release-policy.mjs`. The manifest writer applies that policy after
+validating the release identity; workflows do not choose the value.
 
 **Latest Release**
 
-The moving GitHub release/tag used by installers and default updates. Updating source files after publishing does not change release assets; already-published manifest assets must be replaced explicitly.
+GitHub's Latest Release pointer to an exact versioned release. Installers and
+default updates resolve this pointer through GitHub's API. Fennara does not use
+a literal `latest` tag or release. Updating source files after publishing does
+not change release assets; already-published manifest assets must be replaced
+explicitly.

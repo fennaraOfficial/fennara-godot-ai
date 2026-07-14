@@ -25,6 +25,10 @@ func _remove_tree(path: String) -> void:
 func _initialize() -> void:
 	var watchdog := create_timer(10.0)
 	watchdog.timeout.connect(_on_test_watchdog_timeout)
+	var addon_version := FileAccess.get_file_as_string(
+		"res://addons/fennara/VERSION",
+	).strip_edges()
+	assert(not addon_version.is_empty())
 	var original_local_app_data := OS.get_environment("LOCALAPPDATA")
 	var original_user_profile := OS.get_environment("USERPROFILE")
 	var test_local_app_data := ProjectSettings.globalize_path(
@@ -46,7 +50,7 @@ func _initialize() -> void:
 	owner.close()
 	var waiting_setup: Variant = ClassDB.instantiate("FirstRunSetup")
 	root.add_child(waiting_setup)
-	waiting_setup.start(ProjectSettings.globalize_path("res://"), "0.3.8")
+	waiting_setup.start(ProjectSettings.globalize_path("res://"), addon_version)
 	assert(waiting_setup.is_running())
 	assert(waiting_setup.get_status() == "Waiting for another Fennara setup...")
 	waiting_setup.free()
@@ -64,7 +68,7 @@ func _initialize() -> void:
 	assert(setup.has_failed())
 	assert(setup.get_error_code() == "FEN-SETUP-PROJECT-INVALID")
 
-	setup.start(ProjectSettings.globalize_path("res://"), "0.3.8")
+	setup.start(ProjectSettings.globalize_path("res://"), addon_version)
 	assert(setup.has_failed())
 	assert(
 		setup.get_error_code() == "FEN-SETUP-MANIFEST-DOWNLOAD",

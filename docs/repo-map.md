@@ -49,10 +49,10 @@ This is the quick map for contributors and coding agents working in this reposit
 | `local/crates/fennara-cli/src/operation/` | Focused operation journal, durable storage, diagnostic redaction, and test modules. |
 | `local/crates/fennara-cli/src/project_addon.rs` | Existing project-addon version and current-platform GDExtension library validation. |
 | `local/crates/fennara-cli/src/release_identity.rs` | Stable/staging addon identity, exact release selectors, pull-request channel validation, and legacy stable compatibility. |
-| `local/crates/fennara-cli/src/release_channel.rs` | Per-channel staging pointer validation and resolution to an immutable exact release. |
+| `local/crates/fennara-cli/src/release_channel.rs` | Per-channel staging pointer validation and resolution to an exact versioned release. |
 | `local/crates/fennara-cli/src/release_manifest.rs` | Release manifest parsing, asset hash validation, identity binding, and platform package selection. |
 | `local/crates/fennara-cli/src/release_version.rs` | Shared CLI SemVer parsing and precedence used by manifests and release selection. |
-| `local/crates/fennara-cli/src/existing_addon_install.rs` | Exact-version adoption of an existing Asset Library or release addon without replacing project addon files. |
+| `local/crates/fennara-cli/src/existing_addon_install.rs` | Exact-version adoption of an existing complete addon without replacing project addon files. |
 | `local/crates/fennara-cli/src/daemon_setup.rs` | Shared daemon health check, exact-version readiness, and startup used by install and doctor. |
 | `local/crates/fennara-cli/tests/operation_failures.rs` | Process-level failure, durable diagnostics, redaction, and fail-closed operation-log tests. |
 | `local/crates/fennara-cli/src/diagnostics.rs` | User-facing access to the latest or a named sanitized operation report. |
@@ -79,7 +79,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `fennara-cpp/src/setup/` | Native first-run setup state, release-manifest CLI bootstrap, hash verification, CLI launch, and durable operation progress reader. |
 | `fennara-cpp/src/release/version.cpp` | Native SemVer validation and precedence used by release/update discovery. |
 | `fennara-cpp/src/release/identity.cpp` | Packaged stable/staging identity validation and legacy stable compatibility. |
-| `fennara-cpp/src/release/discovery.cpp` | Stable-latest and isolated staging-channel update discovery. |
+| `fennara-cpp/src/release/discovery.cpp` | GitHub Latest and isolated staging-channel update discovery. |
 | `fennara-cpp/src/update/` | Exact-target update coordination, durable receipt discovery, close/install handoff, and recovery UI state. |
 | `fennara-cpp/src/ui/setup_panel.cpp` | Webview-independent first-run setup panel with progress, retry, logs, and sanitized report actions. |
 | `fennara-cpp/vendor/cef/` | Official CEF 139 header snapshot used by the Linux OSR bridge. Runtime binaries stay outside the addon. |
@@ -125,6 +125,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `scripts/set-version.mjs` | Updates versioned files across the repo. |
 | `scripts/check-version.mjs` | Checks version sync. |
 | `scripts/release-identity.mjs` | Shared Node validation and generation for SemVer release identity and per-PR staging pointers. |
+| `scripts/release-policy.mjs` | Minimum compatible published CLI policy for stable and staging release manifests. |
 | `scripts/staging-candidate.mjs` | Trusted staging candidate identity generation and monotonic per-PR pointer decisions. |
 | `scripts/staging-*-validation.mjs` / `scripts/staging-validation-files.mjs` | Focused staging addon, archive, manifest, shared filesystem, and publication-bundle validation. |
 | `scripts/validate-staging-build.mjs` / `scripts/validate-staging-publish-bundle.mjs` | Strict validation entrypoints for untrusted build outputs and the trusted publication bundle. |
@@ -145,7 +146,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `.github/workflows/local-build.yml` | Rust local package build check. |
 | `.github/workflows/package-preview.yml` | Manual package preview artifacts, including a test-only Linux CEF runtime artifact for Linux chat smoke tests. |
 | `.github/workflows/release.yml` | Manual GitHub release publishing, including generated Linux CEF runtime packaging, release manifest generation, and final asset validation. |
-| `.github/workflows/staging-release.yml` | Manual exact-SHA staging build, validation-only dry run, immutable prerelease publication, and per-PR pointer advancement. |
+| `.github/workflows/staging-release.yml` | Manual exact-SHA staging build, validation-only dry run, exact prerelease publication, and per-PR pointer advancement. |
 
 ## Where To Change Things
 
@@ -168,7 +169,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | Change built-in chat providers | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/`, `local/crates/fennara-daemon/src/runtime_daemon/chat/models.rs`, `local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs`, and `ui/chat/` |
 | Change vendored chat UI libraries | `ui/chat/vendor/`, `godot_demo/addons/fennara/dist/vendor/`, and `THIRD_PARTY_NOTICES.md` |
 | Change C# support | `fennara-cpp/src/csharp/`, `fennara-cpp/include/fennara/csharp/`, and the C# tool schemas and guidance |
-| Change release packages or CLI self-update | `local/crates/fennara-cli/src/release_manifest.rs`, `local/crates/fennara-cli/src/release_client.rs`, `local/crates/fennara-cli/src/release_package.rs`, `local/crates/fennara-cli/src/self_update.rs`, `scripts/package-preview.mjs`, `scripts/write-release-manifest.mjs`, and `.github/workflows/release.yml` |
+| Change release packages, minimum CLI policy, or CLI self-update | `local/crates/fennara-cli/src/release_manifest.rs`, `local/crates/fennara-cli/src/release_client.rs`, `local/crates/fennara-cli/src/release_package.rs`, `local/crates/fennara-cli/src/self_update.rs`, `scripts/package-preview.mjs`, `scripts/release-policy.mjs`, `scripts/write-release-manifest.mjs`, and `.github/workflows/release.yml` |
 | Bump version | `node scripts/set-version.mjs <version>` |
 | Update setup/docs for chat vs MCP, providers, or slash commands | `README.md`, `docs/mcp-setup.md`, `docs/chat-vs-mcp.md`, `docs/providers.md`, `docs/slash-commands.md`, `docs/setup.md`, `docs/faq.md`, `docs/manual-install.md`, `docs/tools.md`, `docs/examples.md`, and `llms.txt` |
 

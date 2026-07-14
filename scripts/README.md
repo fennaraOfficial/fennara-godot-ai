@@ -15,6 +15,7 @@ Run `check-version.mjs` in CI and before release packaging. Use `set-version.mjs
 
 - `package-preview.mjs`: syncs committed addon payloads, then assembles per-platform preview archives after the GDExtension and local Rust binaries have already been built.
 - `package-addon-all.mjs`: combines platform addon parts into the final all-platform addon archive.
+- `release-policy.mjs`: defines the minimum compatible published CLI for each release track.
 - `write-release-manifest.mjs`: writes `fennara-release-manifest-v<version>.json` from release assets and validates every referenced SHA-256.
 
 Both scripts use `.package-preview/` as temporary staging and write zip outputs under the repo-root `dist/` folder. Those outputs are ignored and should not be committed.
@@ -31,7 +32,7 @@ Packaging scripts must keep the addon payload small. In particular, Linux CEF ru
 - `validate-staging-publish-bundle.mjs`: revalidates the final artifact bundle without executing candidate code.
 - `verify-published-assets.mjs`: compares the expected and downloaded GitHub Release asset names and SHA-256 values.
 
-These scripts support `.github/workflows/staging-release.yml`. Candidate build jobs run without release credentials. Only the trusted final job can publish, and it advances the per-channel Git ref after the immutable release has been downloaded and verified.
+These scripts support `.github/workflows/staging-release.yml`. Candidate build jobs run without release credentials. Only the trusted final job can publish, and it advances the per-channel Git ref after the exact release has been downloaded and verified.
 
 ## Linux CEF Scripts
 

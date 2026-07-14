@@ -22,7 +22,7 @@ Releases are manual. Do not publish from pull request workflows.
 
 Release tooling accepts SemVer values. Stable releases use `X.Y.Z`. Staging
 candidates use an isolated pull-request prerelease such as
-`0.3.9-pr.101.2`, where `pr-101` is the staging channel and `2` is that
+`1.2.3-pr.101.2`, where `pr-101` is the staging channel and `2` is that
 channel's candidate number.
 
 To bump the repo version:
@@ -44,13 +44,13 @@ written automatically by the normal command above. A staging build workspace
 uses the explicit identity inputs:
 
 ```bash
-node scripts/set-version.mjs 0.3.9-pr.101.2 \
+node scripts/set-version.mjs 1.2.3-pr.101.2 \
   --track staging \
   --channel pr-101 \
   --source-commit <full-commit-sha>
 ```
 
-The staging version, channel, source commit, and immutable release tag must
+The staging version, channel, source commit, and exact release tag must
 agree. A prerelease addon without this identity is rejected. Existing stable
 addons from before `release.json` continue to default to the stable track.
 
@@ -132,7 +132,7 @@ The `version` input must match `VERSION`.
 The workflow publishes:
 
 - `v<version>`
-- `latest` when `promote_latest` is true
+- marks `v<version>` as GitHub Latest when `promote_latest` is true
 
 The release workflow prepares the Linux CEF runtime before platform packaging.
 It downloads the pinned official CEF 139 Linux minimal SDK, assembles the
@@ -167,7 +167,7 @@ Package roles:
 | `fennara-cli-*` | Install script payload containing only the `fennara` CLI for one platform |
 | `fennara-release-local-*` | MCP and daemon launchers plus versioned runtime binaries for one platform |
 | `fennara-release-addon-v*` | Versioned all-platform addon resolved through the release manifest |
-| `fennara-addon-latest.zip` | Stable all-platform addon URL for the Godot Asset Library and documentation |
+| `fennara-addon-latest.zip` | Stable-name all-platform addon alias for documentation and manual downloads |
 | `fennara-webview-cef-linux-x64-*` | Linux-only shared CEF runtime installed once in Fennara app data |
 | `fennara-release-manifest-v*` | Install and update plan containing asset names, SHA-256 values, install primitives, and shared runtimes |
 
@@ -195,11 +195,14 @@ manifest whenever the release publishes one. The manifest records:
 - the shared addon asset with SHA-256
 - platform-specific shared runtime assets, currently Linux CEF
 
-The current manifest generator and release workflows use
-`minimum_cli_version: 0.3.8` by default. Normal package layout or asset name
-changes should be handled by manifest data, not by changing the outer CLI.
-Raise `minimum_cli_version` only when a release needs a new manifest schema or
-install primitive that older CLIs truly cannot perform.
+`scripts/release-policy.mjs` is the source of truth for
+`minimum_cli_version`. The manifest writer selects the policy after validating
+the release identity, so Stable, Package Preview, and Staging cannot choose
+independent values. Normal package layout or asset name changes should be
+handled by manifest data, not by changing the outer CLI. Raise the policy when
+a release needs a newer updater handoff, manifest schema, install primitive,
+self-update behavior, or other CLI capability that an older published CLI
+cannot safely perform.
 
 When the CLI is too old, `fennara update` should use the manifest's
 per-platform `assets.cli` entry to update the installed CLI first, then resume
@@ -220,19 +223,20 @@ Staging channels are isolated per pull request:
 | Value | PR 101 example |
 | --- | --- |
 | Channel | `pr-101` |
-| Candidate version | `0.3.9-pr.101.2` |
-| Immutable release | `v0.3.9-pr.101.2` |
+| Candidate version | `1.2.3-pr.101.2` |
+| Exact release | `v1.2.3-pr.101.2` |
 | Channel ref | `fennara-staging/pr-101` |
 | Pointer file | `fennara-staging-channel-pr-101.json` |
 
-The per-channel Git ref contains only a small pointer file to an immutable
-exact release. Release binaries never live under the moving channel ref. The
+The per-channel Git ref contains only a small pointer file to an exact
+versioned release. Release binaries never live under the moving channel ref. The
 CLI can resolve this pointer with the internal version request
-`channel:pr-101`, then continues using only the exact immutable version.
+`channel:pr-101`, then continues using only the exact version.
 
 PR 101 and PR 125 therefore use different release tags and pointer assets.
 Updating one channel cannot redirect testers on the other channel. Publishing
-one channel never changes stable `latest` or another pull request's channel.
+one channel never changes the stable GitHub Latest designation or another pull
+request's channel.
 
 ## Staging Candidate Workflow
 
@@ -242,7 +246,7 @@ head of an open pull request. Run it from `main` and provide:
 | Input | Meaning |
 | --- | --- |
 | `pull_request` | Open pull request to build |
-| `base_version` | Planned stable version, such as `0.3.9` |
+| `base_version` | Planned stable version in `X.Y.Z` form |
 | `candidate` | Increasing candidate number for this pull request |
 | `source_commit` | Optional full SHA that must still be the pull request head |
 | `publish` | Off for artifact-only validation, on to publish the candidate |
@@ -250,8 +254,12 @@ head of an open pull request. Run it from `main` and provide:
 The workflow freezes the pull request head SHA before any platform build. The
 Windows, Linux, and macOS jobs check out that exact commit with read-only
 permissions, no persisted Git credentials, no release credentials, and no
-shared dependency caches. Candidate code can produce build artifacts, but it
-cannot publish a GitHub Release.
+ability to save shared dependency caches. They may restore compatible
+SCons/godot-cpp and Cargo caches written by trusted default-branch workflows.
+Staging uses the restore-only cache action, so candidate code can consume
+trusted build outputs but cannot replace or poison caches for later runs.
+Candidate code can produce build artifacts, but it cannot publish a GitHub
+Release.
 
 Trusted repository scripts then validate the candidate identity, exact archive
 inventory, addon contents, platform package layout, release manifest, and every
@@ -260,37 +268,37 @@ selected.
 
 When publication is enabled, the trusted final job:
 
-1. Requires GitHub release immutability to be enabled for the repository.
-2. Revalidates the candidate artifacts as data.
-3. Creates a draft, uploads every asset, publishes it as the immutable
-   `v<exact-version>` prerelease, and verifies its release attestation.
-4. Downloads the published assets and compares their names and hashes.
-5. Rejects a backward or conflicting channel change.
-6. Updates the small `fennara-staging/pr-<number>` pointer ref last through a
+1. Revalidates the candidate artifacts as data.
+2. Creates a draft, uploads every asset, and publishes it as the exact
+   `v<exact-version>` prerelease without changing GitHub Latest.
+3. Downloads the published assets and compares their names and hashes.
+4. Rejects a backward or conflicting channel change.
+5. Updates the small `fennara-staging/pr-<number>` pointer ref last through a
    conditional GitHub Contents API write.
-7. Downloads the active pointer and verifies its exact contents.
+6. Downloads the active pointer and verifies its exact contents.
 
 Runs for one pull request are serialized. Different pull requests use separate
 concurrency groups, release tags, and pointer refs. Retrying the same
-candidate verifies the existing immutable release instead of mixing files into
-it. The workflow never creates, uploads to, or promotes stable `latest`.
+candidate verifies the existing exact release instead of mixing files into it.
+The workflow never creates, uploads to, or promotes stable GitHub Latest.
 
-GitHub release immutability applies only to releases created after the setting
-is enabled. Fennara intentionally preserves the existing pre-policy `latest`
-release as the one mutable compatibility endpoint used by current installers.
-The stable Release workflow updates that release in place and fails if it is
-missing or immutable. Exact stable and staging releases are created as drafts,
-receive all assets before publication, and must pass `gh release verify` after
-publication.
+Stable publication does not use a literal `latest` tag or release. The Release
+workflow creates the exact `v<version>` release as a draft, verifies the uploaded
+assets byte for byte, publishes it as a mutable release, and marks that exact
+release as GitHub Latest when `promote_latest` is true. Installers and stable CLI
+discovery resolve GitHub's Latest Release API endpoint.
 
-The stable and staging publication jobs use the `RELEASE_ADMIN_TOKEN` repository
-secret only for the immutable-release preflight. Configure it as a fine-grained
-token with repository Administration read access. Asset publication continues
-to use the job-scoped `GITHUB_TOKEN` with contents write access.
+Stable and staging releases are mutable while repository release immutability is
+disabled. Both workflows verify release metadata and downloaded asset bytes
+before completing publication or advancing a staging channel. Asset publication
+uses the job-scoped `GITHUB_TOKEN` with contents write access.
 
-Staging-capable and stable release workflows use `minimum_cli_version: 0.3.8`.
-Channel handoff, exact-target preservation across CLI replacement, and safe
-shared-runtime activation depend on the updater behavior introduced in that CLI.
+The release policy currently requires CLI `0.3.11` for stable manifests and
+CLI `0.3.8` for staging manifests. Stable discovery no longer resolves the
+retired `latest` tag. A staging candidate such as `0.3.11-pr.123.1` compares
+lower than stable `0.3.11` under SemVer, so its minimum must remain below the
+candidate version for first-run setup to install the candidate CLI. Do not
+change either minimum based only on manifest schema compatibility.
 
 The shared addon zip contains every built GDExtension binary referenced by `godot_demo/addons/fennara/fennara.gdextension`. Godot loads the matching library for the user's OS and ignores the others.
 
@@ -398,12 +406,13 @@ When release packaging builds the CLI, those templates are compiled into the bin
 
 ## What `latest` Means
 
-`latest` is the moving release used by normal install and update flows.
+GitHub's Latest Release pointer selects the versioned release used by normal
+install and update flows. Fennara does not create or move a literal `latest` tag.
 
 - `install.ps1` and `install.sh` fetch the latest CLI asset by default.
-- `fennara update` fetches the release manifest from `latest` by default, self-updates the installed CLI when needed, then resolves local/addon/shared runtime assets from it.
+- `fennara update` fetches the release manifest through GitHub's Latest Release endpoint by default, self-updates the installed CLI when needed, then resolves local/addon/shared runtime assets from it.
 - In-editor updates stage verified assets before shutdown, recheck the complete staged-addon digest before replacement, keep the previous addon, launchers, and runtime manifest until activation validation succeeds, and require the reopened GDExtension handshake before deleting rollback data.
-- `fennara install` fetches the release manifest from `latest` by default, then resolves local/addon/shared runtime assets from it.
+- `fennara install` fetches the release manifest through GitHub's Latest Release endpoint by default, then resolves local/addon/shared runtime assets from it.
 - The Godot plugin update check compares against GitHub's latest release.
 
 Use `promote_latest: false` only when publishing a version that should not become the default user install.
@@ -462,5 +471,5 @@ fennara self-update
 - Release workflow runs from `main` only.
 - Release version input must match `VERSION`.
 - Pull request workflows may build and upload test artifacts, but must not publish releases.
-- Keep `latest` pointed at the newest release intended for normal users.
+- Keep the intended normal-user release designated as GitHub Latest.
 - Do not rewrite published release tags unless maintainers intentionally decide to replace a broken release.

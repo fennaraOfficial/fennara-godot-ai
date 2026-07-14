@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       base_version:
-        description: "Planned stable version, for example 0.3.9."
+        description: "Planned stable version in X.Y.Z form."
         required: true
         type: string
       candidate:
@@ -241,6 +241,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Stamp candidate version in the runner workspace
+        shell: bash
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
           CHANNEL: ${{ needs.resolve.outputs.channel }}
@@ -293,11 +294,71 @@ jobs:
             --out-dir "${RUNNER_TEMP}/fennara-cef-sdk" \
             --download-dir "${RUNNER_TEMP}/fennara-cef-download"
 
+      - name: Compute godot-cpp cache key
+        id: godot_cpp_cache_key
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_hash="${{ hashFiles('fennara-cpp/godot-cpp/SConstruct', 'fennara-cpp/godot-cpp/tools/**/*.py', 'fennara-cpp/godot-cpp/include/**/*.h', 'fennara-cpp/godot-cpp/include/**/*.hpp', 'fennara-cpp/godot-cpp/gdextension/*.json') }}"
+          image_id="${ImageOS:-${RUNNER_OS:-unknown}}-${ImageVersion:-unknown}"
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            toolchain_id="$(powershell -NoProfile -Command '$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"; if (Test-Path $vswhere) { $install = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath; if ($install) { $versions = Get-ChildItem (Join-Path $install "VC\Tools\MSVC") -Directory | Sort-Object Name -Descending; if ($versions) { $versions[0].Name } } }' | tr -d '\r')"
+          else
+            toolchain_id="$(c++ --version | head -n 1)"
+          fi
+          toolchain_id="$(printf "%s" "${toolchain_id:-unknown}" | tr -c 'A-Za-z0-9_.-' '-')"
+          base="godot-cpp-v2-${{ runner.os }}-${{ matrix.platform }}-editor-${source_hash}-${image_id}-${toolchain_id}"
+          echo "primary=${base}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+          echo "restore=${base}-" >> "$GITHUB_OUTPUT"
+          echo "image-id=${image_id}" >> "$GITHUB_OUTPUT"
+          echo "toolchain-id=${toolchain_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore trusted SCons and godot-cpp outputs
+        id: godot_cpp_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            fennara-cpp/.scons_cache/
+            fennara-cpp/.sconsign.dblite
+            fennara-cpp/godot-cpp/bin/
+            fennara-cpp/godot-cpp/gen/
+            fennara-cpp/godot-cpp/src/**/*.obj
+            fennara-cpp/godot-cpp/src/**/*.pdb
+          key: ${{ steps.godot_cpp_cache_key.outputs.primary }}
+          restore-keys: |
+            ${{ steps.godot_cpp_cache_key.outputs.restore }}
+
+      - name: Report godot-cpp cache restore
+        run: |
+          echo "cache-hit: ${{ steps.godot_cpp_cache.outputs.cache-hit }}"
+          echo "cache-primary-key: ${{ steps.godot_cpp_cache_key.outputs.primary }}"
+          echo "cache-restore-prefix: ${{ steps.godot_cpp_cache_key.outputs.restore }}"
+          echo "runner-image: ${{ steps.godot_cpp_cache_key.outputs.image-id }}"
+          echo "toolchain-id: ${{ steps.godot_cpp_cache_key.outputs.toolchain-id }}"
+
+      - name: Restore trusted Cargo artifacts
+        id: cargo_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            local/target
+          key: local-cargo-${{ runner.os }}-${{ hashFiles('local/Cargo.lock') }}
+          restore-keys: |
+            local-cargo-${{ runner.os }}-
+
+      - name: Report Cargo cache restore
+        run: |
+          echo "cache-hit: ${{ steps.cargo_cache.outputs.cache-hit }}"
+          echo "cache-primary-key: local-cargo-${{ runner.os }}-${{ hashFiles('local/Cargo.lock') }}"
+
       - name: Build GDExtension
         working-directory: fennara-cpp
         env:
+          SCONS_CACHE: ${{ github.workspace }}/fennara-cpp/.scons_cache
           FENNARA_CEF_ROOT: ${{ steps.linux_cef_sdk.outputs.cef_root }}
-        run: scons platform=${{ matrix.platform }} target=editor
+        run: scons platform=${{ matrix.platform }} target=editor --debug=explain --cache-show
 
       - name: Build local tools
         working-directory: local
@@ -449,7 +510,6 @@ jobs:
             --assets-dir release-assets \
             --linux-cef-manifest generated-linux-cef-manifest/linux-cef.json \
             --release-identity staging-metadata/candidate.json \
-            --minimum-cli-version 0.3.8 \
             --out "release-assets/fennara-release-manifest-v${VERSION}.json"
 
       - name: Validate complete candidate asset set
@@ -491,7 +551,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: publish immutable candidate and advance channel
+    name: publish candidate and advance channel
     runs-on: ubuntu-latest
     needs: [resolve, assemble]
     if: inputs.publish
@@ -525,24 +585,7 @@ jobs:
       - name: Revalidate untrusted candidate artifacts as data
         run: node scripts/validate-staging-publish-bundle.mjs --bundle staging-bundle
 
-      - name: Require immutable GitHub releases
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_ADMIN_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo "::error::RELEASE_ADMIN_TOKEN must provide repository Administration read access for the immutable-release preflight."
-            exit 1
-          fi
-          if ! gh api \
-            -H "X-GitHub-Api-Version: 2026-03-10" \
-            "repos/${GITHUB_REPOSITORY}/immutable-releases" >/dev/null 2>&1; then
-            echo "::error::Repository release immutability must be enabled before publishing staging candidates."
-            exit 1
-          fi
-
-      - name: Publish or verify immutable candidate release
+      - name: Publish or verify candidate release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -558,11 +601,11 @@ jobs:
           remote_dir="${RUNNER_TEMP}/published-${VERSION}"
 
           if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            read -r is_draft is_prerelease is_immutable target_commitish <<< "$(
+            read -r is_draft is_prerelease target_commitish <<< "$(
               gh release view "${RELEASE_TAG}" \
                 --repo "${GITHUB_REPOSITORY}" \
-                --json isDraft,isPrerelease,isImmutable,targetCommitish \
-                --jq '[.isDraft, .isPrerelease, .isImmutable, .targetCommitish] | @tsv'
+                --json isDraft,isPrerelease,targetCommitish \
+                --jq '[.isDraft, .isPrerelease, .targetCommitish] | @tsv'
             )"
             if [[ "${target_commitish}" != "${SOURCE_COMMIT}" || "${is_prerelease}" != "true" ]]; then
               echo "::error::Existing ${RELEASE_TAG} has conflicting release metadata."
@@ -573,9 +616,12 @@ jobs:
                 --repo "${GITHUB_REPOSITORY}" \
                 --yes \
                 --cleanup-tag
-            elif [[ "${is_immutable}" != "true" ]]; then
-              echo "::error::Existing ${RELEASE_TAG} is published but not immutable."
-              exit 1
+            else
+              release_tag_sha="$(git ls-remote origin "refs/tags/${RELEASE_TAG}" | awk '{print $1}')"
+              if [[ "${release_tag_sha}" != "${SOURCE_COMMIT}" ]]; then
+                echo "::error::Existing ${RELEASE_TAG} does not point to ${SOURCE_COMMIT}."
+                exit 1
+              fi
             fi
           fi
 
@@ -600,10 +646,21 @@ jobs:
             gh release edit "${RELEASE_TAG}" \
               --repo "${GITHUB_REPOSITORY}" \
               --draft=false \
-              --prerelease
+              --prerelease \
+              --latest=false
           fi
 
-          gh release verify "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}"
+          read -r published_draft published_prerelease <<< "$(
+            gh release view "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --json isDraft,isPrerelease \
+              --jq '[.isDraft, .isPrerelease] | @tsv'
+          )"
+          published_tag_sha="$(git ls-remote origin "refs/tags/${RELEASE_TAG}" | awk '{print $1}')"
+          if [[ "${published_draft}" != "false" || "${published_prerelease}" != "true" || "${published_tag_sha}" != "${SOURCE_COMMIT}" ]]; then
+            echo "::error::Published ${RELEASE_TAG} does not match the staging candidate."
+            exit 1
+          fi
 
           rm -rf "${remote_dir}"
           mkdir -p "${remote_dir}"

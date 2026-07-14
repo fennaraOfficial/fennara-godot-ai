@@ -134,7 +134,7 @@ not captured by default. The daemon exposes a small local debug read endpoint at
 
 ## Install Layout
 
-For the default Asset Library flow, the GDExtension first presents a native
+For the manually copied release-addon flow, the GDExtension first presents a native
 setup panel when the exact local installation is missing. Its bootstrap bridge
 downloads the addon version's release manifest and CLI archive with Godot's
 HTTP client, verifies the declared SHA-256, and places only the CLI in Fennara
@@ -313,8 +313,9 @@ still apply in both modes.
 ## Updates
 
 `fennara update` is the normal project update command. It reads the installed
-addon release identity, resolves stable latest or that addon's isolated staging
-channel, and freezes the result to one exact immutable version. It first checks
+add-on release identity, resolves GitHub's Latest Release pointer or that
+add-on's isolated staging channel, and freezes the result to one exact version.
+It first checks
 the version of that release manifest's per-platform CLI asset and, when newer,
 stages that CLI, lets the old process exit, replaces the installed CLI, and
 resumes with the same target. It then uses the same manifest-driven resolver and installer as
@@ -365,8 +366,9 @@ Each public release publishes separate assets so installs can stay modular:
 | `fennara-webview-cef-linux-x64-<cef-version>.zip` | Linux-only shared CEF runtime installed once into Fennara app data. |
 | `fennara-release-manifest-v<version>.json` | Schema-versioned install/update plan with asset names, hashes, minimum CLI version, and shared runtime declarations. |
 
-The moving `latest` release is what normal users should install from. Versioned
-releases such as `v0.2.8` stay available for pinning and debugging.
+Normal users install from the exact versioned release currently designated as
+GitHub Latest. Fennara does not create or move a literal `latest` tag or release.
+Older versioned releases stay available for pinning and debugging.
 
 Linux CEF runtime payloads are not part of `fennara-addon-*`. They are selected
 by the release manifest and installed once into the shared app-data

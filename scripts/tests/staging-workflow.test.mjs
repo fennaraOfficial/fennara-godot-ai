@@ -61,13 +61,39 @@ test("shell commands do not interpolate resolve outputs directly", () => {
   }
 });
 
-test("immutable-release preflight uses an administration token", () => {
+test("candidate version stamping uses bash on every platform", () => {
+  const packageJob = jobBlocks(workflow).get("package");
+  assert.ok(packageJob, "workflow must contain the package job");
+  const stampStep = stepBlocks(packageJob).find((block) =>
+    /name: Stamp candidate version in the runner workspace/.test(block),
+  );
+  assert.ok(stampStep, "package job must stamp the staging candidate version");
+  assert.match(stampStep, /^        shell: bash$/m);
+});
+
+test("candidate builds restore trusted caches without saving them", () => {
+  const packageJob = jobBlocks(workflow).get("package");
+  assert.ok(packageJob, "workflow must contain the package job");
+  assert.equal(
+    (packageJob.match(/uses: actions\/cache\/restore@v4/g) ?? []).length,
+    2,
+    "staging packages must restore the godot-cpp and Cargo caches",
+  );
+  assert.doesNotMatch(packageJob, /uses: actions\/cache@/);
+  assert.doesNotMatch(packageJob, /uses: actions\/cache\/save@/);
+  assert.match(packageJob, /key: \$\{\{ steps\.godot_cpp_cache_key\.outputs\.primary \}\}/);
+  assert.match(packageJob, /key: local-cargo-\$\{\{ runner\.os \}\}-\$\{\{ hashFiles\('local\/Cargo\.lock'\) \}\}/);
+  assert.match(packageJob, /SCONS_CACHE: \$\{\{ github\.workspace \}\}\/fennara-cpp\/\.scons_cache/);
+});
+
+test("staging publication supports mutable exact prereleases", () => {
   const publish = jobBlocks(workflow).get("publish");
   assert.ok(publish, "workflow must contain the publish job");
-  assert.match(
-    publish,
-    /name: Require immutable GitHub releases[\s\S]*?GH_TOKEN: \$\{\{ secrets\.RELEASE_ADMIN_TOKEN \}\}/,
-  );
+  assert.doesNotMatch(publish, /Require immutable GitHub releases/);
+  assert.doesNotMatch(publish, /gh release verify/);
+  assert.doesNotMatch(publish, /isImmutable/);
+  assert.match(publish, /git ls-remote origin "refs\/tags\/\$\{RELEASE_TAG\}"/);
+  assert.match(publish, /--prerelease[\s\S]*?--latest=false/);
 });
 
 function runBlocks(source) {
@@ -94,9 +120,11 @@ function runBlocks(source) {
 }
 
 function checkoutSteps(source) {
-  return source
-    .split(/(?=^      - )/m)
-    .filter((block) => /uses: actions\/checkout@/.test(block));
+  return stepBlocks(source).filter((block) => /uses: actions\/checkout@/.test(block));
+}
+
+function stepBlocks(source) {
+  return source.split(/(?=^      - )/m);
 }
 
 function jobBlocks(source) {
