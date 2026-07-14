@@ -1,6 +1,6 @@
 use super::journal::OperationJournal;
 use super::redaction::{replace_path, sanitize_text};
-use super::storage::{read_operation_state, unix_ms, validate_operation_id};
+use super::storage::{read_operation_state, unix_ms, validate_operation_id, write_json_atomic};
 use super::{FailureClass, OperationKind, Phase};
 use crate::app_layout::AppLayout;
 use serde_json::Value;
@@ -182,6 +182,55 @@ fn reads_previous_state_after_interrupted_atomic_swap() {
     let state = read_operation_state(&journal.state_path).unwrap();
     assert_eq!(state["operation_id"], journal.id);
     fs::remove_dir_all(&journal.app_dir).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn atomic_state_write_retries_a_windows_sharing_violation() {
+    use std::fs::OpenOptions;
+    use std::os::windows::fs::OpenOptionsExt;
+    use std::thread;
+    use std::time::Duration;
+
+    const FILE_SHARE_READ: u32 = 0x00000001;
+
+    let layout = test_layout("windows-sharing-violation");
+    layout.ensure_base_dirs().unwrap();
+    let path = layout.operations_dir.join("update-123-godot-456.json");
+    fs::write(&path, r#"{"phase":"checking"}"#).unwrap();
+    let reader = OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ)
+        .open(&path)
+        .unwrap();
+    let release_reader = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(100));
+        drop(reader);
+    });
+
+    write_json_atomic(&path, &serde_json::json!({ "phase": "verifying" })).unwrap();
+    release_reader.join().unwrap();
+
+    let state = read_operation_state(&path).unwrap();
+    assert_eq!(state["phase"], "verifying");
+    fs::remove_dir_all(&layout.app_dir).unwrap();
+}
+
+#[cfg(not(windows))]
+#[test]
+fn atomic_state_write_replaces_state_while_a_posix_reader_is_open() {
+    let layout = test_layout("posix-open-reader");
+    layout.ensure_base_dirs().unwrap();
+    let path = layout.operations_dir.join("update-123-godot-456.json");
+    fs::write(&path, r#"{"phase":"checking"}"#).unwrap();
+    let reader = fs::File::open(&path).unwrap();
+
+    write_json_atomic(&path, &serde_json::json!({ "phase": "verifying" })).unwrap();
+
+    drop(reader);
+    let state = read_operation_state(&path).unwrap();
+    assert_eq!(state["phase"], "verifying");
+    fs::remove_dir_all(&layout.app_dir).unwrap();
 }
 
 #[test]
