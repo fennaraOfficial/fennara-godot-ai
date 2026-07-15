@@ -123,7 +123,8 @@ mod tests {
             .and_then(Value::as_str)
             .expect("run_scene_edit_script should expose description");
 
-        assert!(description.contains("Run a one-off scene edit worker script"));
+        assert!(description.contains("Run a one-off scene worker script"));
+        assert!(description.contains("`mode=inspect`"));
         assert!(description.contains("script_path"));
         assert!(description.contains("ctx.get_scene_root()"));
         assert!(tool.get("description_lines").is_none());

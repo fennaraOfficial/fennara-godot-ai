@@ -92,13 +92,22 @@ func run(ctx: Variant) -> void:
 
 writeProjectFile("smoke.gd", `extends SceneTree
 
+const IMPORT_WAIT_TIMEOUT_MSEC: int = 60_000
+
 func _initialize() -> void:
 \t_run.call_deferred()
 
 func _run() -> void:
 \tvar filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
-\twhile filesystem.is_scanning() or not ResourceLoader.exists("res://assets/minimal_imported_scene.gltf", "PackedScene"):
+\tvar import_deadline_msec: int = Time.get_ticks_msec() + IMPORT_WAIT_TIMEOUT_MSEC
+\tvar packed_scene_exists: bool = ResourceLoader.exists("res://assets/minimal_imported_scene.gltf", "PackedScene")
+\twhile filesystem.is_scanning() or not packed_scene_exists:
+\t\tif Time.get_ticks_msec() >= import_deadline_msec:
+\t\t\tpush_error("FENNARA_IMPORT_TIMEOUT scanning=%s packed_scene_exists=%s" % [filesystem.is_scanning(), packed_scene_exists])
+\t\t\tquit(1)
+\t\t\treturn
 \t\tawait process_frame
+\t\tpacked_scene_exists = ResourceLoader.exists("res://assets/minimal_imported_scene.gltf", "PackedScene")
 
 \tvar executor: FennaraExecutor = FennaraExecutor.new()
 \tget_root().add_child(executor)
