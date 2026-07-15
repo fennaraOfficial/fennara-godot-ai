@@ -36,6 +36,8 @@ Use `fennara_status` first when any of these are uncertain:
 - which Fennara MCP tools are available
 - whether Godot is still scanning or importing resources before asset-facing work
 
+If `fennara_status` reports that Godot is scanning or importing, or that asset tools are not ready, do not loop, rapidly poll, or programmatically call `fennara_status` repeatedly. Wait without making Fennara tool calls for a meaningful interval based on the project or import size, then call `fennara_status` once again. Do not use sub-second status retries. Every retry is a separate visible MCP tool call and creates avoidable UI noise and local load.
+
 If more than one Godot project is open, the active MCP target controls which project receives Fennara MCP calls. In Godot, use the Fennara dock's project target control for the desired project.
 
 ## Cursor MCP Identifier
