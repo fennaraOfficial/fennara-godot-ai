@@ -130,6 +130,7 @@ godot::Dictionary format_run_scene_edit_script(const godot::Dictionary &raw_resu
     lines.append("Status: " + status);
     lines.append("Scene: " + godot::String(raw_result.get("scene_path", "")));
     lines.append("Script: " + godot::String(raw_result.get("script_path", "")));
+    lines.append("Mode: " + godot::String(raw_result.get("mode", "edit")));
     lines.append("Scene created: " + bool_text(raw_result.get("scene_created", false)));
     lines.append("Scene saved: " + bool_text(raw_result.get("scene_saved", false)));
     lines.append("Modified: " + bool_text(raw_result.get("modified", false)));
@@ -229,6 +230,7 @@ godot::Dictionary format_run_scene_edit_script(const godot::Dictionary &raw_resu
         "run_scene_edit_script", "run_scene_edit_script-md-v1", status);
     metadata["scene_path"] = raw_result.get("scene_path", "");
     metadata["script_path"] = raw_result.get("script_path", "");
+    metadata["mode"] = raw_result.get("mode", "edit");
     metadata["scene_created"] = raw_result.get("scene_created", false);
     metadata["scene_saved"] = raw_result.get("scene_saved", false);
     metadata["modified"] = raw_result.get("modified", false);

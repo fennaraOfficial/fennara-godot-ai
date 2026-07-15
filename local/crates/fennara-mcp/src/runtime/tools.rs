@@ -70,12 +70,18 @@ fn status_payload() -> Value {
 }
 
 fn connected_status_payload(status: Value) -> Value {
+    let editor_filesystem = status
+        .get("active_project")
+        .and_then(|project| project.get("editor_filesystem"))
+        .filter(|status| status.is_object())
+        .cloned();
     json!({
         "ok": true,
         "server": SERVER_NAME,
         "version": SERVER_VERSION,
         "daemon_connected": true,
-        "daemon": daemon_status_for_mcp(status)
+        "daemon": daemon_status_for_mcp(status),
+        "editor_filesystem": editor_filesystem
     })
 }
 
@@ -105,7 +111,6 @@ fn status_tool_result(payload: Value) -> Value {
                 "text": text
             }
         ],
-        "structuredContent": payload,
         "isError": false
     })
 }
@@ -132,6 +137,7 @@ fn status_markdown(payload: &Value) -> String {
 
     if daemon_connected {
         append_daemon_status_lines(&mut lines, payload.get("daemon"));
+        append_editor_filesystem_status(&mut lines, payload.get("editor_filesystem"));
     } else {
         if let Some(plugin_connected) = payload
             .get("godot_plugin_connected")
@@ -148,6 +154,37 @@ fn status_markdown(payload: &Value) -> String {
     }
 
     lines.join("\n")
+}
+
+fn append_editor_filesystem_status(lines: &mut Vec<String>, status: Option<&Value>) {
+    let Some(status) = status.filter(|status| status.is_object()) else {
+        return;
+    };
+
+    let state = string_field(status, "state").unwrap_or_else(|| "unknown".to_string());
+    lines.push(format!("Editor filesystem: {}", markdown_escape(&state)));
+
+    let asset_tools_ready = status
+        .get("asset_tools_ready")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    lines.push(format!(
+        "Asset tools ready: {}",
+        if asset_tools_ready { "yes" } else { "no" }
+    ));
+
+    if status.get("is_scanning").and_then(Value::as_bool) == Some(true)
+        && let Some(progress) = status.get("scan_progress").and_then(Value::as_f64)
+    {
+        lines.push(format!(
+            "Editor filesystem scan progress: {:.1}%",
+            progress.clamp(0.0, 1.0) * 100.0
+        ));
+    }
+
+    if let Some(reason) = string_field(status, "not_ready_reason") {
+        lines.push(format!("Asset tools note: {}", markdown_escape(&reason)));
+    }
 }
 
 fn append_daemon_status_lines(lines: &mut Vec<String>, daemon: Option<&Value>) {
@@ -539,7 +576,7 @@ mod tests {
     const PNG_1X1: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 
     #[test]
-    fn status_tool_result_uses_markdown_text_and_keeps_structured_content() {
+    fn status_tool_result_uses_plain_text_without_duplicate_structured_content() {
         let active_project = json!({
             "project_name": "Top_Down Template 2d",
             "project_path": "C:\\godot\\SimpleTopDownShooter_Template2D\\",
@@ -601,31 +638,7 @@ mod tests {
         assert!(text.contains("Tools: read\\_file, screenshot\\_scene"));
         assert!(!text.contains("rendering_context"));
         assert!(!text.contains("connected_projects"));
-        assert_eq!(
-            result["structuredContent"]["daemon"]["active_project"]["project_name"],
-            "Top_Down Template 2d"
-        );
-        assert_eq!(
-            result["structuredContent"]["daemon"]["active_project"]["project_path"],
-            "C:\\godot\\SimpleTopDownShooter_Template2D\\"
-        );
-        assert_eq!(
-            result["structuredContent"]["daemon"]["connected_projects"][1]["project_name"],
-            "Puzzle_Project [Test]"
-        );
-        assert_eq!(
-            result["structuredContent"]["daemon"]["connected_projects"][1]["project_path"],
-            "D:\\Games\\Puzzle_Project\\"
-        );
-        assert!(
-            result["structuredContent"]["daemon"]["active_project"]
-                .get("rendering_context")
-                .is_none()
-        );
-        assert_eq!(
-            result["structuredContent"]["daemon"]["connected_projects"][0]["rendering_context"]["schema_version"],
-            "rendering-context-v1"
-        );
+        assert!(result.get("structuredContent").is_none());
     }
 
     #[test]
@@ -648,6 +661,39 @@ mod tests {
     }
 
     #[test]
+    fn status_tool_result_includes_live_editor_filesystem_readiness() {
+        let payload = connected_status_payload(json!({
+            "ok": true,
+            "version": "0.3.12",
+            "godot_plugin_connected": true,
+            "active_session_id": "D:/project/#42",
+            "active_project": {
+                "project_name": "Import Test",
+                "project_path": "D:/project/",
+                "editor_filesystem": {
+                    "schema_version": "editor-filesystem-status-v1",
+                    "available": true,
+                    "state": "scanning_and_importing",
+                    "initial_scan_complete": false,
+                    "is_scanning": true,
+                    "scan_progress": 0.625,
+                    "asset_tools_ready": false,
+                    "not_ready_reason": "Godot is still scanning and importing project resources."
+                }
+            },
+            "connected_projects": []
+        }));
+
+        let result = status_tool_result(payload);
+        let text = result["content"][0]["text"].as_str().unwrap();
+
+        assert!(text.contains(r"Editor filesystem: scanning\_and\_importing"));
+        assert!(text.contains("Asset tools ready: no"));
+        assert!(text.contains("Editor filesystem scan progress: 62.5%"));
+        assert!(result.get("structuredContent").is_none());
+    }
+
+    #[test]
     fn status_tool_result_handles_connected_daemon_without_active_project() {
         let payload = connected_status_payload(json!({
             "ok": true,
@@ -665,7 +711,7 @@ mod tests {
         assert!(text.contains("Godot plugin: not connected"));
         assert!(text.contains("Active project: none"));
         assert!(text.contains("Connected projects: 0"));
-        assert!(result["structuredContent"]["daemon"]["active_project"].is_null());
+        assert!(result.get("structuredContent").is_none());
     }
 
     #[test]

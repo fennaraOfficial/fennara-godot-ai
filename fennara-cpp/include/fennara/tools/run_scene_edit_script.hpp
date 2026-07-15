@@ -17,11 +17,12 @@ protected:
 
 public:
     void configure(godot::Node *scene_root, const godot::String &scene_path,
-                   bool scene_exists);
+                   bool scene_exists, bool read_only = false);
 
     godot::Node *get_scene_root() const;
     godot::String get_scene_path() const;
     bool get_scene_exists() const;
+    bool is_read_only() const;
 
     void set_scene_root(godot::Node *root);
     void own(godot::Node *node);
@@ -50,6 +51,7 @@ private:
     godot::Node *_scene_root = nullptr;
     godot::String _scene_path;
     bool _scene_exists = false;
+    bool _read_only = false;
     bool _modified = false;
     godot::Array _logs;
     godot::Array _edit_errors;

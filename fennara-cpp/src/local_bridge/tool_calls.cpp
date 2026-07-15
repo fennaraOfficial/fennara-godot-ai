@@ -127,7 +127,7 @@ void _log_mcp_tool_complete() {
     Logger::log_activity("Actions complete.");
 }
 
-godot::Dictionary _fennara_status_result() {
+godot::Dictionary _fennara_status_result(const FennaraLocalBridge &bridge) {
     godot::Dictionary result;
     result["success"] = true;
     result["tool_name"] = "fennara_status";
@@ -136,6 +136,7 @@ godot::Dictionary _fennara_status_result() {
     result["version"] = update_notice::status();
     result["addon_access"] = addon_access::status();
     result["rendering_context"] = FennaraLocalBridge::collect_rendering_context();
+    result["editor_filesystem"] = bridge.collect_editor_filesystem_status();
     godot::Array local_tools;
     local_tools.append("read_file");
     local_tools.append("write_or_update_file");
@@ -538,7 +539,7 @@ void FennaraLocalBridge::_handle_tool_call(const godot::Dictionary &message) {
 
     if (tool == "fennara_status") {
         response["ok"] = true;
-        response["result"] = _fennara_status_result();
+        response["result"] = _fennara_status_result(*this);
         tool_call_log::log_completed(_session_id, request_id, tool, args,
                                      godot::Dictionary(response["result"]), true,
                                      started_at_ms);

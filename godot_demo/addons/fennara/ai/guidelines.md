@@ -34,6 +34,7 @@ Use `fennara_status` first when any of these are uncertain:
 - whether Godot is connected
 - which project is the active MCP target
 - which Fennara MCP tools are available
+- whether Godot is still scanning or importing resources before asset-facing work
 
 If more than one Godot project is open, the active MCP target controls which project receives Fennara MCP calls. In Godot, use the Fennara dock's project target control for the desired project.
 
@@ -297,6 +298,7 @@ Tool choice:
 
 - Use `get_class_info` first when you only need class API docs, methods, properties, inheritance, enums, or signals.
 - Use `run_scene_edit_script` when you need to execute real Godot editor code, such as instantiating an addon class, reading runtime-only property lists, loading/saving resources, or probing APIs that static class docs cannot answer.
+- Use `run_scene_edit_script` with `mode: "inspect"` for an existing imported `PackedScene` such as `.glb` or `.gltf`. Inspect mode never saves the source, rejects mutating `ctx` helpers, and skips saved-scene validation.
 - If the script does not actually need the target scene, pass a small safe existing scene as context. Do not call `ctx.mark_modified()` or scene-mutating helpers unless you intentionally want to save that scene. In this mode `modified=false` and `scene_saved=false` are expected.
 
 Use it instead of raw `.tscn`, `.tres`, or `.res` surgery when editing:
@@ -319,7 +321,7 @@ Important behavior:
 - Treat diagnostics and validation output as part of the edit result.
 - Fix reported issues before claiming the scene/resource edit is complete.
 - Do not directly write `.tscn` files with generic file tools. If a scene must change, use `run_scene_edit_script` so Godot owns serialization and validation.
-- For inspection-only scripts, use `ctx.log(...)` and do not call `ctx.mark_modified()` or mutating helpers such as `ctx.own(...)`, `ctx.instance_scene(...)`, `ctx.remove_node(...)`, or `ctx.clear_children(...)`. Existing scenes with `modified=false` are not saved, so read-only inspection should report `scene_saved=false` and should not rewrite the `.tscn`.
+- For inspection-only scripts, use `mode: "inspect"` and `ctx.log(...)`. Do not call direct mutation APIs such as `ResourceSaver`, filesystem writes, import-setting changes, or editor and OS state changes. The context rejects `ctx.mark_modified()` and mutating helpers such as `ctx.own(...)`, `ctx.instance_scene(...)`, `ctx.remove_node(...)`, or `ctx.clear_children(...)`.
 
 Inherited scenes:
 

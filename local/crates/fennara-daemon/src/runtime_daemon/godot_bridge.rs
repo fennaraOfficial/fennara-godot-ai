@@ -641,6 +641,10 @@ async fn handle_godot_socket(socket: WebSocket, state: AppState) {
                                 .get("rendering_context")
                                 .filter(|context| context.is_object())
                                 .cloned(),
+                            editor_filesystem: value
+                                .get("editor_filesystem")
+                                .filter(|status| status.is_object())
+                                .cloned(),
                             chat_token: optional_string(&value, "chat_token"),
                             tools: string_array(&value, "tools"),
                         };
@@ -658,6 +662,21 @@ async fn handle_godot_socket(socket: WebSocket, state: AppState) {
                             .insert(next_session_id.clone(), project);
                         ensure_active_project_after_connect(&state, &next_session_id).await;
                         broadcast_active_project_changed(&state).await;
+                    } else if value.get("type").and_then(Value::as_str) == Some("project_status") {
+                        if let Some(current_session_id) = session_id.as_deref()
+                            && value
+                                .get("session_id")
+                                .and_then(Value::as_str)
+                                .is_none_or(|reported| reported == current_session_id)
+                            && let Some(editor_filesystem) = value
+                                .get("editor_filesystem")
+                                .filter(|status| status.is_object())
+                        {
+                            let mut projects = state.projects.write().await;
+                            if let Some(project) = projects.get_mut(current_session_id) {
+                                project.editor_filesystem = Some(editor_filesystem.clone());
+                            }
+                        }
                     } else if matches!(
                         value.get("type").and_then(Value::as_str),
                         Some("tool_result" | "snapshot_result" | "project_file_result")

@@ -283,7 +283,8 @@ void FennaraExecutor::_on_batch_diagnostics_complete(uint64_t batch_generation) 
             merged["diagnostic_mode"] = "direct_script_load";
             merged["diagnostic_fallback"] = "direct_script_load";
             godot::Dictionary executed = FennaraRunSceneEditScriptTool::execute_prepared(merged);
-            if ((bool)executed.get("success", false)) {
+            if ((bool)executed.get("success", false) &&
+                (bool)executed.get("scene_saved", false)) {
                 godot::String scene_path =
                     executed.get("scene_path", merged.get("scene_path", ""));
                 if (!scene_path.is_empty()) {
@@ -307,7 +308,8 @@ void FennaraExecutor::_on_batch_diagnostics_complete(uint64_t batch_generation) 
         }
 
         godot::Dictionary executed = FennaraRunSceneEditScriptTool::execute_prepared(merged);
-        if ((bool)executed.get("success", false)) {
+        if ((bool)executed.get("success", false) &&
+            (bool)executed.get("scene_saved", false)) {
             godot::String scene_path =
                 executed.get("scene_path", merged.get("scene_path", ""));
             if (!scene_path.is_empty()) {

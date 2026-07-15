@@ -62,7 +62,8 @@ bool load_or_prepare_scene(const godot::String &normalized_scene,
                            godot::Dictionary &result,
                            godot::Node *&root_node,
                            bool &created_new_scene,
-                           bool &inherited_root_scene) {
+                           bool &inherited_root_scene,
+                           bool read_only) {
     bool scene_exists = godot::ResourceLoader::get_singleton()->exists(normalized_scene);
     created_new_scene = !scene_exists;
     inherited_root_scene = false;
@@ -84,9 +85,11 @@ bool load_or_prepare_scene(const godot::String &normalized_scene,
         inherited_root_scene = packed_scene_has_inherited_root(packed);
         result["inherited_root_scene"] = inherited_root_scene;
 
-        godot::PackedScene::GenEditState edit_state = inherited_root_scene
-            ? godot::PackedScene::GEN_EDIT_STATE_MAIN_INHERITED
-            : godot::PackedScene::GEN_EDIT_STATE_MAIN;
+        godot::PackedScene::GenEditState edit_state = read_only
+            ? godot::PackedScene::GEN_EDIT_STATE_DISABLED
+            : (inherited_root_scene
+                ? godot::PackedScene::GEN_EDIT_STATE_MAIN_INHERITED
+                : godot::PackedScene::GEN_EDIT_STATE_MAIN);
         root_node = packed->instantiate(edit_state);
         if (root_node == nullptr) {
             result["success"] = false;
@@ -96,6 +99,14 @@ bool load_or_prepare_scene(const godot::String &normalized_scene,
             return false;
         }
         return true;
+    }
+
+    if (read_only) {
+        result["success"] = false;
+        result["error"] = "Scene source is not available for inspection: " + normalized_scene;
+        result["runtime_errors"] = godot::Array();
+        result["logs"] = godot::Array();
+        return false;
     }
 
     godot::String dir_path = normalized_scene.get_base_dir();

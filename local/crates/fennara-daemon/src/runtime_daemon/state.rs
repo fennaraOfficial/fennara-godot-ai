@@ -77,6 +77,7 @@ pub(crate) struct GodotProjectStatus {
     pub(crate) godot_version: Option<String>,
     pub(crate) plugin_version: Option<String>,
     pub(crate) rendering_context: Option<Value>,
+    pub(crate) editor_filesystem: Option<Value>,
     #[serde(skip_serializing)]
     pub(crate) chat_token: Option<String>,
     pub(crate) tools: Vec<String>,

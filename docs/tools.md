@@ -145,7 +145,11 @@ the inspection step instead of calling `fennara_status`.
 Use this first when the MCP client is not sure which Godot project is connected.
 It reports daemon and Godot bridge reachability, the active project, connected
 editors, Godot and addon versions, rendering context, and the tools advertised
-by each connected editor.
+by each connected editor. For the active project it also reports whether
+Godot's editor filesystem is still scanning or importing, its progress, and
+whether asset-facing tools are ready for use.
+The MCP response is one plain-text status block, without a duplicate structured
+JSON block.
 
 The editor advertisement describes the Godot bridge and currently includes
 `read_file`, which the built-in chat can use. For an external MCP app, the
@@ -256,9 +260,11 @@ Use write_or_update_file to patch res://scripts/player.gd, then report any diagn
 
 ### `run_scene_edit_script`
 
-Use this for scene/resource edits that need Godot APIs and Godot serialization.
-The tool runs one editor-time `@tool` worker script against exactly one target
-scene/resource graph.
+Use this for scene/resource work that needs Godot APIs. The tool runs one
+editor-time `@tool` worker script against exactly one detached scene/resource
+graph. `mode: "edit"` allows authored `.tscn` and `.scn` mutation through Godot
+serialization. `mode: "inspect"` loads an existing `PackedScene`, including an
+imported `.glb` or `.gltf`, as a read-only context that is never saved.
 
 Good fit for:
 
@@ -278,7 +284,7 @@ Script contract:
 - every result includes the effective `script_path`
 - call `ctx.mark_modified()` only when the target should be saved
 
-Common context helpers include `ctx.get_scene_root()`, `ctx.set_scene_root()`,
+Common context helpers include `ctx.get_scene_root()`, `ctx.is_read_only()`, `ctx.set_scene_root()`,
 `ctx.own()`, `ctx.instance_scene()`, `ctx.get_node_or_null()`,
 `ctx.find_nodes_by_name()`, `ctx.remove_node()`, `ctx.clear_children()`,
 `ctx.mark_modified()`, `ctx.log()`, and `ctx.error()`.
@@ -286,6 +292,11 @@ Common context helpers include `ctx.get_scene_root()`, `ctx.set_scene_root()`,
 The result includes logs, modified/saved status, script diagnostics, and scene
 validation after edits. Use `get_class_info` when you need class API details
 before writing the worker script.
+
+Inspect mode rejects mutating context helpers and skips scene save and
+saved-scene validation. Worker code must still avoid direct mutation APIs such
+as `ResourceSaver`, filesystem writes, import-setting changes, and editor or OS
+state changes.
 
 Example prompt:
 

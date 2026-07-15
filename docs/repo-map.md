@@ -131,6 +131,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `scripts/validate-staging-build.mjs` / `scripts/validate-staging-publish-bundle.mjs` | Strict validation entrypoints for untrusted build outputs and the trusted publication bundle. |
 | `scripts/check-staging-channel-advance.mjs` | Applies monotonic and provenance checks before a staging channel pointer advances. |
 | `scripts/verify-published-assets.mjs` / `scripts/smoke-public-release.mjs` | Verify published asset bytes and public download behavior before pointer promotion. |
+| `scripts/test-run-scene-edit-script-inspect.mjs` | Builds an ignored temp Godot project and smoke-tests read-only imported `PackedScene` inspection against the editor GDExtension. |
 | `scripts/release-targets.mjs` | Defines supported platform release targets and their packaged asset names. |
 | `scripts/write-staging-candidate.mjs` / `scripts/write-staging-pointer.mjs` | Write the frozen candidate identity and its small channel pointer. |
 | `scripts/sync-chat-ui.mjs` | Copies the buildless chat UI source into the addon payload. |

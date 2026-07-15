@@ -38,7 +38,8 @@ bool load_or_prepare_scene(const godot::String &normalized_scene,
                            godot::Dictionary &result,
                            godot::Node *&root_node,
                            bool &created_new_scene,
-                           bool &inherited_root_scene);
+                           bool &inherited_root_scene,
+                           bool read_only);
 void append_capture_errors(const godot::Array &captured,
                            godot::Array &runtime_errors);
 bool save_scene(godot::Node *root_node,
