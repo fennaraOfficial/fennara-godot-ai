@@ -18,6 +18,8 @@ const MAX_MODEL_ID_LEN: usize = 256;
 const MAX_BASE_URL_LEN: usize = 2_048;
 const MAX_HEADER_VALUE_LEN: usize = 4_096;
 const MAX_API_KEY_LEN: usize = 16_384;
+const DEFAULT_CUSTOM_CONTEXT_TOKENS: u32 = 64_000;
+const DEFAULT_CUSTOM_MAX_OUTPUT_TOKENS: u32 = 4_096;
 
 const RESERVED_PROVIDER_IDS: &[&str] = &[
     ProviderId::OPENAI,
@@ -53,6 +55,10 @@ pub(crate) struct CustomProviderConfig {
 pub(crate) struct CustomProviderModel {
     pub(crate) id: String,
     pub(crate) name: String,
+    #[serde(default = "default_custom_context_tokens")]
+    pub(crate) context_length: u32,
+    #[serde(default = "default_custom_max_output_tokens")]
+    pub(crate) max_output_tokens: u32,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -65,9 +71,17 @@ pub(crate) struct SaveCustomProviderRequest {
     #[serde(default)]
     pub(crate) api_key: Option<String>,
     #[serde(default)]
-    pub(crate) models: Vec<CustomProviderModel>,
+    pub(crate) models: Vec<SaveCustomProviderModel>,
     #[serde(default)]
     pub(crate) headers: Vec<CustomProviderHeader>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub(crate) struct SaveCustomProviderModel {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) context_length: Option<u32>,
+    pub(crate) max_output_tokens: Option<u32>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -147,7 +161,16 @@ pub(crate) fn clean_saved_providers(
             display_name: provider.name.clone(),
             base_url: provider.base_url.clone(),
             api_key: None,
-            models: provider.models.clone(),
+            models: provider
+                .models
+                .iter()
+                .map(|model| SaveCustomProviderModel {
+                    id: model.id.clone(),
+                    name: model.name.clone(),
+                    context_length: Some(model.context_length),
+                    max_output_tokens: Some(model.max_output_tokens),
+                })
+                .collect(),
             headers: provider
                 .headers
                 .iter()
@@ -198,7 +221,11 @@ pub(crate) fn model_definitions(config: &CustomProviderConfig) -> Vec<ModelDefin
             display_name: model.name.clone(),
             adapter_model_id: model.id.clone(),
             capabilities: Capabilities::text_tools(),
-            limits: Limits::default(),
+            limits: Limits {
+                context_tokens: Some(model.context_length),
+                input_tokens: None,
+                output_tokens: Some(model.max_output_tokens),
+            },
             request: RequestDefaults::default(),
             enabled: true,
         })
@@ -248,7 +275,7 @@ fn clean_base_url(value: &str) -> Result<String, String> {
     Ok(value.trim_end_matches('/').to_string())
 }
 
-fn clean_models(models: Vec<CustomProviderModel>) -> Result<Vec<CustomProviderModel>, String> {
+fn clean_models(models: Vec<SaveCustomProviderModel>) -> Result<Vec<CustomProviderModel>, String> {
     if models.is_empty() {
         return Err("Add at least one model.".to_string());
     }
@@ -262,10 +289,30 @@ fn clean_models(models: Vec<CustomProviderModel>) -> Result<Vec<CustomProviderMo
     for model in models {
         let id = required_bounded(&model.id, "Model ID", MAX_MODEL_ID_LEN)?;
         let name = required_bounded(&model.name, "Model display name", MAX_DISPLAY_NAME_LEN)?;
+        let Some(context_length) = model.context_length.filter(|value| *value > 0) else {
+            return Err(format!(
+                "Model {id} context length is required and must be greater than zero."
+            ));
+        };
+        let Some(max_output_tokens) = model.max_output_tokens.filter(|value| *value > 0) else {
+            return Err(format!(
+                "Model {id} maximum output tokens are required and must be greater than zero."
+            ));
+        };
+        if max_output_tokens > context_length {
+            return Err(format!(
+                "Model {id} maximum output tokens cannot exceed its context length."
+            ));
+        }
         if !seen.insert(id.clone()) {
             return Err(format!("Model ID {id} is duplicated."));
         }
-        clean.push(CustomProviderModel { id, name });
+        clean.push(CustomProviderModel {
+            id,
+            name,
+            context_length,
+            max_output_tokens,
+        });
     }
     Ok(clean)
 }
@@ -313,6 +360,14 @@ fn required_bounded(value: &str, label: &str, max_len: usize) -> Result<String, 
     Ok(value.to_string())
 }
 
+const fn default_custom_context_tokens() -> u32 {
+    DEFAULT_CUSTOM_CONTEXT_TOKENS
+}
+
+const fn default_custom_max_output_tokens() -> u32 {
+    DEFAULT_CUSTOM_MAX_OUTPUT_TOKENS
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,9 +379,11 @@ mod tests {
             display_name: "OmniRoute".to_string(),
             base_url: "http://localhost:20128/v1/".to_string(),
             api_key: Some(" secret ".to_string()),
-            models: vec![CustomProviderModel {
+            models: vec![SaveCustomProviderModel {
                 id: "zai/glm-5".to_string(),
                 name: "GLM 5".to_string(),
+                context_length: Some(131_072),
+                max_output_tokens: Some(8_192),
             }],
             headers: vec![CustomProviderHeader {
                 name: "X-Router".to_string(),
@@ -359,6 +416,55 @@ mod tests {
         );
         assert_eq!(models[0].adapter_model_id, "zai/glm-5");
         assert!(models[0].capabilities.tools);
+        assert_eq!(models[0].limits.context_tokens, Some(131_072));
+        assert_eq!(models[0].limits.output_tokens, Some(8_192));
+    }
+
+    #[test]
+    fn legacy_saved_models_receive_compatible_limit_defaults() {
+        let model: CustomProviderModel = serde_json::from_value(serde_json::json!({
+            "id": "legacy-model",
+            "name": "Legacy Model"
+        }))
+        .unwrap();
+
+        assert_eq!(model.context_length, DEFAULT_CUSTOM_CONTEXT_TOKENS);
+        assert_eq!(model.max_output_tokens, DEFAULT_CUSTOM_MAX_OUTPUT_TOKENS);
+    }
+
+    #[test]
+    fn rejects_invalid_custom_model_limits() {
+        let mut missing_context = omniroute_request();
+        missing_context.models[0].context_length = None;
+        assert!(
+            validate_new_provider(missing_context)
+                .unwrap_err()
+                .contains("context length is required")
+        );
+
+        let mut zero_context = omniroute_request();
+        zero_context.models[0].context_length = Some(0);
+        assert!(
+            validate_new_provider(zero_context)
+                .unwrap_err()
+                .contains("context length is required and must be greater than zero")
+        );
+
+        let mut missing_output = omniroute_request();
+        missing_output.models[0].max_output_tokens = None;
+        assert!(
+            validate_new_provider(missing_output)
+                .unwrap_err()
+                .contains("maximum output tokens are required")
+        );
+
+        let mut excessive_output = omniroute_request();
+        excessive_output.models[0].max_output_tokens = Some(200_000);
+        assert!(
+            validate_new_provider(excessive_output)
+                .unwrap_err()
+                .contains("cannot exceed its context length")
+        );
     }
 
     #[test]

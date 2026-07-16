@@ -1128,10 +1128,13 @@ fn summary_budgets_for_model(
     match providers::model_context_estimate(provider_settings, model, reasoning_effort) {
         Ok(estimate) => {
             if let Some(usable) = estimate.usable_input_tokens {
-                Some(context_compaction::SummaryBudgets::from_model_context(
-                    usable,
-                    estimate.raw_context_tokens,
-                ))
+                Some(
+                    context_compaction::SummaryBudgets::from_model_context(
+                        usable,
+                        estimate.raw_context_tokens,
+                    )
+                    .with_model_output_limit(estimate.max_output_tokens),
+                )
             } else {
                 let local_unknown_context = is_unknown_local_context_model(model);
                 let fallback_context_tokens = if local_unknown_context {

@@ -471,6 +471,7 @@ pub(crate) struct ChatContextEstimate {
     pub(crate) estimated_input_tokens: u32,
     pub(crate) usable_input_tokens: Option<u32>,
     pub(crate) raw_context_tokens: Option<u32>,
+    pub(crate) max_output_tokens: Option<u32>,
 }
 
 pub(crate) fn estimate_chat_context(
@@ -482,6 +483,7 @@ pub(crate) fn estimate_chat_context(
         estimated_input_tokens: context::estimate_request_tokens(&llm_request),
         usable_input_tokens: context::request_usable_input_tokens(&llm_request),
         raw_context_tokens: llm_request.model.model.limits.context_tokens,
+        max_output_tokens: llm_request.model.model.limits.output_tokens,
     })
 }
 
@@ -895,6 +897,8 @@ mod tests {
             models: vec![custom::CustomProviderModel {
                 id: "zai/glm-5".to_string(),
                 name: "GLM 5".to_string(),
+                context_length: 131_072,
+                max_output_tokens: 8_192,
             }],
             headers: BTreeMap::new(),
         }

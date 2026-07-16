@@ -2,6 +2,7 @@
   const PROVIDER_ID = /^[a-z0-9][a-z0-9-_]*$/;
   const MAX_MODELS = 100;
   const MAX_HEADERS = 32;
+  const MAX_TOKEN_COUNT = 4_294_967_295;
   const SAVE_TIMEOUT_MS = 20_000;
 
   function validateCustomProvider(raw, existingProviderIds = new Set()) {
@@ -37,6 +38,8 @@
       const clean = {
         id: String(model?.id || "").trim(),
         name: String(model?.name || "").trim(),
+        context_length: requiredTokenCount(model?.context_length),
+        max_output_tokens: requiredTokenCount(model?.max_output_tokens),
       };
       const rowErrors = {};
       if (!clean.id) {
@@ -48,6 +51,17 @@
       }
       if (!clean.name) {
         rowErrors.name = "Required";
+      }
+      if (clean.context_length === null) {
+        rowErrors.context_length = "Enter a positive whole number";
+      }
+      if (clean.max_output_tokens === null) {
+        rowErrors.max_output_tokens = "Enter a positive whole number";
+      } else if (
+        clean.context_length !== null
+        && clean.max_output_tokens > clean.context_length
+      ) {
+        rowErrors.max_output_tokens = "Cannot exceed context length";
       }
       errors.models[index] = rowErrors;
       return clean;
@@ -88,6 +102,15 @@
       || errors.models.some((row) => Object.keys(row || {}).length > 0)
       || errors.headers.some((row) => Object.keys(row || {}).length > 0);
     return invalid ? { errors } : { errors, value };
+  }
+
+  function requiredTokenCount(value) {
+    const text = String(value ?? "").trim();
+    if (!/^\d+$/.test(text)) {
+      return null;
+    }
+    const count = Number(text);
+    return Number.isSafeInteger(count) && count > 0 && count <= MAX_TOKEN_COUNT ? count : null;
   }
 
   function validHttpUrl(value) {
@@ -243,7 +266,9 @@
 
     function createRow(kind, value = null) {
       const row = document.createElement("div");
-      row.className = "custom-provider-row";
+      row.className = kind === "model"
+        ? "custom-provider-row custom-provider-model-row"
+        : "custom-provider-row";
       row.dataset.customProviderRow = kind;
       const first = rowField(
         kind === "model" ? "model-id" : "header-name",
@@ -255,10 +280,27 @@
         kind === "model" ? "Display name" : "value",
         kind === "model" ? "Model display name" : "Header value",
       );
-      const inputs = [first.querySelector("input"), second.querySelector("input")];
+      const fields = [first, second];
+      if (kind === "model") {
+        fields.push(
+          rowField("model-context-length", "64000", "Context length", {
+            caption: "Context length",
+            help: "The model's full context window in tokens. Fennara uses this value to compact the conversation before the provider rejects an oversized prompt.",
+            numeric: true,
+          }),
+          rowField("model-max-output-tokens", "4096", "Max output tokens", {
+            caption: "Max output tokens",
+            help: "The largest response this model can produce, in tokens. Fennara uses this value to keep compaction summaries within the model's output limit.",
+            numeric: true,
+          }),
+        );
+      }
+      const inputs = fields.map((field) => field.querySelector("input"));
       if (kind === "model") {
         inputs[0].value = String(value?.id || "");
         inputs[1].value = String(value?.name || "");
+        inputs[2].value = String(value?.context_length || "");
+        inputs[3].value = String(value?.max_output_tokens || "");
       } else {
         inputs[0].value = String(value?.name || "");
         inputs[1].value = String(value?.value || "");
@@ -278,14 +320,34 @@
         syncRemoveButtons(container);
         schedulePosition();
       });
-      row.append(first, second, remove);
+      row.append(...fields, remove);
       return row;
     }
 
-    function rowField(field, placeholder, labelText) {
+    function rowField(field, placeholder, labelText, options = {}) {
       const label = document.createElement("label");
+      if (options.caption) {
+        label.className = "custom-provider-limit-field";
+        const caption = document.createElement("span");
+        caption.className = "custom-provider-limit-caption";
+        caption.textContent = options.caption;
+        const help = document.createElement("span");
+        help.className = "custom-provider-limit-help";
+        help.textContent = "?";
+        help.tabIndex = 0;
+        help.title = options.help;
+        help.setAttribute("aria-label", options.help);
+        caption.append(help);
+        label.append(caption);
+      }
       const input = document.createElement("input");
-      input.type = "text";
+      input.type = options.numeric ? "number" : "text";
+      if (options.numeric) {
+        input.inputMode = "numeric";
+        input.min = "1";
+        input.max = String(MAX_TOKEN_COUNT);
+        input.step = "1";
+      }
       input.autocomplete = "off";
       input.placeholder = placeholder;
       input.dataset.customProviderField = field;
@@ -315,6 +377,8 @@
         models: Array.from(modelRows?.children || []).map((row) => ({
           id: row.querySelector('[data-custom-provider-field="model-id"]')?.value,
           name: row.querySelector('[data-custom-provider-field="model-name"]')?.value,
+          context_length: row.querySelector('[data-custom-provider-field="model-context-length"]')?.value,
+          max_output_tokens: row.querySelector('[data-custom-provider-field="model-max-output-tokens"]')?.value,
         })),
         headers: Array.from(headerRows?.children || []).map((row) => ({
           name: row.querySelector('[data-custom-provider-field="header-name"]')?.value,
@@ -358,7 +422,12 @@
       setInputError(providerIdInput, errors.fields.provider_id);
       setInputError(displayNameInput, errors.fields.display_name);
       setInputError(baseUrlInput, errors.fields.base_url);
-      renderRowErrors(modelRows, errors.models, ["model-id", "model-name"], ["id", "name"]);
+      renderRowErrors(
+        modelRows,
+        errors.models,
+        ["model-id", "model-name", "model-context-length", "model-max-output-tokens"],
+        ["id", "name", "context_length", "max_output_tokens"],
+      );
       renderRowErrors(headerRows, errors.headers, ["header-name", "header-value"], ["name", "value"]);
       const firstError = popover.querySelector('[aria-invalid="true"]');
       firstError?.focus({ preventScroll: true });

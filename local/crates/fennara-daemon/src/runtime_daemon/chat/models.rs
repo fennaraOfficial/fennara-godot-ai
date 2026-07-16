@@ -545,8 +545,8 @@ fn append_custom_provider_models(
             verified: false,
             latest_alias: false,
             canonical_slug: Some(configured_model.id.clone()),
-            context_length: None,
-            max_output_tokens: None,
+            context_length: Some(u64::from(configured_model.context_length)),
+            max_output_tokens: Some(u64::from(configured_model.max_output_tokens)),
             input_cost_per_million: None,
             output_cost_per_million: None,
             cache_read_cost_per_million: None,
@@ -1177,6 +1177,8 @@ mod tests {
             models: vec![CustomProviderModel {
                 id: "zai/glm-5".to_string(),
                 name: "GLM 5".to_string(),
+                context_length: 131_072,
+                max_output_tokens: 8_192,
             }],
             headers: BTreeMap::new(),
         };
@@ -1190,7 +1192,8 @@ mod tests {
         assert_eq!(models[0].provider, "OmniRoute");
         assert_eq!(models[0].display_name, "GLM 5");
         assert!(models[0].supports_tools);
-        assert_eq!(models[0].context_length, None);
+        assert_eq!(models[0].context_length, Some(131_072));
+        assert_eq!(models[0].max_output_tokens, Some(8_192));
     }
 
     #[test]

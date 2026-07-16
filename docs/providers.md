@@ -56,7 +56,7 @@ endpoint such as a local router or an internal API gateway. Enter:
 - the display name shown in Fennara
 - a base URL ending at the API version, for example `http://localhost:20128/v1`
 - an optional API key
-- one or more model IDs and display names
+- one or more model IDs, display names, context lengths, and maximum output-token limits
 - optional request headers
 
 Model IDs must match what the endpoint expects. Fennara exposes them as
@@ -65,8 +65,11 @@ the provider. The endpoint must implement the OpenAI-compatible
 `/chat/completions` request and streaming response shape.
 
 API keys use Fennara's local credential store. Provider configuration and custom
-headers use the local chat settings file. Context-length configuration and
-custom compaction tuning are not part of this initial custom-provider form.
+headers use the local chat settings file. Accurate model limits let Fennara
+compact conversation history before a request exceeds the model's context
+window and keep generated summaries within the model's output limit. Existing
+custom models saved before these fields were available load with compatibility
+defaults of 64,000 context tokens and 4,096 output tokens.
 
 After saving, the custom provider appears in the provider picker with its model
 count. Select that provider to reopen the form and add or rename models. Leaving

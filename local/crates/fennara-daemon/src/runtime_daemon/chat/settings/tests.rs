@@ -20,6 +20,8 @@ fn provider_edit_replaces_a_removed_selected_model() {
         models: vec![CustomProviderModel {
             id: "replacement/model".to_string(),
             name: "Replacement".to_string(),
+            context_length: 64_000,
+            max_output_tokens: 4_096,
         }],
         headers: BTreeMap::new(),
     };
@@ -54,6 +56,8 @@ fn legacy_migration_preserves_a_custom_provider_namespace() {
         models: vec![CustomProviderModel {
             id: "gemini-3.5-flash".to_string(),
             name: "Custom Gemini".to_string(),
+            context_length: 64_000,
+            max_output_tokens: 4_096,
         }],
         headers: BTreeMap::new(),
     };

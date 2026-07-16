@@ -20,6 +20,7 @@ pub(crate) struct SummaryBudgets {
     pub(crate) summary_trigger_tokens: usize,
     pub(crate) tail_budget_tokens: usize,
     pub(crate) summary_replay_budget_tokens: usize,
+    model_output_max_tokens: Option<u32>,
 }
 
 impl SummaryBudgets {
@@ -54,7 +55,13 @@ impl SummaryBudgets {
             summary_trigger_tokens,
             tail_budget_tokens,
             summary_replay_budget_tokens,
+            model_output_max_tokens: None,
         }
+    }
+
+    pub(crate) fn with_model_output_limit(mut self, max_output_tokens: Option<u32>) -> Self {
+        self.model_output_max_tokens = max_output_tokens;
+        self
     }
 
     pub(crate) fn for_unknown_context() -> Self {
@@ -80,12 +87,14 @@ impl SummaryBudgets {
     }
 
     pub(crate) fn summary_output_max_tokens(self) -> u32 {
-        match self.raw_context_tokens {
+        let budget = match self.raw_context_tokens {
             0..=8_192 => 512,
             8_193..=16_384 => 1_024,
             16_385..=65_536 => 2_048,
             _ => SUMMARY_OUTPUT_MAX_TOKENS,
-        }
+        };
+        self.model_output_max_tokens
+            .map_or(budget, |limit| budget.min(limit))
     }
 }
 
@@ -467,6 +476,11 @@ mod tests {
 
         let mid = SummaryBudgets::from_model_context(62_000, Some(64_000));
         assert_eq!(mid.summary_output_max_tokens(), 2_048);
+        assert_eq!(
+            mid.with_model_output_limit(Some(1_024))
+                .summary_output_max_tokens(),
+            1_024
+        );
 
         let small = SummaryBudgets::from_model_context(126_000, Some(128_000));
         assert_eq!(small.compaction_working_budget, 126_000);

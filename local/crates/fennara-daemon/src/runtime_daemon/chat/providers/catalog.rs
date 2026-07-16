@@ -468,6 +468,8 @@ mod tests {
                 models: vec![CustomProviderModel {
                     id: "zai/glm-5".to_string(),
                     name: "GLM 5".to_string(),
+                    context_length: 131_072,
+                    max_output_tokens: 8_192,
                 }],
                 headers: BTreeMap::from([("x-router".to_string(), "primary".to_string())]),
             },
@@ -506,6 +508,8 @@ mod tests {
                 models: vec![CustomProviderModel {
                     id: "gemini-3.5-flash".to_string(),
                     name: "Custom Gemini".to_string(),
+                    context_length: 64_000,
+                    max_output_tokens: 4_096,
                 }],
                 headers: BTreeMap::new(),
             },
