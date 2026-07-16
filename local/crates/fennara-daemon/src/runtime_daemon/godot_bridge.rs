@@ -608,6 +608,72 @@ pub(crate) async fn godot_ws(
     ws.on_upgrade(move |socket| handle_godot_socket(socket, state))
 }
 
+async fn handle_project_state_message(
+    value: &Value,
+    state: &AppState,
+    session_id: &mut Option<String>,
+    fallback_session_id: &str,
+    outbound_tx: &mpsc::UnboundedSender<Message>,
+) -> bool {
+    if value.get("type").and_then(Value::as_str) == Some("hello") {
+        let next_session_id =
+            optional_string(value, "session_id").unwrap_or_else(|| fallback_session_id.to_string());
+        let project = GodotProjectStatus {
+            session_id: next_session_id.clone(),
+            project_name: optional_string(value, "project_name"),
+            project_path: optional_string(value, "project_path"),
+            godot_executable_path: optional_string(value, "godot_executable_path"),
+            godot_version: optional_string(value, "godot_version"),
+            plugin_version: optional_string(value, "plugin_version"),
+            rendering_context: value
+                .get("rendering_context")
+                .filter(|context| context.is_object())
+                .cloned(),
+            editor_filesystem: value
+                .get("editor_filesystem")
+                .filter(|status| status.is_object())
+                .cloned(),
+            chat_token: optional_string(value, "chat_token"),
+            tools: string_array(value, "tools"),
+        };
+
+        *session_id = Some(next_session_id.clone());
+        state
+            .godot_senders
+            .write()
+            .await
+            .insert(next_session_id.clone(), outbound_tx.clone());
+        state
+            .projects
+            .write()
+            .await
+            .insert(next_session_id.clone(), project);
+        ensure_active_project_after_connect(state, &next_session_id).await;
+        broadcast_active_project_changed(state).await;
+        return true;
+    }
+
+    if value.get("type").and_then(Value::as_str) == Some("project_status") {
+        if let Some(current_session_id) = session_id.as_deref()
+            && value
+                .get("session_id")
+                .and_then(Value::as_str)
+                .is_none_or(|reported| reported == current_session_id)
+            && let Some(editor_filesystem) = value
+                .get("editor_filesystem")
+                .filter(|status| status.is_object())
+        {
+            let mut projects = state.projects.write().await;
+            if let Some(project) = projects.get_mut(current_session_id) {
+                project.editor_filesystem = Some(editor_filesystem.clone());
+            }
+        }
+        return true;
+    }
+
+    false
+}
+
 async fn handle_godot_socket(socket: WebSocket, state: AppState) {
     let connection_id = state.connection_counter.fetch_add(1, Ordering::Relaxed) + 1;
     let fallback_session_id = format!("connection-{connection_id}");
@@ -627,57 +693,18 @@ async fn handle_godot_socket(socket: WebSocket, state: AppState) {
         match message {
             Ok(Message::Text(text)) => {
                 if let Ok(value) = serde_json::from_str::<Value>(&text) {
-                    if value.get("type").and_then(Value::as_str) == Some("hello") {
-                        let next_session_id = optional_string(&value, "session_id")
-                            .unwrap_or_else(|| fallback_session_id.clone());
-                        let project = GodotProjectStatus {
-                            session_id: next_session_id.clone(),
-                            project_name: optional_string(&value, "project_name"),
-                            project_path: optional_string(&value, "project_path"),
-                            godot_executable_path: optional_string(&value, "godot_executable_path"),
-                            godot_version: optional_string(&value, "godot_version"),
-                            plugin_version: optional_string(&value, "plugin_version"),
-                            rendering_context: value
-                                .get("rendering_context")
-                                .filter(|context| context.is_object())
-                                .cloned(),
-                            editor_filesystem: value
-                                .get("editor_filesystem")
-                                .filter(|status| status.is_object())
-                                .cloned(),
-                            chat_token: optional_string(&value, "chat_token"),
-                            tools: string_array(&value, "tools"),
-                        };
-
-                        session_id = Some(next_session_id.clone());
-                        state
-                            .godot_senders
-                            .write()
-                            .await
-                            .insert(next_session_id.clone(), outbound_tx.clone());
-                        state
-                            .projects
-                            .write()
-                            .await
-                            .insert(next_session_id.clone(), project);
-                        ensure_active_project_after_connect(&state, &next_session_id).await;
-                        broadcast_active_project_changed(&state).await;
-                    } else if value.get("type").and_then(Value::as_str) == Some("project_status") {
-                        if let Some(current_session_id) = session_id.as_deref()
-                            && value
-                                .get("session_id")
-                                .and_then(Value::as_str)
-                                .is_none_or(|reported| reported == current_session_id)
-                            && let Some(editor_filesystem) = value
-                                .get("editor_filesystem")
-                                .filter(|status| status.is_object())
-                        {
-                            let mut projects = state.projects.write().await;
-                            if let Some(project) = projects.get_mut(current_session_id) {
-                                project.editor_filesystem = Some(editor_filesystem.clone());
-                            }
-                        }
-                    } else if matches!(
+                    if handle_project_state_message(
+                        &value,
+                        &state,
+                        &mut session_id,
+                        &fallback_session_id,
+                        &outbound_tx,
+                    )
+                    .await
+                    {
+                        continue;
+                    }
+                    if matches!(
                         value.get("type").and_then(Value::as_str),
                         Some("tool_result" | "snapshot_result" | "project_file_result")
                     ) {
@@ -755,6 +782,9 @@ async fn handle_godot_socket(socket: WebSocket, state: AppState) {
         schedule_idle_shutdown_if_empty(state.clone()).await;
     }
 }
+
+#[cfg(test)]
+mod tests;
 
 async fn current_status(state: &AppState) -> DaemonStatus {
     let projects = state.projects.read().await;

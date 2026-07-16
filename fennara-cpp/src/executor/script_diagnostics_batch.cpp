@@ -77,6 +77,25 @@ void FennaraExecutor::_track_modified_scene(const godot::String &scene_path,
     _modified_scenes.push_back({scene_path, tool_index});
 }
 
+void FennaraExecutor::_finish_run_scene_edit_script(
+    godot::Dictionary &result,
+    const godot::Dictionary &prepared_args,
+    int tool_index,
+    uint64_t batch_generation) {
+    if ((bool)result.get("success", false) &&
+        (bool)result.get("scene_saved", false)) {
+        godot::String scene_path =
+            result.get("scene_path", prepared_args.get("scene_path", ""));
+        if (!scene_path.is_empty()) {
+            _track_modified_scene(scene_path, tool_index);
+            _maybe_append_scene_validation(result, scene_path);
+        }
+    }
+    _on_async_tool_complete(
+        result, tool_index, "run_scene_edit_script", godot::Dictionary(),
+        batch_generation);
+}
+
 void FennaraExecutor::_run_batch_diagnostics(uint64_t batch_generation) {
     godot::Dictionary per_file_results;
     bool batch_success = false;
@@ -283,16 +302,8 @@ void FennaraExecutor::_on_batch_diagnostics_complete(uint64_t batch_generation) 
             merged["diagnostic_mode"] = "direct_script_load";
             merged["diagnostic_fallback"] = "direct_script_load";
             godot::Dictionary executed = FennaraRunSceneEditScriptTool::execute_prepared(merged);
-            if ((bool)executed.get("success", false) &&
-                (bool)executed.get("scene_saved", false)) {
-                godot::String scene_path =
-                    executed.get("scene_path", merged.get("scene_path", ""));
-                if (!scene_path.is_empty()) {
-                    _track_modified_scene(scene_path, pending.tool_index);
-                    _maybe_append_scene_validation(executed, scene_path);
-                }
-            }
-            _on_async_tool_complete(executed, pending.tool_index, "run_scene_edit_script", godot::Dictionary(), batch_generation);
+            _finish_run_scene_edit_script(
+                executed, merged, pending.tool_index, batch_generation);
             continue;
         }
 
@@ -308,16 +319,8 @@ void FennaraExecutor::_on_batch_diagnostics_complete(uint64_t batch_generation) 
         }
 
         godot::Dictionary executed = FennaraRunSceneEditScriptTool::execute_prepared(merged);
-        if ((bool)executed.get("success", false) &&
-            (bool)executed.get("scene_saved", false)) {
-            godot::String scene_path =
-                executed.get("scene_path", merged.get("scene_path", ""));
-            if (!scene_path.is_empty()) {
-                _track_modified_scene(scene_path, pending.tool_index);
-                _maybe_append_scene_validation(executed, scene_path);
-            }
-        }
-        _on_async_tool_complete(executed, pending.tool_index, "run_scene_edit_script", godot::Dictionary(), batch_generation);
+        _finish_run_scene_edit_script(
+            executed, merged, pending.tool_index, batch_generation);
     }
 
     _pending_run_scene_edit_scripts.clear();

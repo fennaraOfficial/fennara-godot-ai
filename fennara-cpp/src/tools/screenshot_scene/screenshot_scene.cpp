@@ -117,9 +117,6 @@ void FennaraScreenshotSceneTool::_bind_methods() {
         "FennaraScreenshotSceneTool", godot::D_METHOD("navigate", "args"),
         &FennaraScreenshotSceneTool::navigate);
     godot::ClassDB::bind_static_method(
-        "FennaraScreenshotSceneTool", godot::D_METHOD("capture"),
-        &FennaraScreenshotSceneTool::capture);
-    godot::ClassDB::bind_static_method(
         "FennaraScreenshotSceneTool", godot::D_METHOD("make_collage", "images"),
         &FennaraScreenshotSceneTool::make_collage);
     godot::ClassDB::bind_static_method(

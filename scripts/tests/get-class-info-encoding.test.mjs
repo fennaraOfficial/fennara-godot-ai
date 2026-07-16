@@ -17,6 +17,15 @@ test("official documentation uses the byte-preserving HTTP path first", () => {
   );
   assert.match(source, /response_bytes\.append_array\(chunk\)/);
   assert.match(source, /response_bytes\.get_string_from_utf8\(\)/);
+  assert.match(source, /bool response_complete = false/);
+  assert.match(source, /response_complete = true/);
+  assert.match(source, /if \(!response_complete\)/);
+  assert.match(source, /get_response_body_length\(\)/);
+  assert.match(source, /response_bytes\.size\(\) != expected_body_length/);
+  assert.ok(
+    source.indexOf("if (!response_complete)") <
+      source.indexOf("result.body = response_bytes.get_string_from_utf8()"),
+  );
 });
 
 test("legacy mojibake documentation cache is rejected", () => {

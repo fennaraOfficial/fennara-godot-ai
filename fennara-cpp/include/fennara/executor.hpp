@@ -58,6 +58,11 @@ private:
 
     void _run_batch_diagnostics(uint64_t batch_generation);
     void _on_batch_diagnostics_complete(uint64_t batch_generation);
+    void _finish_run_scene_edit_script(
+        godot::Dictionary &result,
+        const godot::Dictionary &prepared_args,
+        int tool_index,
+        uint64_t batch_generation);
 
     // --- Post-batch engine warning capture for modified scenes ---
     struct ModifiedScene {

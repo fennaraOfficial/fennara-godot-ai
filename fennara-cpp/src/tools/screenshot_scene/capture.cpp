@@ -86,10 +86,6 @@ ContentMetrics analyze_content(const godot::Ref<godot::Image> &image) {
 
 } // namespace
 
-godot::Dictionary FennaraScreenshotSceneTool::capture() {
-    return capture_owned(_active_capture_owner_ref());
-}
-
 godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
     godot::Dictionary result;
 

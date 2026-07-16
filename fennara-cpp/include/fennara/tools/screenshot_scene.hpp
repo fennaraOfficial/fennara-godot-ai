@@ -24,7 +24,6 @@ protected:
 public:
     static godot::Dictionary open_scene(const godot::String &scene_path);
     static godot::Dictionary navigate(const godot::Dictionary &args);
-    static godot::Dictionary capture();
     static godot::Dictionary capture_owned(uint64_t owner);
     static godot::Dictionary make_collage(const godot::Array &images);
     static godot::Dictionary execute(const godot::Dictionary &args);

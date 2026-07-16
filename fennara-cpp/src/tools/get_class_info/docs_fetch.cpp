@@ -158,6 +158,7 @@ HttpFetchResult _http_get_text(const godot::String &path) {
     const uint64_t deadline =
         godot::Time::get_singleton()->get_ticks_msec() + kHttpTimeoutMs;
     bool request_sent = false;
+    bool response_complete = false;
     godot::PackedByteArray response_bytes;
 
     while (godot::Time::get_singleton()->get_ticks_msec() < deadline) {
@@ -189,12 +190,26 @@ HttpFetchResult _http_get_text(const godot::String &path) {
             if (!chunk.is_empty()) {
                 response_bytes.append_array(chunk);
             }
-            if (http->get_status() != godot::HTTPClient::STATUS_BODY &&
+            godot::HTTPClient::Status body_status = http->get_status();
+            if (body_status == godot::HTTPClient::STATUS_CANT_RESOLVE ||
+                body_status == godot::HTTPClient::STATUS_CANT_CONNECT ||
+                body_status == godot::HTTPClient::STATUS_TLS_HANDSHAKE_ERROR ||
+                body_status == godot::HTTPClient::STATUS_CONNECTION_ERROR) {
+                result.error =
+                    "Connection failed while receiving Godot XML docs.";
+                return result;
+            }
+            if ((body_status == godot::HTTPClient::STATUS_CONNECTED ||
+                 body_status == godot::HTTPClient::STATUS_DISCONNECTED) &&
                 http->has_response()) {
+                response_complete = true;
                 break;
             }
-        } else if (request_sent && status == godot::HTTPClient::STATUS_CONNECTED &&
+        } else if (request_sent &&
+                   (status == godot::HTTPClient::STATUS_CONNECTED ||
+                    status == godot::HTTPClient::STATUS_DISCONNECTED) &&
                    http->has_response()) {
+            response_complete = true;
             break;
         }
 
@@ -203,6 +218,18 @@ HttpFetchResult _http_get_text(const godot::String &path) {
 
     if (!http->has_response()) {
         result.error = "Timed out fetching Godot XML docs.";
+        return result;
+    }
+    if (!response_complete) {
+        result.error =
+            "Timed out before the Godot XML documentation body completed.";
+        return result;
+    }
+    const int64_t expected_body_length = http->get_response_body_length();
+    if (expected_body_length >= 0 &&
+        response_bytes.size() != expected_body_length) {
+        result.error =
+            "Godot XML documentation body ended before its declared length.";
         return result;
     }
 
