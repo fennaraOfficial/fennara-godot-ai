@@ -34,6 +34,7 @@ You can also type `/provider` and `/model` in the composer.
 | MiniMax Token Plan | Use the Subscription Key from [MiniMax API Platform](https://platform.minimax.io/docs/api-reference/api-overview) **Billing > Token Plan**. Fennara key/env: `MINIMAX_API_KEY`. | `minimax-coding-plan/<model>` | Token Plan Subscription Keys are separate from pay-as-you-go API keys. |
 | MiniMax (China) | Create a pay-as-you-go key from the [MiniMax China](https://platform.minimaxi.com/docs/api-reference/api-overview) API key page. Fennara key/env: `MINIMAX_API_KEY`. | `minimax-cn/<model>` | Uses MiniMax China's Anthropic-compatible Messages API at `minimaxi.com`. |
 | MiniMax Token Plan (China) | Use the Subscription Key from the [MiniMax China](https://platform.minimaxi.com/docs/api-reference/api-overview) Token Plan page. Fennara key/env: `MINIMAX_API_KEY`. | `minimax-cn-coding-plan/<model>` | China Token Plan Subscription Keys are separate from pay-as-you-go API keys. |
+| NVIDIA | Create a key at [build.nvidia.com](https://build.nvidia.com/). Fennara key/env: `NVIDIA_API_KEY`. | `nvidia/<publisher>/<model>` | Uses NVIDIA's OpenAI-compatible hosted NIM API. |
 | Ollama | Run a local Ollama server. No cloud API key is required. | `ollama/<local-model>` | Defaults to `http://127.0.0.1:11434`. |
 | LM Studio | Start LM Studio's local server. No key is required by default. | `lmstudio/<local-model>` | Defaults to `http://127.0.0.1:1234/v1`. If your LM Studio server requires auth, set `LMSTUDIO_API_KEY` in the daemon environment. |
 

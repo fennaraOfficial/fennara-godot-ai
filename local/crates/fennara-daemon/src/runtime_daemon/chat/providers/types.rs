@@ -22,6 +22,7 @@ impl ProviderId {
     pub(crate) const MINIMAX_CODING_PLAN: &'static str = "minimax-coding-plan";
     pub(crate) const MINIMAX_CN: &'static str = "minimax-cn";
     pub(crate) const MINIMAX_CN_CODING_PLAN: &'static str = "minimax-cn-coding-plan";
+    pub(crate) const NVIDIA: &'static str = "nvidia";
     pub(crate) const LOCAL: &'static str = "local";
 
     pub(crate) fn new(value: impl Into<String>) -> Option<Self> {
@@ -287,6 +288,7 @@ pub(crate) struct ProviderSettings {
     pub(crate) minimax_coding_plan_api_key: Option<String>,
     pub(crate) minimax_cn_api_key: Option<String>,
     pub(crate) minimax_cn_coding_plan_api_key: Option<String>,
+    pub(crate) nvidia_api_key: Option<String>,
     pub(crate) ollama_base_url: String,
     pub(crate) lmstudio_base_url: String,
     pub(crate) custom_models: Vec<String>,

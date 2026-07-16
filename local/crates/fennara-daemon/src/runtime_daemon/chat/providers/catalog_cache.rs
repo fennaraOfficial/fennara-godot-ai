@@ -10,7 +10,8 @@ use super::models_dev::{
     parse_kimi_for_coding_catalog, parse_lmstudio_catalog, parse_minimax_catalog,
     parse_minimax_cn_catalog, parse_minimax_cn_coding_plan_catalog,
     parse_minimax_coding_plan_catalog, parse_moonshot_catalog, parse_moonshot_cn_catalog,
-    parse_ollama_cloud_catalog, parse_openai_catalog, parse_openrouter_catalog, parse_zai_catalog,
+    parse_nvidia_catalog, parse_ollama_cloud_catalog, parse_openai_catalog,
+    parse_openrouter_catalog, parse_zai_catalog,
 };
 use crate::runtime_daemon::chat::settings;
 
@@ -41,6 +42,7 @@ pub(crate) struct CachedOpenRouterCatalog {
     pub(crate) minimax_coding_plan: OpenRouterCatalog,
     pub(crate) minimax_cn: OpenRouterCatalog,
     pub(crate) minimax_cn_coding_plan: OpenRouterCatalog,
+    pub(crate) nvidia: OpenRouterCatalog,
     pub(crate) meta: CatalogMeta,
     pub(crate) stale: bool,
 }
@@ -82,6 +84,8 @@ pub(crate) struct CatalogMeta {
     pub(crate) minimax_cn_model_count: usize,
     #[serde(default)]
     pub(crate) minimax_cn_coding_plan_model_count: usize,
+    #[serde(default)]
+    pub(crate) nvidia_model_count: usize,
 }
 
 impl CatalogMeta {
@@ -107,6 +111,7 @@ impl CatalogMeta {
             minimax_coding_plan_model_count: catalogs.minimax_coding_plan.models.len(),
             minimax_cn_model_count: catalogs.minimax_cn.models.len(),
             minimax_cn_coding_plan_model_count: catalogs.minimax_cn_coding_plan.models.len(),
+            nvidia_model_count: catalogs.nvidia.models.len(),
         }
     }
 }
@@ -126,6 +131,7 @@ struct ParsedCatalogs {
     minimax_coding_plan: OpenRouterCatalog,
     minimax_cn: OpenRouterCatalog,
     minimax_cn_coding_plan: OpenRouterCatalog,
+    nvidia: OpenRouterCatalog,
 }
 
 impl ParsedCatalogs {
@@ -145,6 +151,7 @@ impl ParsedCatalogs {
             minimax_coding_plan: self.minimax_coding_plan,
             minimax_cn: self.minimax_cn,
             minimax_cn_coding_plan: self.minimax_cn_coding_plan,
+            nvidia: self.nvidia,
             meta,
             stale,
         }
@@ -167,6 +174,7 @@ fn parse_all_catalogs(bytes: &[u8]) -> Result<ParsedCatalogs, String> {
         minimax_coding_plan: parse_minimax_coding_plan_catalog(bytes)?,
         minimax_cn: parse_minimax_cn_catalog(bytes)?,
         minimax_cn_coding_plan: parse_minimax_cn_coding_plan_catalog(bytes)?,
+        nvidia: parse_nvidia_catalog(bytes)?,
     })
 }
 
@@ -454,7 +462,8 @@ mod tests {
             "minimax": { "id": "minimax", "models": {} },
             "minimax-coding-plan": { "id": "minimax-coding-plan", "models": {} },
             "minimax-cn": { "id": "minimax-cn", "models": {} },
-            "minimax-cn-coding-plan": { "id": "minimax-cn-coding-plan", "models": {} }
+            "minimax-cn-coding-plan": { "id": "minimax-cn-coding-plan", "models": {} },
+            "nvidia": { "id": "nvidia", "models": {} }
         }"#
         .to_vec()
     }
@@ -497,6 +506,7 @@ mod tests {
             minimax_coding_plan_model_count: 0,
             minimax_cn_model_count: 0,
             minimax_cn_coding_plan_model_count: 0,
+            nvidia_model_count: 0,
         };
         write_validated_snapshot(&paths, &fixture(), &meta)
             .await
@@ -528,6 +538,7 @@ mod tests {
             minimax_coding_plan_model_count: 0,
             minimax_cn_model_count: 0,
             minimax_cn_coding_plan_model_count: 0,
+            nvidia_model_count: 0,
         };
         write_validated_snapshot(&paths, &fixture(), &meta)
             .await
@@ -561,6 +572,7 @@ mod tests {
             minimax_coding_plan_model_count: 0,
             minimax_cn_model_count: 0,
             minimax_cn_coding_plan_model_count: 0,
+            nvidia_model_count: 0,
         };
         write_validated_snapshot(&paths, &fixture(), &meta)
             .await

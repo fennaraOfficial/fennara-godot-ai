@@ -10,6 +10,7 @@ mod error;
 mod lmstudio;
 pub(crate) mod models_dev;
 mod moonshot;
+mod nvidia;
 mod ollama;
 mod ollama_cloud;
 mod openai;
@@ -89,6 +90,7 @@ pub(crate) fn settings_from_chat(settings: &ChatSettings) -> ProviderSettings {
         minimax_cn_api_key: auth::api_key(types::ProviderId::MINIMAX_CN),
         minimax_cn_coding_plan_api_key: auth::api_key(types::ProviderId::MINIMAX_CN_CODING_PLAN)
             .or_else(|| auth::api_key(types::ProviderId::MINIMAX_CN)),
+        nvidia_api_key: auth::api_key(types::ProviderId::NVIDIA),
         ollama_base_url: settings.ollama_base_url.clone(),
         lmstudio_base_url: settings
             .provider_base_url(types::ProviderId::LMSTUDIO, lmstudio::DEFAULT_BASE_URL),
@@ -156,6 +158,11 @@ pub(crate) fn public_provider_registry(settings: &ChatSettings) -> Vec<PublicPro
         anthropic_api_key_provider(types::ProviderId::MINIMAX_CODING_PLAN),
         anthropic_api_key_provider(types::ProviderId::MINIMAX_CN),
         anthropic_api_key_provider(types::ProviderId::MINIMAX_CN_CODING_PLAN),
+        api_key_provider(
+            nvidia::provider_definition(None),
+            "cloud",
+            nvidia::API_KEY_ENV,
+        ),
     ]
 }
 
@@ -291,6 +298,9 @@ fn auth_provider_for_model(model: &str) -> Option<(&'static str, &'static str, &
             "Moonshot AI (China)",
             moonshot::API_KEY_ENV,
         )),
+        types::ProviderId::NVIDIA => {
+            Some((types::ProviderId::NVIDIA, "NVIDIA", nvidia::API_KEY_ENV))
+        }
         provider if anthropic_providers::is_anthropic_provider(provider) => {
             let spec = anthropic_providers::spec(provider)?;
             Some((spec.id, spec.name, spec.api_key_env))
@@ -317,6 +327,7 @@ fn selected_provider_for_model(model: &str) -> &'static str {
         types::ProviderId::MINIMAX_CODING_PLAN,
         types::ProviderId::MINIMAX_CN,
         types::ProviderId::MINIMAX,
+        types::ProviderId::NVIDIA,
     ]
     .into_iter()
     .find(|provider| has_provider_prefix(clean, provider))
@@ -791,6 +802,7 @@ pub(crate) fn pricing_for_model(
         types::ProviderId::MINIMAX_CODING_PLAN => &cached.minimax_coding_plan,
         types::ProviderId::MINIMAX_CN => &cached.minimax_cn,
         types::ProviderId::MINIMAX_CN_CODING_PLAN => &cached.minimax_cn_coding_plan,
+        types::ProviderId::NVIDIA => &cached.nvidia,
         _ => return None,
     };
     provider_catalog
@@ -815,6 +827,7 @@ pub(crate) fn parse_model_ref(model: &str) -> Result<String, LlmError> {
         minimax_coding_plan_api_key: None,
         minimax_cn_api_key: None,
         minimax_cn_coding_plan_api_key: None,
+        nvidia_api_key: None,
         ollama_base_url: super::settings::DEFAULT_OLLAMA_BASE_URL.to_string(),
         lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
         custom_models: Vec::new(),
@@ -884,6 +897,10 @@ mod tests {
         assert_eq!(
             selected_provider_for_model("kimi-for-coding/k2p7"),
             types::ProviderId::KIMI_FOR_CODING
+        );
+        assert_eq!(
+            selected_provider_for_model("nvidia/meta/llama-3.3-70b-instruct"),
+            types::ProviderId::NVIDIA
         );
     }
 
@@ -987,6 +1004,10 @@ mod tests {
                 "MiniMax Token Plan (minimaxi.com)",
                 anthropic_providers::MINIMAX_API_KEY_ENV
             ))
+        );
+        assert_eq!(
+            auth_provider_for_model("nvidia/meta/llama-3.3-70b-instruct"),
+            Some((types::ProviderId::NVIDIA, "NVIDIA", nvidia::API_KEY_ENV))
         );
     }
 }

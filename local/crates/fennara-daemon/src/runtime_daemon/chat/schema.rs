@@ -777,6 +777,8 @@ pub(crate) fn model_trace_from_selection(model: &str) -> Option<ModelTrace> {
         ("minimax-cn", model_id.trim())
     } else if let Some(model_id) = model.strip_prefix("minimax-cn-coding-plan/") {
         ("minimax-cn-coding-plan", model_id.trim())
+    } else if let Some(model_id) = model.strip_prefix("nvidia/") {
+        ("nvidia", model_id.trim())
     } else if let Some(model_id) = model.strip_prefix("openrouter/") {
         ("openrouter", model_id.trim())
     } else if model.contains('/') {
@@ -876,6 +878,11 @@ mod tests {
                 "minimax-cn-coding-plan/MiniMax-M3",
                 "minimax-cn-coding-plan",
                 "MiniMax-M3",
+            ),
+            (
+                "nvidia/meta/llama-3.3-70b-instruct",
+                "nvidia",
+                "meta/llama-3.3-70b-instruct",
             ),
         ] {
             let trace = model_trace_from_selection(selection).unwrap();

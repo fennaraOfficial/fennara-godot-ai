@@ -131,6 +131,7 @@ fn suggestion_models(custom_models: &[String], has_openrouter_key: bool) -> Vec<
             && !model.starts_with("minimax-coding-plan/")
             && !model.starts_with("minimax-cn/")
             && !model.starts_with("minimax-cn-coding-plan/")
+            && !model.starts_with("nvidia/")
         {
             continue;
         }

@@ -7,6 +7,7 @@ use super::deepseek;
 use super::lmstudio;
 use super::models_dev::OpenRouterCatalog;
 use super::moonshot;
+use super::nvidia;
 use super::ollama;
 use super::ollama_cloud;
 use super::openai;
@@ -57,7 +58,8 @@ impl Catalog {
                 || key_or_env_present(
                     settings.minimax_cn_coding_plan_api_key.as_ref(),
                     anthropic_providers::MINIMAX_API_KEY_ENV,
-                );
+                )
+                || key_or_env_present(settings.nvidia_api_key.as_ref(), nvidia::API_KEY_ENV);
         let hosted_catalog = needs_hosted_catalog
             .then(catalog_cache::load_disk_blocking)
             .and_then(Result::ok);
@@ -83,6 +85,7 @@ impl Catalog {
             hosted_catalog
                 .as_ref()
                 .map(|cached| &cached.minimax_cn_coding_plan),
+            hosted_catalog.as_ref().map(|cached| &cached.nvidia),
         )
     }
 
@@ -102,6 +105,7 @@ impl Catalog {
         hosted_minimax_coding_plan: Option<&OpenRouterCatalog>,
         hosted_minimax_cn: Option<&OpenRouterCatalog>,
         hosted_minimax_cn_coding_plan: Option<&OpenRouterCatalog>,
+        hosted_nvidia: Option<&OpenRouterCatalog>,
     ) -> Self {
         let mut catalog = Self::default();
         catalog.local_model_limits = settings.local_model_limits.clone();
@@ -148,6 +152,9 @@ impl Catalog {
             ProviderId::MINIMAX_CN_CODING_PLAN,
             settings.minimax_cn_coding_plan_api_key.as_deref(),
         );
+        catalog.insert_provider(nvidia::provider_definition(
+            settings.nvidia_api_key.as_deref(),
+        ));
         catalog.insert_provider(ollama::provider_definition(&settings.ollama_base_url));
         catalog.insert_provider(local_provider_alias(&settings.ollama_base_url));
 
@@ -204,6 +211,7 @@ impl Catalog {
         catalog.insert_hosted_catalog(hosted_minimax_coding_plan);
         catalog.insert_hosted_catalog(hosted_minimax_cn);
         catalog.insert_hosted_catalog(hosted_minimax_cn_coding_plan);
+        catalog.insert_hosted_catalog(hosted_nvidia);
         for model in &settings.custom_models {
             if let Ok(model_ref) = model_ref_from_selection(model, &catalog) {
                 catalog.ensure_model_for_ref(&model_ref);
@@ -347,6 +355,7 @@ fn dynamic_model(provider_id: &ProviderId, model_id: &ModelId) -> ModelDefinitio
         ProviderId::LMSTUDIO => lmstudio::model_definition(model_id.as_str(), None),
         ProviderId::DEEPSEEK => deepseek::model_definition(model_id.as_str(), None),
         ProviderId::ZAI => zai::model_definition(model_id.as_str(), None),
+        ProviderId::NVIDIA => nvidia::model_definition(model_id.as_str(), None),
         ProviderId::MOONSHOTAI | ProviderId::MOONSHOTAI_CN => {
             moonshot::model_definition(provider_id.as_str(), model_id.as_str(), None)
         }
@@ -406,6 +415,7 @@ mod tests {
             minimax_coding_plan_api_key: None,
             minimax_cn_api_key: None,
             minimax_cn_coding_plan_api_key: None,
+            nvidia_api_key: None,
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
             custom_models: Vec::new(),
@@ -466,6 +476,7 @@ mod tests {
             minimax_coding_plan_api_key: None,
             minimax_cn_api_key: None,
             minimax_cn_coding_plan_api_key: None,
+            nvidia_api_key: None,
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
             custom_models: Vec::new(),
@@ -508,6 +519,25 @@ mod tests {
         assert_eq!(
             resolved.provider.base_url.as_deref(),
             Some(moonshot::API_BASE)
+        );
+    }
+
+    #[test]
+    fn nvidia_model_refs_resolve_to_hosted_nim_provider() {
+        let catalog = test_catalog();
+        let model_ref =
+            model_ref_from_selection("nvidia/meta/llama-3.3-70b-instruct", &catalog).unwrap();
+        let resolved = catalog.resolve(&model_ref).unwrap();
+
+        assert_eq!(model_ref.provider.as_str(), ProviderId::NVIDIA);
+        assert_eq!(model_ref.model.as_str(), "meta/llama-3.3-70b-instruct");
+        assert_eq!(
+            resolved.model.adapter_model_id,
+            "meta/llama-3.3-70b-instruct"
+        );
+        assert_eq!(
+            resolved.provider.base_url.as_deref(),
+            Some(nvidia::API_BASE)
         );
     }
 

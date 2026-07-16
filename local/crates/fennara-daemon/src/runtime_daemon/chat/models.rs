@@ -136,6 +136,10 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
         || std::env::var("MINIMAX_API_KEY")
             .ok()
             .is_some_and(|key| !key.trim().is_empty());
+    let has_nvidia_key = auth::has_api_key(ProviderId::NVIDIA)
+        || std::env::var("NVIDIA_API_KEY")
+            .ok()
+            .is_some_and(|key| !key.trim().is_empty());
     let cached_catalog = catalog_cache::load_disk().await;
     let catalog_status = catalog_status(&cached_catalog);
     let openrouter_error = cached_catalog.as_ref().err().cloned();
@@ -151,7 +155,8 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
         || has_minimax_key
         || has_minimax_coding_plan_key
         || has_minimax_cn_key
-        || has_minimax_cn_coding_plan_key;
+        || has_minimax_cn_coding_plan_key
+        || has_nvidia_key;
     let mut models = Vec::new();
     if has_saved_openrouter_key {
         if let Ok(cached_catalog) = &cached_catalog {
@@ -291,6 +296,17 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.minimax_cn_coding_plan,
                 "MiniMax Token Plan (minimaxi.com)",
                 ProviderId::MINIMAX_CN_CODING_PLAN,
+                &custom_ids,
+            );
+        }
+    }
+    if has_nvidia_key {
+        if let Ok(cached_catalog) = &cached_catalog {
+            append_hosted_catalog_models(
+                &mut models,
+                &cached_catalog.nvidia,
+                "NVIDIA",
+                ProviderId::NVIDIA,
                 &custom_ids,
             );
         }
@@ -477,6 +493,7 @@ fn append_openrouter_catalog_models(
             && !id.starts_with("minimax-coding-plan/")
             && !id.starts_with("minimax-cn/")
             && !id.starts_with("minimax-cn-coding-plan/")
+            && !id.starts_with("nvidia/")
     }) {
         if models
             .iter()
@@ -921,6 +938,7 @@ fn fallback_provider(id: &str) -> String {
         "minimax-coding-plan" => "MiniMax Token Plan (minimax.io)".to_string(),
         "minimax-cn" => "MiniMax (minimaxi.com)".to_string(),
         "minimax-cn-coding-plan" => "MiniMax Token Plan (minimaxi.com)".to_string(),
+        "nvidia" => "NVIDIA".to_string(),
         other => {
             let mut chars = other.chars();
             match chars.next() {
@@ -960,6 +978,8 @@ fn fallback_provider_id(id: &str) -> &'static str {
         ProviderId::MINIMAX_CN
     } else if id.starts_with("minimax/") {
         ProviderId::MINIMAX
+    } else if id.starts_with("nvidia/") {
+        ProviderId::NVIDIA
     } else {
         ProviderId::OPENROUTER
     }
@@ -997,7 +1017,7 @@ fn string_array_contains(value: Option<&Value>, needle: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::super::providers::models_dev::parse_moonshot_catalog;
+    use super::super::providers::models_dev::{parse_moonshot_catalog, parse_nvidia_catalog};
     use super::*;
     use serde_json::json;
 
@@ -1075,6 +1095,46 @@ mod tests {
         assert_eq!(models[0].provider_id, ProviderId::MINIMAX);
         assert_eq!(models[0].provider, "MiniMax (minimax.io)");
         assert_eq!(models[0].canonical_slug.as_deref(), Some("MiniMax-M3"));
+    }
+
+    #[test]
+    fn appends_nvidia_catalog_models_with_native_prefix() {
+        let raw = br#"{
+            "nvidia": {
+                "id": "nvidia",
+                "models": {
+                    "meta/llama-3.3-70b-instruct": {
+                        "id": "meta/llama-3.3-70b-instruct",
+                        "name": "Llama 3.3 70B Instruct",
+                        "tool_call": true,
+                        "reasoning": false,
+                        "temperature": true,
+                        "limit": { "context": 131072, "output": 32768 },
+                        "modalities": { "input": ["text"], "output": ["text"] }
+                    }
+                }
+            }
+        }"#;
+        let catalog = parse_nvidia_catalog(raw).unwrap();
+        let mut models = Vec::new();
+        let custom_ids = Vec::new();
+
+        append_hosted_catalog_models(
+            &mut models,
+            &catalog,
+            "NVIDIA",
+            ProviderId::NVIDIA,
+            &custom_ids,
+        );
+
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "nvidia/meta/llama-3.3-70b-instruct");
+        assert_eq!(models[0].provider_id, ProviderId::NVIDIA);
+        assert_eq!(models[0].provider, "NVIDIA");
+        assert_eq!(
+            models[0].canonical_slug.as_deref(),
+            Some("meta/llama-3.3-70b-instruct")
+        );
     }
 
     #[test]
