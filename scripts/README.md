@@ -43,6 +43,10 @@ These scripts support `.github/workflows/staging-release.yml`. Candidate build j
 
 The CEF scripts operate on copied staging files only. They must not mutate the downloaded/source CEF SDK tree.
 
+## Development Tests
+
+- `test-run-scene-edit-script-inspect.mjs`: creates an ignored Godot smoke project under `temp/` and verifies imported `PackedScene` inspection, read-only context guards, missing-source failure, and no-save behavior against a built editor GDExtension.
+
 ## UI Sync
 
 - `sync-chat-ui.mjs`: copies `ui/chat/` into `godot_demo/addons/fennara/dist/`.

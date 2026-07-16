@@ -7,6 +7,7 @@
 #include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/classes/web_socket_peer.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
 #include <cstdint>
@@ -37,6 +38,7 @@ public:
     godot::String get_device_id() const;
     godot::String get_chat_token() const;
     static godot::Dictionary collect_rendering_context();
+    godot::Dictionary collect_editor_filesystem_status() const;
     void request_get_class_info_warmup();
     bool send_chat_context_snippet(const godot::String &path,
                                    int32_t start_line,
@@ -62,6 +64,9 @@ private:
     godot::String _active_mcp_target_name;
     godot::String _active_mcp_target_path;
     godot::Ref<FennaraSnapshotManager> _snapshot_mgr;
+    bool _is_importing_resources = false;
+    int64_t _active_import_count = 0;
+    int64_t _last_imported_count = 0;
     std::future<godot::String> _daemon_auth_future;
     std::shared_ptr<std::atomic_bool> _daemon_auth_cancel;
 
@@ -83,7 +88,11 @@ private:
                                        int32_t attempt);
     void _on_async_tool_call_completed(const godot::Array &results, godot::String request_id, godot::String tool_name, godot::Dictionary input, uint64_t started_at_ms, godot::Object *executor);
     void _send_json(const godot::Dictionary &payload);
+    void _send_editor_filesystem_status();
     void _maybe_send_get_class_info_warmup();
+    void _on_editor_filesystem_changed();
+    void _on_resources_reimporting(const godot::PackedStringArray &paths);
+    void _on_resources_reimported(const godot::PackedStringArray &paths);
     godot::String _daemon_binary_path() const;
     godot::String _make_session_id() const;
     godot::String _make_chat_token() const;

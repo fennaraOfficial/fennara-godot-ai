@@ -24,6 +24,8 @@ public:
                                                  int index);
     static bool is_runtime_eligible_scene(
         const godot::Dictionary &scene_result);
+    static godot::String runtime_skip_reason(
+        const godot::Dictionary &scene_result);
     static godot::Dictionary run_runtime_checks_for_scenes(
         const godot::Dictionary &args,
         const godot::Array &runtime_eligible_scene_paths,

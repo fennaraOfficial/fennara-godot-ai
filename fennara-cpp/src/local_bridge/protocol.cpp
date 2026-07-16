@@ -6,6 +6,8 @@
 
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/crypto.hpp>
+#include <godot_cpp/classes/editor_file_system.hpp>
+#include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/marshalls.hpp>
 #include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/os.hpp>
@@ -99,6 +101,7 @@ void FennaraLocalBridge::_send_hello() {
     payload["godot_version"] = godot::String(godot::Engine::get_singleton()->get_version_info()["string"]);
     payload["csharp_support"] = csharp_support::inspect_project();
     payload["rendering_context"] = collect_rendering_context();
+    payload["editor_filesystem"] = collect_editor_filesystem_status();
 
     godot::Array tools;
     tools.append("read_file");
@@ -215,6 +218,65 @@ godot::Dictionary FennaraLocalBridge::collect_rendering_context() {
     context["warnings"] = warnings;
 
     return context;
+}
+
+godot::Dictionary FennaraLocalBridge::collect_editor_filesystem_status() const {
+    godot::Dictionary status;
+    status["schema_version"] = "editor-filesystem-status-v1";
+
+    godot::EditorInterface *editor = godot::EditorInterface::get_singleton();
+    godot::EditorFileSystem *filesystem =
+        editor != nullptr ? editor->get_resource_filesystem() : nullptr;
+    if (filesystem == nullptr) {
+        status["available"] = false;
+        status["state"] = "unavailable";
+        status["initial_scan_complete"] = false;
+        status["is_scanning"] = false;
+        status["scan_progress"] = 0.0;
+        status["asset_tools_ready"] = false;
+        status["not_ready_reason"] =
+            "Godot's EditorFileSystem is unavailable.";
+        return status;
+    }
+
+    const bool is_scanning = filesystem->is_scanning();
+    const double scan_progress = filesystem->get_scanning_progress();
+    // Godot's is_scanning() includes its private first_scan flag. Progress can
+    // remain zero for an empty project, so completion must not depend on it.
+    const bool initial_scan_complete = !is_scanning;
+    const bool is_importing = _is_importing_resources;
+    const bool ready = initial_scan_complete && !is_importing;
+
+    godot::String state = "ready";
+    if (is_scanning && is_importing) {
+        state = "scanning_and_importing";
+    } else if (is_scanning) {
+        state = "scanning";
+    } else if (is_importing) {
+        state = "importing";
+    }
+
+    status["available"] = true;
+    status["state"] = state;
+    status["initial_scan_complete"] = initial_scan_complete;
+    status["is_scanning"] = is_scanning;
+    status["scan_progress"] = scan_progress;
+    status["active_import_count"] = _active_import_count;
+    status["last_imported_count"] = _last_imported_count;
+    status["asset_tools_ready"] = ready;
+    if (is_scanning && is_importing) {
+        status["not_ready_reason"] =
+            "Godot is still scanning and importing project resources.";
+    } else if (is_scanning) {
+        status["not_ready_reason"] =
+            "Godot is still scanning project resources.";
+    } else if (is_importing) {
+        status["not_ready_reason"] =
+            "Godot is still importing project resources.";
+    } else {
+        status["not_ready_reason"] = godot::String();
+    }
+    return status;
 }
 
 void FennaraLocalBridge::request_get_class_info_warmup() {

@@ -6,19 +6,65 @@
 #include <cmath>
 #include <vector>
 
+#include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/control.hpp>
+#include <godot_cpp/classes/directional_light3d.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
-#include <godot_cpp/classes/editor_selection.hpp>
+#include <godot_cpp/classes/environment.hpp>
+#include <godot_cpp/classes/light3d.hpp>
+#include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
+#include <godot_cpp/classes/skeleton3d.hpp>
+#include <godot_cpp/classes/skin_reference.hpp>
 #include <godot_cpp/classes/sub_viewport.hpp>
 #include <godot_cpp/classes/visual_instance3d.hpp>
+#include <godot_cpp/classes/world_environment.hpp>
 #include <godot_cpp/variant/node_path.hpp>
 
 namespace fennara {
+
+namespace {
+
+bool contains_light(godot::Node *node) {
+    if (!node) return false;
+    if (auto *light = godot::Object::cast_to<godot::Light3D>(node)) {
+        if (light->is_visible_in_tree() &&
+            light->get_param(godot::Light3D::PARAM_ENERGY) > 0.0) {
+            return true;
+        }
+    }
+    for (int i = 0; i < node->get_child_count(); i++) {
+        if (contains_light(node->get_child(i))) return true;
+    }
+    return false;
+}
+
+bool contains_environment(godot::Node *node) {
+    if (!node) return false;
+    if (auto *world = godot::Object::cast_to<godot::WorldEnvironment>(node)) {
+        if (world->get_environment().is_valid()) return true;
+    }
+    for (int i = 0; i < node->get_child_count(); i++) {
+        if (contains_environment(node->get_child(i))) return true;
+    }
+    return false;
+}
+
+void force_skeleton_updates(godot::Node *node) {
+    if (!node) return;
+    if (auto *skeleton = godot::Object::cast_to<godot::Skeleton3D>(node)) {
+        skeleton->force_update_all_bone_transforms();
+    }
+    for (int i = 0; i < node->get_child_count(); i++) {
+        force_skeleton_updates(node->get_child(i));
+    }
+}
+
+} // namespace
 
 godot::Transform3D FennaraScreenshotSceneTool::_local_tree_3d_transform(godot::Node *node) {
     godot::Transform3D transform;
@@ -55,6 +101,15 @@ void FennaraScreenshotSceneTool::_accumulate_3d_bounds(godot::Node *node,
         godot::Object::cast_to<godot::VisualInstance3D>(node);
     if (visual && visual->is_visible()) {
         godot::AABB local_bounds = visual->get_aabb();
+        godot::MeshInstance3D *mesh_instance =
+            godot::Object::cast_to<godot::MeshInstance3D>(visual);
+        if (mesh_instance && mesh_instance->get_skin_reference().is_valid()) {
+            godot::Ref<godot::ArrayMesh> baked_mesh =
+                mesh_instance->bake_mesh_from_current_skeleton_pose();
+            if (baked_mesh.is_valid()) {
+                local_bounds = baked_mesh->get_aabb();
+            }
+        }
         if (local_bounds.has_surface()) {
             godot::AABB global_bounds =
                 _local_tree_3d_transform(visual).xform(local_bounds).abs();
@@ -82,18 +137,6 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
         return result;
     }
 
-    godot::EditorSelection *selection = editor->get_selection();
-    if (selection) {
-        selection->clear();
-    }
-
-    godot::Node *edited_root = editor->get_edited_scene_root();
-    if (!edited_root) {
-        result["success"] = false;
-        result["error"] = "No edited scene root available";
-        return result;
-    }
-
     godot::Node *base = godot::Object::cast_to<godot::Node>(editor->get_base_control());
     if (!base) {
         result["success"] = false;
@@ -103,10 +146,9 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
 
     godot::SubViewport *previous = _camera_capture_viewport_ref();
     if (previous) {
-        previous->queue_free();
-        _camera_capture_viewport_ref() = nullptr;
-        _camera_capture_root_ref() = nullptr;
+        _discard_temporary_viewport();
     }
+    _capture_requires_content_ref() = false;
 
     godot::String scene_path = _current_scene_path_ref();
     godot::Ref<godot::PackedScene> packed =
@@ -125,13 +167,23 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
         return result;
     }
 
+    godot::SubViewport *viewport = memnew(godot::SubViewport);
+    viewport->set_name("FennaraFramedScreenshotViewport");
+    viewport->set_update_mode(godot::SubViewport::UPDATE_ALWAYS);
+    viewport->set_clear_mode(godot::SubViewport::CLEAR_MODE_ALWAYS);
+    viewport->set_transparent_background(false);
+    viewport->set_use_own_world_3d(true);
+    base->add_child(viewport);
+    viewport->add_child(root);
+    force_skeleton_updates(root);
+
     godot::Node *bounds_root = root;
     godot::String target_path = args.get("target_node_path", "");
     bool has_target = !target_path.is_empty();
     if (has_target) {
         bounds_root = _resolve_scene_node(root, target_path);
         if (!bounds_root) {
-            memdelete(root);
+            viewport->queue_free();
             result["success"] = false;
             result["error"] = "target_node_path not found: " + target_path;
             return result;
@@ -140,7 +192,16 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
 
     godot::AABB bounds;
     bool has_bounds = false;
-    _accumulate_3d_bounds(bounds_root, bounds, has_bounds);
+    bool can_reuse_bounds =
+        _cached_bounds_valid_ref() &&
+        _cached_bounds_scene_path_ref() == scene_path &&
+        _cached_bounds_target_path_ref() == target_path;
+    if (can_reuse_bounds) {
+        bounds = _cached_bounds_ref();
+        has_bounds = true;
+    } else {
+        _accumulate_3d_bounds(bounds_root, bounds, has_bounds);
+    }
     if (!has_bounds) {
         godot::Node3D *target_3d = godot::Object::cast_to<godot::Node3D>(bounds_root);
         if (target_3d) {
@@ -150,12 +211,17 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
                                  godot::Vector3(2, 2, 2));
             has_bounds = true;
         } else {
-            memdelete(root);
-            result["success"] = true;
-            result["is_3d"] = true;
-            result["note"] = "3D scene: no visible 3D geometry bounds found; using default 3D editor camera view";
+            viewport->queue_free();
+            result["success"] = false;
+            result["error"] = "No visible 3D geometry bounds found for isolated capture";
             return result;
         }
+    }
+    if (!can_reuse_bounds) {
+        _cached_bounds_scene_path_ref() = scene_path;
+        _cached_bounds_target_path_ref() = target_path;
+        _cached_bounds_ref() = bounds;
+        _cached_bounds_valid_ref() = true;
     }
 
     godot::String view = args.get("view", "perspective");
@@ -187,7 +253,7 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
     } else if (view == "perspective") {
         view_dir = godot::Vector3(1.0, 0.65, 1.0).normalized();
     } else {
-        memdelete(root);
+        viewport->queue_free();
         result["success"] = false;
         result["error"] = "Unsupported 3D view: " + view;
         return result;
@@ -229,8 +295,8 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
         }
     }
 
-    double effective_margin = std::max(margin, 1.08);
-    double distance = std::max(fit_distance * effective_margin, radius + 0.75);
+    double effective_margin = margin;
+    double distance = std::max(fit_distance * effective_margin, 0.75);
     godot::Vector3 camera_position = center + view_dir * distance;
 
     double orthographic_size = 0.0;
@@ -260,13 +326,7 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
         camera_position = center + view_dir * distance;
     }
 
-    godot::SubViewport *viewport = memnew(godot::SubViewport);
-    viewport->set_name("FennaraFramedScreenshotViewport");
     viewport->set_size(viewport_size);
-    viewport->set_update_mode(godot::SubViewport::UPDATE_ALWAYS);
-    viewport->set_clear_mode(godot::SubViewport::CLEAR_MODE_ALWAYS);
-    viewport->set_transparent_background(false);
-    viewport->set_use_own_world_3d(true);
 
     godot::Camera3D *camera = memnew(godot::Camera3D);
     camera->set_name("FennaraFramedScreenshotCamera");
@@ -280,14 +340,37 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
     camera->set_near(0.05f);
     camera->set_far(float(std::max(distance + radius * 10.0, 1000.0)));
 
-    base->add_child(viewport);
-    viewport->add_child(root);
     viewport->add_child(camera);
+
+    if (!contains_environment(root)) {
+        godot::Ref<godot::Environment> environment;
+        environment.instantiate();
+        environment->set_background(godot::Environment::BG_COLOR);
+        environment->set_bg_color(godot::Color(0.11, 0.12, 0.14, 1.0));
+        environment->set_ambient_source(godot::Environment::AMBIENT_SOURCE_COLOR);
+        environment->set_ambient_light_color(godot::Color(1.0, 1.0, 1.0, 1.0));
+        environment->set_ambient_light_energy(0.65f);
+
+        godot::WorldEnvironment *world_environment =
+            memnew(godot::WorldEnvironment);
+        world_environment->set_name("FennaraPreviewEnvironment");
+        world_environment->set_environment(environment);
+        viewport->add_child(world_environment);
+    }
+    if (!contains_light(root)) {
+        godot::DirectionalLight3D *light = memnew(godot::DirectionalLight3D);
+        light->set_name("FennaraPreviewKeyLight");
+        light->set_rotation_degrees(godot::Vector3(-45.0, -35.0, 0.0));
+        light->set_param(godot::Light3D::PARAM_ENERGY, 1.1f);
+        viewport->add_child(light);
+    }
+
     camera->look_at_from_position(camera_position, center, up);
     camera->make_current();
 
     _camera_capture_viewport_ref() = viewport;
     _camera_capture_root_ref() = root;
+    _capture_requires_content_ref() = true;
 
     godot::Dictionary bounds_dict;
     bounds_dict["center"] = center;
@@ -297,7 +380,7 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
     result["scene_path"] = _current_scene_path_ref();
     result["view"] = view;
     if (has_target) result["target_node_path"] = target_path;
-    result["note"] = "3D scene: auto-framed visible geometry bounds";
+    result["note"] = "3D scene: isolated capture auto-framed visible geometry bounds";
     result["framed_bounds"] = bounds_dict;
     result["camera_distance"] = distance;
     result["camera_position"] = camera_position;

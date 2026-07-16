@@ -75,6 +75,11 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     if (raw_success && !has_image) {
         status = "partial";
     }
+    if (raw_success && has_image &&
+        godot::String(raw_result.get("content_validation", "passed")) !=
+            "passed") {
+        status = "partial";
+    }
 
     godot::PackedStringArray lines;
     lines.append("Tool: screenshot_scene");
@@ -95,6 +100,24 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     }
     if (has_image) {
         lines.append(image_summary_line(raw_result));
+    }
+    if (raw_result.has("content_validation")) {
+        lines.append("Content validation: " +
+                     godot::String(raw_result.get("content_validation", "")));
+    }
+    if (raw_result.has("content_coverage") && raw_result.has("content_max_span")) {
+        lines.append("Content framing: coverage " +
+                     godot::String::num(
+                         double(raw_result.get("content_coverage", 0.0)) * 100.0,
+                         2) +
+                     "%, maximum span " +
+                     godot::String::num(
+                         double(raw_result.get("content_max_span", 0.0)) * 100.0,
+                         2) + "%");
+    }
+    if (raw_result.has("content_warning")) {
+        lines.append("Content warning: " +
+                     godot::String(raw_result.get("content_warning", "")));
     }
     if (raw_result.has("image_res_path")) {
         lines.append("Saved resource: " + godot::String(raw_result.get("image_res_path", "")));
@@ -164,6 +187,11 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     metadata["image_count"] = image_metadata.size();
     metadata["images"] = image_metadata;
     metadata["has_primary_image"] = has_image;
+    metadata["content_validation"] =
+        raw_result.get("content_validation", "not_run");
+    metadata["content_coverage"] = raw_result.get("content_coverage", 0.0);
+    metadata["content_max_span"] = raw_result.get("content_max_span", 0.0);
+    metadata["content_warning"] = raw_result.get("content_warning", "");
     metadata["previewed"] = false;
 
     godot::Dictionary envelope = make_envelope(

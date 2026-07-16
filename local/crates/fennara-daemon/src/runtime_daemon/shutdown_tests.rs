@@ -36,6 +36,7 @@ async fn deferred_shutdown_is_cancelled_and_rearmed_when_a_project_connects() {
             godot_version: None,
             plugin_version: None,
             rendering_context: None,
+            editor_filesystem: None,
             chat_token: None,
             tools: Vec::new(),
         },

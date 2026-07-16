@@ -188,10 +188,9 @@ godot::Dictionary FennaraScreenshotSceneTool::_setup_camera_path_viewport(
 
     godot::SubViewport *previous = _camera_capture_viewport_ref();
     if (previous) {
-        previous->queue_free();
-        _camera_capture_viewport_ref() = nullptr;
-        _camera_capture_root_ref() = nullptr;
+        _discard_temporary_viewport();
     }
+    _capture_requires_content_ref() = false;
 
     godot::String scene_path = _current_scene_path_ref();
     godot::String camera_path = args.get("camera_path", "");
@@ -263,6 +262,7 @@ godot::Dictionary FennaraScreenshotSceneTool::_setup_camera_path_viewport(
     } else {
         camera_3d->make_current();
         _is_3d_scene = true;
+        _capture_requires_content_ref() = true;
         result["view"] = "camera_3d";
     }
 

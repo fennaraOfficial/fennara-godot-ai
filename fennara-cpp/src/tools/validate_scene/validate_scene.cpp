@@ -376,8 +376,28 @@ godot::Dictionary FennaraValidateSceneTool::validate_scene_item(
 
 bool FennaraValidateSceneTool::is_runtime_eligible_scene(
     const godot::Dictionary &scene_result) {
-    return godot::String(scene_result.get("status", "")) == "success" &&
-           static_cast<int>(scene_result.get("errors", 0)) == 0;
+    if (godot::String(scene_result.get("status", "")) != "success" ||
+        static_cast<int>(scene_result.get("errors", 0)) != 0) {
+        return false;
+    }
+
+    const godot::String scene_path = scene_result.get("scene_path", "");
+    const godot::String extension = scene_path.get_extension().to_lower();
+    return extension == "tscn" || extension == "scn" ||
+           extension == "escn" || extension == "res" ||
+           extension == "tres";
+}
+
+godot::String FennaraValidateSceneTool::runtime_skip_reason(
+    const godot::Dictionary &scene_result) {
+    if (godot::String(scene_result.get("status", "")) != "success") {
+        return "";
+    }
+    if (static_cast<int>(scene_result.get("errors", 0)) != 0) {
+        return "structural_errors";
+    }
+    return "Godot's command-line scene runner cannot launch imported source "
+           "scenes directly; structural validation completed.";
 }
 
 godot::Dictionary FennaraValidateSceneTool::run_runtime_checks_for_scenes(
@@ -458,8 +478,7 @@ godot::Dictionary FennaraValidateSceneTool::build_result_from_scenes(
         if (runtime_by_scene.has(scene_path)) {
             scene["runtime_check"] = runtime_by_scene[scene_path];
             final_scenes[i] = scene;
-        } else if (godot::String(scene.get("status", "")) == "success" &&
-                   static_cast<int>(scene.get("errors", 0)) == 0 &&
+        } else if (is_runtime_eligible_scene(scene) &&
                    !(bool)runtime_batch.get("success", false)) {
             scene["runtime_check"] = "failed";
             scene["runtime_error"] = runtime_batch.get("error", "Runtime batch failed.");
@@ -679,12 +698,12 @@ godot::Dictionary FennaraValidateSceneTool::execute(const godot::Dictionary &arg
         }
 
         godot::Dictionary scene_result = validate_single_scene(item);
-        if (godot::String(scene_result.get("status", "")) == "success" &&
-            static_cast<int>(scene_result.get("errors", 0)) == 0) {
+        if (is_runtime_eligible_scene(scene_result)) {
             runtime_eligible_scene_paths.append(scene_result.get("scene_path", ""));
         } else if (godot::String(scene_result.get("status", "")) == "success") {
             scene_result["runtime_check"] = "skipped";
-            scene_result["runtime_skip_reason"] = "structural_errors";
+            scene_result["runtime_skip_reason"] =
+                runtime_skip_reason(scene_result);
         }
         scenes.append(scene_result);
     }

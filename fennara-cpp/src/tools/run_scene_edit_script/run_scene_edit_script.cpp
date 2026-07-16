@@ -26,6 +26,7 @@ void finalize_summary(godot::Dictionary &result) {
     summary["status"] = success ? "success" : "failed";
     summary["scene_path"] = result.get("scene_path", "");
     summary["script_path"] = result.get("script_path", "");
+    summary["mode"] = result.get("mode", "edit");
     summary["scene_created"] = result.get("scene_created", false);
     summary["scene_saved"] = result.get("scene_saved", false);
     summary["modified"] = result.get("modified", false);
@@ -134,6 +135,7 @@ godot::Dictionary FennaraRunSceneEditScriptTool::prepare_execution(const godot::
     godot::String scene_path = args.get("scene_path", "");
     godot::String code = args.get("code", "");
     godot::String script_path = args.get("script_path", "");
+    godot::String mode = godot::String(args.get("mode", "edit")).strip_edges().to_lower();
 
     if (scene_path.is_empty()) {
         result["success"] = false;
@@ -145,11 +147,20 @@ godot::Dictionary FennaraRunSceneEditScriptTool::prepare_execution(const godot::
         result["error"] = "Provide exactly one of code or script_path.";
         return result;
     }
+    if (mode != "edit" && mode != "inspect") {
+        result["success"] = false;
+        result["error"] = "mode must be either 'edit' or 'inspect'.";
+        return result;
+    }
 
     godot::String normalized_scene = normalize_path(scene_path);
-    if (!normalized_scene.ends_with(".tscn") && !normalized_scene.ends_with(".scn")) {
+    if (mode == "edit" &&
+        !normalized_scene.ends_with(".tscn") &&
+        !normalized_scene.ends_with(".scn")) {
         result["success"] = false;
-        result["error"] = "scene_path must point to a .tscn or .scn file.";
+        result["error"] =
+            "Edit mode requires scene_path to point to a .tscn or .scn file. "
+            "Use mode='inspect' for read-only inspection of imported PackedScene sources.";
         return result;
     }
 
@@ -161,6 +172,7 @@ godot::Dictionary FennaraRunSceneEditScriptTool::prepare_execution(const godot::
 
     result["scene_path"] = normalized_scene;
     result["script_path"] = effective_script_path;
+    result["mode"] = mode;
     result["success"] = true;
     return result;
 }
@@ -171,10 +183,14 @@ godot::Dictionary FennaraRunSceneEditScriptTool::execute_prepared(
     stamp_result(result);
     godot::String normalized_scene = prepared_args.get("scene_path", "");
     godot::String effective_script_path = prepared_args.get("script_path", "");
+    godot::String mode = prepared_args.get("mode", "edit");
+    bool read_only = mode == "inspect";
     result["scene_created"] = false;
     result["scene_saved"] = false;
-    result["scene_status_note"] =
-        "Scene has not been created or saved yet. The scene will only be created or updated if execution succeeds.";
+    result["scene_status_note"] = read_only
+        ? godot::String("Scene source will be inspected in memory and will not be saved.")
+        : godot::String(
+            "Scene has not been created or saved yet. The scene will only be created or updated if execution succeeds.");
 
     godot::Ref<godot::GDScript> script = load_script(effective_script_path, result);
     if (!script.is_valid() || !validate_script_contract(script, result)) {
@@ -185,7 +201,8 @@ godot::Dictionary FennaraRunSceneEditScriptTool::execute_prepared(
     godot::Node *root_node = nullptr;
     bool created_new_scene = false;
     bool inherited_root_scene = false;
-    if (!load_or_prepare_scene(normalized_scene, result, root_node, created_new_scene, inherited_root_scene)) {
+    if (!load_or_prepare_scene(normalized_scene, result, root_node, created_new_scene,
+                               inherited_root_scene, read_only)) {
         finalize_summary(result);
         return result;
     }
@@ -193,7 +210,7 @@ godot::Dictionary FennaraRunSceneEditScriptTool::execute_prepared(
 
     godot::Ref<FennaraRunSceneEditScriptContext> ctx;
     ctx.instantiate();
-    ctx->configure(root_node, normalized_scene, scene_exists);
+    ctx->configure(root_node, normalized_scene, scene_exists, read_only);
 
     godot::Variant runner_variant = instantiate_runner(script, root_node, result);
     godot::Object *runner = runner_variant;
@@ -228,6 +245,21 @@ godot::Dictionary FennaraRunSceneEditScriptTool::execute_prepared(
         }
         result["success"] = false;
         result["error"] = "Editor script execution failed.";
+        finalize_summary(result);
+        return result;
+    }
+
+    if (read_only) {
+        if (root_node != nullptr) {
+            root_node->queue_free();
+        }
+        result["scene_saved"] = false;
+        result["scene_created"] = false;
+        result["modified"] = false;
+        result["scene_status_note"] =
+            "Scene source was inspected in memory and was not saved.";
+        result["runtime_safe"] = true;
+        result["success"] = true;
         finalize_summary(result);
         return result;
     }

@@ -105,6 +105,8 @@ void FennaraRunSceneEditScriptContext::_bind_methods() {
                                 &FennaraRunSceneEditScriptContext::get_scene_path);
     godot::ClassDB::bind_method(godot::D_METHOD("get_scene_exists"),
                                 &FennaraRunSceneEditScriptContext::get_scene_exists);
+    godot::ClassDB::bind_method(godot::D_METHOD("is_read_only"),
+                                &FennaraRunSceneEditScriptContext::is_read_only);
     godot::ClassDB::bind_method(godot::D_METHOD("set_scene_root", "root"),
                                 &FennaraRunSceneEditScriptContext::set_scene_root);
     godot::ClassDB::bind_method(godot::D_METHOD("own", "node"),
@@ -141,10 +143,12 @@ void FennaraRunSceneEditScriptContext::_bind_methods() {
 
 void FennaraRunSceneEditScriptContext::configure(godot::Node *scene_root,
                                           const godot::String &scene_path,
-                                          bool scene_exists) {
+                                          bool scene_exists,
+                                          bool read_only) {
     _scene_root = scene_root;
     _scene_path = scene_path;
     _scene_exists = scene_exists;
+    _read_only = read_only;
     _modified = false;
     _logs.clear();
     _edit_errors.clear();
@@ -156,7 +160,13 @@ godot::String FennaraRunSceneEditScriptContext::get_scene_path() const { return 
 
 bool FennaraRunSceneEditScriptContext::get_scene_exists() const { return _scene_exists; }
 
+bool FennaraRunSceneEditScriptContext::is_read_only() const { return _read_only; }
+
 void FennaraRunSceneEditScriptContext::set_scene_root(godot::Node *root) {
+    if (_read_only) {
+        add_edit_error("set_scene_root() is unavailable in inspect mode.");
+        return;
+    }
     if (_scene_exists) {
         add_edit_error("set_scene_root() is only allowed when scene_path does not exist yet.");
         return;
@@ -179,6 +189,10 @@ void FennaraRunSceneEditScriptContext::set_scene_root(godot::Node *root) {
 }
 
 void FennaraRunSceneEditScriptContext::own(godot::Node *node) {
+    if (_read_only) {
+        add_edit_error("own() is unavailable in inspect mode.");
+        return;
+    }
     if (_scene_root == nullptr) {
         add_edit_error("own() requires a scene root. Create one with set_scene_root() first.");
         return;
@@ -208,6 +222,10 @@ void FennaraRunSceneEditScriptContext::own(godot::Node *node) {
 godot::Node *FennaraRunSceneEditScriptContext::instance_scene(
     godot::Node *parent, const godot::String &scene_path,
     const godot::String &desired_name) {
+    if (_read_only) {
+        add_edit_error("instance_scene() is unavailable in inspect mode.");
+        return nullptr;
+    }
     if (_scene_root == nullptr) {
         add_edit_error("instance_scene() requires a scene root. Create one with set_scene_root() first.");
         return nullptr;
@@ -297,6 +315,10 @@ godot::String FennaraRunSceneEditScriptContext::ensure_unique_child_name(
 }
 
 bool FennaraRunSceneEditScriptContext::remove_node(const godot::String &node_path) {
+    if (_read_only) {
+        add_edit_error("remove_node() is unavailable in inspect mode.");
+        return false;
+    }
     godot::Node *target = resolve_node_path(_scene_root, node_path);
     if (target == nullptr) {
         add_edit_error("remove_node(): node not found: " + node_path);
@@ -317,6 +339,10 @@ bool FennaraRunSceneEditScriptContext::remove_node(const godot::String &node_pat
 }
 
 void FennaraRunSceneEditScriptContext::clear_children(godot::Node *node) {
+    if (_read_only) {
+        add_edit_error("clear_children() is unavailable in inspect mode.");
+        return;
+    }
     if (node == nullptr) {
         add_edit_error("clear_children() received a null node.");
         return;
@@ -330,7 +356,13 @@ void FennaraRunSceneEditScriptContext::clear_children(godot::Node *node) {
     _modified = true;
 }
 
-void FennaraRunSceneEditScriptContext::mark_modified() { _modified = true; }
+void FennaraRunSceneEditScriptContext::mark_modified() {
+    if (_read_only) {
+        add_edit_error("mark_modified() is unavailable in inspect mode.");
+        return;
+    }
+    _modified = true;
+}
 
 bool FennaraRunSceneEditScriptContext::has_errors() const { return !_edit_errors.is_empty(); }
 

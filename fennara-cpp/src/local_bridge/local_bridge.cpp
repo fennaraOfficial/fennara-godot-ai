@@ -7,6 +7,8 @@
 #include "fennara/snapshot_manager.hpp"
 
 #include <godot_cpp/classes/json.hpp>
+#include <godot_cpp/classes/editor_file_system.hpp>
+#include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
@@ -29,12 +31,35 @@ void FennaraLocalBridge::_bind_methods() {
     godot::ClassDB::bind_method(
         godot::D_METHOD("_focus_project_file_reference", "path", "start_line", "end_line", "attempt"),
         &FennaraLocalBridge::_focus_project_file_reference);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("_on_resources_reimporting", "paths"),
+        &FennaraLocalBridge::_on_resources_reimporting);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("_on_resources_reimported", "paths"),
+        &FennaraLocalBridge::_on_resources_reimported);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("_on_editor_filesystem_changed"),
+        &FennaraLocalBridge::_on_editor_filesystem_changed);
 }
 
 void FennaraLocalBridge::_ready() {
     _session_id = _make_session_id();
     _chat_token = _make_chat_token();
     _snapshot_mgr.instantiate();
+    godot::EditorInterface *editor = godot::EditorInterface::get_singleton();
+    godot::EditorFileSystem *filesystem =
+        editor != nullptr ? editor->get_resource_filesystem() : nullptr;
+    if (filesystem != nullptr) {
+        filesystem->connect(
+            "filesystem_changed",
+            callable_mp(this, &FennaraLocalBridge::_on_editor_filesystem_changed));
+        filesystem->connect(
+            "resources_reimporting",
+            callable_mp(this, &FennaraLocalBridge::_on_resources_reimporting));
+        filesystem->connect(
+            "resources_reimported",
+            callable_mp(this, &FennaraLocalBridge::_on_resources_reimported));
+    }
     set_process(true);
     _start_daemon_if_available();
     _connect_socket();
@@ -146,6 +171,26 @@ godot::String FennaraLocalBridge::get_chat_token() const {
 }
 
 void FennaraLocalBridge::_exit_tree() {
+    godot::EditorInterface *editor = godot::EditorInterface::get_singleton();
+    godot::EditorFileSystem *filesystem =
+        editor != nullptr ? editor->get_resource_filesystem() : nullptr;
+    if (filesystem != nullptr) {
+        godot::Callable filesystem_changed =
+            callable_mp(this, &FennaraLocalBridge::_on_editor_filesystem_changed);
+        godot::Callable reimporting =
+            callable_mp(this, &FennaraLocalBridge::_on_resources_reimporting);
+        godot::Callable reimported =
+            callable_mp(this, &FennaraLocalBridge::_on_resources_reimported);
+        if (filesystem->is_connected("filesystem_changed", filesystem_changed)) {
+            filesystem->disconnect("filesystem_changed", filesystem_changed);
+        }
+        if (filesystem->is_connected("resources_reimporting", reimporting)) {
+            filesystem->disconnect("resources_reimporting", reimporting);
+        }
+        if (filesystem->is_connected("resources_reimported", reimported)) {
+            filesystem->disconnect("resources_reimported", reimported);
+        }
+    }
     _close_socket();
     if (_daemon_auth_cancel) {
         _daemon_auth_cancel->store(true);
@@ -154,6 +199,37 @@ void FennaraLocalBridge::_exit_tree() {
         _daemon_auth_future.get();
     }
     _daemon_auth_cancel.reset();
+}
+
+void FennaraLocalBridge::_send_editor_filesystem_status() {
+    if (!_sent_hello || !is_daemon_connected()) {
+        return;
+    }
+
+    godot::Dictionary payload;
+    payload["type"] = "project_status";
+    payload["session_id"] = _session_id;
+    payload["editor_filesystem"] = collect_editor_filesystem_status();
+    _send_json(payload);
+}
+
+void FennaraLocalBridge::_on_editor_filesystem_changed() {
+    _send_editor_filesystem_status();
+}
+
+void FennaraLocalBridge::_on_resources_reimporting(
+    const godot::PackedStringArray &paths) {
+    _is_importing_resources = true;
+    _active_import_count = paths.size();
+    _send_editor_filesystem_status();
+}
+
+void FennaraLocalBridge::_on_resources_reimported(
+    const godot::PackedStringArray &paths) {
+    _is_importing_resources = false;
+    _last_imported_count = paths.size();
+    _active_import_count = 0;
+    _send_editor_filesystem_status();
 }
 
 void FennaraLocalBridge::_connect_socket() {
