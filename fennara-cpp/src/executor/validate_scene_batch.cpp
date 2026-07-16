@@ -71,7 +71,8 @@ void FennaraExecutor::_process_next_validate_scene(uint64_t batch_generation) {
                 scene_result.get("scene_path", ""));
         } else if (godot::String(scene_result.get("status", "")) == "success") {
             scene_result["runtime_check"] = "skipped";
-            scene_result["runtime_skip_reason"] = "structural_errors";
+            scene_result["runtime_skip_reason"] =
+                FennaraValidateSceneTool::runtime_skip_reason(scene_result);
         }
         _validate_scene_results.append(scene_result);
         _validate_scene_index++;

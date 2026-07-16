@@ -9,6 +9,7 @@
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/tls_options.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
 
 #include <map>
@@ -67,6 +68,16 @@ godot::String _cache_file_path(const godot::String &class_name,
         .path_join(_sanitize_path_component(class_name) + ".xml");
 }
 
+bool _contains_utf8_mojibake(const godot::String &text) {
+    for (int64_t i = 0; i + 1 < text.length(); i++) {
+        if (text[i] == 0x00e2 &&
+            (text[i + 1] == 0x201d || text[i + 1] == 0x20ac)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool _read_cached_xml(const godot::String &class_name,
                       const godot::String &branch,
                       CachedXmlLookup &lookup) {
@@ -83,6 +94,13 @@ bool _read_cached_xml(const godot::String &class_name,
 
     lookup.found = true;
     lookup.xml_text = file->get_as_text();
+
+    // Windows process output can decode UTF-8 box-drawing bytes as Windows-1252
+    // text. Do not keep serving documentation cached by the old curl-first path.
+    if (_contains_utf8_mojibake(lookup.xml_text)) {
+        lookup = CachedXmlLookup();
+        return false;
+    }
 
     const int64_t modified_at = godot::FileAccess::get_modified_time(cache_path);
     const int64_t now = static_cast<int64_t>(
@@ -140,7 +158,7 @@ HttpFetchResult _http_get_text(const godot::String &path) {
     const uint64_t deadline =
         godot::Time::get_singleton()->get_ticks_msec() + kHttpTimeoutMs;
     bool request_sent = false;
-    godot::String response_body;
+    godot::PackedByteArray response_bytes;
 
     while (godot::Time::get_singleton()->get_ticks_msec() < deadline) {
         http->poll();
@@ -169,7 +187,7 @@ HttpFetchResult _http_get_text(const godot::String &path) {
         if (status == godot::HTTPClient::STATUS_BODY) {
             godot::PackedByteArray chunk = http->read_response_body_chunk();
             if (!chunk.is_empty()) {
-                response_body += chunk.get_string_from_utf8();
+                response_bytes.append_array(chunk);
             }
             if (http->get_status() != godot::HTTPClient::STATUS_BODY &&
                 http->has_response()) {
@@ -189,7 +207,7 @@ HttpFetchResult _http_get_text(const godot::String &path) {
     }
 
     result.response_code = http->get_response_code();
-    result.body = response_body;
+    result.body = response_bytes.get_string_from_utf8();
     result.ok = result.response_code == 200;
     result.not_found = result.response_code == 404;
     if (!result.ok && !result.not_found) {
@@ -239,6 +257,12 @@ HttpFetchResult _curl_get_text(const godot::String &path) {
     result.response_code = status_text.to_int();
     result.ok = result.response_code == 200;
     result.not_found = result.response_code == 404;
+    if (result.ok && _contains_utf8_mojibake(result.body)) {
+        result.ok = false;
+        result.error =
+            "curl process output corrupted UTF-8 Godot documentation text.";
+        return result;
+    }
     if (!result.ok && !result.not_found) {
         result.error = "curl returned HTTP " +
                        godot::String::num_int64(result.response_code) +
@@ -248,20 +272,20 @@ HttpFetchResult _curl_get_text(const godot::String &path) {
 }
 
 HttpFetchResult _get_text_with_fallback(const godot::String &path) {
-    HttpFetchResult curl_result = _curl_get_text(path);
-    if (curl_result.ok || curl_result.not_found) {
-        return curl_result;
-    }
-
     HttpFetchResult http_result = _http_get_text(path);
     if (http_result.ok || http_result.not_found) {
         return http_result;
     }
 
-    if (!http_result.error.is_empty()) {
-        return http_result;
+    HttpFetchResult curl_result = _curl_get_text(path);
+    if (curl_result.ok || curl_result.not_found) {
+        return curl_result;
     }
-    return curl_result;
+
+    if (!curl_result.error.is_empty()) {
+        return curl_result;
+    }
+    return http_result;
 }
 
 bool _fetch_class_xml(const godot::String &class_name,

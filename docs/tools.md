@@ -389,10 +389,13 @@ so large scenes do not flood the receipt with one line per node/property pair.
 Ignore these notes when the references are intentionally optional or assigned at
 runtime.
 
-For scenes with zero structural errors, Fennara also runs each scene headlessly
-for exactly 3 seconds through the local daemon using up to 3 memory-throttled
-workers. The result includes runtime status, crash/error/warning flags, compact
-runtime output inline, and paths to the full result JSON and raw runtime logs.
+For authored scenes with zero structural errors, Fennara also runs each scene
+headlessly for exactly 3 seconds through the local daemon using up to 3
+memory-throttled workers. Imported source scenes such as `.glb` and `.gltf`
+receive structural validation only because Godot's command-line scene runner
+cannot launch those source paths directly. The result includes runtime status,
+crash/error/warning flags, compact runtime output inline, and paths to the full
+result JSON and raw runtime logs.
 The headless pass enables Godot's local debugger with error breaks ignored or
 auto-continued so debugger-aware addons can send debugger messages without
 requiring an attached editor session; normal errors and warnings are still
