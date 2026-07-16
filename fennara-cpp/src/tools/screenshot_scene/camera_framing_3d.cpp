@@ -295,7 +295,7 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
         }
     }
 
-    double effective_margin = std::max(margin, 1.1);
+    double effective_margin = margin;
     double distance = std::max(fit_distance * effective_margin, 0.75);
     godot::Vector3 camera_position = center + view_dir * distance;
 
