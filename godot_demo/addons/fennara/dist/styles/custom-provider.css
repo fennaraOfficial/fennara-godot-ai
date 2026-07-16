@@ -1,0 +1,236 @@
+.custom-provider-popover {
+  width: min(500px, calc(100vw - 32px)) !important;
+  max-width: 500px;
+  max-height: min(560px, calc(100vh - 72px));
+}
+
+.custom-provider-picker {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: inherit;
+  min-height: 0;
+}
+
+.custom-provider-header {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.custom-provider-header strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.custom-provider-header button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.custom-provider-header button:hover,
+.custom-provider-header button:focus-visible {
+  background: var(--surface-soft);
+  color: var(--text);
+  outline: none;
+}
+
+.custom-provider-body {
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+  padding: 12px 16px 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.custom-provider-intro,
+.custom-provider-error {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.custom-provider-intro {
+  color: var(--muted);
+}
+
+.custom-provider-error {
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, #f06a6a 55%, var(--line));
+  border-radius: 6px;
+  background: color-mix(in srgb, #f06a6a 10%, transparent);
+  color: #ff9a9a;
+}
+
+.custom-provider-fields,
+.custom-provider-section {
+  display: grid;
+  gap: 9px;
+}
+
+.custom-provider-fields label {
+  display: grid;
+  gap: 4px;
+}
+
+.custom-provider-fields label > span,
+.custom-provider-section h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.custom-provider-fields small {
+  color: var(--faint);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.custom-provider-fields .custom-provider-field-error {
+  color: #ff9a9a;
+}
+
+.custom-provider-fields input,
+.custom-provider-row input {
+  width: 100%;
+  height: 32px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.custom-provider-fields input:focus,
+.custom-provider-row input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.custom-provider-fields input[aria-invalid="true"],
+.custom-provider-row input[aria-invalid="true"] {
+  border-color: #f06a6a;
+}
+
+.custom-provider-section h3 span {
+  color: var(--faint);
+  font-weight: 600;
+}
+
+.custom-provider-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.custom-provider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px;
+  gap: 6px;
+  align-items: start;
+}
+
+.custom-provider-row > label {
+  display: grid;
+  gap: 4px;
+}
+
+.custom-provider-row small {
+  color: #ff9a9a;
+  font-size: 10.5px;
+}
+
+.custom-provider-remove {
+  width: 28px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.custom-provider-remove:hover:not(:disabled),
+.custom-provider-remove:focus-visible:not(:disabled) {
+  background: var(--surface-soft);
+  color: var(--text);
+  outline: none;
+}
+
+.custom-provider-remove:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.custom-provider-add {
+  justify-self: start;
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.custom-provider-add:hover,
+.custom-provider-add:focus-visible {
+  color: var(--accent-soft);
+  outline: none;
+}
+
+.custom-provider-submit {
+  justify-self: start;
+  min-width: 104px;
+  min-height: 32px;
+}
+
+.custom-provider-submit:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.provider-row-custom strong::before {
+  content: "✦";
+  margin-right: 8px;
+  color: var(--accent-soft);
+}
+
+@media (max-width: 520px) {
+  .custom-provider-popover {
+    width: calc(100vw - 24px) !important;
+  }
+
+  .custom-provider-body {
+    padding-inline: 12px;
+  }
+
+  .custom-provider-row {
+    grid-template-columns: minmax(0, 1fr) 32px;
+  }
+
+  .custom-provider-row > label:nth-child(2) {
+    grid-column: 1;
+  }
+
+  .custom-provider-remove {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}

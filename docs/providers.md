@@ -41,13 +41,44 @@ You can also type `/provider` and `/model` in the composer.
 Cloud providers need your own API key or subscription key. Local providers need
 the local server running with a model available.
 
+OpenRouter selections always use the explicit `openrouter/<provider>/<model>`
+shape. Older saved `<provider>/<model>` OpenRouter selections are migrated once
+when settings load, but that legacy shape is not used for new routing.
+
 Fennara can store keys from the provider picker in the dock. Chat Settings includes an **Open providers** button for discovering the same picker. The key/env names above are the same names Fennara understands if you prefer environment variables. Stored keys live in the daemon's local app data, outside the Godot project.
+
+## Custom OpenAI-Compatible Providers
+
+Choose **Custom** at the bottom of the provider picker to add an OpenAI-compatible
+endpoint such as a local router or an internal API gateway. Enter:
+
+- a unique lowercase provider ID
+- the display name shown in Fennara
+- a base URL ending at the API version, for example `http://localhost:20128/v1`
+- an optional API key
+- one or more model IDs and display names
+- optional request headers
+
+Model IDs must match what the endpoint expects. Fennara exposes them as
+`<provider-id>/<model-id>` in the model picker while sending only `<model-id>` to
+the provider. The endpoint must implement the OpenAI-compatible
+`/chat/completions` request and streaming response shape.
+
+API keys use Fennara's local credential store. Provider configuration and custom
+headers use the local chat settings file. Context-length configuration and
+custom compaction tuning are not part of this initial custom-provider form.
+
+After saving, the custom provider appears in the provider picker with its model
+count. Select that provider to reopen the form and add or rename models. Leaving
+the API key empty preserves the saved key, and any newly entered headers merge
+with the saved headers by name.
 
 ## Where Settings Live
 
 Fennara stores built-in chat settings locally through the daemon, outside the Godot project:
 
 - provider API keys
+- custom OpenAI-compatible provider definitions
 - local provider base URLs
 - selected model
 - reasoning effort

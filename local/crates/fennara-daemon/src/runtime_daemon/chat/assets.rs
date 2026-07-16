@@ -130,6 +130,9 @@ fn asset(path: &str) -> Option<Asset> {
         "command-palette.js" => js(include_bytes!(
             "../../../../../../godot_demo/addons/fennara/dist/command-palette.js"
         )),
+        "custom-provider-dialog.js" => js(include_bytes!(
+            "../../../../../../godot_demo/addons/fennara/dist/custom-provider-dialog.js"
+        )),
         "composer-actions.js" => js(include_bytes!(
             "../../../../../../godot_demo/addons/fennara/dist/composer-actions.js"
         )),
@@ -183,6 +186,9 @@ fn asset(path: &str) -> Option<Asset> {
         )),
         "styles/controls.css" => css(include_bytes!(
             "../../../../../../godot_demo/addons/fennara/dist/styles/controls.css"
+        )),
+        "styles/custom-provider.css" => css(include_bytes!(
+            "../../../../../../godot_demo/addons/fennara/dist/styles/custom-provider.css"
         )),
         "styles/drawer.css" => css(include_bytes!(
             "../../../../../../godot_demo/addons/fennara/dist/styles/drawer.css"

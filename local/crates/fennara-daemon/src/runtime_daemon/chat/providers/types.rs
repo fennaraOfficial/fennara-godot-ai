@@ -3,6 +3,8 @@ use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::fmt;
 
+use super::custom::CustomProviderRuntime;
+
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub(crate) struct ProviderId(String);
 
@@ -289,6 +291,7 @@ pub(crate) struct ProviderSettings {
     pub(crate) minimax_cn_api_key: Option<String>,
     pub(crate) minimax_cn_coding_plan_api_key: Option<String>,
     pub(crate) nvidia_api_key: Option<String>,
+    pub(crate) custom_providers: Vec<CustomProviderRuntime>,
     pub(crate) ollama_base_url: String,
     pub(crate) lmstudio_base_url: String,
     pub(crate) custom_models: Vec<String>,

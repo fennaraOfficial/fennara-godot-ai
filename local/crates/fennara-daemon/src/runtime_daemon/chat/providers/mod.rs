@@ -5,6 +5,7 @@ mod capability_check;
 mod catalog;
 pub(crate) mod catalog_cache;
 mod context;
+pub(crate) mod custom;
 mod deepseek;
 mod error;
 mod lmstudio;
@@ -54,6 +55,8 @@ pub(crate) struct PublicProvider {
     pub(crate) model_prefix: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) setup: Option<PublicProviderSetup>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) custom: Option<PublicCustomProvider>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -70,6 +73,13 @@ pub(crate) struct PublicProviderSetup {
     pub(crate) kind: &'static str,
     pub(crate) default_base_url: &'static str,
     pub(crate) base_url: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct PublicCustomProvider {
+    pub(crate) base_url: String,
+    pub(crate) models: Vec<custom::CustomProviderModel>,
+    pub(crate) header_count: usize,
 }
 
 pub(crate) fn settings_from_chat(settings: &ChatSettings) -> ProviderSettings {
@@ -91,6 +101,15 @@ pub(crate) fn settings_from_chat(settings: &ChatSettings) -> ProviderSettings {
         minimax_cn_coding_plan_api_key: auth::api_key(types::ProviderId::MINIMAX_CN_CODING_PLAN)
             .or_else(|| auth::api_key(types::ProviderId::MINIMAX_CN)),
         nvidia_api_key: auth::api_key(types::ProviderId::NVIDIA),
+        custom_providers: settings
+            .custom_providers
+            .iter()
+            .cloned()
+            .map(|config| custom::CustomProviderRuntime {
+                api_key: auth::api_key(&config.id),
+                config,
+            })
+            .collect(),
         ollama_base_url: settings.ollama_base_url.clone(),
         lmstudio_base_url: settings
             .provider_base_url(types::ProviderId::LMSTUDIO, lmstudio::DEFAULT_BASE_URL),
@@ -100,7 +119,7 @@ pub(crate) fn settings_from_chat(settings: &ChatSettings) -> ProviderSettings {
 }
 
 pub(crate) fn public_provider_registry(settings: &ChatSettings) -> Vec<PublicProvider> {
-    vec![
+    let mut providers = vec![
         api_key_provider(
             openai::provider_definition(None),
             "cloud",
@@ -163,7 +182,29 @@ pub(crate) fn public_provider_registry(settings: &ChatSettings) -> Vec<PublicPro
             "cloud",
             nvidia::API_KEY_ENV,
         ),
-    ]
+    ];
+    providers.extend(settings.custom_providers.iter().map(custom_public_provider));
+    providers
+}
+
+fn custom_public_provider(config: &custom::CustomProviderConfig) -> PublicProvider {
+    PublicProvider {
+        id: config.id.clone(),
+        name: config.name.clone(),
+        kind: "custom",
+        auth: PublicProviderAuth {
+            kind: "optional_api_key",
+            env: None,
+        },
+        connected: true,
+        model_prefix: format!("{}/", config.id),
+        setup: None,
+        custom: Some(PublicCustomProvider {
+            base_url: config.base_url.clone(),
+            models: config.models.clone(),
+            header_count: config.headers.len(),
+        }),
+    }
 }
 
 pub(crate) fn provider_has_api_key(provider_id: &str, env_var: &str) -> bool {
@@ -202,6 +243,7 @@ fn api_key_provider(
         connected: provider_has_api_key(&provider_id, env_var),
         model_prefix: format!("{provider_id}/"),
         setup: None,
+        custom: None,
     }
 }
 
@@ -226,6 +268,7 @@ fn anthropic_api_key_provider(provider_id: &'static str) -> PublicProvider {
         connected,
         model_prefix: format!("{provider_id}/"),
         setup: None,
+        custom: None,
     }
 }
 
@@ -251,10 +294,14 @@ fn local_provider(
             default_base_url,
             base_url,
         }),
+        custom: None,
     }
 }
 
-pub(crate) fn missing_auth_for_model(_settings: &ChatSettings, model: &str) -> Option<LlmError> {
+pub(crate) fn missing_auth_for_model(settings: &ChatSettings, model: &str) -> Option<LlmError> {
+    if custom::split_model_selection(&settings.custom_providers, model).is_some() {
+        return None;
+    }
     let (provider_id, provider_name, env_var) = auth_provider_for_model(model)?;
     (!provider_has_api_key(provider_id, env_var)).then(|| LlmError::Auth {
         provider: provider_id.to_string(),
@@ -263,7 +310,7 @@ pub(crate) fn missing_auth_for_model(_settings: &ChatSettings, model: &str) -> O
 }
 
 fn auth_provider_for_model(model: &str) -> Option<(&'static str, &'static str, &'static str)> {
-    match selected_provider_for_model(model) {
+    match selected_provider_for_model(model)? {
         types::ProviderId::OPENAI => {
             Some((types::ProviderId::OPENAI, "OpenAI", openai::API_KEY_ENV))
         }
@@ -309,7 +356,7 @@ fn auth_provider_for_model(model: &str) -> Option<(&'static str, &'static str, &
     }
 }
 
-fn selected_provider_for_model(model: &str) -> &'static str {
+fn selected_provider_for_model(model: &str) -> Option<&'static str> {
     let clean = model.trim();
     [
         types::ProviderId::OPENAI,
@@ -331,7 +378,6 @@ fn selected_provider_for_model(model: &str) -> &'static str {
     ]
     .into_iter()
     .find(|provider| has_provider_prefix(clean, provider))
-    .unwrap_or(types::ProviderId::OPENROUTER)
 }
 
 fn has_provider_prefix(model: &str, provider: &str) -> bool {
@@ -828,6 +874,7 @@ pub(crate) fn parse_model_ref(model: &str) -> Result<String, LlmError> {
         minimax_cn_api_key: None,
         minimax_cn_coding_plan_api_key: None,
         nvidia_api_key: None,
+        custom_providers: Vec::new(),
         ollama_base_url: super::settings::DEFAULT_OLLAMA_BASE_URL.to_string(),
         lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
         custom_models: Vec::new(),
@@ -840,67 +887,98 @@ pub(crate) fn parse_model_ref(model: &str) -> Result<String, LlmError> {
 mod tests {
     use super::*;
 
+    fn custom_provider_config() -> custom::CustomProviderConfig {
+        custom::CustomProviderConfig {
+            id: "omniroute".to_string(),
+            name: "OmniRoute".to_string(),
+            base_url: "http://localhost:20128/v1".to_string(),
+            models: vec![custom::CustomProviderModel {
+                id: "zai/glm-5".to_string(),
+                name: "GLM 5".to_string(),
+            }],
+            headers: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn custom_providers_are_connected_and_allow_optional_auth() {
+        let mut settings = ChatSettings::default();
+        settings.custom_providers.push(custom_provider_config());
+
+        let provider = public_provider_registry(&settings)
+            .into_iter()
+            .find(|provider| provider.id == "omniroute")
+            .unwrap();
+
+        assert_eq!(provider.name, "OmniRoute");
+        assert_eq!(provider.kind, "custom");
+        assert_eq!(provider.auth.kind, "optional_api_key");
+        assert!(provider.connected);
+        let custom = provider.custom.unwrap();
+        assert_eq!(custom.base_url, "http://localhost:20128/v1");
+        assert_eq!(custom.models[0].id, "zai/glm-5");
+        assert_eq!(custom.header_count, 0);
+        assert!(missing_auth_for_model(&settings, "omniroute/zai/glm-5").is_none());
+    }
+
     #[test]
     fn openrouter_vendor_namespaces_are_not_provider_prefixes() {
-        assert_eq!(
-            selected_provider_for_model("google/gemini-3.5-flash"),
-            types::ProviderId::OPENROUTER
-        );
+        assert_eq!(selected_provider_for_model("google/gemini-3.5-flash"), None);
         assert_eq!(
             selected_provider_for_model("openai/gpt-5.1"),
-            types::ProviderId::OPENAI
+            Some(types::ProviderId::OPENAI)
         );
         assert_eq!(
             selected_provider_for_model("anthropic/claude-sonnet-4.5"),
-            types::ProviderId::ANTHROPIC
+            Some(types::ProviderId::ANTHROPIC)
         );
         assert_eq!(
             selected_provider_for_model("openrouter/google/gemini-3.5-flash"),
-            types::ProviderId::OPENROUTER
+            Some(types::ProviderId::OPENROUTER)
         );
         assert_eq!(
             selected_provider_for_model("openrouter/openai/gpt-5.5"),
-            types::ProviderId::OPENROUTER
+            Some(types::ProviderId::OPENROUTER)
         );
         assert_eq!(
             selected_provider_for_model("ollama/llama3.2"),
-            types::ProviderId::OLLAMA
+            Some(types::ProviderId::OLLAMA)
         );
         assert_eq!(
             selected_provider_for_model("moonshotai/kimi-k2.7-code"),
-            types::ProviderId::MOONSHOTAI
+            Some(types::ProviderId::MOONSHOTAI)
         );
         assert_eq!(
             selected_provider_for_model("moonshotai-cn/kimi-k2.7-code"),
-            types::ProviderId::MOONSHOTAI_CN
+            Some(types::ProviderId::MOONSHOTAI_CN)
         );
         assert_eq!(
             selected_provider_for_model("openrouter/moonshotai/kimi-k2.7-code"),
-            types::ProviderId::OPENROUTER
+            Some(types::ProviderId::OPENROUTER)
         );
         assert_eq!(
             selected_provider_for_model("minimax/MiniMax-M3"),
-            types::ProviderId::MINIMAX
+            Some(types::ProviderId::MINIMAX)
         );
         assert_eq!(
             selected_provider_for_model("minimax-coding-plan/MiniMax-M3"),
-            types::ProviderId::MINIMAX_CODING_PLAN
+            Some(types::ProviderId::MINIMAX_CODING_PLAN)
         );
         assert_eq!(
             selected_provider_for_model("minimax-cn/MiniMax-M3"),
-            types::ProviderId::MINIMAX_CN
+            Some(types::ProviderId::MINIMAX_CN)
         );
         assert_eq!(
             selected_provider_for_model("minimax-cn-coding-plan/MiniMax-M3"),
-            types::ProviderId::MINIMAX_CN_CODING_PLAN
+            Some(types::ProviderId::MINIMAX_CN_CODING_PLAN)
         );
         assert_eq!(
             selected_provider_for_model("kimi-for-coding/k2p7"),
-            types::ProviderId::KIMI_FOR_CODING
+            Some(types::ProviderId::KIMI_FOR_CODING)
         );
         assert_eq!(
             selected_provider_for_model("nvidia/meta/llama-3.3-70b-instruct"),
-            types::ProviderId::NVIDIA
+            Some(types::ProviderId::NVIDIA)
         );
     }
 

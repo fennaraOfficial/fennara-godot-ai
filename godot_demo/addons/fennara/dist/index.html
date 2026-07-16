@@ -325,6 +325,62 @@
         </div>
       </section>
 
+      <section class="model-popover custom-provider-popover" data-custom-provider-popover hidden>
+        <form class="custom-provider-picker" aria-label="Add custom provider" data-custom-provider-form novalidate>
+          <header class="custom-provider-header">
+            <button type="button" aria-label="Back to providers" data-custom-provider-back>←</button>
+            <strong data-custom-provider-title>Custom provider</strong>
+            <button type="button" aria-label="Close custom provider" data-custom-provider-close>×</button>
+          </header>
+          <div class="custom-provider-body">
+            <p class="custom-provider-intro">
+              Configure an OpenAI-compatible provider. Add the model IDs exactly as its API expects them.
+            </p>
+            <p class="custom-provider-error" data-custom-provider-error hidden></p>
+
+            <div class="custom-provider-fields">
+              <label>
+                <span>Provider ID</span>
+                <input type="text" autocomplete="off" placeholder="myprovider" data-custom-provider-id data-custom-provider-field="provider_id" />
+                <small>Lowercase letters, numbers, hyphens, or underscores.</small>
+                <small class="custom-provider-field-error" data-custom-provider-field-error="provider_id" hidden></small>
+              </label>
+              <label>
+                <span>Display name</span>
+                <input type="text" autocomplete="off" placeholder="My AI Provider" data-custom-provider-name data-custom-provider-field="display_name" />
+                <small class="custom-provider-field-error" data-custom-provider-field-error="display_name" hidden></small>
+              </label>
+              <label>
+                <span>Base URL</span>
+                <input type="url" inputmode="url" autocomplete="off" placeholder="https://api.myprovider.com/v1" data-custom-provider-base-url data-custom-provider-field="base_url" />
+                <small class="custom-provider-field-error" data-custom-provider-field-error="base_url" hidden></small>
+              </label>
+              <label>
+                <span>API key</span>
+                <input type="password" autocomplete="off" placeholder="API key" data-custom-provider-api-key />
+                <small data-custom-provider-api-key-help>Optional. Leave empty if authentication is handled through headers.</small>
+              </label>
+            </div>
+
+            <section class="custom-provider-section">
+              <h3>Models</h3>
+              <div class="custom-provider-rows" data-custom-provider-models></div>
+              <button class="custom-provider-add" type="button" data-custom-provider-add-model>+ Add model</button>
+            </section>
+
+            <section class="custom-provider-section">
+              <h3>Headers <span data-custom-provider-headers-help>(optional)</span></h3>
+              <div class="custom-provider-rows" data-custom-provider-headers></div>
+              <button class="custom-provider-add" type="button" data-custom-provider-add-header>+ Add header</button>
+            </section>
+
+            <button class="primary-button custom-provider-submit" type="submit" data-custom-provider-submit>
+              Add provider
+            </button>
+          </div>
+        </form>
+      </section>
+
       <section class="model-popover" data-provider-key-popover hidden>
         <form class="model-picker provider-picker key-picker" aria-label="Provider API key" data-provider-key-form>
           <header class="picker-header">
@@ -545,6 +601,7 @@
     <script src="./command-palette.js"></script>
     <script src="./project-status.js"></script>
     <script src="./project-file-links.js"></script>
+    <script src="./custom-provider-dialog.js"></script>
     <script src="./provider-popovers.js"></script>
     <script src="./settings-panel.js"></script>
     <script src="./mcp-apps-settings.js?v=mcp-apps-8"></script>

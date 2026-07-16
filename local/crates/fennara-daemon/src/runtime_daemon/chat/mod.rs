@@ -34,6 +34,7 @@ mod tools;
 pub(crate) mod trace;
 
 pub(crate) use assets::{chat_asset, chat_index, chat_index_redirect, chat_tool_media};
+use providers::custom::SaveCustomProviderRequest;
 use settings::{SaveSettingsRequest, load_settings, save_settings};
 
 #[derive(Debug, Deserialize)]
@@ -60,6 +61,7 @@ struct ClientRequest {
     provider_api_keys: Option<BTreeMap<String, String>>,
     ollama_base_url: Option<String>,
     provider_base_urls: Option<BTreeMap<String, String>>,
+    custom_provider: Option<SaveCustomProviderRequest>,
     approval_mode: Option<String>,
     local_model_context_lengths: Option<BTreeMap<String, u32>>,
     approval_id: Option<String>,
@@ -433,6 +435,7 @@ where
                 provider_api_keys: request.provider_api_keys,
                 ollama_base_url: request.ollama_base_url,
                 provider_base_urls: request.provider_base_urls,
+                custom_provider: request.custom_provider,
                 model: request.model,
                 reasoning_effort: request.reasoning_effort,
                 local_model_context_lengths: request.local_model_context_lengths,

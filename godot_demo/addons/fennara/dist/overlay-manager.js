@@ -6,6 +6,7 @@
     const providerPopover = elements.providerPopover || null;
     const providerKeyPopover = elements.providerKeyPopover || null;
     const ollamaSetupPopover = elements.ollamaSetupPopover || null;
+    const customProviderPopover = elements.customProviderPopover || null;
     const modelPopover = elements.modelPopover || null;
     const effortOptions = elements.effortOptions || null;
     const usagePopover = elements.usagePopover || null;
@@ -15,6 +16,7 @@
     const closeProviderPicker = callbacks.closeProviderPicker || function () {};
     const closeProviderKeyPrompt = callbacks.closeProviderKeyPrompt || function () {};
     const closeLocalSetupPrompt = callbacks.closeLocalSetupPrompt || function () {};
+    const closeCustomProviderPrompt = callbacks.closeCustomProviderPrompt || function () {};
     const setEffortMenuOpen = callbacks.setEffortMenuOpen || function () {};
     const setUsagePopoverOpen = callbacks.setUsagePopoverOpen || function () {};
     const focusComposer = callbacks.focusComposer || function () {};
@@ -56,6 +58,13 @@
       ) {
         closeLocalSetupPrompt();
       }
+      if (
+        customProviderPopover &&
+        customProviderPopover.hidden === false &&
+        !customProviderPopover.contains(event.target)
+      ) {
+        closeCustomProviderPrompt();
+      }
       setEffortMenuOpen(false);
       setUsagePopoverOpen(false);
     });
@@ -66,6 +75,7 @@
           providerPopover?.hidden === false ||
           providerKeyPopover?.hidden === false ||
           ollamaSetupPopover?.hidden === false ||
+          customProviderPopover?.hidden === false ||
           modelPopover?.hidden === false ||
           commandPopover?.hidden === false ||
           effortOptions?.hidden === false ||
@@ -76,6 +86,7 @@
         closeProviderPicker();
         closeProviderKeyPrompt();
         closeLocalSetupPrompt();
+        closeCustomProviderPrompt();
         commandPalette.close?.();
         closeDrawer();
         if (hadOverlayOpen) {
@@ -91,6 +102,7 @@
       positionProviderPopover();
       positionProviderKeyPrompt();
       positionLocalSetupPrompt();
+      callbacks.positionCustomProviderPrompt?.();
       commandPalette.position?.();
     }
 

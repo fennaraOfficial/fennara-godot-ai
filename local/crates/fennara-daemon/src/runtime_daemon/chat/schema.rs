@@ -613,7 +613,7 @@ fn backfill_chat_model_trace(conn: &Connection) -> Result<(), String> {
     let mut updates = Vec::new();
     for row in rows {
         let (chat_id, model) = row.map_err(to_store_error)?;
-        let Some(trace) = model_trace_from_selection(&model) else {
+        let Some(trace) = legacy_model_trace_from_selection(&model) else {
             continue;
         };
         updates.push((chat_id, trace));
@@ -681,7 +681,7 @@ fn backfill_usage_logs(conn: &Connection) -> Result<(), String> {
             continue;
         };
         let usage_model = usage_string(&usage, "model").unwrap_or_else(|| "unknown".to_string());
-        let trace = model_trace_from_selection(&usage_model);
+        let trace = legacy_model_trace_from_selection(&usage_model);
         conn.execute(
             "INSERT INTO chat_usage_logs
              (id, chat_id, assistant_message_id, generation_id, model,
@@ -781,16 +781,32 @@ pub(crate) fn model_trace_from_selection(model: &str) -> Option<ModelTrace> {
         ("nvidia", model_id.trim())
     } else if let Some(model_id) = model.strip_prefix("openrouter/") {
         ("openrouter", model_id.trim())
-    } else if model.contains('/') {
-        ("openrouter", model)
+    } else if let Some((provider_id, model_id)) = settings::custom_model_trace_parts(model) {
+        return build_model_trace(provider_id, model_id);
     } else {
         return None;
     };
     if model_id.is_empty() {
         return None;
     }
-    let provider_id = provider_id.to_string();
-    let model_id = model_id.to_string();
+    build_model_trace(provider_id.to_string(), model_id.to_string())
+}
+
+// Legacy database migration only. Runtime model routing requires an explicit provider prefix.
+fn legacy_model_trace_from_selection(model: &str) -> Option<ModelTrace> {
+    model_trace_from_selection(model).or_else(|| {
+        let model = model.trim();
+        model
+            .contains('/')
+            .then(|| build_model_trace("openrouter".to_string(), model.to_string()))
+            .flatten()
+    })
+}
+
+fn build_model_trace(provider_id: String, model_id: String) -> Option<ModelTrace> {
+    if provider_id.is_empty() || model_id.is_empty() {
+        return None;
+    }
     let model_variant = None;
     let model_ref_json = json!({
         "provider_id": &provider_id,
@@ -832,7 +848,7 @@ mod tests {
     }
 
     #[test]
-    fn model_trace_parses_legacy_and_explicit_models() {
+    fn model_trace_parses_explicit_provider_models() {
         let ollama = model_trace_from_selection("ollama/llama3.2").unwrap();
         assert_eq!(ollama.provider_id, "ollama");
         assert_eq!(ollama.model_id, "llama3.2");
@@ -890,12 +906,9 @@ mod tests {
             assert_eq!(trace.model_id, model_id, "{selection}");
         }
 
-        let legacy = model_trace_from_selection("google/gemini").unwrap();
-        assert_eq!(legacy.provider_id, "openrouter");
-        assert_eq!(legacy.model_id, "google/gemini");
-
         assert!(model_trace_from_selection("").is_none());
         assert!(model_trace_from_selection("not-a-routable-model").is_none());
+        assert!(model_trace_from_selection("google/gemini").is_none());
         assert!(model_trace_from_selection("ollama/").is_none());
     }
 

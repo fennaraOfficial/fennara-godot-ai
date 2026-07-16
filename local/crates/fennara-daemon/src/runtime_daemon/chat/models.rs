@@ -311,6 +311,9 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
             );
         }
     }
+    for provider in &settings.custom_providers {
+        append_custom_provider_models(&mut models, provider);
+    }
 
     let lmstudio_base_url = settings.provider_base_url(
         ProviderId::LMSTUDIO,
@@ -407,7 +410,8 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
     let local_live = local_provider_statuses
         .values()
         .any(|status| matches!(status.state, "ready" | "empty"));
-    let live = openrouter_error.is_none() || ollama_live || local_live;
+    let custom_live = !settings.custom_providers.is_empty();
+    let live = openrouter_error.is_none() || ollama_live || local_live || custom_live;
     ModelCatalog {
         models,
         recommended_ids,
@@ -472,36 +476,29 @@ fn append_openrouter_catalog_models(
         let prefixed_id = openrouter_model_id(id);
         models.push(openrouter_catalog_model_info(
             model,
-            recommended_ids.contains(&id),
+            recommended_ids.contains(&prefixed_id.as_str()),
             custom_ids
                 .iter()
                 .any(|custom| custom == id || custom == &prefixed_id),
         ));
     }
-    for id in custom_ids.iter().filter(|id| {
-        !id.starts_with("ollama/")
-            && !id.starts_with("openai/")
-            && !id.starts_with("anthropic/")
-            && !id.starts_with("ollama-cloud/")
-            && !id.starts_with("lmstudio/")
-            && !id.starts_with("deepseek/")
-            && !id.starts_with("zai/")
-            && !id.starts_with("moonshotai/")
-            && !id.starts_with("moonshotai-cn/")
-            && !id.starts_with("kimi-for-coding/")
-            && !id.starts_with("minimax/")
-            && !id.starts_with("minimax-coding-plan/")
-            && !id.starts_with("minimax-cn/")
-            && !id.starts_with("minimax-cn-coding-plan/")
-            && !id.starts_with("nvidia/")
-    }) {
+    for id in custom_ids
+        .iter()
+        .filter_map(|selection| selection.strip_prefix("openrouter/"))
+    {
+        let prefixed_id = openrouter_model_id(id);
         if models
             .iter()
-            .any(|model| model.id == *id || model.canonical_slug.as_deref() == Some(id.as_str()))
+            .any(|model| model.id == prefixed_id || model.canonical_slug.as_deref() == Some(id))
         {
             continue;
         }
-        let mut model = model_info(id, None, recommended_ids.contains(&id.as_str()), true);
+        let mut model = model_info(
+            &prefixed_id,
+            None,
+            recommended_ids.contains(&prefixed_id.as_str()),
+            true,
+        );
         model.provider_id = ProviderId::OPENROUTER.to_string();
         model.provider = "OpenRouter".to_string();
         models.push(model);
@@ -528,6 +525,39 @@ fn append_hosted_catalog_models(
         model.provider = provider_label.to_string();
         model.canonical_slug = Some(catalog_model.definition.id.to_string());
         models.push(model);
+    }
+}
+
+fn append_custom_provider_models(
+    models: &mut Vec<ModelInfo>,
+    provider: &providers::custom::CustomProviderConfig,
+) {
+    for configured_model in &provider.models {
+        let id = format!("{}/{}", provider.id, configured_model.id);
+        models.push(ModelInfo {
+            id,
+            display_name: configured_model.name.clone(),
+            provider_id: provider.id.clone(),
+            provider: provider.name.clone(),
+            source: "custom",
+            recommended: false,
+            custom: true,
+            verified: false,
+            latest_alias: false,
+            canonical_slug: Some(configured_model.id.clone()),
+            context_length: None,
+            max_output_tokens: None,
+            input_cost_per_million: None,
+            output_cost_per_million: None,
+            cache_read_cost_per_million: None,
+            cache_write_cost_per_million: None,
+            tokens_per_second: None,
+            modalities: vec!["in:text".to_string(), "out:text".to_string()],
+            supports_tools: true,
+            supports_reasoning: false,
+            supported_reasoning_efforts: Vec::new(),
+            description: Some("Custom OpenAI-compatible provider model.".to_string()),
+        });
     }
 }
 
@@ -1017,6 +1047,7 @@ fn string_array_contains(value: Option<&Value>, needle: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::super::providers::custom::{CustomProviderConfig, CustomProviderModel};
     use super::super::providers::models_dev::{parse_moonshot_catalog, parse_nvidia_catalog};
     use super::*;
     use serde_json::json;
@@ -1135,6 +1166,31 @@ mod tests {
             models[0].canonical_slug.as_deref(),
             Some("meta/llama-3.3-70b-instruct")
         );
+    }
+
+    #[test]
+    fn appends_custom_provider_models_with_provider_prefix() {
+        let provider = CustomProviderConfig {
+            id: "omniroute".to_string(),
+            name: "OmniRoute".to_string(),
+            base_url: "http://localhost:20128/v1".to_string(),
+            models: vec![CustomProviderModel {
+                id: "zai/glm-5".to_string(),
+                name: "GLM 5".to_string(),
+            }],
+            headers: BTreeMap::new(),
+        };
+        let mut models = Vec::new();
+
+        append_custom_provider_models(&mut models, &provider);
+
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "omniroute/zai/glm-5");
+        assert_eq!(models[0].provider_id, "omniroute");
+        assert_eq!(models[0].provider, "OmniRoute");
+        assert_eq!(models[0].display_name, "GLM 5");
+        assert!(models[0].supports_tools);
+        assert_eq!(models[0].context_length, None);
     }
 
     #[test]
