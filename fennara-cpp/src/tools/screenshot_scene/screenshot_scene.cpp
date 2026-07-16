@@ -2,6 +2,7 @@
 
 #include "fennara/logger.hpp"
 
+#include <godot_cpp/classes/sub_viewport.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
 namespace fennara {
@@ -31,6 +32,81 @@ godot::SubViewport *&FennaraScreenshotSceneTool::_camera_capture_viewport_ref() 
 godot::Node *&FennaraScreenshotSceneTool::_camera_capture_root_ref() {
     static godot::Node *value = nullptr;
     return value;
+}
+
+bool &FennaraScreenshotSceneTool::_capture_requires_content_ref() {
+    static bool value = false;
+    return value;
+}
+
+uint64_t &FennaraScreenshotSceneTool::_active_capture_owner_ref() {
+    static uint64_t value = 0;
+    return value;
+}
+
+uint64_t &FennaraScreenshotSceneTool::_next_capture_owner_ref() {
+    static uint64_t value = 0;
+    return value;
+}
+
+godot::String &FennaraScreenshotSceneTool::_cached_bounds_scene_path_ref() {
+    static godot::String *value = new godot::String;
+    return *value;
+}
+
+godot::String &FennaraScreenshotSceneTool::_cached_bounds_target_path_ref() {
+    static godot::String *value = new godot::String;
+    return *value;
+}
+
+godot::AABB &FennaraScreenshotSceneTool::_cached_bounds_ref() {
+    static godot::AABB value;
+    return value;
+}
+
+bool &FennaraScreenshotSceneTool::_cached_bounds_valid_ref() {
+    static bool value = false;
+    return value;
+}
+
+void FennaraScreenshotSceneTool::_reset_bounds_cache() {
+    _cached_bounds_scene_path_ref() = godot::String();
+    _cached_bounds_target_path_ref() = godot::String();
+    _cached_bounds_ref() = godot::AABB();
+    _cached_bounds_valid_ref() = false;
+}
+
+void FennaraScreenshotSceneTool::_discard_temporary_viewport() {
+    godot::SubViewport *viewport = _camera_capture_viewport_ref();
+    if (viewport) {
+        if (viewport->is_inside_tree()) {
+            viewport->queue_free();
+        } else {
+            memdelete(viewport);
+        }
+    }
+    _camera_capture_viewport_ref() = nullptr;
+    _camera_capture_root_ref() = nullptr;
+    _capture_requires_content_ref() = false;
+}
+
+uint64_t FennaraScreenshotSceneTool::try_reserve_capture() {
+    if (_active_capture_owner_ref() != 0) {
+        return 0;
+    }
+    uint64_t &next_owner = _next_capture_owner_ref();
+    next_owner++;
+    if (next_owner == 0) next_owner++;
+    _active_capture_owner_ref() = next_owner;
+    return next_owner;
+}
+
+void FennaraScreenshotSceneTool::release_capture(uint64_t owner) {
+    if (owner == 0 || _active_capture_owner_ref() != owner) {
+        return;
+    }
+    _discard_temporary_viewport();
+    _active_capture_owner_ref() = 0;
 }
 
 void FennaraScreenshotSceneTool::_bind_methods() {

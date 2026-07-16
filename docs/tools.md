@@ -414,6 +414,14 @@ Use validate_scene on res://scenes/main.tscn and explain any errors or warnings.
 Use this when layout, framing, camera view, rendering, material/shader output,
 animation-visible state, or visual correctness matters.
 
+Imported 3D `PackedScene` sources such as `.glb` and `.gltf` are instantiated
+for an isolated `SubViewport` capture. They are not opened as the edited scene,
+so previewing them does not change the active editor tab or trigger Godot's
+inherited-scene confirmation dialog. Auto-framed 3D captures add neutral
+preview lighting only when the scene supplies no environment or light, and a
+visually sparse capture, including a `Camera3D` capture, is still returned with
+framing metrics and a partial status instead of hiding the image evidence.
+
 External MCP clients receive the primary screenshot as an image content block
 when their client/model supports image inputs, while the text receipt still
 includes saved paths and metadata as a fallback.

@@ -1,12 +1,13 @@
 {
   "name": "screenshot_scene",
   "description_lines": [
-    "Open a scene file and capture a PNG image.",
+    "Open a scene file and capture a PNG image. Imported 3D PackedScene sources such as GLB and GLTF are loaded into an isolated SubViewport without opening or changing the edited scene.",
     "Use camera_path to render from a specific Camera2D or Camera3D through a temporary SubViewport when authored camera framing matters.",
     "For 2D scenes, optionally specify a world-coordinate view_rect for editor viewport capture; camera_path overrides view_rect and uses the Camera2D view.",
-    "For 3D scenes, optionally specify view and target_node_path to frame a specific node/subtree in the editor viewport with surrounding context; camera_path overrides view/target framing and uses the Camera3D view.",
+    "For 3D scenes, optionally specify view and target_node_path to frame a specific node/subtree in an isolated SubViewport with surrounding context; camera_path overrides view/target framing and uses the Camera3D view.",
     "For 3D view=all captures front, back, left, right, top, perspective, and isometric into one labeled collage.",
     "For 3D target_node_path captures, the camera is framed around the target subtree while the rest of the scene remains visible for context.",
+    "A successfully encoded screenshot is always returned. Visually sparse or weakly framed 3D captures, including Camera3D captures, use partial status with coverage/span metrics and a warning instead of hiding the image.",
     "Defaults to perspective.",
     "Every generated screenshot is saved under user://.fennara/screenshots and returned as image_res_path plus cross-platform absolute image_path.",
     "External MCP responses include the primary screenshot as model image context when the client/model supports image content; visible text still returns image_path values and metadata as a fallback.",
@@ -19,7 +20,7 @@
     "properties": {
       "scene_path": {
         "type": "string",
-        "description": "Path to the scene file to open and capture (e.g. 'res://scenes/level1.tscn')"
+        "description": "Path to a loadable PackedScene to capture, including authored .tscn/.scn scenes and imported sources such as .glb/.gltf (e.g. 'res://scenes/level1.tscn')"
       },
       "view_rect": {
         "type": "object",
@@ -38,7 +39,7 @@
       },
       "view": {
         "type": "string",
-        "description": "3D editor-viewport capture only. Camera view to capture: front, back, left, right, top, perspective, isometric, or all. `all` captures all seven listed views into one labeled collage. Defaults to perspective. Ignored when camera_path is provided.",
+        "description": "3D isolated capture only. Camera view to capture: front, back, left, right, top, perspective, isometric, or all. `all` captures all seven listed views into one labeled collage. Defaults to perspective. Ignored when camera_path is provided.",
         "enum": ["front", "back", "left", "right", "top", "perspective", "isometric", "all"]
       },
       "target_node_path": {

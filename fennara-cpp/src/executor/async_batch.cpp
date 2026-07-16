@@ -10,6 +10,7 @@
 #include "fennara/tools/run_scene_edit_script.hpp"
 #include "fennara/tools/runtime_script.hpp"
 #include "fennara/tools/runtime_session.hpp"
+#include "fennara/tools/screenshot_scene.hpp"
 #include "fennara/tools/validate_scene.hpp"
 
 #include <godot_cpp/classes/json.hpp>
@@ -75,6 +76,8 @@ bool complete_if_blocked(FennaraExecutor *executor,
 } // namespace
 
 void FennaraExecutor::_cancel_active_async_tools() {
+    FennaraScreenshotSceneTool::release_capture(_screenshot_capture_owner);
+    _screenshot_capture_owner = 0;
     for (int i = 0; i < _active_async_tools.size(); i++) {
         godot::Ref<FennaraScriptDiagnosticsTool> tool = _active_async_tools[i];
         if (tool.is_valid()) {
