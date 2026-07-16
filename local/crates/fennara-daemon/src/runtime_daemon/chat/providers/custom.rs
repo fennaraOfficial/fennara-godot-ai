@@ -47,7 +47,7 @@ pub(crate) struct CustomProviderConfig {
     pub(crate) name: String,
     pub(crate) base_url: String,
     pub(crate) models: Vec<CustomProviderModel>,
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     pub(crate) headers: BTreeMap<String, String>,
 }
 
@@ -430,6 +430,31 @@ mod tests {
 
         assert_eq!(model.context_length, DEFAULT_CUSTOM_CONTEXT_TOKENS);
         assert_eq!(model.max_output_tokens, DEFAULT_CUSTOM_MAX_OUTPUT_TOKENS);
+    }
+
+    #[test]
+    fn custom_headers_deserialize_but_are_not_serialized_with_settings() {
+        let (config, _) = validate_new_provider(omniroute_request()).unwrap();
+        let serialized = serde_json::to_value(&config).unwrap();
+        assert!(serialized.get("headers").is_none());
+
+        let restored: CustomProviderConfig = serde_json::from_value(serde_json::json!({
+            "id": "legacy",
+            "name": "Legacy",
+            "base_url": "https://example.com/v1",
+            "models": [{
+                "id": "model",
+                "name": "Model",
+                "context_length": 64000,
+                "max_output_tokens": 4096
+            }],
+            "headers": { "x-api-key": "legacy-secret" }
+        }))
+        .unwrap();
+        assert_eq!(
+            restored.headers.get("x-api-key").map(String::as_str),
+            Some("legacy-secret")
+        );
     }
 
     #[test]

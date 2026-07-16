@@ -64,8 +64,9 @@ Model IDs must match what the endpoint expects. Fennara exposes them as
 the provider. The endpoint must implement the OpenAI-compatible
 `/chat/completions` request and streaming response shape.
 
-API keys, provider configuration, and custom headers stay in daemon-managed local
-app data outside the Godot project. Accurate model limits let Fennara
+API keys and custom header values use Fennara's protected daemon auth store.
+Provider definitions stay in daemon-managed local app data outside the Godot
+project. Accurate model limits let Fennara
 compact conversation history before a request exceeds the model's context
 window and keep generated summaries within the model's output limit. Existing
 custom models saved before these fields were available load with compatibility
@@ -81,6 +82,7 @@ with the saved headers by name.
 Fennara stores built-in chat settings locally through the daemon, outside the Godot project:
 
 - provider API keys
+- custom provider header values
 - custom OpenAI-compatible provider definitions
 - local provider base URLs
 - selected model

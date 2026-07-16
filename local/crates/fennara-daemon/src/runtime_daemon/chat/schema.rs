@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use super::settings;
+use super::{providers::custom::CustomProviderConfig, settings};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ModelTrace {
@@ -744,9 +744,12 @@ fn usage_string(usage: &Value, key: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-pub(crate) fn model_trace_from_selection(model: &str) -> Option<ModelTrace> {
+pub(crate) fn model_trace_from_selection(
+    model: &str,
+    custom_providers: &[CustomProviderConfig],
+) -> Option<ModelTrace> {
     built_in_model_trace_from_selection(model).or_else(|| {
-        settings::custom_model_trace_parts(model)
+        settings::custom_model_trace_parts(custom_providers, model)
             .and_then(|(provider_id, model_id)| build_model_trace(provider_id, model_id))
     })
 }
@@ -854,23 +857,23 @@ mod tests {
 
     #[test]
     fn model_trace_parses_explicit_provider_models() {
-        let ollama = model_trace_from_selection("ollama/llama3.2").unwrap();
+        let ollama = model_trace_from_selection("ollama/llama3.2", &[]).unwrap();
         assert_eq!(ollama.provider_id, "ollama");
         assert_eq!(ollama.model_id, "llama3.2");
 
-        let openrouter = model_trace_from_selection("openrouter/google/gemini").unwrap();
+        let openrouter = model_trace_from_selection("openrouter/google/gemini", &[]).unwrap();
         assert_eq!(openrouter.provider_id, "openrouter");
         assert_eq!(openrouter.model_id, "google/gemini");
 
-        let lmstudio = model_trace_from_selection("lmstudio/openai/gpt-oss-20b").unwrap();
+        let lmstudio = model_trace_from_selection("lmstudio/openai/gpt-oss-20b", &[]).unwrap();
         assert_eq!(lmstudio.provider_id, "lmstudio");
         assert_eq!(lmstudio.model_id, "openai/gpt-oss-20b");
 
-        let deepseek = model_trace_from_selection("deepseek/deepseek-chat").unwrap();
+        let deepseek = model_trace_from_selection("deepseek/deepseek-chat", &[]).unwrap();
         assert_eq!(deepseek.provider_id, "deepseek");
         assert_eq!(deepseek.model_id, "deepseek-chat");
 
-        let zai = model_trace_from_selection("zai/glm-5.2").unwrap();
+        let zai = model_trace_from_selection("zai/glm-5.2", &[]).unwrap();
         assert_eq!(zai.provider_id, "zai");
         assert_eq!(zai.model_id, "glm-5.2");
 
@@ -906,15 +909,36 @@ mod tests {
                 "meta/llama-3.3-70b-instruct",
             ),
         ] {
-            let trace = model_trace_from_selection(selection).unwrap();
+            let trace = model_trace_from_selection(selection, &[]).unwrap();
             assert_eq!(trace.provider_id, provider_id, "{selection}");
             assert_eq!(trace.model_id, model_id, "{selection}");
         }
 
-        assert!(model_trace_from_selection("").is_none());
-        assert!(model_trace_from_selection("not-a-routable-model").is_none());
-        assert!(model_trace_from_selection("google/gemini").is_none());
-        assert!(model_trace_from_selection("ollama/").is_none());
+        assert!(model_trace_from_selection("", &[]).is_none());
+        assert!(model_trace_from_selection("not-a-routable-model", &[]).is_none());
+        assert!(model_trace_from_selection("google/gemini", &[]).is_none());
+        assert!(model_trace_from_selection("ollama/", &[]).is_none());
+    }
+
+    #[test]
+    fn model_trace_uses_the_supplied_custom_provider_snapshot() {
+        let providers = [CustomProviderConfig {
+            id: "omniroute".to_string(),
+            name: "OmniRoute".to_string(),
+            base_url: "https://example.com/v1".to_string(),
+            models: vec![super::super::providers::custom::CustomProviderModel {
+                id: "zai/glm-5".to_string(),
+                name: "GLM 5".to_string(),
+                context_length: 131_072,
+                max_output_tokens: 8_192,
+            }],
+            headers: std::collections::BTreeMap::new(),
+        }];
+
+        let trace = model_trace_from_selection("omniroute/zai/glm-5", &providers).unwrap();
+
+        assert_eq!(trace.provider_id, "omniroute");
+        assert_eq!(trace.model_id, "zai/glm-5");
     }
 
     #[test]

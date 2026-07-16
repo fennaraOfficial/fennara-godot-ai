@@ -230,7 +230,12 @@ where
     .await?;
     send_project_status(sender, None, state, bound_project).await?;
     let scope = &bound_project.scope;
-    match store::open_active_or_create(scope, &settings.model, &settings.reasoning_effort) {
+    match store::open_active_or_create(
+        scope,
+        &settings.model,
+        &settings.reasoning_effort,
+        &settings.custom_providers,
+    ) {
         Ok(opened) => {
             *active_chat_id = Some(opened.chat.id.clone());
             send_json(
@@ -473,7 +478,7 @@ where
             )
             .to_string();
             let scope = &bound_project.scope;
-            match store::create_chat(scope, &model, &reasoning_effort) {
+            match store::create_chat(scope, &model, &reasoning_effort, &settings.custom_providers) {
                 Ok(opened) => {
                     *active_chat_id = Some(opened.chat.id.clone());
                     if send_json(

@@ -11,11 +11,14 @@ struct AuthFile {
     providers: BTreeMap<String, ProviderAuth>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct ProviderAuth {
-    #[serde(rename = "type")]
+    #[serde(default, rename = "type")]
     kind: String,
+    #[serde(default)]
     key: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    headers: BTreeMap<String, String>,
 }
 
 pub(crate) fn api_key(provider: &str) -> Option<String> {
@@ -42,13 +45,40 @@ pub(crate) fn save_api_key(provider: &str, key: &str) -> Result<(), String> {
     }
 
     let mut auth = load_auth();
-    auth.providers.insert(
-        provider.to_string(),
-        ProviderAuth {
-            kind: "api".to_string(),
-            key: key.to_string(),
-        },
-    );
+    let entry = auth.providers.entry(provider.to_string()).or_default();
+    entry.kind = "api".to_string();
+    entry.key = key.to_string();
+    write_auth(&auth)
+}
+
+pub(crate) fn custom_headers(provider: &str) -> BTreeMap<String, String> {
+    clean_provider(provider)
+        .and_then(|provider| load_auth().providers.remove(provider))
+        .map(|auth| auth.headers)
+        .unwrap_or_default()
+}
+
+pub(crate) fn save_custom_headers(
+    provider: &str,
+    headers: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    let Some(provider) = clean_provider(provider) else {
+        return Err("Provider id is empty.".to_string());
+    };
+    let mut auth = load_auth();
+    if headers.is_empty() {
+        if let Some(entry) = auth.providers.get_mut(provider) {
+            entry.headers.clear();
+            if entry.key.trim().is_empty() {
+                auth.providers.remove(provider);
+            }
+        }
+    } else {
+        auth.providers
+            .entry(provider.to_string())
+            .or_default()
+            .headers = headers.clone();
+    }
     write_auth(&auth)
 }
 

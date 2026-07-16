@@ -3,6 +3,7 @@ use serde_json::Value;
 
 use super::super::{
     ids::{new_id, now_ms},
+    providers::custom::CustomProviderConfig,
     schema::{model_trace_from_selection, to_store_error},
 };
 use super::{summary::SummaryCandidate, types::ContextSummaryChunk};
@@ -17,6 +18,7 @@ pub(crate) struct InsertContextSummary<'a> {
     pub(crate) reasoning_effort: &'a str,
     pub(crate) usage: Option<&'a Value>,
     pub(crate) metadata: &'a Value,
+    pub(crate) custom_providers: &'a [CustomProviderConfig],
 }
 
 pub(crate) fn load_context_summaries_from_conn(
@@ -53,7 +55,7 @@ pub(crate) fn insert_context_summary_on_connection(
 
     let summary_id = new_id("ctxsum");
     let now = now_ms();
-    let model_trace = model_trace_from_selection(input.model);
+    let model_trace = model_trace_from_selection(input.model, input.custom_providers);
     let metadata_json = serde_json::to_string(input.metadata).map_err(|error| error.to_string())?;
     tx.execute(
         "INSERT INTO chat_context_summaries
@@ -466,6 +468,7 @@ mod tests {
                     &json!({ "prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12 }),
                 ),
                 metadata: &json!({ "trigger_estimated_tokens": 100 }),
+                custom_providers: &[],
             },
         )
         .unwrap();
@@ -502,6 +505,7 @@ mod tests {
                 reasoning_effort: "medium",
                 usage: None,
                 metadata: &json!({}),
+                custom_providers: &[],
             },
         )
         .unwrap();

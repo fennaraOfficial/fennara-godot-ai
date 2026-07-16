@@ -80,19 +80,22 @@
           commandPopover?.hidden === false ||
           effortOptions?.hidden === false ||
           usagePopover?.hidden === false;
+        const customProviderWasOpen = customProviderPopover?.hidden === false;
         setEffortMenuOpen(false);
         setUsagePopoverOpen(false);
         modelPicker.close?.();
         closeProviderPicker();
         closeProviderKeyPrompt();
         closeLocalSetupPrompt();
-        closeCustomProviderPrompt();
+        const customProviderClosed = closeCustomProviderPrompt();
         commandPalette.close?.();
         closeDrawer();
         if (hadOverlayOpen) {
           event.preventDefault();
           event.stopPropagation();
-          focusComposer();
+          if (!customProviderWasOpen || customProviderClosed) {
+            focusComposer();
+          }
         }
       }
     }, true);

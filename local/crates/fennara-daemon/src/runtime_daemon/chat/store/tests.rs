@@ -105,6 +105,7 @@ fn finish_assistant_message_with_tool_calls_persists_usage_and_rollup_atomically
         Some(&usage),
         "openrouter/z-ai/glm-5.2",
         Some("gen_1"),
+        &[],
     )
     .unwrap();
 
@@ -192,6 +193,7 @@ fn assistant_placeholder_and_generation_start_atomically() {
             "chat_1",
             "openrouter/z-ai/glm-5.2",
             "medium",
+            &[],
         )
         .unwrap();
 
@@ -956,6 +958,7 @@ fn raw_summary_tail_does_not_split_assistant_tool_call_group() {
             reasoning_effort: "medium",
             usage: None,
             metadata: &json!({}),
+            custom_providers: &[],
         },
     )
     .unwrap();
@@ -1015,6 +1018,7 @@ fn raw_summary_includes_stale_in_progress_rows_before_insert_validation() {
             reasoning_effort: "medium",
             usage: None,
             metadata: &json!({}),
+            custom_providers: &[],
         },
     )
     .unwrap();

@@ -187,10 +187,10 @@ pub(crate) struct SaveSettingsRequest {
 
 pub(crate) fn load_settings() -> ChatSettings {
     let _guard = settings_lock();
-    load_settings_unlocked()
+    load_settings_unlocked().0
 }
 
-fn load_settings_unlocked() -> ChatSettings {
+fn load_settings_unlocked() -> (ChatSettings, bool) {
     let path = settings_path();
     let previous = path.with_extension("json.previous");
     let selected = if path.is_file() {
@@ -198,17 +198,27 @@ fn load_settings_unlocked() -> ChatSettings {
     } else if previous.is_file() {
         &previous
     } else {
-        return ChatSettings::default();
+        return (ChatSettings::default(), true);
     };
     let Ok(raw) = fs::read_to_string(selected) else {
-        return ChatSettings::default();
+        return (ChatSettings::default(), true);
     };
     let Ok(mut settings) = serde_json::from_str::<ChatSettings>(&raw) else {
-        return ChatSettings::default();
+        return (ChatSettings::default(), true);
     };
     let legacy_openrouter_key = settings.openrouter_api_key.take();
     let had_legacy_openrouter_key = legacy_openrouter_key.is_some();
     settings.custom_providers = custom::clean_saved_providers(&settings.custom_providers);
+    let mut custom_headers_migrated = false;
+    let mut custom_headers_migration_failed = false;
+    for provider in &mut settings.custom_providers {
+        let stored_headers = auth::custom_headers(&provider.id);
+        match migrate_custom_provider_headers(provider, stored_headers, auth::save_custom_headers) {
+            CustomHeaderMigration::None => {}
+            CustomHeaderMigration::ScrubSettings => custom_headers_migrated = true,
+            CustomHeaderMigration::Failed => custom_headers_migration_failed = true,
+        }
+    }
     let clean_model = clean_model(&settings.model).unwrap_or_else(|| DEFAULT_MODEL.to_string());
     settings.model = migrate_legacy_openrouter_selection(&clean_model, &settings.custom_providers);
     let model_migrated = settings.model != clean_model;
@@ -233,15 +243,67 @@ fn load_settings_unlocked() -> ChatSettings {
     if had_legacy_openrouter_key {
         auth::migrate_legacy_api_key(ProviderId::OPENROUTER, legacy_openrouter_key);
     }
-    if had_legacy_openrouter_key || model_migrated || custom_models_migrated {
-        let _ = write_settings_file(&settings);
+    if !custom_headers_migration_failed
+        && (had_legacy_openrouter_key
+            || model_migrated
+            || custom_models_migrated
+            || custom_headers_migrated)
+    {
+        if write_settings_file(&settings).is_ok() && custom_headers_migrated {
+            let _ = fs::remove_file(previous);
+        }
     }
-    settings
+    (settings, !custom_headers_migration_failed)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CustomHeaderMigration {
+    None,
+    ScrubSettings,
+    Failed,
+}
+
+fn migrate_custom_provider_headers<F>(
+    provider: &mut CustomProviderConfig,
+    stored_headers: BTreeMap<String, String>,
+    save_headers: F,
+) -> CustomHeaderMigration
+where
+    F: FnOnce(&str, &BTreeMap<String, String>) -> Result<(), String>,
+{
+    if provider.headers.is_empty() {
+        if stored_headers.is_empty() {
+            return CustomHeaderMigration::None;
+        }
+        provider.headers = stored_headers;
+        return CustomHeaderMigration::None;
+    }
+
+    let mut merged_headers = provider.headers.clone();
+    merged_headers.extend(stored_headers.clone());
+    if merged_headers != stored_headers {
+        return match save_headers(&provider.id, &merged_headers) {
+            Ok(()) => {
+                provider.headers = merged_headers;
+                CustomHeaderMigration::ScrubSettings
+            }
+            Err(_) => CustomHeaderMigration::Failed,
+        };
+    }
+
+    provider.headers = stored_headers;
+    CustomHeaderMigration::ScrubSettings
 }
 
 pub(crate) fn save_settings(update: SaveSettingsRequest) -> Result<ChatSettings, String> {
     let _guard = settings_lock();
-    let mut settings = load_settings_unlocked();
+    let (mut settings, custom_headers_ready) = load_settings_unlocked();
+    if !custom_headers_ready {
+        return Err(
+            "Could not move custom provider headers into Fennara's protected auth store."
+                .to_string(),
+        );
+    }
     if let Some(key) = update.openrouter_api_key {
         let trimmed = key.trim();
         if !trimmed.is_empty() {
@@ -310,6 +372,7 @@ pub(crate) fn save_settings(update: SaveSettingsRequest) -> Result<ChatSettings,
             }
             (None, false) => settings.custom_providers.push(config.clone()),
         }
+        auth::save_custom_headers(&config.id, &config.headers)?;
         if let Some(api_key) = api_key {
             auth::save_api_key(&config.id, &api_key)?;
         }
@@ -571,9 +634,11 @@ pub(crate) fn clean_model(model: &str) -> Option<String> {
     Some(clean.to_string())
 }
 
-pub(crate) fn custom_model_trace_parts(model: &str) -> Option<(String, String)> {
-    let settings = load_settings();
-    custom::split_model_selection(&settings.custom_providers, model)
+pub(crate) fn custom_model_trace_parts(
+    custom_providers: &[CustomProviderConfig],
+    model: &str,
+) -> Option<(String, String)> {
+    custom::split_model_selection(custom_providers, model)
         .map(|(provider_id, model_id)| (provider_id.to_string(), model_id.to_string()))
 }
 

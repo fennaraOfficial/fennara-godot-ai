@@ -264,7 +264,8 @@
       return true;
     }
 
-    function back() {
+    function back(event) {
+      event?.stopPropagation();
       if (close()) {
         openProviderPicker();
       }

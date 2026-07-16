@@ -400,8 +400,8 @@ fn adapter_model_id(provider_id: &str, id: &str) -> String {
         | ProviderId::MINIMAX
         | ProviderId::MINIMAX_CODING_PLAN
         | ProviderId::MINIMAX_CN
-        | ProviderId::MINIMAX_CN_CODING_PLAN => id.to_string(),
-        ProviderId::NVIDIA => id.to_string(),
+        | ProviderId::MINIMAX_CN_CODING_PLAN
+        | ProviderId::NVIDIA => id.to_string(),
         _ => openrouter::adapter_model_id(id),
     }
 }
