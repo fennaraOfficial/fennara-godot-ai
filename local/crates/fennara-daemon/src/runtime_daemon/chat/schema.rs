@@ -745,6 +745,13 @@ fn usage_string(usage: &Value, key: &str) -> Option<String> {
 }
 
 pub(crate) fn model_trace_from_selection(model: &str) -> Option<ModelTrace> {
+    built_in_model_trace_from_selection(model).or_else(|| {
+        settings::custom_model_trace_parts(model)
+            .and_then(|(provider_id, model_id)| build_model_trace(provider_id, model_id))
+    })
+}
+
+fn built_in_model_trace_from_selection(model: &str) -> Option<ModelTrace> {
     let model = model.trim();
     if model.is_empty() {
         return None;
@@ -781,8 +788,6 @@ pub(crate) fn model_trace_from_selection(model: &str) -> Option<ModelTrace> {
         ("nvidia", model_id.trim())
     } else if let Some(model_id) = model.strip_prefix("openrouter/") {
         ("openrouter", model_id.trim())
-    } else if let Some((provider_id, model_id)) = settings::custom_model_trace_parts(model) {
-        return build_model_trace(provider_id, model_id);
     } else {
         return None;
     };
@@ -794,7 +799,7 @@ pub(crate) fn model_trace_from_selection(model: &str) -> Option<ModelTrace> {
 
 // Legacy database migration only. Runtime model routing requires an explicit provider prefix.
 fn legacy_model_trace_from_selection(model: &str) -> Option<ModelTrace> {
-    model_trace_from_selection(model).or_else(|| {
+    built_in_model_trace_from_selection(model).or_else(|| {
         let model = model.trim();
         model
             .contains('/')
@@ -910,6 +915,14 @@ mod tests {
         assert!(model_trace_from_selection("not-a-routable-model").is_none());
         assert!(model_trace_from_selection("google/gemini").is_none());
         assert!(model_trace_from_selection("ollama/").is_none());
+    }
+
+    #[test]
+    fn legacy_model_trace_treats_bare_slash_models_as_openrouter() {
+        let trace = legacy_model_trace_from_selection("google/gemini").unwrap();
+
+        assert_eq!(trace.provider_id, "openrouter");
+        assert_eq!(trace.model_id, "google/gemini");
     }
 
     #[test]

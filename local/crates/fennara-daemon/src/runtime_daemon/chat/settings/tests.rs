@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+#[cfg(windows)]
+use super::replace_settings_file;
 use super::{ChatSettings, migrate_legacy_openrouter_selection, reconcile_custom_provider_models};
 use crate::runtime_daemon::chat::providers::custom::{CustomProviderConfig, CustomProviderModel};
 
@@ -66,4 +68,24 @@ fn legacy_migration_preserves_a_custom_provider_namespace() {
         migrate_legacy_openrouter_selection("google/gemini-3.5-flash", &[provider]),
         "google/gemini-3.5-flash"
     );
+}
+
+#[cfg(windows)]
+#[test]
+fn failed_settings_replace_preserves_an_existing_backup_without_a_current_file() {
+    let dir = std::env::temp_dir().join(format!(
+        "fennara-settings-backup-test-{}",
+        std::process::id()
+    ));
+    let path = dir.join("chat_settings.json");
+    let backup = path.with_extension("json.previous");
+    let missing_temp = dir.join("missing.tmp");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(&backup, b"previous settings").unwrap();
+
+    let result = replace_settings_file(&missing_temp, &path);
+
+    assert!(result.is_err());
+    assert_eq!(std::fs::read(&backup).unwrap(), b"previous settings");
+    let _ = std::fs::remove_dir_all(dir);
 }

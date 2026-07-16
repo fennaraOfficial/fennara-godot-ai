@@ -419,11 +419,12 @@ fn replace_settings_file(temp: &Path, path: &Path) -> Result<(), String> {
 #[cfg(windows)]
 fn replace_settings_file(temp: &Path, path: &Path) -> Result<(), String> {
     let backup = path.with_extension("json.previous");
-    if backup.exists() {
-        fs::remove_file(&backup)
-            .map_err(|error| format!("failed to remove {}: {error}", backup.display()))?;
-    }
-    if path.exists() {
+    let had_current = path.exists();
+    if had_current {
+        if backup.exists() {
+            fs::remove_file(&backup)
+                .map_err(|error| format!("failed to remove {}: {error}", backup.display()))?;
+        }
         fs::rename(path, &backup).map_err(|error| {
             format!(
                 "failed to back up {} as {}: {error}",
@@ -438,7 +439,7 @@ fn replace_settings_file(temp: &Path, path: &Path) -> Result<(), String> {
             Ok(())
         }
         Err(error) => {
-            if backup.exists() && !path.exists() {
+            if had_current && backup.exists() && !path.exists() {
                 let _ = fs::rename(&backup, path);
             }
             Err(format!(

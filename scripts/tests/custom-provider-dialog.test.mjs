@@ -9,7 +9,61 @@ const source = readFileSync(
 );
 const context = { URL, window: {} };
 vm.runInNewContext(source, context);
-const validate = context.window.FennaraCustomProviderDialog.validateCustomProvider;
+const customProviderDialog = context.window.FennaraCustomProviderDialog;
+const createPendingSaveRegistry = customProviderDialog.createPendingSaveRegistry;
+const matchesSaveResponse = customProviderDialog.matchesSaveResponse;
+const validate = customProviderDialog.validateCustomProvider;
+
+test("timed-out custom provider saves remain reconcilable for a grace period", () => {
+  let expiry = null;
+  const cancelled = [];
+  const registry = createPendingSaveRegistry({
+    graceMs: 25,
+    setTimeout: (callback, delay) => {
+      expiry = { callback, delay };
+      return 7;
+    },
+    clearTimeout: (timer) => cancelled.push(timer),
+  });
+
+  registry.add("save-1", "omniroute");
+  assert.equal(registry.markTimedOut("save-1"), true);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(registry.peek("save-1"))),
+    { providerId: "omniroute", timedOut: true },
+  );
+  assert.equal(expiry.delay, 25);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(registry.take("save-1"))),
+    { providerId: "omniroute", timedOut: true },
+  );
+  assert.deepEqual(cancelled, [7]);
+  assert.equal(registry.size, 0);
+});
+
+test("timed-out custom provider saves expire after the grace period", () => {
+  let expire = null;
+  const registry = createPendingSaveRegistry({
+    setTimeout: (callback) => {
+      expire = callback;
+      return 1;
+    },
+    clearTimeout: () => {},
+  });
+
+  registry.add("save-2", "router");
+  registry.markTimedOut("save-2");
+  expire();
+
+  assert.equal(registry.peek("save-2"), null);
+  assert.equal(registry.size, 0);
+});
+
+test("late save responses do not replace a newer active request", () => {
+  assert.equal(matchesSaveResponse("old", "", "old"), true);
+  assert.equal(matchesSaveResponse("old", "new", "old"), false);
+  assert.equal(matchesSaveResponse("new", "new", "old"), true);
+});
 
 test("custom provider form accepts OmniRoute-compatible configuration", () => {
   const result = validate(

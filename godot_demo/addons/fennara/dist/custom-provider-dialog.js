@@ -4,6 +4,83 @@
   const MAX_HEADERS = 32;
   const MAX_TOKEN_COUNT = 4_294_967_295;
   const SAVE_TIMEOUT_MS = 20_000;
+  const LATE_RESPONSE_GRACE_MS = 60_000;
+
+  function createPendingSaveRegistry(options = {}) {
+    const graceMs = options.graceMs ?? LATE_RESPONSE_GRACE_MS;
+    const schedule = options.setTimeout || ((callback, delay) => window.setTimeout(callback, delay));
+    const cancel = options.clearTimeout || ((timer) => window.clearTimeout(timer));
+    const entries = new Map();
+
+    function add(requestId, providerId) {
+      take(requestId);
+      entries.set(String(requestId), {
+        providerId: String(providerId || ""),
+        timedOut: false,
+        expiryTimer: null,
+      });
+    }
+
+    function markTimedOut(requestId) {
+      const key = String(requestId);
+      const entry = entries.get(key);
+      if (!entry) {
+        return false;
+      }
+      entry.timedOut = true;
+      if (entry.expiryTimer !== null) {
+        cancel(entry.expiryTimer);
+      }
+      entry.expiryTimer = schedule(() => entries.delete(key), graceMs);
+      return true;
+    }
+
+    function peek(requestId) {
+      const entry = entries.get(String(requestId));
+      return entry ? { providerId: entry.providerId, timedOut: entry.timedOut } : null;
+    }
+
+    function take(requestId) {
+      const key = String(requestId);
+      const entry = entries.get(key);
+      if (!entry) {
+        return null;
+      }
+      if (entry.expiryTimer !== null) {
+        cancel(entry.expiryTimer);
+      }
+      entries.delete(key);
+      return { providerId: entry.providerId, timedOut: entry.timedOut };
+    }
+
+    function clear() {
+      entries.forEach((entry) => {
+        if (entry.expiryTimer !== null) {
+          cancel(entry.expiryTimer);
+        }
+      });
+      entries.clear();
+    }
+
+    return {
+      add,
+      clear,
+      markTimedOut,
+      peek,
+      take,
+      get size() {
+        return entries.size;
+      },
+    };
+  }
+
+  function matchesSaveResponse(requestId, activeRequestId, timedOutRequestId) {
+    if (!requestId) {
+      return true;
+    }
+    return requestId === activeRequestId
+      || (!activeRequestId && requestId === timedOutRequestId);
+  }
 
   function validateCustomProvider(raw, existingProviderIds = new Set()) {
     const value = {
@@ -157,6 +234,7 @@
     let saving = false;
     let editingProviderId = "";
     let activeRequestId = "";
+    let timedOutRequestId = "";
     let saveTimeout = null;
 
     function open(provider = null) {
@@ -196,6 +274,7 @@
       clearSaveTimeout();
       saving = false;
       activeRequestId = "";
+      timedOutRequestId = "";
       editingProviderId = "";
       form?.reset();
       if (providerIdInput) {
@@ -409,12 +488,15 @@
         return;
       }
       activeRequestId = String(requestId);
+      timedOutRequestId = "";
       saveTimeout = window.setTimeout(() => {
-        const timedOutRequestId = activeRequestId;
+        timedOutRequestId = activeRequestId;
         activeRequestId = "";
         saveTimeout = null;
+        saving = false;
+        syncSaving();
         onTimeout(timedOutRequestId);
-        handleError("Saving the provider timed out. Check the daemon and try again.");
+        showError("Saving the provider timed out. Check the daemon and try again.");
       }, SAVE_TIMEOUT_MS);
     }
 
@@ -479,11 +561,12 @@
     }
 
     function handleSaved(requestId = "") {
-      if (requestId && requestId !== activeRequestId) {
+      if (!matchesSaveResponse(requestId, activeRequestId, timedOutRequestId)) {
         return false;
       }
       clearSaveTimeout();
       activeRequestId = "";
+      timedOutRequestId = "";
       saving = false;
       syncSaving();
       close();
@@ -491,19 +574,24 @@
     }
 
     function handleError(message, requestId = "") {
-      if (requestId && activeRequestId && requestId !== activeRequestId) {
+      if (!matchesSaveResponse(requestId, activeRequestId, timedOutRequestId)) {
         return false;
       }
       clearSaveTimeout();
       activeRequestId = "";
+      timedOutRequestId = "";
       saving = false;
       syncSaving();
+      showError(message);
+      return true;
+    }
+
+    function showError(message) {
       if (errorBox) {
         errorBox.textContent = message || "Could not add the custom provider.";
         errorBox.hidden = false;
         errorBox.scrollIntoView({ block: "nearest" });
       }
-      return true;
     }
 
     function hideError() {
@@ -571,7 +659,9 @@
   }
 
   window.FennaraCustomProviderDialog = {
+    createPendingSaveRegistry,
     createCustomProviderDialog,
+    matchesSaveResponse,
     validateCustomProvider,
   };
 })();

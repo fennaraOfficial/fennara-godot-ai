@@ -64,8 +64,8 @@ Model IDs must match what the endpoint expects. Fennara exposes them as
 the provider. The endpoint must implement the OpenAI-compatible
 `/chat/completions` request and streaming response shape.
 
-API keys use Fennara's local credential store. Provider configuration and custom
-headers use the local chat settings file. Accurate model limits let Fennara
+API keys, provider configuration, and custom headers stay in daemon-managed local
+app data outside the Godot project. Accurate model limits let Fennara
 compact conversation history before a request exceeds the model's context
 window and keep generated summaries within the model's output limit. Existing
 custom models saved before these fields were available load with compatibility

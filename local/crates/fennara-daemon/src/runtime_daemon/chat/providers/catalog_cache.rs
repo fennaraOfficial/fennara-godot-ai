@@ -174,8 +174,17 @@ fn parse_all_catalogs(bytes: &[u8]) -> Result<ParsedCatalogs, String> {
         minimax_coding_plan: parse_minimax_coding_plan_catalog(bytes)?,
         minimax_cn: parse_minimax_cn_catalog(bytes)?,
         minimax_cn_coding_plan: parse_minimax_cn_coding_plan_catalog(bytes)?,
-        nvidia: parse_nvidia_catalog(bytes)?,
+        nvidia: parse_optional_nvidia_catalog(bytes)?,
     })
+}
+
+fn parse_optional_nvidia_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
+    let snapshot: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(bytes)
+        .map_err(|error| format!("Models.dev catalog JSON was invalid: {error}"))?;
+    if !snapshot.contains_key("nvidia") {
+        return Ok(OpenRouterCatalog::default());
+    }
+    parse_nvidia_catalog(bytes)
 }
 
 pub(crate) fn default_paths() -> CatalogPaths {
@@ -474,6 +483,12 @@ mod tests {
         serde_json::to_vec(&value).unwrap()
     }
 
+    fn fixture_without_nvidia() -> Vec<u8> {
+        let mut value: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
+        value.as_object_mut().unwrap().remove("nvidia");
+        serde_json::to_vec(&value).unwrap()
+    }
+
     fn test_paths(name: &str) -> CatalogPaths {
         let base = std::env::temp_dir().join(format!(
             "fennara-catalog-cache-test-{name}-{}",
@@ -516,6 +531,38 @@ mod tests {
 
         assert_eq!(loaded.catalog.models.len(), 1);
         assert!(loaded.stale);
+    }
+
+    #[tokio::test]
+    async fn older_snapshot_without_nvidia_still_loads() {
+        let paths = test_paths("without-nvidia");
+        let meta = CatalogMeta {
+            source_url: DEFAULT_MODELS_DEV_URL.to_string(),
+            fetched_at_ms: now_ms(),
+            openrouter_model_count: 1,
+            openai_model_count: 0,
+            anthropic_model_count: 0,
+            ollama_cloud_model_count: 0,
+            lmstudio_model_count: 0,
+            deepseek_model_count: 0,
+            zai_model_count: 0,
+            moonshot_model_count: 0,
+            moonshot_cn_model_count: 0,
+            kimi_for_coding_model_count: 0,
+            minimax_model_count: 0,
+            minimax_coding_plan_model_count: 0,
+            minimax_cn_model_count: 0,
+            minimax_cn_coding_plan_model_count: 0,
+            nvidia_model_count: 0,
+        };
+        write_validated_snapshot(&paths, &fixture_without_nvidia(), &meta)
+            .await
+            .unwrap();
+
+        let loaded = load_disk_from(&paths).await.unwrap();
+
+        assert_eq!(loaded.catalog.models.len(), 1);
+        assert!(loaded.nvidia.models.is_empty());
     }
 
     #[tokio::test]

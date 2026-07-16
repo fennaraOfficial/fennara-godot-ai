@@ -175,7 +175,7 @@
   let openrouterCatalogStatus = null;
   let catalogRefreshInFlight = false;
   let pendingProviderKeySaves = new Map();
-  let pendingCustomProviderSaves = new Map();
+  const pendingCustomProviderSaves = window.FennaraCustomProviderDialog.createPendingSaveRegistry();
   let chatStreaming = false;
   let sessionCost = 0;
   let activeTurnCost = 0;
@@ -349,19 +349,19 @@
       getProviderIds: () => providerRegistry.map((provider) => provider.id),
       onSubmit: (customProvider) => {
         const requestId = nextRequestId("save-custom-provider");
-        pendingCustomProviderSaves.set(requestId, customProvider.provider_id);
+        pendingCustomProviderSaves.add(requestId, customProvider.provider_id);
         const sent = send({
           type: "save_settings",
           request_id: requestId,
           custom_provider: customProvider,
         });
         if (!sent) {
-          pendingCustomProviderSaves.delete(requestId);
+          pendingCustomProviderSaves.take(requestId);
           return false;
         }
         return requestId;
       },
-      onTimeout: (requestId) => pendingCustomProviderSaves.delete(requestId),
+      onTimeout: (requestId) => pendingCustomProviderSaves.markTimedOut(requestId),
     },
   });
 
@@ -1389,10 +1389,9 @@
         : "";
       const isSettingsDialogSave = requestId.startsWith("save-settings-") && !isKeySave;
       const isProviderSetupSave = requestId.startsWith("save-ollama-provider") || requestId.startsWith("save-local-provider");
-      const isCustomProviderSave = pendingCustomProviderSaves.has(requestId);
-      const customProviderId = isCustomProviderSave
-        ? pendingCustomProviderSaves.get(requestId) || ""
-        : "";
+      const pendingCustomProviderSave = pendingCustomProviderSaves.peek(requestId);
+      const isCustomProviderSave = Boolean(pendingCustomProviderSave);
+      const customProviderId = pendingCustomProviderSave?.providerId || "";
       const isSilentSave = requestId.startsWith("silent-settings");
       applySettings(message.settings, {
         preserveTypedKey: !isKeySave && !isSettingsDialogSave,
@@ -1419,13 +1418,14 @@
         updateChatSize();
       }
       if (isCustomProviderSave) {
-        pendingCustomProviderSaves.delete(requestId);
-        currentProvider = customProviderId || currentProvider;
-        currentModel = "";
-        customProviderDialog?.handleSaved(requestId);
-        updateProviderUi();
-        updateModelUi();
-        updateChatSize();
+        pendingCustomProviderSaves.take(requestId);
+        if (customProviderDialog?.handleSaved(requestId)) {
+          currentProvider = customProviderId || currentProvider;
+          currentModel = "";
+          updateProviderUi();
+          updateModelUi();
+          updateChatSize();
+        }
       }
       if (message.type === "settings_saved") {
         const restartNeeded = currentChatSurface !== RUNTIME_CHAT_SURFACE;
@@ -1689,8 +1689,8 @@
         pendingProviderKeySaves.delete(requestId);
         send({ type: "get_settings", request_id: nextRequestId("settings-after-key-save-error") });
       }
-      if (pendingCustomProviderSaves.has(requestId)) {
-        pendingCustomProviderSaves.delete(requestId);
+      if (pendingCustomProviderSaves.peek(requestId)) {
+        pendingCustomProviderSaves.take(requestId);
         customProviderDialog?.handleError(errorText, requestId);
       }
       transcriptRenderer.finishActiveThinking();
