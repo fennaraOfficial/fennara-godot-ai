@@ -154,13 +154,12 @@ godot::Dictionary FennaraRunSceneEditScriptTool::prepare_execution(const godot::
     }
 
     godot::String normalized_scene = normalize_path(scene_path);
-    if (mode == "edit" &&
-        !normalized_scene.ends_with(".tscn") &&
+    if (!normalized_scene.ends_with(".tscn") &&
         !normalized_scene.ends_with(".scn")) {
         result["success"] = false;
         result["error"] =
-            "Edit mode requires scene_path to point to a .tscn or .scn file. "
-            "Use mode='inspect' for read-only inspection of imported PackedScene sources.";
+            "scene_path must point to an authored .tscn or .scn file. "
+            "Use run_asset_import_script for imported source assets.";
         return result;
     }
 

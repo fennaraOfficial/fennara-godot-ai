@@ -9,6 +9,7 @@
 #include "fennara/tools/project_settings.hpp"
 #include "fennara/tools/read_file.hpp"
 #include "fennara/tools/run_scene_edit_script.hpp"
+#include "fennara/tools/run_asset_import_script.hpp"
 #include "fennara/tools/runtime_script.hpp"
 #include "fennara/tools/runtime_session.hpp"
 #include "fennara/tools/save_custom_resource.hpp"
@@ -76,6 +77,9 @@ godot::Dictionary blocked_tool_result(const godot::String &name,
     } else if (name == "run_scene_edit_script") {
         append_if_blocked(args.get("scene_path", ""), blocked);
         append_if_blocked(args.get("script_path", ""), blocked);
+    } else if (name == "run_asset_import_script") {
+        append_if_blocked(args.get("asset_path", ""), blocked);
+        append_if_blocked(args.get("script_path", ""), blocked);
     } else if (name == "save_custom_resource") {
         append_if_blocked(args.get("resource_path", ""), blocked);
         append_if_blocked(args.get("script_path", ""), blocked);
@@ -109,6 +113,7 @@ bool FennaraExecutor::has_tool(const godot::String &name) {
            name == "write_or_update_file" ||
            name == "get_scene_tree" ||
            name == "save_custom_resource" || name == "run_scene_edit_script" ||
+           name == "run_asset_import_script" ||
            name == "script_diagnostics" ||
            name == "screenshot_scene" ||
            name == "get_node_properties" || name == "get_class_info" ||
@@ -160,6 +165,7 @@ godot::Dictionary FennaraExecutor::execute_tool(const godot::String &name,
     else if (name == "get_scene_tree") result = FennaraGetSceneTreeTool::execute(args);
     else if (name == "save_custom_resource") result = FennaraSaveCustomResourceTool::execute(args);
     else if (name == "run_scene_edit_script") result = FennaraRunSceneEditScriptTool::execute(args);
+    else if (name == "run_asset_import_script") result = FennaraRunAssetImportScriptTool::execute(args);
     else if (name == "get_node_properties") result = FennaraGetNodePropertiesTool::execute(args);
     else if (name == "get_class_info") result = FennaraGetClassInfoTool::execute(args);
     else if (name == "validate_scene") result = FennaraValidateSceneTool::execute(args);

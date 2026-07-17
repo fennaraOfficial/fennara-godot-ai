@@ -362,6 +362,33 @@ fn placeholder_details(result: ToolResultRef<'_>, estimated_tokens: usize) -> Ve
                 &arguments,
             );
         }
+        "run_asset_import_script" => {
+            push_field(
+                &mut details,
+                "modified",
+                &["modified"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "reimported",
+                &["reimported"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_field(
+                &mut details,
+                "changes",
+                &["change_count"],
+                &raw,
+                &metadata,
+                &arguments,
+            );
+            push_diagnostic_counts(&mut details, &raw, &metadata, &arguments);
+        }
         "project_settings" => {
             push_field(
                 &mut details,

@@ -36,6 +36,7 @@ bool _is_local_bridge_tool(const godot::String &tool) {
            tool == "read_file" ||
            tool == "write_or_update_file" ||
            tool == "run_scene_edit_script" ||
+           tool == "run_asset_import_script" ||
            tool == "get_scene_tree" ||
            tool == "save_custom_resource" ||
            tool == "script_diagnostics" ||
@@ -67,6 +68,12 @@ godot::String _friendly_mcp_tool_action(const godot::String &tool,
         return scene_path.is_empty()
             ? godot::String("Applying scene edit script")
             : godot::String("Editing scene: ") + scene_path;
+    }
+    if (tool == "run_asset_import_script") {
+        godot::String asset_path = args.get("asset_path", "");
+        return asset_path.is_empty()
+            ? godot::String("Running asset import script")
+            : godot::String("Inspecting asset import: ") + asset_path;
     }
     if (tool == "screenshot_scene") {
         godot::String scene_path = args.get("scene_path", "");
@@ -141,6 +148,7 @@ godot::Dictionary _fennara_status_result(const FennaraLocalBridge &bridge) {
     local_tools.append("read_file");
     local_tools.append("write_or_update_file");
     local_tools.append("run_scene_edit_script");
+    local_tools.append("run_asset_import_script");
     local_tools.append("get_scene_tree");
     local_tools.append("script_diagnostics");
     local_tools.append("screenshot_scene");
@@ -559,7 +567,8 @@ void FennaraLocalBridge::_handle_tool_call(const godot::Dictionary &message) {
 
     if (tool == "write_or_update_file" ||
         tool == "script_diagnostics" || tool == "screenshot_scene" ||
-        tool == "run_scene_edit_script" || tool == "runtime_session" ||
+        tool == "run_scene_edit_script" || tool == "run_asset_import_script" ||
+        tool == "runtime_session" ||
         tool == "runtime_script" ||
         tool == "validate_scene") {
         FennaraExecutor *executor = memnew(FennaraExecutor);
@@ -696,6 +705,9 @@ void FennaraLocalBridge::_on_async_tool_call_completed(const godot::Array &resul
         FLOG_ERR(godot::String("Local bridge async tool returned no results tool=") + tool_name);
         tool_call_log::log_failed(_session_id, request_id, tool_name, input,
                                   response["error"], started_at_ms);
+        if (tool_name == "run_asset_import_script") {
+            _send_editor_filesystem_status();
+        }
         _send_json(response);
         _queue_free_executor(executor);
         return;
@@ -708,6 +720,9 @@ void FennaraLocalBridge::_on_async_tool_call_completed(const godot::Array &resul
         FLOG_ERR(godot::String("Local bridge async tool invalid result tool=") + tool_name);
         tool_call_log::log_failed(_session_id, request_id, tool_name, input,
                                   response["error"], started_at_ms);
+        if (tool_name == "run_asset_import_script") {
+            _send_editor_filesystem_status();
+        }
         _send_json(response);
         _queue_free_executor(executor);
         return;
@@ -741,6 +756,9 @@ void FennaraLocalBridge::_on_async_tool_call_completed(const godot::Array &resul
     done_details["ok"] = response["ok"];
     done_details["result_count"] = results.size();
     FLOG_CTX("TOOL", "Local bridge async tool completed", done_details);
+    if (tool_name == "run_asset_import_script") {
+        _send_editor_filesystem_status();
+    }
     _send_json(response);
     _queue_free_executor(executor);
 }

@@ -808,6 +808,7 @@ fn tool_summary(tool_name: &str, arguments: &Value) -> String {
     let fields = match tool_name {
         "write_or_update_file" => &[("path", "path"), ("mode", "mode")][..],
         "run_scene_edit_script" => &[("scene_path", "scene"), ("script_path", "script")][..],
+        "run_asset_import_script" => &[("asset_path", "asset"), ("script_path", "script")][..],
         "save_custom_resource" => &[("resource_path", "resource"), ("script_path", "script")][..],
         "project_settings" => &[("action", "action"), ("key", "key"), ("prefix", "prefix")][..],
         "runtime_session" => &[("action", "action"), ("scene_path", "scene")][..],

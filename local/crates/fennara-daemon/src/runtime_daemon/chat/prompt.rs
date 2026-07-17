@@ -336,6 +336,7 @@ fn prompt_tool_cases() -> Vec<PromptToolCase> {
         simple_case("scrape_editor"),
         simple_case("write_or_update_file"),
         simple_case("run_scene_edit_script"),
+        simple_case("run_asset_import_script"),
         simple_case("runtime_script"),
         simple_case("exec_command"),
     ];

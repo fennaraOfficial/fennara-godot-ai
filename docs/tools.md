@@ -1,551 +1,454 @@
 # Tools
 
-Fennara tools provide Godot-aware inspection, editing, validation, and runtime
-feedback. The exact tool set depends on whether you use an external MCP app or
-the built-in Fennara chat.
+Fennara gives coding agents Godot-aware inspection, editing, validation,
+screenshots, and runtime feedback. It complements normal repository and shell
+tools rather than replacing them.
 
-The MCP client should still use its normal repository search, read, and diff
-tools for broad code navigation. Fennara is for the parts that need Godot
-itself: scenes, resources, diagnostics, runtime output, screenshots, editor
-state, and Godot-aware project settings.
-
-When installed into a project, Fennara writes `addons/fennara/ai/guidelines.md` and a
-generated Fennara block in `AGENTS.md`. Agents should read that project guidance
-before doing Godot-specific work. The live MCP tool schemas remain the exact
-source of truth for arguments, limits, and result fields.
+This page explains what each tool can do, what a successful call means, and the
+important limitations or failure cases. The live tool schemas remain the source
+of truth for exact arguments, result fields, limits, and agent instructions.
+Installed projects also receive generated agent guidance at
+`addons/fennara/ai/guidelines.md`.
 
 ## Tool Surfaces
 
-| Surface | Tools |
-| --- | --- |
-| External MCP apps | `fennara_status` and the 12 Godot tools in the table below |
-| Built-in Fennara chat | The same 12 Godot tools, plus `read_file` and `exec_command` |
+External MCP clients, including Codex, Claude Code, Cursor, and Gemini, connect
+through the local `fennara-mcp` process. They use their own model account and
+their normal file, search, diff, and shell tools alongside Fennara.
 
-> [!NOTE]
-> `fennara_status` belongs to the external MCP server. The built-in chat already
-> receives connection and project status from the local daemon.
+The built-in Fennara chat uses the same daemon and Godot bridge. It can call the
+same Godot tools and also provides project-scoped `read_file` and
+`exec_command` tools. Provider and model setup belong to the built-in chat, not
+the MCP server.
 
-## External MCP Tools
+`fennara_status` is available to external MCP clients. The built-in chat already
+receives connection and active-project state from the daemon.
 
-| Tool | Use It For |
-| --- | --- |
-| `fennara_status` | Check daemon and Godot connectivity, the active project, connected editors, versions, rendering context, and advertised Godot tools. |
-| `get_scene_tree` | Inspect real scene node structure, node types, scripts, and instanced subscenes before using node paths. |
-| `get_node_properties` | Read properties changed from defaults for up to 5 scene nodes, including recursive SubResource summaries. |
-| `get_class_info` | Look up real Godot class methods, properties, signals, enums, constants, inheritance, and docs before writing Godot API code. |
-| `write_or_update_file` | Create, rewrite, or exact-replace project files. `.gd` and `.gdshader` edits run diagnostics automatically; C# validation is deferred until related edits are complete. |
-| `run_scene_edit_script` | Run one editor-time Godot worker script against exactly one scene/resource graph and save through Godot serialization. |
-| `project_settings` | Read or change `project.godot` settings, autoloads, and input actions through structured operations. |
-| `script_diagnostics` | Check targeted `.gd` and `.gdshader` files using Godot diagnostics and scene-load checks. Targeted C# diagnostics are not supported; C# validation uses a project scan with an isolated `dotnet build`. |
-| `validate_scene` | Validate scene structure and, when structural checks pass, run a brief headless startup pass. |
-| `screenshot_scene` | Capture a scene image for layout, camera, rendering, material, and UI feedback. |
-| `runtime_session` | Start, inspect, or stop one daemon-managed running Godot scene with live logs and runtime artifacts. |
-| `runtime_script` | Run a small GDScript probe or input-driver inside an active managed runtime session. |
-| `scrape_editor` | Read a narrow Godot editor debugger snapshot when the user manually ran a scene in the editor. |
+## Typical Workflow
 
-These are the tools exposed through the local `fennara-mcp` process. External
-MCP apps should use their own file readers and repository search tools for normal
-source navigation.
+1. Confirm the connected project when using an external MCP client.
+2. Inspect the relevant scene, resource, class, import state, or project setting.
+3. Make the smallest useful edit.
+4. Run diagnostics or scene validation.
+5. Use screenshots or runtime tools when visual or behavioral evidence matters.
 
-## Built-In Chat Tool Use
-
-The in-editor Fennara chat uses the same local daemon and can call the 12
-Godot-side tools listed above. It also provides two chat-only tools:
-
-| Tool | Use It For |
-| --- | --- |
-| `read_file` | Read project-scoped text files and selected images through Godot path normalization and project boundaries. |
-| `exec_command` | Run one non-interactive shell command inside the active project root. |
-
-It does not use the external MCP app's model account. Claude Code, Codex,
-Cursor, Gemini, and other MCP clients use their own model setup when they call
-Fennara over MCP. The built-in dock uses the provider configured in Fennara chat
-settings.
-
-The dock also has UI slash commands: `/provider` opens provider setup and
-`/model` opens model selection. These are not MCP tools.
-
-The built-in chat system prompt includes a compact runtime context from the
-connected Godot editor: current date, platform, project root/name, Godot
-version, Fennara plugin version, approval mode, available tools, and the Godot
-editor executable path when the bridge can report it. The prompt also advertises
-the built-in chat `exec_command` capability with the detected default shell and
-the active project root used as the default cwd.
-
-The built-in chat has two tool approval modes. `Ask for approval` allows
-read-only inspection tools immediately and pauses project mutation or runtime
-execution tools until the user approves or denies the specific tool call.
-`Full access` lets those mutating/execution tools run without prompting, while
-the existing hard tool safety blocks still apply. The `Approve for me` mode is
-not implemented.
-
-The built-in chat also has a daemon-owned `exec_command` tool. It does not route
-through the Godot bridge. Phase one runs one non-interactive shell command with
-captured stdout/stderr, timeout enforcement, output caps, and project-root cwd
-restriction. Omitted cwd defaults to the active project root, relative cwd values
-resolve under that root, and absolute cwd values outside the root are rejected.
-Shell commands use real filesystem paths; Godot tools continue to use `res://`
-and `user://`. This is approval and cwd restriction, not OS sandboxing. Phase one
-does not support PTY sessions, background `session_id`, `write_stdin`, custom
-environment variables, or shell-specific network controls. Each executed command
-also writes a daemon-side raw log and result envelope under Fennara app data so
-older compacted chat history can point to exact stdout/stderr without replaying
-large command output into model context.
-
-For shared Godot tools, the difference is presentation. External MCP clients
-receive compact Markdown results over MCP. The built-in chat may add UI-specific
-handling, such as collapsing large output or attaching screenshots and image
-context to the model request.
-
-### Selected Script Context
-
-The built-in chat can attach a selected script range from the Godot editor:
-
-1. Open a script in Godot's script editor.
-2. Select the code you want the model to see.
-3. Open the script editor context menu on that selection.
-4. Choose **Add to Chat**.
-
-The selected range appears in the chat composer as a removable code context
-chip. Click the chip to preview the attached code, or remove it before sending.
-When you send the next message, Fennara includes the selected `res://` path,
-1-based line range, and selected text as project context for that model request.
-
-This is a built-in chat convenience, not an MCP tool. It requires the local
-daemon connection and only appears when the current script editor has non-empty
-selected text. Fennara accepts up to 8 code context snippets per message and
-caps each snippet at 64,000 characters.
-
-This approval flow is currently for the built-in chat tool loop. External MCP
-clients continue to use their own permission model when deciding whether to call
-Fennara MCP tools.
-
-External MCP clients should still prefer their own normal file tools for broad
-repository reading/search when Godot feedback is not needed.
-
-## Normal Workflow
-
-For most external MCP tasks, use tools in this order:
-
-```text
-fennara_status
-inspect scene/project state
-make the smallest useful edit
-run diagnostics or validation
-use runtime tools or screenshots when behavior/visuals matter
-```
-
-The built-in chat already receives project connection context, so it begins at
-the inspection step instead of calling `fennara_status`.
+The editor filesystem can temporarily be busy scanning or importing. Asset
+tools should be used after it reports ready.
 
 ## Connection
 
 ### `fennara_status`
 
-Use this first when the MCP client is not sure which Godot project is connected.
-It reports daemon and Godot bridge reachability, the active project, connected
-editors, Godot and addon versions, rendering context, and the tools advertised
-by each connected editor. For the active project it also reports whether
-Godot's editor filesystem is still scanning or importing, its progress, and
-whether asset-facing tools are ready for use.
-The MCP response is one plain-text status block, without a duplicate structured
-JSON block.
+Reports the MCP server, daemon, active Godot project, connected editor sessions,
+component versions, rendering context, advertised tools, and editor filesystem
+readiness.
 
-The editor advertisement describes the Godot bridge and currently includes
-`read_file`, which the built-in chat can use. For an external MCP app, the
-**External MCP Tools** table above and the live MCP `tools/list` response are
-the callable surface.
+Working behavior:
 
-Example prompt:
+- Returns one plain-text status block.
+- Distinguishes a ready editor filesystem from one that is scanning or importing.
+- Reports whether asset-facing tools are currently ready.
+- Shows version differences so mismatched installations can be diagnosed.
 
-```text
-Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
-```
+Important limits and failures:
+
+- It reports project-level readiness, not readiness for one specific asset path.
+- A disconnected daemon, missing active project, or disconnected Godot plugin is
+  reported directly instead of being treated as a ready project.
+- Readiness can change briefly while Godot reimports files.
 
 ## Inspection
 
-### `read_file` (Built-In Chat)
-
-Use this when Godot-side path normalization or image handling matters. It is
-project-scoped and accepts Godot-style paths such as `res://scripts/player.gd`.
-For broad source reading, use the MCP client's normal file reader. Fennara's
-own addon remains protected, except `res://addons/fennara/ai/guidelines.md` is
-readable so agents can follow the generated project guidance.
-
 ### `get_scene_tree`
 
-Use this before guessing node paths in a `.tscn` file. It returns nodes, types,
-attached scripts, and instanced scenes. Node paths are relative to the scene
-root when passed to other tools.
+Loads a scene through Godot and returns its node hierarchy, node classes,
+attached scripts, and instanced subscenes. The returned paths can be used by
+other scene tools.
 
-Example prompt:
+Working behavior:
 
-```text
-Use get_scene_tree on res://scenes/player.tscn and summarize the important nodes.
-```
+- Reads authored scenes without rewriting them.
+- Makes node and instance structure visible before an edit.
+- Keeps the result focused on hierarchy rather than expanding every resource.
+
+Important limits and failures:
+
+- It is not a complete 3D asset, mesh, material, skeleton, or animation report.
+- A scene that Godot cannot load returns a failure instead of a guessed tree.
+- Large resource details belong in targeted property or script inspection.
 
 ### `get_node_properties`
 
-Use this after `get_scene_tree` when you need to understand existing node or
-resource configuration. It shows properties changed from defaults and expands
-embedded SubResources recursively.
+Shows properties that differ from class defaults for selected nodes and expands
+useful summaries of embedded resources.
 
-Attached GDScript exports are shown from their source declarations. Attached C#
-exports are shown from Godot's loaded generic `Script` metadata, including
-property names, types, and defaults when available.
+Working behavior:
 
-Large or opaque resources are summarized into readable API-oriented output,
-including TileSet, TileMapLayer data, GridMap data, MeshLibrary resources,
-Theme resources, AnimationTree graphs, AnimationLibrary, Animation, and
-SpriteFrames. A call can inspect up to 5 targets.
+- Supports up to five node targets in one call.
+- Reads exported GDScript properties and available C# script metadata.
+- Summarizes resources such as animations, themes, tile data, mesh libraries,
+  sprite frames, and animation graphs instead of dumping opaque values.
 
-Example prompt:
+Important limits and failures:
 
-```text
-Use get_node_properties for the Player node in res://scenes/player.tscn before editing movement.
-```
+- It is node-targeted, not a full-scene resource inventory.
+- Imported source assets may expose less information than authored `.tscn`
+  nodes. Use `run_asset_import_script` when the generated imported resource must
+  be inspected directly.
+- Invalid node paths are reported rather than silently ignored.
 
 ### `get_class_info`
 
-Use this before `run_scene_edit_script` when touching Godot nodes/resources. It
-helps avoid invented method names, wrong properties, wrong enum usage, and wrong
-constructor assumptions by returning the real Godot API surface for a class.
+Returns the real API surface for a Godot class, including inheritance,
+properties, methods, signals, enums, constants, and available documentation.
 
-For built-in Godot classes, Fennara reads official XML docs from the GitHub
-branch matching the connected editor's major/minor version, with an explicit
-`master` fallback if that version branch or class XML is unavailable. Runtime
-ClassDB information still comes from the connected editor.
+Working behavior:
 
-For GDExtension/native addon classes, Fennara skips official Godot XML docs
-lookup and returns runtime ClassDB/property information instead.
+- Runtime ClassDB information comes from the connected Godot editor.
+- Built-in classes use official Godot XML documentation matching the connected
+  major and minor version, with an explicit `master` fallback.
+- GDExtension and native addon classes return their available runtime class and
+  property information without pretending they have official Godot docs.
 
-Example prompt:
+Important limits and failures:
 
-```text
-Use get_class_info for CharacterBody2D and AnimationPlayer before writing the scene edit script.
-```
+- Documentation lookup can be incomplete when the matching upstream class XML
+  is unavailable or a response cannot be received completely.
+- Runtime-only behavior may still require a small editor-side script probe.
+- A class name that does not exist is reported as missing.
 
 ## Editing
 
 ### `write_or_update_file`
 
-Use this for normal project text files when a Fennara-aware edit is appropriate.
-It supports two modes:
+Creates, rewrites, or performs an exact replacement in a project text file.
 
-- `write`: create or completely rewrite a file with `new_content`.
-- `update`: replace exact `old_content` with `new_content`; include enough
-  surrounding text to make the match unique.
+Working behavior:
 
-For `.gd` and `.gdshader` files, Fennara automatically runs diagnostics after
-the edit and returns syntax/type/reference or shader parser feedback. Successful
-C# writes deliberately defer diagnostics so a temporarily incomplete multi-file
-change is not checked after every write. Finish the related C# edits, then run
-one `script_diagnostics` call with `scan_project: true`.
+- `write` creates or replaces a file from complete content.
+- `update` replaces one unique exact text block.
+- GDScript and shader edits automatically return Godot diagnostics.
+- Shader edits also try to reserialize referencing scenes and resources through
+  Godot so embedded material data does not stay stale.
+- C# writes are allowed to form a multi-file edit before one project diagnostic
+  build is requested.
 
-For `.gdshader` edits, Fennara also scans referencing `.tscn` and `.tres` owners
-and reserializes them through Godot when possible so stale embedded
-`ShaderMaterial` data can be rewritten. Check `reserialized_resources`,
-`reserialize_warnings`, and `reserialize_skipped` in the result.
+Important limits and failures:
 
-Blocked paths include `res://project.godot`, `res://.godot/`, `res://.git/`,
-`res://addons/fennara/`, and any `plugin.cfg`. Do not use this tool or generic
-file edits for `.tscn`, `.tres`, or `.res` surgery; use Godot-aware structured
-tools instead.
-
-Example prompt:
-
-```text
-Use write_or_update_file to patch res://scripts/player.gd, then report any diagnostics.
-```
+- Ambiguous or missing update text fails instead of changing an arbitrary match.
+- Protected Fennara, Git, Godot cache, plugin manifest, and project-setting paths
+  cannot be edited through this tool.
+- It is not intended for raw `.tscn`, `.tres`, or `.res` surgery.
+- C# validation is not run after every individual write. Use a project diagnostic
+  scan after the related C# edits are complete.
+- Referencing shader owners that cannot be safely reserialized are reported as
+  skipped or warned.
 
 ### `run_scene_edit_script`
 
-Use this for scene/resource work that needs Godot APIs. The tool runs one
-editor-time `@tool` worker script against exactly one detached scene/resource
-graph. `mode: "edit"` allows authored `.tscn` and `.scn` mutation through Godot
-serialization. `mode: "inspect"` loads an existing `PackedScene`, including an
-imported `.glb` or `.gltf`, as a read-only context that is never saved.
+Runs one editor-time GDScript worker against one authored scene or Godot resource
+graph. This is the structured way to inspect or edit scenes through Godot's
+object model and serializer.
 
-Good fit for:
+Working behavior:
 
-- add, rename, remove, or reparent nodes
-- assign resources, SubResources, and exported properties
-- edit Control layout, cameras, collision shapes, materials, animations,
-  signals, and groups
-- create a new scene or standalone `.tres` resource
-- inspect editor-only or addon/runtime-only Godot behavior that static class info
-  cannot answer
+- Inspect mode loads a detached read-only scene graph and never saves it.
+- Edit mode can add, remove, rename, or reparent nodes; assign resources; change
+  properties; create scenes; and save through Godot serialization.
+- Existing scenes are saved only when the worker marks the context modified.
+- New nodes and PackedScene instances use explicit ownership helpers so Godot
+  serializes the intended structure.
+- Script diagnostics run before execution, and saved scenes receive follow-up
+  validation.
+- Inherited scene roots are preserved when Godot can serialize the requested
+  overrides safely.
+- Every call returns the effective temporary worker path, so a failed worker can
+  be corrected without recreating it from scratch.
 
-Script contract:
+Important limits and failures:
 
-- worker scripts use `@tool`, extend `RefCounted`, and define
-  `func run(ctx) -> void`
-- inline code is saved under `res://.fennara/tmp/editor_scripts/`
-- every result includes the effective `script_path`
-- call `ctx.mark_modified()` only when the target should be saved
+- The loaded graph is not the same as pressing Run Scene. SceneTree-dependent
+  gameplay APIs, timers, frame processing, and global transforms can behave
+  differently or fail when used on detached nodes.
+- Inspect mode blocks Fennara context mutation helpers, but arbitrary GDScript
+  must still avoid direct filesystem, editor, OS, and resource-saving side
+  effects.
+- Imported source files such as `.glb` and `.gltf` are not saved by this tool.
+  Import settings belong to `run_asset_import_script`.
+- Incorrect ownership of PackedScene internals is rejected because it can
+  flatten or duplicate instance contents.
+- If saving would flatten an inherited root, Fennara restores the original file
+  and reports failure.
+- Diagnostics or runtime errors stop the edit. A failed result does not create or
+  update the target scene, although the temporary worker script may remain for a
+  retry.
 
-Common context helpers include `ctx.get_scene_root()`, `ctx.is_read_only()`, `ctx.set_scene_root()`,
-`ctx.own()`, `ctx.instance_scene()`, `ctx.get_node_or_null()`,
-`ctx.find_nodes_by_name()`, `ctx.remove_node()`, `ctx.clear_children()`,
-`ctx.mark_modified()`, `ctx.log()`, and `ctx.error()`.
+### `run_asset_import_script`
 
-The result includes logs, modified/saved status, script diagnostics, and scene
-validation after edits. Use `get_class_info` when you need class API details
-before writing the worker script.
+Runs one bounded editor-time GDScript worker against an imported source asset
+and its Godot import configuration. It supports models, textures, audio, fonts,
+and other formats that already have a matching `.import` sidecar.
 
-Inspect mode rejects mutating context helpers and skips scene save and
-saved-scene validation. Worker code must still avoid direct mutation APIs such
-as `ResourceSaver`, filesystem writes, import-setting changes, and editor or OS
-state changes.
+Working behavior in inspect mode:
 
-Example prompt:
+- Reports the importer, generated resource class, import validity, typed current
+  options, generated files, and upstream dependencies.
+- Loads the generated resource without reusing stale nested cache entries.
+- Can temporarily instantiate an imported PackedScene inside the live editor
+  SceneTree for bounded inspection, then removes it without saving it.
+- Provides bounded summaries for generated subresources.
+- Never persists import-option changes in inspect mode.
 
-```text
-Use get_class_info first, then run_scene_edit_script to add a named StatusLabel node to res://scenes/main.tscn.
-```
+Working behavior in edit mode:
+
+- Stages supported existing import options while preserving their native Godot
+  Variant types.
+- Lets the live editor perform the reimport through `EditorFileSystem`.
+- Reports success only after the canonical import settings, generated outputs,
+  editor filesystem state, and a fresh deep resource load verify.
+- Attempts to restore and reimport the previous configuration when verification
+  fails, and reports whether that recovery succeeded.
+
+Important limits and failures:
+
+- The source file must already be imported and have a valid `.import` sidecar.
+- Version one edits only options classified as safe generated-cache changes for
+  supported built-in texture and scene importers.
+- Importer identity, import scripts, `_subresources`, external extraction paths,
+  and options with unknown effects remain inspect-only.
+- Unknown options, unsupported options, and values with the wrong Variant type
+  fail instead of being coerced.
+- Direct `.import` file modification is detected, restored, and reported as a
+  failure. Fennara owns sidecar persistence.
+- Imported scenes configured with a root script are not temporarily instantiated
+  by the inspection helper.
+- Dependencies describe files needed to import the selected asset. They do not
+  identify downstream project consumers such as scenes using a model, materials
+  using a texture, scripts playing audio, or themes using a font.
+- Script diagnostics, runtime errors, reimport errors, missing generated files,
+  invalid filesystem state, or reload failures prevent a successful result.
+- Large arrays and resource internals are bounded or summarized to protect tool
+  output. A bounded result is not a promise that every vertex, key, or dependency
+  was printed inline.
 
 ### `project_settings`
 
-Use this for Godot project settings, autoloads, display/window settings,
-rendering settings, physics settings, application metadata, addon configuration,
-and input actions. For input actions, use structured events instead of editing
-`project.godot` manually.
+Reads and changes structured Godot project settings, autoloads, application
+metadata, rendering and display settings, and input actions.
 
-`project_settings` with `action: "list"` returns settings saved in
-`project.godot` with compact values in the markdown result. Input actions include
-deadzone, event count, and readable event summaries, so agents can inspect
-controls without immediately falling back to raw `project.godot` reads.
+Working behavior:
 
-Example prompt:
+- Uses Godot-aware structured operations instead of raw `project.godot` text
+  replacement.
+- Lists input actions with deadzones, event counts, and readable event summaries.
+- Supports structured input events when adding or updating controls.
 
-```text
-Use project_settings to inspect existing input actions, then add a jump action bound to Space.
-```
+Important limits and failures:
+
+- Unknown operations or invalid setting values are reported.
+- This tool does not replace scene or script editing.
+- Changes should still be validated when they affect startup, rendering, input,
+  or addon behavior.
 
 ## Checks
 
 ### `script_diagnostics`
 
-Use this after editing `.gd` or `.gdshader` files outside
-`write_or_update_file`. For C#, finish all related writes and then use one
-project scan rather than checking every intermediate edit.
+Runs Godot-aware diagnostics for scripts and shaders.
 
-Targeted calls support at most 5 files. `scan_project: true` scans project
-GDScript and shaders, then runs one incremental `dotnet build` for the selected
-C# project or solution. The build writes final assemblies to isolated
-per-project diagnostic output under `.godot/fennara/diagnostic_build`; it does not replace
-`.godot/mono/temp/bin/Debug` or trigger Godot editor assembly reload.
+Working behavior:
 
-After the editor filesystem finishes its initial scan, the Godot plugin starts
-one worker-thread C# preparation immediately. It runs the isolated build in the
-background. C# tools called before preparation completes wait on that worker
-without blocking the editor main thread. If source changes
-during the background build, the build is allowed to finish and the next
-explicit project scan forces one refresh. Targeted C# diagnostics are not
-supported. Runtime and diagnostic builds are serialized because they share
-Godot's intermediate MSBuild output.
+- Targeted GDScript and shader calls support up to five files.
+- GDScript diagnostics come from Godot's language server.
+- Shader diagnostics come from Godot's shader parser.
+- Targeted GDScript checks also load relevant scenes in memory so errors caused
+  by scene attachment can be associated with the script and scene.
+- Project scans check GDScript and shaders, then perform one isolated incremental
+  C# build when a C# project is present.
+- Diagnostic C# assemblies are kept separate from the editor's normal runtime
+  assemblies.
 
-The diagnostic sources are language-specific:
+Important limits and failures:
 
-- `.gd`: Godot's GDScript diagnostics.
-- `.cs`: targeted diagnostics are not supported. Use
-  `scan_project: true`, which uses Godot's structured build logger with one
-  cancellable, isolated `dotnet build` for the selected project or solution.
-- `.gdshader`: Godot shader parser diagnostics.
-
-For targeted `.gd` files, Fennara also loads and instantiates project
-`.tscn` scenes in memory on the Godot main thread with Godot logging captured.
-Script-related scene-load errors are attached back to the matching script with
-`source="scene_load"` and `scene_path`, so agents can see which scene triggered
-the script error. This is a diagnostic pass only; it does not open the editor UI,
-run gameplay, or validate arbitrary scene/resource state.
-
-For `scan_project: true`, Fennara skips scene instantiation and reports that
-scene-load diagnostics were skipped. That project-wide mode can miss errors that
-only occur when scripts are attached to or loaded through scenes, such as missing
-unique-node references, invalid `NodePath` wiring, broken exported scene/resource
-assignments, or script initialization side effects.
-
-Example prompt:
-
-```text
-Use script_diagnostics on res://scripts/player.gd and res://scripts/enemy.gd.
-```
+- Targeted C# file diagnostics are not supported. C# uses a project scan.
+- Project-wide scans skip per-scene instantiation and can miss problems that only
+  appear when a script is loaded through a particular scene.
+- Language-server, parser, or build failures are returned as diagnostic failures,
+  not treated as clean results.
+- Diagnostics prove that the checked code can be parsed or compiled in the tested
+  context. They do not prove gameplay correctness.
 
 ### `validate_scene`
 
-Use this after scene edits or when checking scene/resource integrity. It accepts
-1 to 10 scene paths.
+Checks one or more scenes for structural problems and, where supported, runs a
+brief headless startup pass.
 
-Structural checks include missing scripts/resources, invalid NodePath properties,
-invalid GDScript `$Node`/`get_node()` references, duplicate sibling names,
-cyclic scene dependencies, and unset exported Resource/Object variables. Export
-metadata is read through Godot's generic `Script` API for both GDScript and C#.
+Working behavior:
 
-Unset exported Resource/Object variables are reported as structural notes because
-they may be optional or assigned at runtime. Repeated unset exports are grouped
-once per script with the unique variable names and capped affected scene counts,
-so large scenes do not flood the receipt with one line per node/property pair.
-Ignore these notes when the references are intentionally optional or assigned at
-runtime.
+- Accepts up to ten scene paths.
+- Structural checks cover missing scripts and resources, invalid node paths,
+  duplicate sibling names, cyclic scene dependencies, and relevant exported
+  references.
+- Optional or runtime-assigned exported references are reported as notes rather
+  than unconditional failures.
+- Authored scenes with clean structural results receive a three-second headless
+  startup pass with logs and artifacts retained.
+- Repeated findings are grouped so large scenes do not flood the result.
 
-For authored scenes with zero structural errors, Fennara also runs each scene
-headlessly for exactly 3 seconds through the local daemon using up to 3
-memory-throttled workers. Imported source scenes such as `.glb` and `.gltf`
-receive structural validation only because Godot's command-line scene runner
-cannot launch those source paths directly. The result includes runtime status,
-crash/error/warning flags, compact runtime output inline, and paths to the full
-result JSON and raw runtime logs.
-The headless pass enables Godot's local debugger with error breaks ignored or
-auto-continued so debugger-aware addons can send debugger messages without
-requiring an attached editor session; normal errors and warnings are still
-captured in the log.
-Fennara intentionally stops the process after the validation window, so a
-non-zero exit code from that stop is not by itself a scene failure. It does not
-open scenes in the editor or scrape the editor Output panel.
+Important limits and failures:
 
-Example prompt:
-
-```text
-Use validate_scene on res://scenes/main.tscn and explain any errors or warnings.
-```
+- Imported source scenes receive structural validation only because they cannot
+  be launched directly as authored project scenes.
+- Fennara intentionally stops the process after the validation window. That stop
+  code alone is not treated as a scene failure.
+- A brief startup pass cannot validate all gameplay paths, visuals, performance,
+  animation quality, or user interaction.
+- Structural errors prevent the runtime pass for that scene.
 
 ## Visual And Runtime Feedback
 
 ### `screenshot_scene`
 
-Use this when layout, framing, camera view, rendering, material/shader output,
-animation-visible state, or visual correctness matters.
+Captures visual evidence from authored scenes and supported imported 3D assets.
 
-Imported 3D `PackedScene` sources such as `.glb` and `.gltf` are instantiated
-for an isolated `SubViewport` capture. They are not opened as the edited scene,
-so previewing them does not change the active editor tab or trigger Godot's
-inherited-scene confirmation dialog. Auto-framed 3D captures add neutral
-preview lighting only when the scene supplies no environment or light, and a
-visually sparse capture, including a `Camera3D` capture, is still returned with
-framing metrics and a partial status instead of hiding the image evidence.
+Working behavior:
 
-External MCP clients receive the primary screenshot as an image content block
-when their client/model supports image inputs, while the text receipt still
-includes saved paths and metadata as a fallback.
+- Imported 3D PackedScenes are instantiated in an isolated SubViewport rather
+  than opened as editable inherited scenes.
+- Automatic 3D framing can add neutral preview lighting when the asset has no
+  environment or lights.
+- A seven-view 3D collage can include front, back, left, right, top,
+  perspective, and isometric views.
+- A target node can be framed while leaving surrounding scene context visible.
+- Image-capable MCP clients and built-in chat models can receive the primary
+  screenshot as image context. Saved image paths remain available as fallback.
+- Sparse captures are returned with framing metrics and partial status instead
+  of hiding the image.
 
-In the built-in chat, the daemon attaches the primary screenshot to the next
-model request only when the selected model advertises image input support. If
-the selected model is text-only, the tool still succeeds and the model receives
-the text receipt plus saved `image_path`/`image_res_path` values. The chat UI
-renders screenshots from saved-file references, including when history is
-loaded in a later session; raw screenshot bytes are not persisted in tool raw
-results, markdown, replay messages, or summaries.
+Important limits and failures:
 
-For 3D scenes, `view: "all"` captures front, back, left, right, top,
-perspective, and isometric into one labeled collage. `target_node_path`
-captures frame the camera around the requested subtree while leaving the rest
-of the scene visible for context.
-
-Example prompt:
-
-```text
-Use screenshot_scene on res://scenes/main_menu.tscn and check whether the buttons are visible.
-```
+- Automatic framing cannot always infer the artistically useful viewpoint for a
+  large interior, room, level, or unusual skinned asset.
+- A returned image can be valid while content validation reports that framing is
+  sparse or uncertain.
+- Text-only models receive the receipt and saved paths but cannot directly see
+  attached image pixels.
+- Loading, rendering, capture ownership, or file-save failures are reported.
 
 ### `runtime_session`
 
-Use this to start, check, or stop a managed windowed Godot runtime session.
+Starts, checks, or stops a daemon-managed windowed Godot scene.
 
-A `start` request first runs scene-execution gates. If a gate fails, Fennara
-does not open the scene. If the gates pass, Fennara launches the scene in a
-separate Godot process with the runtime helper enabled. Runtime sessions enable
-Godot's local debugger with error breaks ignored or auto-continued so
-debugger-aware addons can send debugger messages without requiring an attached
-editor session; normal errors and warnings are still captured in
-`runtime_session.log`.
+Working behavior:
 
-For C# projects, `start` first performs the same kind of explicit root `.csproj`
-Debug build Godot performs before Play. This is a real runtime build into
-`.godot/mono/temp/bin/Debug`, unlike the isolated compile-only build used by
-`script_diagnostics`. It ensures the launched process uses the latest C# code.
-An open editor may detect this real assembly update and attempt normal hot
-reload; Fennara does not close the editor.
+- Startup gates run before a scene process is launched.
+- A successful start returns a session identifier, process state, log paths,
+  startup findings, and available capture information.
+- Status returns new runtime output without discarding the full session log.
+- Stop returns final process and log information.
+- C# projects receive a real runtime build into Godot's normal Debug output before
+  launch so the process uses current assemblies.
+- The runtime log is the source of truth for Godot output, runtime errors, helper
+  markers, captures, and stop events.
 
-Actions:
+Important limits and failures:
 
-- `start`: open the scene, wait briefly for startup output, and return
-  `session_id`, process state, log paths, a startup capture path, optional image
-  context for image-capable callers, and a capped new-log excerpt
-- `status`: report the active managed session/process state and any new-log
-  excerpt
-- `stop`: stop the managed runtime process and return final process/log
-  details
-
-The daemon currently allows one managed runtime session globally across connected
-Godot editors. The full `runtime_session.log` is the source of truth for Godot
-stdout/stderr, runtime errors, `FENNARA_SCRIPT_*` markers, captures,
-close/stop events, and `ctx.log(...)` output.
-
-After spawning, `start` waits up to 5 seconds for startup log output, including
-the `FENNARA_RUNTIME_SESSION_READY` marker and the
-`FENNARA_RUNTIME_ORIENTATION_NOTE` startup orientation tail marker when the
-helper prints it in time. If either marker is not seen in that window, the
-receipt says so and later `status` calls can show new log lines.
-
-Example prompt:
-
-```text
-Use runtime_session to start res://scenes/main.tscn, then inspect the returned runtime log excerpt.
-```
+- Only one daemon-managed runtime session is active globally at a time.
+- Failed startup gates prevent the scene from opening.
+- A C# runtime build can trigger the open editor's normal assembly reload.
+- Startup readiness markers may arrive after the initial response and appear in
+  a later status call.
+- Managed sessions are separate Godot processes, not the scene manually running
+  inside the editor.
 
 ### `runtime_script`
 
-Use this inside an active `runtime_session` to inspect live state, send input,
-click UI, capture frames, or run small bounded probes.
+Runs a bounded GDScript probe or input driver inside an active managed runtime
+session.
 
-Script contract:
+Working behavior:
 
-- scripts are runtime scripts, not editor `@tool` scripts
-- scripts extend `RefCounted` and define `func run(ctx: Variant) -> void`
-- pass the active `session_id` and either inline `code` or a `script_path`
-- a script may finish while the scene stays open
+- Can inspect live nodes, log findings, wait for state, send mapped or low-level
+  input, perform raycasts, interact with basic UI, and capture frames.
+- A script can finish while the managed scene remains open for another probe.
+- Results include diagnostics, runtime findings, capture paths, log paths, and
+  session state when available.
 
-The result includes status, `session_id`, `script_run_id`, `script_path`,
-diagnostics, capture paths, optional image context for `ctx.capture(...)`
-outputs when the caller supports images, runtime findings, scene/session state
-when available, log paths, and a capped new-log excerpt.
+Important limits and failures:
 
-The `ctx` helper surface covers logging, waiting, screenshots, InputMap
-actions, key/mouse events, mouse motion, 2D world-to-viewport mouse conversion,
-node lookup, snapshots, wait/until helpers, raycasts, scan raycasts, and basic UI clicking. See the
-`runtime_script` schema and `res://addons/fennara/runtime/` helper scripts for
-exact helper names and signatures.
-
-Example prompt:
-
-```text
-Use runtime_script in the active session to read the current scene state, capture a frame, and report any runtime errors.
-```
+- It requires a valid active `runtime_session` identifier.
+- Runtime scripts are not editor `@tool` scripts and cannot be used as scene edit
+  workers.
+- Invalid diagnostics, timeouts, runtime errors, closed sessions, or unavailable
+  nodes are reported.
+- Probes must remain bounded. They are not a replacement for a permanent gameplay
+  automation framework.
 
 ### `scrape_editor`
 
-Use this only when the user manually ran a scene in Godot and wants to know what
-the editor debugger currently shows. For scenes started with `runtime_session`,
-read `runtime_session.log` instead.
+Reads a compact debugger snapshot after the user manually runs a scene through
+the Godot editor.
 
-The result is intentionally narrow and compact: repeated issues are grouped,
-detail lines are capped, and raw editor UI noise is omitted.
+Working behavior:
 
-Example prompt:
+- Groups repeated debugger issues and caps noisy details.
+- Helps inspect editor-run output that is not owned by a managed runtime session.
 
-```text
-Use scrape_editor with target debugger and summarize the current Godot debugger errors.
-```
+Important limits and failures:
+
+- It is intentionally narrower than reading every editor UI element or log line.
+- It should not be used for scenes launched through `runtime_session`; the
+  managed runtime log is more complete.
+- No useful debugger state may be available when nothing was manually run.
+
+## Built-In Chat Tools And Controls
+
+### `read_file`
+
+Reads project-scoped text files and supported images using Godot path handling.
+It is useful when `res://` normalization or image handling matters. Broad source
+navigation still belongs to normal repository tools.
+
+### `exec_command`
+
+Runs one non-interactive command with the active project root as the default
+working directory.
+
+Working behavior:
+
+- Captures standard output and error with time and output limits.
+- Rejects working directories outside the active project root.
+- Stores a raw daemon-side receipt so large output does not need to remain in the
+  model conversation.
+
+Important limits and failures:
+
+- It is project-root restriction and approval handling, not an operating-system
+  sandbox.
+- It does not provide an interactive terminal, PTY, background session, standard
+  input stream, or arbitrary environment configuration.
+- Non-zero exits, timeouts, and output truncation are reported.
+
+### Chat Controls
+
+The built-in chat supports approval modes for project-changing and runtime tool
+calls. Read-only inspection can run immediately, while mutation or execution can
+require explicit approval. Full access removes those prompts but does not bypass
+hard safety checks.
+
+Selected code from Godot's script editor can be attached with **Add to Chat**.
+The composer shows the attachment before sending. `/provider` opens provider
+setup and `/model` opens model selection; these are chat commands, not MCP tools.
 
 ## What Fennara Does Not Replace
 
-Use the MCP client's own tools for:
+Use normal development tools for:
 
 - broad repository search and navigation
 - ordinary text file reading
-- diffs and version control inspection
-- editing files that do not need Godot feedback
-- running non-Godot shell commands
+- diffs and version control
+- edits that do not need Godot feedback
+- general shell work
 
-Use Fennara when the next step depends on Godot understanding the project.
+Use Fennara when the answer depends on Godot understanding, importing,
+serializing, rendering, validating, or running the project.

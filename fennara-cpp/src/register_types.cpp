@@ -12,6 +12,7 @@
 #include "fennara/tools/get_class_info/get_class_info.hpp"
 #include "fennara/tools/validate_scene.hpp"
 #include "fennara/tools/run_scene_edit_script.hpp"
+#include "fennara/tools/run_asset_import_script.hpp"
 #include "fennara/tools/project_settings.hpp"
 #include "fennara/tools/read_file.hpp"
 #include "fennara/tools/runtime_script.hpp"
@@ -49,6 +50,8 @@ void initialize_fennara(godot::ModuleInitializationLevel p_level) {
         godot::ClassDB::register_class<fennara::FennaraValidateSceneTool>();
         godot::ClassDB::register_class<fennara::FennaraRunSceneEditScriptContext>();
         godot::ClassDB::register_class<fennara::FennaraRunSceneEditScriptTool>();
+        godot::ClassDB::register_class<fennara::FennaraRunAssetImportScriptContext>();
+        godot::ClassDB::register_class<fennara::FennaraRunAssetImportScriptTool>();
         godot::ClassDB::register_class<fennara::FennaraProjectSettingsTool>();
         godot::ClassDB::register_class<fennara::FennaraRuntimeSessionTool>();
         godot::ClassDB::register_class<fennara::FennaraRuntimeScriptTool>();

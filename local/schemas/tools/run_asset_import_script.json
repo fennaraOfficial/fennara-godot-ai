@@ -1,0 +1,48 @@
+{
+  "name": "run_asset_import_script",
+  "description_lines": [
+    "Run one bounded editor-side GDScript worker against an existing Godot-imported source asset and its `.import` configuration.",
+    "Use this tool for any source file that Godot has imported and that has a matching `.import` sidecar, including 3D assets, textures, audio, fonts, and importer-specific formats. Do not assume the imported resource type from the file extension alone.",
+    "Tool boundary: use this tool to inspect the generated resource or change how Godot imports the source everywhere. Use `run_scene_edit_script` to change nodes, transforms, materials, or other per-instance behavior in an authored `.tscn` or `.scn` scene.",
+    "Recommended workflow: start with `mode=inspect`; read `ctx.get_import_info()`; list only relevant options with `ctx.list_import_options(prefix)`; load the generated resource; branch on the reported importer or resource class; and log bounded, task-relevant summaries. Switch to `mode=edit` only after the exact option, current native type, and `editable=true` status have been observed.",
+    "The script contract is `@tool extends RefCounted` with `func run(ctx) -> void`.",
+    "Context inspection helpers: `ctx.get_asset_path()`, `ctx.get_mode()`, `ctx.is_read_only()`, `ctx.get_import_info()`, `ctx.has_import_option(name)`, `ctx.get_import_option(name)`, `ctx.list_import_options(prefix)`, `ctx.get_imported_resource()`, `ctx.instantiate_imported_scene()`, `ctx.get_generated_files()`, `ctx.get_dependencies()`, and `ctx.get_subresource_summary()`.",
+    "Context edit helpers: `ctx.set_import_option(name, value)`, `ctx.get_staged_changes()`, and `ctx.discard_import_option_change(name)`. Import values use their native Godot Variant types. Preserve the type returned by `get_import_option()`.",
+    "Reporting helpers: `ctx.log(value)`, `ctx.error(message)`, and `ctx.require(condition, message)`.",
+    "`ctx.get_dependencies()` reports upstream files needed to import this asset. It does not find downstream project consumers such as scenes using a model, materials using a texture, scripts playing audio, or themes using a font.",
+    "In inspect mode, setters fail and no import settings are saved. In edit mode, changes are staged until the worker exits successfully.",
+    "Fennara owns `.import` persistence, calls the live editor's `EditorFileSystem.reimport_files()`, verifies canonical settings, generated outputs, filesystem validity, and a deep resource reload, then attempts to restore and reimport the previous configuration if requested verification fails. Recovery success or failure is reported explicitly.",
+    "Do not write `.import` files directly. Direct sidecar modification is detected, restored, and reported as failure.",
+    "Version one edits only safe existing cache-generating options for built-in texture and scene importers. `_subresources`, importer identity, import scripts, external extraction paths, and unknown importer effects are inspect-only.",
+    "`ctx.get_imported_resource()` is loaded with `CACHE_MODE_IGNORE_DEEP`. `ctx.instantiate_imported_scene()` places an owned temporary PackedScene instance in the live editor SceneTree and removes it after the worker. It refuses imported scenes with `nodes/root_script` configured.",
+    "Provide exactly one of `code` or `script_path`. On retries, patch the returned `script_path` and reuse it.",
+    "Worker syntax is checked through Fennara's shared GDScript language-server diagnostics before execution. If the language server is unavailable, Godot's native script loader remains the final safety check and rejects invalid workers.",
+    "Keep logs bounded. Summarize meshes, materials, animations, dependencies, and other large data instead of logging raw arrays, vertices, animation keys, texture bytes, or the full `_subresources` dictionary.",
+    "General inspection starter: `@tool\nextends RefCounted\n\nfunc run(ctx) -> void:\n\tvar info: Dictionary = ctx.get_import_info()\n\tctx.log(\"path=%s importer=%s class=%s valid=%s\" % [ctx.get_asset_path(), info.get(\"importer\", \"\"), info.get(\"resource_class\", \"\"), info.get(\"import_valid\", false)])\n\tctx.log(\"options=%d generated=%d dependencies=%d\" % [info.get(\"option_count\", 0), info.get(\"generated_file_count\", 0), info.get(\"dependency_count\", 0)])\n\tvar resource: Resource = ctx.get_imported_resource()\n\tif resource == null:\n\t\tctx.error(\"Imported resource could not be loaded\")\n\t\treturn`.",
+    "Concrete edit example after inspection has confirmed the option is editable and Boolean: `@tool\nextends RefCounted\n\nfunc run(ctx) -> void:\n\tvar option_name: String = \"mipmaps/generate\"\n\tif not ctx.has_import_option(option_name):\n\t\tctx.error(\"Expected import option was not found\")\n\t\treturn\n\tvar before: Variant = ctx.get_import_option(option_name)\n\tif not (before is bool):\n\t\tctx.error(\"Expected a Boolean import option\")\n\t\treturn\n\tctx.set_import_option(option_name, true)\n\tctx.log(\"staged=%s\" % str(ctx.get_staged_changes()))`. Option names and valid values are importer-specific, so inspect rather than copying this texture option to unrelated assets."
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "asset_path": {
+        "type": "string",
+        "description": "Existing imported source path under `res://`. The matching `<asset_path>.import` sidecar must already exist."
+      },
+      "mode": {
+        "type": "string",
+        "enum": ["inspect", "edit"],
+        "default": "inspect",
+        "description": "Use `inspect` first for read-only imported-resource and option inspection. Use `edit` only after inspection has identified an exact supported option and its native type; successful edits automatically reimport and verify through the live editor."
+      },
+      "code": {
+        "type": "string",
+        "description": "Raw `@tool extends RefCounted` GDScript defining `func run(ctx) -> void`. Keep it targeted to one asset and emit bounded summaries with `ctx.log()`. Provide exactly one of `code` or `script_path`."
+      },
+      "script_path": {
+        "type": "string",
+        "description": "Existing `.gd` worker script. Prefer patching and reusing this path after a failed attempt. Provide exactly one of `code` or `script_path`."
+      }
+    },
+    "required": ["asset_path"]
+  }
+}

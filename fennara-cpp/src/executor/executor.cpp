@@ -52,6 +52,7 @@ void FennaraExecutor::_bind_methods() {
 }
 
 FennaraExecutor::FennaraExecutor() {
+    set_process(false);
 }
 
 FennaraExecutor::~FennaraExecutor() {
@@ -69,6 +70,19 @@ FennaraExecutor::~FennaraExecutor() {
     if (_runtime_session_thread.joinable()) {
         _runtime_session_thread.join();
     }
+}
+
+void FennaraExecutor::_process(double) {
+    if (!_asset_import_execution_pending) {
+        set_process(false);
+        return;
+    }
+
+    set_process(false);
+    _asset_import_execution_pending = false;
+    const uint64_t batch_generation = _asset_import_batch_generation;
+    _asset_import_batch_generation = 0;
+    _execute_pending_asset_import_scripts(batch_generation);
 }
 
 void FennaraExecutor::set_snapshot_manager(FennaraSnapshotManager *mgr) {

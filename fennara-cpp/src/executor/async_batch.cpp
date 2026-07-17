@@ -7,6 +7,7 @@
 #include "fennara/tool_results/formatters.hpp"
 
 #include "fennara/tools/script_diagnostics.hpp"
+#include "fennara/tools/run_asset_import_script.hpp"
 #include "fennara/tools/run_scene_edit_script.hpp"
 #include "fennara/tools/runtime_script.hpp"
 #include "fennara/tools/runtime_session.hpp"
@@ -87,6 +88,9 @@ void FennaraExecutor::_cancel_active_async_tools() {
 }
 
 void FennaraExecutor::execute_tool_calls_async(const godot::Array &tool_calls) {
+    set_process(false);
+    _asset_import_execution_pending = false;
+    _asset_import_batch_generation = 0;
     int count = tool_calls.size();
     _async_batch_generation++;
     _execution_batch_id = _make_batch_id();
@@ -119,6 +123,7 @@ void FennaraExecutor::execute_tool_calls_async(const godot::Array &tool_calls) {
     _pending_async_tools = count;
     _pending_script_writes.clear();
     _pending_run_scene_edit_scripts.clear();
+    _pending_run_asset_import_scripts.clear();
     _pending_screenshot_scenes.clear();
     _pending_validate_scenes.clear();
     _pending_runtime_sessions.clear();
@@ -249,14 +254,40 @@ void FennaraExecutor::execute_tool_calls_async(const godot::Array &tool_calls) {
                 godot::String resolved = file_utils::resolve_path(script_path);
                 _pending_run_scene_edit_scripts.push_back({i, script_path, resolved, prepared});
             }
+        } else if (name == "run_asset_import_script") {
+            godot::Dictionary addon_block;
+            if (!addon_access::is_path_allowed(
+                    args.get("asset_path", ""), false, addon_block) ||
+                (!godot::String(args.get("script_path", ""))
+                      .strip_edges()
+                      .is_empty() &&
+                 !addon_access::is_path_allowed(
+                     args.get("script_path", ""), false, addon_block))) {
+                addon_block["tool_name"] = name;
+                _on_async_tool_complete(
+                    addon_block, i, name, args, batch_generation);
+                continue;
+            }
+            godot::Dictionary prepared =
+                FennaraRunAssetImportScriptTool::prepare_execution(args);
+            if (!(bool)prepared.get("success", false)) {
+                _on_async_tool_complete(
+                    prepared, i, name, args, batch_generation);
+            } else {
+                godot::String script_path = prepared.get("script_path", "");
+                godot::String resolved = file_utils::resolve_path(script_path);
+                _pending_run_asset_import_scripts.push_back(
+                    {i, script_path, resolved, prepared});
+            }
         } else {
             godot::Dictionary res = execute_tool(name, args);
             _on_async_tool_complete(res, i, name, args, batch_generation);
         }
     }
 
-    bool has_batch_diagnostics =
-        !_pending_script_writes.empty() || !_pending_run_scene_edit_scripts.empty();
+    bool has_batch_diagnostics = !_pending_script_writes.empty() ||
+        !_pending_run_scene_edit_scripts.empty() ||
+        !_pending_run_asset_import_scripts.empty();
     if (has_batch_diagnostics) {
         godot::String diag_files;
         for (size_t i = 0; i < _pending_script_writes.size(); i++) {
@@ -266,6 +297,11 @@ void FennaraExecutor::execute_tool_calls_async(const godot::Array &tool_calls) {
         for (size_t i = 0; i < _pending_run_scene_edit_scripts.size(); i++) {
             if (!diag_files.is_empty()) diag_files += ",";
             diag_files += _pending_run_scene_edit_scripts[i].resolved_script_path;
+        }
+        for (size_t i = 0; i < _pending_run_asset_import_scripts.size(); i++) {
+            if (!diag_files.is_empty()) diag_files += ",";
+            diag_files +=
+                _pending_run_asset_import_scripts[i].resolved_script_path;
         }
         godot::Dictionary diag_context = _batch_log_context();
         if (!diag_files.is_empty()) {
@@ -285,6 +321,9 @@ void FennaraExecutor::cancel() {
     _async_batch_generation++;
     _batch_cancelled = true;
     _pending_async_tools = 0;
+    set_process(false);
+    _asset_import_execution_pending = false;
+    _asset_import_batch_generation = 0;
     _cancel_active_async_tools();
     _active_async_tools.clear();
     _modified_scenes.clear();
