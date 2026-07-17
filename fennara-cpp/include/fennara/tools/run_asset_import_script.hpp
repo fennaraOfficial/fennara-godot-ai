@@ -34,7 +34,7 @@ public:
     bool has_import_option(const godot::String &name) const;
     godot::Variant get_import_option(const godot::String &name) const;
     godot::Array list_import_options(const godot::String &prefix = "") const;
-    void set_import_option(const godot::String &name,
+    bool set_import_option(const godot::String &name,
                            const godot::Variant &value);
     godot::Array get_staged_changes() const;
     void discard_import_option_change(const godot::String &name);
@@ -50,6 +50,13 @@ public:
     void require(bool condition, const godot::String &message);
     godot::Array get_logs() const;
     godot::Array get_edit_errors() const;
+
+#ifdef FENNARA_SETUP_TEST_HOOKS
+    void configure_for_test(const godot::String &importer,
+                            const godot::Dictionary &options,
+                            const godot::Ref<godot::Resource> &imported_resource,
+                            bool read_only);
+#endif
 
 private:
     bool _option_is_editable(const godot::String &name,
@@ -67,6 +74,7 @@ private:
     godot::Ref<godot::Resource> _imported_resource;
     bool _import_valid = false;
     bool _read_only = true;
+    bool _failed = false;
     godot::Array _logs;
     godot::Array _errors;
     godot::Node *_temporary_host = nullptr;
@@ -83,6 +91,7 @@ public:
     static godot::Dictionary prepare_execution(const godot::Dictionary &args);
     static godot::Dictionary execute_prepared(
         const godot::Dictionary &prepared_args);
+    static void finalize_result(godot::Dictionary &result);
 };
 
 } // namespace fennara

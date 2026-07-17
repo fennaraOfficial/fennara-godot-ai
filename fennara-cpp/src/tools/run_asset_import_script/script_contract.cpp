@@ -67,6 +67,7 @@ godot::String write_or_resolve_script_path(
     }
 
     const godot::String resolved = normalize_path(script_path);
+    result["script_path"] = resolved;
     if (!resolved.ends_with(".gd")) {
         result["success"] = false;
         result["error"] = "script_path must point to a .gd file.";

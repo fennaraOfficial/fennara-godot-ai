@@ -426,6 +426,7 @@ void FennaraExecutor::_execute_pending_asset_import_scripts(
                 "Script diagnostics reported errors. Patch the saved script_path and rerun.";
             merged["runtime_errors"] = godot::Array();
             merged["logs"] = godot::Array();
+            FennaraRunAssetImportScriptTool::finalize_result(merged);
             _on_async_tool_complete(
                 merged, pending.tool_index, "run_asset_import_script",
                 godot::Dictionary(), batch_generation);

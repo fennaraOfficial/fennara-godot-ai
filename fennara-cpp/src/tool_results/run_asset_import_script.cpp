@@ -27,6 +27,10 @@ godot::Dictionary format_run_asset_import_script(
     lines.append("Status: " + godot::String(success ? "success" : "failed"));
     lines.append("Asset: " + godot::String(raw_result.get("asset_path", "")));
     lines.append("Mode: " + godot::String(raw_result.get("mode", "inspect")));
+    const godot::String script_path = raw_result.get("script_path", "");
+    if (!script_path.is_empty()) {
+        lines.append("Script: " + script_path);
+    }
     const godot::String importer = raw_result.get("importer", "");
     if (!importer.is_empty()) {
         lines.append("Importer: " + importer);

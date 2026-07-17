@@ -160,7 +160,7 @@ jobs:
           }
           "console=$($console.FullName)" >> $env:GITHUB_OUTPUT
 
-      - name: Test native first-run setup states
+      - name: Test native editor states
         if: steps.source.outputs.available == 'true' && matrix.platform == 'windows'
         timeout-minutes: 20
         shell: pwsh
@@ -174,22 +174,28 @@ jobs:
           }
 
           $testTimeoutSeconds = 120
-          $godot = Start-Process `
-            -FilePath "${{ steps.godot.outputs.console }}" `
-            -ArgumentList @(
-              "--headless",
-              "--path",
-              '"${{ github.workspace }}\godot_demo"',
-              "--script",
-              "res://tests/first_run_setup_test.gd"
-            ) `
-            -NoNewWindow `
-            -PassThru
-          if (-not $godot.WaitForExit($testTimeoutSeconds * 1000)) {
-            Write-Host "::error::Native first-run setup test exceeded ${testTimeoutSeconds} seconds."
-            & taskkill.exe /PID $godot.Id /T /F
-            exit 124
-          }
-          if ($godot.ExitCode -ne 0) {
-            exit $godot.ExitCode
+          $testScripts = @(
+            "res://tests/first_run_setup_test.gd",
+            "res://tests/asset_import_script_context_test.gd"
+          )
+          foreach ($testScript in $testScripts) {
+            $godot = Start-Process `
+              -FilePath "${{ steps.godot.outputs.console }}" `
+              -ArgumentList @(
+                "--headless",
+                "--path",
+                '"${{ github.workspace }}\godot_demo"',
+                "--script",
+                $testScript
+              ) `
+              -NoNewWindow `
+              -PassThru
+            if (-not $godot.WaitForExit($testTimeoutSeconds * 1000)) {
+              Write-Host "::error::Native test $testScript exceeded ${testTimeoutSeconds} seconds."
+              & taskkill.exe /PID $godot.Id /T /F
+              exit 124
+            }
+            if ($godot.ExitCode -ne 0) {
+              exit $godot.ExitCode
+            }
           }

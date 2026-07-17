@@ -20,7 +20,29 @@ void stamp_result(godot::Dictionary &result) {
     result["format_version"] = "run-asset-import-script-result-v1";
 }
 
-void finalize_result(godot::Dictionary &result) {
+void append_captured_errors(const godot::Array &captured,
+                            godot::Array &runtime_errors) {
+    for (int i = 0; i < captured.size(); i++) {
+        if (captured[i].get_type() != godot::Variant::DICTIONARY) {
+            continue;
+        }
+        godot::Dictionary item = captured[i];
+        const godot::String type = item.get("type", "");
+        if (type == "error" || type == "script_error" || type == "shader_error") {
+            godot::Dictionary entry;
+            entry["source"] = "engine";
+            entry["message"] = item.get("message", "Godot reported an error.");
+            entry["file"] = item.get("file", "");
+            entry["line"] = item.get("line", 0);
+            runtime_errors.append(entry);
+        }
+    }
+}
+
+} // namespace
+
+void FennaraRunAssetImportScriptTool::finalize_result(
+    godot::Dictionary &result) {
     const bool success = result.get("success", false);
     result["status"] = success ? "success" : "failed";
     godot::Dictionary summary;
@@ -47,27 +69,6 @@ void finalize_result(godot::Dictionary &result) {
         godot::Array(result.get("logs", godot::Array())).size();
     result["summary"] = summary;
 }
-
-void append_captured_errors(const godot::Array &captured,
-                            godot::Array &runtime_errors) {
-    for (int i = 0; i < captured.size(); i++) {
-        if (captured[i].get_type() != godot::Variant::DICTIONARY) {
-            continue;
-        }
-        godot::Dictionary item = captured[i];
-        const godot::String type = item.get("type", "");
-        if (type == "error" || type == "script_error" || type == "shader_error") {
-            godot::Dictionary entry;
-            entry["source"] = "engine";
-            entry["message"] = item.get("message", "Godot reported an error.");
-            entry["file"] = item.get("file", "");
-            entry["line"] = item.get("line", 0);
-            runtime_errors.append(entry);
-        }
-    }
-}
-
-} // namespace
 
 void FennaraRunAssetImportScriptTool::_bind_methods() {
     godot::ClassDB::bind_static_method(
@@ -217,7 +218,7 @@ godot::Dictionary FennaraRunAssetImportScriptTool::execute_prepared(
     result["logs"] = context->get_logs();
     result["runtime_errors"] = runtime_errors;
     result["changes"] = context->get_staged_changes();
-    result["modified"] = !godot::Array(result["changes"]).is_empty();
+    result["modified"] = false;
     context->cleanup();
 
     if (!sidecar_matches_snapshot(snapshot)) {
@@ -277,6 +278,7 @@ godot::Dictionary FennaraRunAssetImportScriptTool::execute_prepared(
         result[keys[i]] = import_result[keys[i]];
     }
     if ((bool)result.get("success", false)) {
+        result["modified"] = true;
         refresh_selected_import_dock(asset_path, target_selected);
         result["import_dock_refreshed"] = target_selected;
         FLOG_TOOL("run_asset_import_script: asset=" + asset_path +

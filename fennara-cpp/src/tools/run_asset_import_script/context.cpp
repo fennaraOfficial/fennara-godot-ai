@@ -8,8 +8,11 @@
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
+#include <godot_cpp/classes/scene_state.hpp>
 #include <godot_cpp/classes/skeleton3d.hpp>
 #include <godot_cpp/core/class_db.hpp>
+
+#include <unordered_set>
 
 namespace fennara {
 
@@ -19,6 +22,7 @@ constexpr int kMaximumStagedChanges = 64;
 constexpr int kMaximumListedOptions = 200;
 constexpr int kMaximumLogEntries = 100;
 constexpr int kMaximumLogCharacters = 16000;
+constexpr int kMaximumSceneStateDepth = 64;
 
 void count_scene_nodes(godot::Node *node, godot::Dictionary &summary) {
     if (node == nullptr) {
@@ -53,6 +57,61 @@ bool has_effective_value(const godot::Variant &value) {
         return !godot::String(value).strip_edges().is_empty();
     }
     return true;
+}
+
+bool scene_state_is_script_free(
+    const godot::Ref<godot::SceneState> &state,
+    std::unordered_set<uint64_t> &visited,
+    godot::String &error,
+    int depth = 0) {
+    if (!state.is_valid()) {
+        return true;
+    }
+    if (depth > kMaximumSceneStateDepth) {
+        error = "PackedScene script preflight exceeded the nested-scene depth limit.";
+        return false;
+    }
+
+    const uint64_t state_id = state->get_instance_id();
+    if (!visited.insert(state_id).second) {
+        return true;
+    }
+
+    for (int node_index = 0; node_index < state->get_node_count(); node_index++) {
+        for (int property_index = 0;
+             property_index < state->get_node_property_count(node_index);
+             property_index++) {
+            if (state->get_node_property_name(node_index, property_index) !=
+                godot::StringName("script")) {
+                continue;
+            }
+            if (has_effective_value(
+                    state->get_node_property_value(node_index, property_index))) {
+                error = "PackedScene instantiation is refused because node " +
+                    godot::String(state->get_node_path(node_index)) +
+                    " has an attached script.";
+                return false;
+            }
+        }
+
+        const godot::Ref<godot::PackedScene> nested =
+            state->get_node_instance(node_index);
+        if (nested.is_valid() &&
+            !scene_state_is_script_free(
+                nested->get_state(), visited, error, depth + 1)) {
+            return false;
+        }
+    }
+
+    return scene_state_is_script_free(
+        state->get_base_scene_state(), visited, error, depth + 1);
+}
+
+bool packed_scene_is_safe_to_instantiate(
+    const godot::Ref<godot::PackedScene> &packed,
+    godot::String &error) {
+    std::unordered_set<uint64_t> visited;
+    return scene_state_is_script_free(packed->get_state(), visited, error);
 }
 
 } // namespace
@@ -103,6 +162,13 @@ void FennaraRunAssetImportScriptContext::_bind_methods() {
         &FennaraRunAssetImportScriptContext::get_logs);
     godot::ClassDB::bind_method(godot::D_METHOD("get_edit_errors"),
         &FennaraRunAssetImportScriptContext::get_edit_errors);
+#ifdef FENNARA_SETUP_TEST_HOOKS
+    godot::ClassDB::bind_method(
+        godot::D_METHOD(
+            "configure_for_test", "importer", "options", "imported_resource",
+            "read_only"),
+        &FennaraRunAssetImportScriptContext::configure_for_test);
+#endif
 }
 
 void FennaraRunAssetImportScriptContext::configure(
@@ -123,10 +189,23 @@ void FennaraRunAssetImportScriptContext::configure(
     _imported_resource = imported_resource;
     _import_valid = import_valid;
     _read_only = read_only;
+    _failed = false;
     _staged_values.clear();
     _logs.clear();
     _errors.clear();
 }
+
+#ifdef FENNARA_SETUP_TEST_HOOKS
+void FennaraRunAssetImportScriptContext::configure_for_test(
+    const godot::String &importer,
+    const godot::Dictionary &options,
+    const godot::Ref<godot::Resource> &imported_resource,
+    bool read_only) {
+    configure("res://asset-import-context-test.asset", importer, options,
+              godot::Array(), godot::Array(), imported_resource, true,
+              read_only);
+}
+#endif
 
 void FennaraRunAssetImportScriptContext::cleanup() {
     if (_temporary_host != nullptr) {
@@ -224,22 +303,25 @@ godot::Array FennaraRunAssetImportScriptContext::list_import_options(
     return listed;
 }
 
-void FennaraRunAssetImportScriptContext::set_import_option(
+bool FennaraRunAssetImportScriptContext::set_import_option(
     const godot::String &name,
     const godot::Variant &value) {
+    if (_failed) {
+        return false;
+    }
     if (_read_only) {
         _add_error("set_import_option() is unavailable in inspect mode.");
-        return;
+        return false;
     }
     if (!_options.has(name)) {
         _add_error("Unknown import option: " + name);
-        return;
+        return false;
     }
     godot::String reason;
     if (!_option_is_editable(name, &reason)) {
         _add_error("Import option is inspect-only in this version: " + name +
                    " (" + reason + ")");
-        return;
+        return false;
     }
     const godot::Variant before = _options[name];
     if (before.get_type() != value.get_type()) {
@@ -247,17 +329,18 @@ void FennaraRunAssetImportScriptContext::set_import_option(
             "Import option type mismatch for " + name + ": expected " +
             godot::Variant::get_type_name(before.get_type()) + ", received " +
             godot::Variant::get_type_name(value.get_type()) + ".");
-        return;
+        return false;
     }
     if (!_staged_values.has(name) && _staged_values.size() >= kMaximumStagedChanges) {
         _add_error("A maximum of 64 import option changes may be staged per call.");
-        return;
+        return false;
     }
     if (before == value) {
         _staged_values.erase(name);
-        return;
+        return true;
     }
     _staged_values[name] = value;
+    return true;
 }
 
 godot::Array FennaraRunAssetImportScriptContext::get_staged_changes() const {
@@ -317,6 +400,11 @@ godot::Node *FennaraRunAssetImportScriptContext::instantiate_imported_scene() {
             "instantiate");
         return nullptr;
     }
+    godot::String preflight_error;
+    if (!packed_scene_is_safe_to_instantiate(packed, preflight_error)) {
+        _add_error(preflight_error, "instantiate");
+        return nullptr;
+    }
     godot::Node *host = _ensure_temporary_host();
     if (host == nullptr) {
         return nullptr;
@@ -357,6 +445,11 @@ godot::Dictionary FennaraRunAssetImportScriptContext::get_subresource_summary() 
 
     godot::Ref<godot::PackedScene> packed = _imported_resource;
     if (!packed.is_valid()) {
+        return summary;
+    }
+    godot::String preflight_error;
+    if (!packed_scene_is_safe_to_instantiate(packed, preflight_error)) {
+        _add_error(preflight_error, "summary");
         return summary;
     }
     godot::Node *instance =
@@ -444,6 +537,8 @@ bool FennaraRunAssetImportScriptContext::_option_is_editable(
 void FennaraRunAssetImportScriptContext::_add_error(
     const godot::String &message,
     const godot::String &source) {
+    _failed = true;
+    _staged_values.clear();
     _errors.append(run_asset_import_script_internal::make_runtime_error(message, source));
 }
 
