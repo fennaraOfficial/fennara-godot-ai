@@ -123,6 +123,10 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
+.custom-provider-limit-field input.is-default-value:not(:focus) {
+  color: var(--faint);
+}
+
 .custom-provider-fields input[aria-invalid="true"],
 .custom-provider-row input[aria-invalid="true"] {
   border-color: #f06a6a;

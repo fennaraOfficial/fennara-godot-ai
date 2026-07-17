@@ -772,6 +772,10 @@
     transcriptRenderer.updateThinkingText(text, status);
   }
 
+  function updateGenerationStatus(text) {
+    transcriptRenderer.updateGenerationStatus(text);
+  }
+
   function updateAssistantText(text) {
     if (String(text || "").trim()) {
       transcriptRenderer.finishActiveThinking();
@@ -1604,6 +1608,14 @@
     }
     if (message.type === "chat_item_update" && message.item?.type === "message") {
       updateAssistantText(message.item.content || "");
+      return;
+    }
+    if (
+      message.type === "chat_item_update"
+      && message.item?.type === "reasoning"
+      && message.item?.id === "status"
+    ) {
+      updateGenerationStatus(message.item.content || "");
       return;
     }
     if (message.type === "chat_item_update" && message.item?.type === "reasoning") {

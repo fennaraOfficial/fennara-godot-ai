@@ -239,6 +239,13 @@
   line-height: 1.35;
 }
 
+.generation-status-line {
+  width: min(100%, var(--message-width));
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .context-compaction-marker {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

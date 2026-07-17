@@ -381,6 +381,8 @@
         inputs[1].value = String(value?.name || "");
         inputs[2].value = String(value?.context_length || "");
         inputs[3].value = String(value?.max_output_tokens || "");
+        syncDefaultValueAppearance(inputs[2]);
+        syncDefaultValueAppearance(inputs[3]);
       } else {
         inputs[0].value = String(value?.name || "");
         inputs[1].value = String(value?.value || "");
@@ -427,17 +429,34 @@
         input.min = "1";
         input.max = String(MAX_TOKEN_COUNT);
         input.step = "1";
+        input.dataset.customProviderDefaultValue = placeholder;
+        input.addEventListener("focus", () => {
+          if (input.classList.contains("is-default-value")) {
+            window.requestAnimationFrame(() => input.select());
+          }
+        });
       }
       input.autocomplete = "off";
       input.placeholder = placeholder;
       input.dataset.customProviderField = field;
       input.setAttribute("aria-label", labelText);
-      input.addEventListener("input", () => clearInputError(input));
+      input.addEventListener("input", () => {
+        clearInputError(input);
+        syncDefaultValueAppearance(input);
+      });
       const error = document.createElement("small");
       error.dataset.customProviderFieldError = field;
       error.hidden = true;
       label.append(input, error);
       return label;
+    }
+
+    function syncDefaultValueAppearance(input) {
+      const defaultValue = input?.dataset.customProviderDefaultValue;
+      input?.classList.toggle(
+        "is-default-value",
+        Boolean(defaultValue && input.value === defaultValue),
+      );
     }
 
     function syncRemoveButtons(container) {
