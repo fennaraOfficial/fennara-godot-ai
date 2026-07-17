@@ -45,6 +45,9 @@ bool write_text_file(const godot::String &path,
 godot::Dictionary apply_and_reimport(
     const ImportSnapshot &snapshot,
     const godot::Array &staged_changes);
+void apply_reimport_result(godot::Dictionary &result,
+                           const godot::Dictionary &import_result);
+godot::Dictionary verify_generated_outputs(const godot::Variant &dest_files);
 bool selected_import_dock_is_safe(const godot::String &asset_path,
                                   bool &target_selected,
                                   godot::String &error);

@@ -92,6 +92,13 @@ public:
     static godot::Dictionary execute_prepared(
         const godot::Dictionary &prepared_args);
     static void finalize_result(godot::Dictionary &result);
+#ifdef FENNARA_SETUP_TEST_HOOKS
+    static godot::Dictionary apply_reimport_result_for_test(
+        const godot::Dictionary &import_result,
+        int change_count);
+    static godot::Dictionary verify_generated_outputs_for_test(
+        const godot::Variant &dest_files);
+#endif
 };
 
 } // namespace fennara

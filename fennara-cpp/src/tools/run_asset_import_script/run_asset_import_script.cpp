@@ -75,7 +75,52 @@ void FennaraRunAssetImportScriptTool::_bind_methods() {
         "FennaraRunAssetImportScriptTool",
         godot::D_METHOD("execute", "args"),
         &FennaraRunAssetImportScriptTool::execute);
+#ifdef FENNARA_SETUP_TEST_HOOKS
+    godot::ClassDB::bind_static_method(
+        "FennaraRunAssetImportScriptTool",
+        godot::D_METHOD(
+            "apply_reimport_result_for_test", "import_result", "change_count"),
+        &FennaraRunAssetImportScriptTool::apply_reimport_result_for_test);
+    godot::ClassDB::bind_static_method(
+        "FennaraRunAssetImportScriptTool",
+        godot::D_METHOD("verify_generated_outputs_for_test", "dest_files"),
+        &FennaraRunAssetImportScriptTool::verify_generated_outputs_for_test);
+#endif
 }
+
+void run_asset_import_script_internal::apply_reimport_result(
+    godot::Dictionary &result,
+    const godot::Dictionary &import_result) {
+    const godot::Array keys = import_result.keys();
+    for (int i = 0; i < keys.size(); i++) {
+        result[keys[i]] = import_result[keys[i]];
+    }
+    result["modified"] =
+        (bool)result.get("success", false) &&
+        !godot::Array(result.get("changes", godot::Array())).is_empty();
+}
+
+#ifdef FENNARA_SETUP_TEST_HOOKS
+godot::Dictionary FennaraRunAssetImportScriptTool::apply_reimport_result_for_test(
+    const godot::Dictionary &import_result,
+    int change_count) {
+    godot::Dictionary result;
+    godot::Array changes;
+    for (int i = 0; i < change_count; i++) {
+        changes.append(godot::Dictionary());
+    }
+    result["changes"] = changes;
+    result["modified"] = false;
+    apply_reimport_result(result, import_result);
+    return result;
+}
+
+godot::Dictionary
+FennaraRunAssetImportScriptTool::verify_generated_outputs_for_test(
+    const godot::Variant &dest_files) {
+    return verify_generated_outputs(dest_files);
+}
+#endif
 
 godot::Dictionary FennaraRunAssetImportScriptTool::execute(
     const godot::Dictionary &args) {
@@ -273,12 +318,8 @@ godot::Dictionary FennaraRunAssetImportScriptTool::execute_prepared(
     }
 
     godot::Dictionary import_result = apply_and_reimport(snapshot, changes);
-    godot::Array keys = import_result.keys();
-    for (int i = 0; i < keys.size(); i++) {
-        result[keys[i]] = import_result[keys[i]];
-    }
+    apply_reimport_result(result, import_result);
     if ((bool)result.get("success", false)) {
-        result["modified"] = true;
         refresh_selected_import_dock(asset_path, target_selected);
         result["import_dock_refreshed"] = target_selected;
         FLOG_TOOL("run_asset_import_script: asset=" + asset_path +

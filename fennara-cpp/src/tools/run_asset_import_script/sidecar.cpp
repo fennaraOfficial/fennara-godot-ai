@@ -49,6 +49,26 @@ godot::Array variant_paths(const godot::Variant &value, int maximum_paths = -1) 
     return result;
 }
 
+int variant_path_count(const godot::Variant &value) {
+    if (value.get_type() == godot::Variant::ARRAY) {
+        return godot::Array(value).size();
+    }
+    if (value.get_type() == godot::Variant::PACKED_STRING_ARRAY) {
+        return godot::PackedStringArray(value).size();
+    }
+    return 0;
+}
+
+godot::String variant_path_at(const godot::Variant &value, int index) {
+    if (value.get_type() == godot::Variant::ARRAY) {
+        return godot::Array(value)[index];
+    }
+    if (value.get_type() == godot::Variant::PACKED_STRING_ARRAY) {
+        return godot::PackedStringArray(value)[index];
+    }
+    return godot::String();
+}
+
 bool editor_filesystem_import_valid(const godot::String &asset_path) {
     godot::EditorInterface *editor = godot::EditorInterface::get_singleton();
     godot::EditorFileSystem *filesystem =
@@ -126,31 +146,15 @@ godot::Dictionary verify_import(const ImportSnapshot &snapshot,
     }
     verification["mismatched_options"] = mismatched_options;
 
-    godot::Array generated_files = variant_paths(
+    const godot::Dictionary generated_outputs = verify_generated_outputs(
         config->get_value("deps", "dest_files", godot::Array()));
-    godot::Array reported_generated_files;
-    godot::Array missing_outputs;
-    int missing_output_count = 0;
-    for (int i = 0; i < generated_files.size(); i++) {
-        const godot::String path = generated_files[i];
-        if (reported_generated_files.size() < kMaximumCollectedPaths) {
-            reported_generated_files.append(path);
-        }
-        if (!godot::FileAccess::file_exists(path)) {
-            missing_output_count++;
-            if (missing_outputs.size() < kMaximumCollectedPaths) {
-                missing_outputs.append(path);
-            }
-        }
+    const godot::Array generated_output_keys = generated_outputs.keys();
+    for (int i = 0; i < generated_output_keys.size(); i++) {
+        verification[generated_output_keys[i]] =
+            generated_outputs[generated_output_keys[i]];
     }
-    verification["generated_files"] = reported_generated_files;
-    verification["generated_file_count"] = generated_files.size();
-    verification["generated_files_omitted_count"] =
-        generated_files.size() - reported_generated_files.size();
-    verification["missing_outputs"] = missing_outputs;
-    verification["missing_output_count"] = missing_output_count;
-    verification["missing_outputs_omitted_count"] =
-        missing_output_count - missing_outputs.size();
+    const int missing_output_count =
+        generated_outputs.get("missing_output_count", 0);
 
     godot::Ref<godot::Resource> loaded =
         godot::ResourceLoader::get_singleton()->load(
@@ -213,6 +217,35 @@ godot::Dictionary restore_previous_import(const ImportSnapshot &snapshot) {
 }
 
 } // namespace
+
+godot::Dictionary verify_generated_outputs(const godot::Variant &dest_files) {
+    godot::Dictionary result;
+    godot::Array generated_files;
+    godot::Array missing_outputs;
+    int missing_output_count = 0;
+    const int generated_file_count = variant_path_count(dest_files);
+    for (int i = 0; i < generated_file_count; i++) {
+        const godot::String path = variant_path_at(dest_files, i);
+        if (generated_files.size() < kMaximumCollectedPaths) {
+            generated_files.append(path);
+        }
+        if (!godot::FileAccess::file_exists(path)) {
+            missing_output_count++;
+            if (missing_outputs.size() < kMaximumCollectedPaths) {
+                missing_outputs.append(path);
+            }
+        }
+    }
+    result["generated_files"] = generated_files;
+    result["generated_file_count"] = generated_file_count;
+    result["generated_files_omitted_count"] =
+        generated_file_count - generated_files.size();
+    result["missing_outputs"] = missing_outputs;
+    result["missing_output_count"] = missing_output_count;
+    result["missing_outputs_omitted_count"] =
+        missing_output_count - missing_outputs.size();
+    return result;
+}
 
 bool load_import_snapshot(const godot::String &asset_path,
                           ImportSnapshot &snapshot,
