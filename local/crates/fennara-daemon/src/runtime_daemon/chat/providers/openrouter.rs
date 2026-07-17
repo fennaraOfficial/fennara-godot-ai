@@ -8,7 +8,7 @@ use super::types::{
     ProviderDefinition, ProviderId, RequestDefaults,
 };
 use crate::runtime_daemon::chat::models::{model_supports_image_chat, model_supports_text_chat};
-use crate::runtime_daemon::chat::settings::DEFAULT_MODEL;
+use crate::runtime_daemon::chat::settings::DEFAULT_OPENROUTER_MODEL_ID;
 
 pub(crate) const PROVIDER_ID: &str = ProviderId::OPENROUTER;
 pub(crate) const API_BASE: &str = "https://openrouter.ai/api/v1";
@@ -60,7 +60,7 @@ pub(crate) fn model_definition(model_id: &str, display_name: Option<String>) -> 
         display_name: display_name.unwrap_or_else(|| fallback_display_name(model_id)),
         adapter_model_id: adapter_model_id(model_id),
         capabilities: Capabilities::text_image_tools_reasoning(),
-        limits: if model_id == DEFAULT_MODEL {
+        limits: if model_id == DEFAULT_OPENROUTER_MODEL_ID {
             Limits {
                 context_tokens: Some(1_048_576),
                 input_tokens: None,
@@ -91,7 +91,7 @@ pub(crate) async fn validate_request(request: &LlmRequest) -> Result<(), LlmErro
         .as_str()
         .trim()
         .trim_end_matches(":nitro");
-    if clean == DEFAULT_MODEL {
+    if clean == DEFAULT_OPENROUTER_MODEL_ID {
         return Ok(());
     }
     if request.model.model.limits.context_tokens.is_some()

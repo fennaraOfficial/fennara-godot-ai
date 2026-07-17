@@ -15,6 +15,7 @@
     const activeTools = new Map();
     let activeToolAnchor = null;
     let statusLine = null;
+    let generationStatusLine = null;
     let contextCompactionMarker = null;
     let pendingAssistantText = null;
     let pendingAssistantStick = false;
@@ -40,6 +41,7 @@
       activeTools.clear();
       activeToolAnchor = null;
       statusLine = null;
+      generationStatusLine = null;
       contextCompactionMarker = null;
       streamActive = false;
       streamFollowing = false;
@@ -113,6 +115,7 @@
 
     function endStream() {
       flushAssistantRender();
+      clearGenerationStatus();
       keepBottomIfNeeded(streamFollowing);
       streamActive = false;
       streamFollowing = false;
@@ -174,6 +177,27 @@
       statusLine = null;
     }
 
+    function updateGenerationStatus(text) {
+      const cleanText = String(text || "").trim();
+      if (!cleanText) {
+        clearGenerationStatus();
+        return;
+      }
+      const shouldStick = isNearBottom();
+      if (!generationStatusLine?.isConnected) {
+        generationStatusLine = document.createElement("p");
+        generationStatusLine.className = "generation-status-line";
+        transcript?.insertBefore(generationStatusLine, activeAssistant || null);
+      }
+      generationStatusLine.textContent = cleanText;
+      keepBottomIfNeeded(shouldStick);
+    }
+
+    function clearGenerationStatus() {
+      generationStatusLine?.remove();
+      generationStatusLine = null;
+    }
+
     function updateContextCompaction(status) {
       const cleanStatus = String(status || "").toLowerCase();
       if (cleanStatus !== "running" && cleanStatus !== "done") {
@@ -224,6 +248,7 @@
 
     function resetStreamState() {
       flushAssistantRender();
+      clearGenerationStatus();
       activeAssistant = null;
       activeThinking = null;
       activeToolAnchor = null;
@@ -262,6 +287,7 @@
       if (!cleanText && !activeThinking) {
         return;
       }
+      clearGenerationStatus();
       const shouldStick = isNearBottom();
       const card = activeThinking || startThinkingCard();
       const body = card.querySelector(".thinking-body");
@@ -310,6 +336,9 @@
       if (!activeAssistant && !String(text || "").trim()) {
         return;
       }
+      if (String(text || "").trim()) {
+        clearGenerationStatus();
+      }
       const message = activeAssistant || startAssistantMessage();
       message.dataset.rawText = text;
       pendingAssistantText = text;
@@ -348,6 +377,7 @@
     }
 
     function updateToolCall(item) {
+      clearGenerationStatus();
       const shouldStick = isNearBottom();
       const id = item.id || "tool_call";
       let node = activeTools.get(id);
@@ -952,6 +982,7 @@
       scrollToBottom,
       updateContextCompaction,
       updateAssistantText,
+      updateGenerationStatus,
       updateThinkingText,
       updateToolCall,
     };

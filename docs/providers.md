@@ -34,19 +34,56 @@ You can also type `/provider` and `/model` in the composer.
 | MiniMax Token Plan | Use the Subscription Key from [MiniMax API Platform](https://platform.minimax.io/docs/api-reference/api-overview) **Billing > Token Plan**. Fennara key/env: `MINIMAX_API_KEY`. | `minimax-coding-plan/<model>` | Token Plan Subscription Keys are separate from pay-as-you-go API keys. |
 | MiniMax (China) | Create a pay-as-you-go key from the [MiniMax China](https://platform.minimaxi.com/docs/api-reference/api-overview) API key page. Fennara key/env: `MINIMAX_API_KEY`. | `minimax-cn/<model>` | Uses MiniMax China's Anthropic-compatible Messages API at `minimaxi.com`. |
 | MiniMax Token Plan (China) | Use the Subscription Key from the [MiniMax China](https://platform.minimaxi.com/docs/api-reference/api-overview) Token Plan page. Fennara key/env: `MINIMAX_API_KEY`. | `minimax-cn-coding-plan/<model>` | China Token Plan Subscription Keys are separate from pay-as-you-go API keys. |
+| NVIDIA | Create a key at [build.nvidia.com](https://build.nvidia.com/). Fennara key/env: `NVIDIA_API_KEY`. | `nvidia/<publisher>/<model>` | Uses NVIDIA's OpenAI-compatible hosted NIM API. |
 | Ollama | Run a local Ollama server. No cloud API key is required. | `ollama/<local-model>` | Defaults to `http://127.0.0.1:11434`. |
 | LM Studio | Start LM Studio's local server. No key is required by default. | `lmstudio/<local-model>` | Defaults to `http://127.0.0.1:1234/v1`. If your LM Studio server requires auth, set `LMSTUDIO_API_KEY` in the daemon environment. |
 
 Cloud providers need your own API key or subscription key. Local providers need
 the local server running with a model available.
 
+OpenRouter selections always use the explicit `openrouter/<provider>/<model>`
+shape. Older saved `<provider>/<model>` OpenRouter selections are migrated once
+when settings load, but that legacy shape is not used for new routing.
+
 Fennara can store keys from the provider picker in the dock. Chat Settings includes an **Open providers** button for discovering the same picker. The key/env names above are the same names Fennara understands if you prefer environment variables. Stored keys live in the daemon's local app data, outside the Godot project.
+
+## Custom OpenAI-Compatible Providers
+
+Choose **Custom** at the bottom of the provider picker to add an OpenAI-compatible
+endpoint such as a local router or an internal API gateway. Enter:
+
+- a unique lowercase provider ID
+- the display name shown in Fennara
+- a base URL ending at the API version, for example `http://localhost:20128/v1`
+- an optional API key
+- one or more model IDs, display names, context lengths, and maximum output-token limits
+- optional request headers
+
+Model IDs must match what the endpoint expects. Fennara exposes them as
+`<provider-id>/<model-id>` in the model picker while sending only `<model-id>` to
+the provider. The endpoint must implement the OpenAI-compatible
+`/chat/completions` request and streaming response shape.
+
+API keys and custom header values use Fennara's protected daemon auth store.
+Provider definitions stay in daemon-managed local app data outside the Godot
+project. Accurate model limits let Fennara
+compact conversation history before a request exceeds the model's context
+window and keep generated summaries within the model's output limit. Existing
+custom models saved before these fields were available load with compatibility
+defaults of 64,000 context tokens and 4,096 output tokens.
+
+After saving, the custom provider appears in the provider picker with its model
+count. Select that provider to reopen the form and add or rename models. Leaving
+the API key empty preserves the saved key, and any newly entered headers merge
+with the saved headers by name.
 
 ## Where Settings Live
 
 Fennara stores built-in chat settings locally through the daemon, outside the Godot project:
 
 - provider API keys
+- custom provider header values
+- custom OpenAI-compatible provider definitions
 - local provider base URLs
 - selected model
 - reasoning effort

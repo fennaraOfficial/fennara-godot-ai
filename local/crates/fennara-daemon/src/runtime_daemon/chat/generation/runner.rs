@@ -70,12 +70,14 @@ where
     .to_string();
     let chat_id = match request.chat_id.or_else(|| active_chat_id.clone()) {
         Some(chat_id) => chat_id,
-        None => match store::create_chat(scope, &model, &reasoning_effort) {
-            Ok(opened) => opened.chat.id,
-            Err(error) => {
-                return send_error(sender, request_id, "chat_create_failed", &error).await;
+        None => {
+            match store::create_chat(scope, &model, &reasoning_effort, &settings.custom_providers) {
+                Ok(opened) => opened.chat.id,
+                Err(error) => {
+                    return send_error(sender, request_id, "chat_create_failed", &error).await;
+                }
             }
-        },
+        }
     };
     let turn_started_at = Instant::now();
     let trace = trace::TraceRecorder::new(
@@ -119,7 +121,12 @@ where
         )
         .await;
     };
-    if let Err(error) = store::set_chat_model(&chat_id, &model, &reasoning_effort) {
+    if let Err(error) = store::set_chat_model(
+        &chat_id,
+        &model,
+        &reasoning_effort,
+        &settings.custom_providers,
+    ) {
         trace.error(
             "turn.failed",
             "failed",
@@ -223,6 +230,7 @@ where
                     .await?;
                 match try_create_context_summary(
                     provider_settings.clone(),
+                    &settings.custom_providers,
                     &model,
                     &reasoning_effort,
                     &chat_id,
@@ -428,6 +436,7 @@ where
             &chat_id,
             &model,
             &reasoning_effort,
+            &settings.custom_providers,
         ) {
             Ok((message, generation)) => {
                 assistant_generation_write_span.finish(
@@ -522,6 +531,7 @@ where
                         .await?;
                         match try_create_context_summary(
                             provider_settings.clone(),
+                            &settings.custom_providers,
                             &model,
                             &reasoning_effort,
                             &chat_id,
@@ -764,6 +774,7 @@ where
                 Some(&usage),
                 &model,
                 Some(&current_generation.id),
+                &settings.custom_providers,
             ) {
                 Ok(message) => message,
                 Err(error) => {
@@ -854,6 +865,7 @@ where
             Some(&usage),
             &model,
             Some(&current_generation.id),
+            &settings.custom_providers,
         )
         .map(|_| ())
         {
@@ -967,6 +979,7 @@ where
                 &chat_id,
                 &model,
                 &reasoning_effort,
+                &settings.custom_providers,
             ) {
                 Ok((message, generation)) => {
                     continuation_generation_span.finish(
@@ -1128,10 +1141,13 @@ fn summary_budgets_for_model(
     match providers::model_context_estimate(provider_settings, model, reasoning_effort) {
         Ok(estimate) => {
             if let Some(usable) = estimate.usable_input_tokens {
-                Some(context_compaction::SummaryBudgets::from_model_context(
-                    usable,
-                    estimate.raw_context_tokens,
-                ))
+                Some(
+                    context_compaction::SummaryBudgets::from_model_context(
+                        usable,
+                        estimate.raw_context_tokens,
+                    )
+                    .with_model_output_limit(estimate.max_output_tokens),
+                )
             } else {
                 let local_unknown_context = is_unknown_local_context_model(model);
                 let fallback_context_tokens = if local_unknown_context {
@@ -1311,6 +1327,7 @@ where
 
 async fn try_create_context_summary(
     provider_settings: providers::ProviderSettings,
+    custom_providers: &[providers::custom::CustomProviderConfig],
     model: &str,
     reasoning_effort: &str,
     chat_id: &str,
@@ -1415,6 +1432,7 @@ async fn try_create_context_summary(
         reasoning_effort,
         usage.as_ref(),
         &metadata,
+        custom_providers,
     )
     .map(Some)
 }

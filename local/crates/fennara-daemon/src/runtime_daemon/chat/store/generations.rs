@@ -3,6 +3,7 @@ use serde_json::Value;
 
 use super::super::{
     ids::{new_id, now_ms},
+    providers::custom::CustomProviderConfig,
     schema::{ModelTrace, model_trace_from_selection, to_store_error},
 };
 use super::{NewMessage, StartedGeneration, StoredMessage, get_message, insert_message_in_tx};
@@ -12,6 +13,7 @@ pub(super) fn insert_assistant_placeholder_with_generation_on_connection(
     chat_id: &str,
     model: &str,
     reasoning_effort: &str,
+    custom_providers: &[CustomProviderConfig],
 ) -> Result<(StoredMessage, StartedGeneration), String> {
     let tx = conn
         .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
@@ -33,8 +35,14 @@ pub(super) fn insert_assistant_placeholder_with_generation_on_connection(
         },
         now,
     )?;
-    let generation =
-        start_generation_on_connection(&tx, chat_id, &placeholder.id, model, reasoning_effort)?;
+    let generation = start_generation_on_connection(
+        &tx,
+        chat_id,
+        &placeholder.id,
+        model,
+        reasoning_effort,
+        custom_providers,
+    )?;
     let placeholder = get_message(&tx, &placeholder.id)?
         .ok_or_else(|| "Assistant message not found.".to_string())?;
     tx.commit().map_err(to_store_error)?;
@@ -47,13 +55,14 @@ fn start_generation_on_connection(
     assistant_message_id: &str,
     model: &str,
     reasoning_effort: &str,
+    custom_providers: &[CustomProviderConfig],
 ) -> Result<StartedGeneration, String> {
     if get_message(conn, assistant_message_id)?.is_none() {
         return Err("Assistant message not found.".to_string());
     }
     let now = now_ms();
     let generation_id = new_id("gen");
-    let model_trace = model_trace_from_selection(model);
+    let model_trace = model_trace_from_selection(model, custom_providers);
     conn.execute(
         "INSERT INTO chat_generations
          (id, chat_id, assistant_message_id, provider_id, model_id, model_variant,

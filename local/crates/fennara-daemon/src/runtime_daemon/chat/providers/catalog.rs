@@ -3,10 +3,12 @@ use std::collections::BTreeMap;
 use super::anthropic;
 use super::anthropic_providers;
 use super::catalog_cache;
+use super::custom;
 use super::deepseek;
 use super::lmstudio;
 use super::models_dev::OpenRouterCatalog;
 use super::moonshot;
+use super::nvidia;
 use super::ollama;
 use super::ollama_cloud;
 use super::openai;
@@ -57,7 +59,8 @@ impl Catalog {
                 || key_or_env_present(
                     settings.minimax_cn_coding_plan_api_key.as_ref(),
                     anthropic_providers::MINIMAX_API_KEY_ENV,
-                );
+                )
+                || key_or_env_present(settings.nvidia_api_key.as_ref(), nvidia::API_KEY_ENV);
         let hosted_catalog = needs_hosted_catalog
             .then(catalog_cache::load_disk_blocking)
             .and_then(Result::ok);
@@ -83,6 +86,7 @@ impl Catalog {
             hosted_catalog
                 .as_ref()
                 .map(|cached| &cached.minimax_cn_coding_plan),
+            hosted_catalog.as_ref().map(|cached| &cached.nvidia),
         )
     }
 
@@ -102,6 +106,7 @@ impl Catalog {
         hosted_minimax_coding_plan: Option<&OpenRouterCatalog>,
         hosted_minimax_cn: Option<&OpenRouterCatalog>,
         hosted_minimax_cn_coding_plan: Option<&OpenRouterCatalog>,
+        hosted_nvidia: Option<&OpenRouterCatalog>,
     ) -> Self {
         let mut catalog = Self::default();
         catalog.local_model_limits = settings.local_model_limits.clone();
@@ -148,8 +153,17 @@ impl Catalog {
             ProviderId::MINIMAX_CN_CODING_PLAN,
             settings.minimax_cn_coding_plan_api_key.as_deref(),
         );
+        catalog.insert_provider(nvidia::provider_definition(
+            settings.nvidia_api_key.as_deref(),
+        ));
         catalog.insert_provider(ollama::provider_definition(&settings.ollama_base_url));
         catalog.insert_provider(local_provider_alias(&settings.ollama_base_url));
+        for runtime in &settings.custom_providers {
+            catalog.insert_provider(custom::provider_definition(runtime));
+            for model in custom::model_definitions(&runtime.config) {
+                catalog.insert_model(model);
+            }
+        }
 
         if let Some(hosted_openrouter) = hosted_openrouter {
             for model in &hosted_openrouter.models {
@@ -157,12 +171,13 @@ impl Catalog {
             }
         } else {
             catalog.insert_model(openrouter::model_definition(
-                settings::DEFAULT_MODEL,
+                settings::DEFAULT_OPENROUTER_MODEL_ID,
                 Some("Gemini 3.5 Flash".to_string()),
             ));
             for model in settings::recommended_model_ids()
                 .into_iter()
-                .filter(|model| *model != settings::DEFAULT_MODEL)
+                .filter_map(|model| model.strip_prefix("openrouter/"))
+                .filter(|model| *model != settings::DEFAULT_OPENROUTER_MODEL_ID)
             {
                 catalog.insert_model(openrouter::model_definition(model, None));
             }
@@ -204,6 +219,7 @@ impl Catalog {
         catalog.insert_hosted_catalog(hosted_minimax_coding_plan);
         catalog.insert_hosted_catalog(hosted_minimax_cn);
         catalog.insert_hosted_catalog(hosted_minimax_cn_coding_plan);
+        catalog.insert_hosted_catalog(hosted_nvidia);
         for model in &settings.custom_models {
             if let Ok(model_ref) = model_ref_from_selection(model, &catalog) {
                 catalog.ensure_model_for_ref(&model_ref);
@@ -211,7 +227,7 @@ impl Catalog {
         }
         catalog.default_model = Some(ModelRef::new(
             ProviderId::unchecked(ProviderId::OPENROUTER),
-            ModelId::new(settings::DEFAULT_MODEL).expect("default model id is valid"),
+            ModelId::new(settings::DEFAULT_OPENROUTER_MODEL_ID).expect("default model id is valid"),
         ));
         catalog
     }
@@ -310,17 +326,15 @@ pub(crate) fn model_ref_from_selection(
             });
     }
 
-    if let Ok(parsed) = ModelRef::parse(clean) {
-        if catalog.provider(&parsed.provider).is_some() {
-            return Ok(parsed);
-        }
+    let parsed =
+        ModelRef::parse(clean).map_err(|message| super::error::LlmError::Config { message })?;
+    if catalog.provider(&parsed.provider).is_some() {
+        return Ok(parsed);
     }
 
-    ModelId::new(clean)
-        .map(|model| ModelRef::new(ProviderId::unchecked(ProviderId::OPENROUTER), model))
-        .ok_or_else(|| super::error::LlmError::Config {
-            message: "Model id is empty.".to_string(),
-        })
+    Err(super::error::LlmError::ProviderNotFound {
+        provider: parsed.provider.to_string(),
+    })
 }
 
 fn resolve_model(
@@ -347,6 +361,7 @@ fn dynamic_model(provider_id: &ProviderId, model_id: &ModelId) -> ModelDefinitio
         ProviderId::LMSTUDIO => lmstudio::model_definition(model_id.as_str(), None),
         ProviderId::DEEPSEEK => deepseek::model_definition(model_id.as_str(), None),
         ProviderId::ZAI => zai::model_definition(model_id.as_str(), None),
+        ProviderId::NVIDIA => nvidia::model_definition(model_id.as_str(), None),
         ProviderId::MOONSHOTAI | ProviderId::MOONSHOTAI_CN => {
             moonshot::model_definition(provider_id.as_str(), model_id.as_str(), None)
         }
@@ -387,11 +402,12 @@ fn key_or_env_present(key: Option<&String>, env_var: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::super::custom::{CustomProviderConfig, CustomProviderModel, CustomProviderRuntime};
     use super::super::types::AdapterKind;
     use super::*;
 
-    fn test_catalog() -> Catalog {
-        Catalog::from_settings(&ProviderSettings {
+    fn test_settings() -> ProviderSettings {
+        ProviderSettings {
             openai_api_key: None,
             anthropic_api_key: None,
             openrouter_api_key: None,
@@ -406,11 +422,17 @@ mod tests {
             minimax_coding_plan_api_key: None,
             minimax_cn_api_key: None,
             minimax_cn_coding_plan_api_key: None,
+            nvidia_api_key: None,
+            custom_providers: Vec::new(),
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
             custom_models: Vec::new(),
             local_model_limits: BTreeMap::new(),
-        })
+        }
+    }
+
+    fn test_catalog() -> Catalog {
+        Catalog::from_settings(&test_settings())
     }
 
     #[test]
@@ -424,12 +446,81 @@ mod tests {
     }
 
     #[test]
-    fn legacy_openrouter_model_ids_still_resolve() {
+    fn bare_openrouter_vendor_model_ids_are_rejected() {
         let catalog = test_catalog();
+        let error = model_ref_from_selection("google/gemini-3.5-flash", &catalog).unwrap_err();
+
+        assert!(matches!(
+            error,
+            super::super::error::LlmError::ProviderNotFound { provider }
+                if provider == "google"
+        ));
+    }
+
+    #[test]
+    fn custom_provider_models_resolve_with_the_raw_adapter_model_id() {
+        let mut settings = test_settings();
+        settings.custom_providers.push(CustomProviderRuntime {
+            config: CustomProviderConfig {
+                id: "omniroute".to_string(),
+                name: "OmniRoute".to_string(),
+                base_url: "http://localhost:20128/v1".to_string(),
+                models: vec![CustomProviderModel {
+                    id: "zai/glm-5".to_string(),
+                    name: "GLM 5".to_string(),
+                    context_length: 131_072,
+                    max_output_tokens: 8_192,
+                }],
+                headers: BTreeMap::from([("x-router".to_string(), "primary".to_string())]),
+            },
+            api_key: Some("secret".to_string()),
+        });
+        let catalog = Catalog::from_settings(&settings);
+        let model_ref = model_ref_from_selection("omniroute/zai/glm-5", &catalog).unwrap();
+        let resolved = catalog.resolve(&model_ref).unwrap();
+
+        assert_eq!(resolved.provider.name, "OmniRoute");
+        assert_eq!(
+            resolved.provider.base_url.as_deref(),
+            Some("http://localhost:20128/v1")
+        );
+        assert_eq!(resolved.provider.adapter, AdapterKind::OpenAiCompatibleChat);
+        assert_eq!(resolved.model.adapter_model_id, "zai/glm-5");
+        assert_eq!(
+            resolved
+                .provider
+                .request
+                .headers
+                .get("x-router")
+                .map(String::as_str),
+            Some("primary")
+        );
+    }
+
+    #[test]
+    fn custom_provider_ids_own_their_explicit_model_namespace() {
+        let mut settings = test_settings();
+        settings.custom_providers.push(CustomProviderRuntime {
+            config: CustomProviderConfig {
+                id: "google".to_string(),
+                name: "Custom Google".to_string(),
+                base_url: "https://example.com/v1".to_string(),
+                models: vec![CustomProviderModel {
+                    id: "gemini-3.5-flash".to_string(),
+                    name: "Custom Gemini".to_string(),
+                    context_length: 64_000,
+                    max_output_tokens: 4_096,
+                }],
+                headers: BTreeMap::new(),
+            },
+            api_key: None,
+        });
+        let catalog = Catalog::from_settings(&settings);
+
         let model_ref = model_ref_from_selection("google/gemini-3.5-flash", &catalog).unwrap();
 
-        assert_eq!(model_ref.provider.as_str(), "openrouter");
-        assert_eq!(model_ref.model.as_str(), "google/gemini-3.5-flash");
+        assert_eq!(model_ref.provider.as_str(), "google");
+        assert_eq!(model_ref.model.as_str(), "gemini-3.5-flash");
     }
 
     #[test]
@@ -466,6 +557,8 @@ mod tests {
             minimax_coding_plan_api_key: None,
             minimax_cn_api_key: None,
             minimax_cn_coding_plan_api_key: None,
+            nvidia_api_key: None,
+            custom_providers: Vec::new(),
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
             custom_models: Vec::new(),
@@ -508,6 +601,25 @@ mod tests {
         assert_eq!(
             resolved.provider.base_url.as_deref(),
             Some(moonshot::API_BASE)
+        );
+    }
+
+    #[test]
+    fn nvidia_model_refs_resolve_to_hosted_nim_provider() {
+        let catalog = test_catalog();
+        let model_ref =
+            model_ref_from_selection("nvidia/meta/llama-3.3-70b-instruct", &catalog).unwrap();
+        let resolved = catalog.resolve(&model_ref).unwrap();
+
+        assert_eq!(model_ref.provider.as_str(), ProviderId::NVIDIA);
+        assert_eq!(model_ref.model.as_str(), "meta/llama-3.3-70b-instruct");
+        assert_eq!(
+            resolved.model.adapter_model_id,
+            "meta/llama-3.3-70b-instruct"
+        );
+        assert_eq!(
+            resolved.provider.base_url.as_deref(),
+            Some(nvidia::API_BASE)
         );
     }
 

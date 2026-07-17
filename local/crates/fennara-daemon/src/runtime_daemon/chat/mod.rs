@@ -34,6 +34,7 @@ mod tools;
 pub(crate) mod trace;
 
 pub(crate) use assets::{chat_asset, chat_index, chat_index_redirect, chat_tool_media};
+use providers::custom::SaveCustomProviderRequest;
 use settings::{SaveSettingsRequest, load_settings, save_settings};
 
 #[derive(Debug, Deserialize)]
@@ -60,6 +61,7 @@ struct ClientRequest {
     provider_api_keys: Option<BTreeMap<String, String>>,
     ollama_base_url: Option<String>,
     provider_base_urls: Option<BTreeMap<String, String>>,
+    custom_provider: Option<SaveCustomProviderRequest>,
     approval_mode: Option<String>,
     local_model_context_lengths: Option<BTreeMap<String, u32>>,
     approval_id: Option<String>,
@@ -228,7 +230,12 @@ where
     .await?;
     send_project_status(sender, None, state, bound_project).await?;
     let scope = &bound_project.scope;
-    match store::open_active_or_create(scope, &settings.model, &settings.reasoning_effort) {
+    match store::open_active_or_create(
+        scope,
+        &settings.model,
+        &settings.reasoning_effort,
+        &settings.custom_providers,
+    ) {
         Ok(opened) => {
             *active_chat_id = Some(opened.chat.id.clone());
             send_json(
@@ -433,6 +440,7 @@ where
                 provider_api_keys: request.provider_api_keys,
                 ollama_base_url: request.ollama_base_url,
                 provider_base_urls: request.provider_base_urls,
+                custom_provider: request.custom_provider,
                 model: request.model,
                 reasoning_effort: request.reasoning_effort,
                 local_model_context_lengths: request.local_model_context_lengths,
@@ -470,7 +478,7 @@ where
             )
             .to_string();
             let scope = &bound_project.scope;
-            match store::create_chat(scope, &model, &reasoning_effort) {
+            match store::create_chat(scope, &model, &reasoning_effort, &settings.custom_providers) {
                 Ok(opened) => {
                     *active_chat_id = Some(opened.chat.id.clone());
                     if send_json(

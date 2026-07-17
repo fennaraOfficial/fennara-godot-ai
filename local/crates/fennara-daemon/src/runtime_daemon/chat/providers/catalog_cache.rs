@@ -10,7 +10,8 @@ use super::models_dev::{
     parse_kimi_for_coding_catalog, parse_lmstudio_catalog, parse_minimax_catalog,
     parse_minimax_cn_catalog, parse_minimax_cn_coding_plan_catalog,
     parse_minimax_coding_plan_catalog, parse_moonshot_catalog, parse_moonshot_cn_catalog,
-    parse_ollama_cloud_catalog, parse_openai_catalog, parse_openrouter_catalog, parse_zai_catalog,
+    parse_nvidia_catalog, parse_ollama_cloud_catalog, parse_openai_catalog,
+    parse_openrouter_catalog, parse_zai_catalog,
 };
 use crate::runtime_daemon::chat::settings;
 
@@ -41,6 +42,7 @@ pub(crate) struct CachedOpenRouterCatalog {
     pub(crate) minimax_coding_plan: OpenRouterCatalog,
     pub(crate) minimax_cn: OpenRouterCatalog,
     pub(crate) minimax_cn_coding_plan: OpenRouterCatalog,
+    pub(crate) nvidia: OpenRouterCatalog,
     pub(crate) meta: CatalogMeta,
     pub(crate) stale: bool,
 }
@@ -82,6 +84,8 @@ pub(crate) struct CatalogMeta {
     pub(crate) minimax_cn_model_count: usize,
     #[serde(default)]
     pub(crate) minimax_cn_coding_plan_model_count: usize,
+    #[serde(default)]
+    pub(crate) nvidia_model_count: usize,
 }
 
 impl CatalogMeta {
@@ -107,6 +111,7 @@ impl CatalogMeta {
             minimax_coding_plan_model_count: catalogs.minimax_coding_plan.models.len(),
             minimax_cn_model_count: catalogs.minimax_cn.models.len(),
             minimax_cn_coding_plan_model_count: catalogs.minimax_cn_coding_plan.models.len(),
+            nvidia_model_count: catalogs.nvidia.models.len(),
         }
     }
 }
@@ -126,6 +131,7 @@ struct ParsedCatalogs {
     minimax_coding_plan: OpenRouterCatalog,
     minimax_cn: OpenRouterCatalog,
     minimax_cn_coding_plan: OpenRouterCatalog,
+    nvidia: OpenRouterCatalog,
 }
 
 impl ParsedCatalogs {
@@ -145,6 +151,7 @@ impl ParsedCatalogs {
             minimax_coding_plan: self.minimax_coding_plan,
             minimax_cn: self.minimax_cn,
             minimax_cn_coding_plan: self.minimax_cn_coding_plan,
+            nvidia: self.nvidia,
             meta,
             stale,
         }
@@ -167,7 +174,17 @@ fn parse_all_catalogs(bytes: &[u8]) -> Result<ParsedCatalogs, String> {
         minimax_coding_plan: parse_minimax_coding_plan_catalog(bytes)?,
         minimax_cn: parse_minimax_cn_catalog(bytes)?,
         minimax_cn_coding_plan: parse_minimax_cn_coding_plan_catalog(bytes)?,
+        nvidia: parse_optional_nvidia_catalog(bytes)?,
     })
+}
+
+fn parse_optional_nvidia_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
+    let snapshot: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(bytes)
+        .map_err(|error| format!("Models.dev catalog JSON was invalid: {error}"))?;
+    if !snapshot.contains_key("nvidia") {
+        return Ok(OpenRouterCatalog::default());
+    }
+    parse_nvidia_catalog(bytes)
 }
 
 pub(crate) fn default_paths() -> CatalogPaths {
@@ -454,7 +471,8 @@ mod tests {
             "minimax": { "id": "minimax", "models": {} },
             "minimax-coding-plan": { "id": "minimax-coding-plan", "models": {} },
             "minimax-cn": { "id": "minimax-cn", "models": {} },
-            "minimax-cn-coding-plan": { "id": "minimax-cn-coding-plan", "models": {} }
+            "minimax-cn-coding-plan": { "id": "minimax-cn-coding-plan", "models": {} },
+            "nvidia": { "id": "nvidia", "models": {} }
         }"#
         .to_vec()
     }
@@ -462,6 +480,12 @@ mod tests {
     fn fixture_with_bad_side_provider() -> Vec<u8> {
         let mut value: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
         value["anthropic"]["id"] = serde_json::json!("not-anthropic");
+        serde_json::to_vec(&value).unwrap()
+    }
+
+    fn fixture_without_nvidia() -> Vec<u8> {
+        let mut value: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
+        value.as_object_mut().unwrap().remove("nvidia");
         serde_json::to_vec(&value).unwrap()
     }
 
@@ -497,6 +521,7 @@ mod tests {
             minimax_coding_plan_model_count: 0,
             minimax_cn_model_count: 0,
             minimax_cn_coding_plan_model_count: 0,
+            nvidia_model_count: 0,
         };
         write_validated_snapshot(&paths, &fixture(), &meta)
             .await
@@ -506,6 +531,38 @@ mod tests {
 
         assert_eq!(loaded.catalog.models.len(), 1);
         assert!(loaded.stale);
+    }
+
+    #[tokio::test]
+    async fn older_snapshot_without_nvidia_still_loads() {
+        let paths = test_paths("without-nvidia");
+        let meta = CatalogMeta {
+            source_url: DEFAULT_MODELS_DEV_URL.to_string(),
+            fetched_at_ms: now_ms(),
+            openrouter_model_count: 1,
+            openai_model_count: 0,
+            anthropic_model_count: 0,
+            ollama_cloud_model_count: 0,
+            lmstudio_model_count: 0,
+            deepseek_model_count: 0,
+            zai_model_count: 0,
+            moonshot_model_count: 0,
+            moonshot_cn_model_count: 0,
+            kimi_for_coding_model_count: 0,
+            minimax_model_count: 0,
+            minimax_coding_plan_model_count: 0,
+            minimax_cn_model_count: 0,
+            minimax_cn_coding_plan_model_count: 0,
+            nvidia_model_count: 0,
+        };
+        write_validated_snapshot(&paths, &fixture_without_nvidia(), &meta)
+            .await
+            .unwrap();
+
+        let loaded = load_disk_from(&paths).await.unwrap();
+
+        assert_eq!(loaded.catalog.models.len(), 1);
+        assert!(loaded.nvidia.models.is_empty());
     }
 
     #[tokio::test]
@@ -528,6 +585,7 @@ mod tests {
             minimax_coding_plan_model_count: 0,
             minimax_cn_model_count: 0,
             minimax_cn_coding_plan_model_count: 0,
+            nvidia_model_count: 0,
         };
         write_validated_snapshot(&paths, &fixture(), &meta)
             .await
@@ -561,6 +619,7 @@ mod tests {
             minimax_coding_plan_model_count: 0,
             minimax_cn_model_count: 0,
             minimax_cn_coding_plan_model_count: 0,
+            nvidia_model_count: 0,
         };
         write_validated_snapshot(&paths, &fixture(), &meta)
             .await

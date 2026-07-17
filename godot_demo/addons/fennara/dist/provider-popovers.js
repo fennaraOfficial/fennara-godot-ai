@@ -29,6 +29,8 @@
     const ensureDaemonConnected = callbacks.ensureDaemonConnected || (() => true);
     const setUsagePopoverOpen = callbacks.setUsagePopoverOpen || noop;
     const closeCommandPalette = callbacks.closeCommandPalette || noop;
+    const closeCustomProviderPrompt = callbacks.closeCustomProviderPrompt || noop;
+    const openCustomProviderPrompt = callbacks.openCustomProviderPrompt || (() => false);
     const getModelPicker = callbacks.getModelPicker || (() => null);
     const getProviderRegistry = callbacks.getProviderRegistry || (() => []);
     const getProviderMetadata = callbacks.getProviderMetadata || (() => new Map());
@@ -49,6 +51,7 @@
       closeProviderPicker();
       closeOpenRouterKeyPrompt();
       closeOllamaSetupPrompt();
+      closeCustomProviderPrompt();
       closeCommandPalette();
       if (forceOpen && modelPicker?.open()) {
         return;
@@ -67,6 +70,7 @@
       modelPicker?.close();
       closeOpenRouterKeyPrompt();
       closeOllamaSetupPrompt();
+      closeCustomProviderPrompt();
       closeCommandPalette();
       if (!providerPopover) {
         return false;
@@ -202,7 +206,11 @@
       ranked.forEach(({ provider }) => {
         providerOptionsList.append(renderProviderRow(provider));
       });
-      if (!ranked.length) {
+      const showCustom = providerScore("custom other add provider", query) < 99;
+      if (showCustom) {
+        providerOptionsList.append(renderCustomProviderRow());
+      }
+      if (!ranked.length && !showCustom) {
         const empty = document.createElement("div");
         empty.className = "model-empty";
         const text = document.createElement("p");
@@ -213,14 +221,37 @@
       positionProviderPopover();
     }
 
+    function renderCustomProviderRow() {
+      const row = document.createElement("button");
+      row.className = "provider-row provider-row-custom";
+      row.type = "button";
+      row.dataset.providerOption = "custom";
+      row.title = "Add a custom OpenAI-compatible provider";
+      row.innerHTML = [
+        "<span><strong>Custom</strong></span>",
+        "<b>Custom&nbsp;&nbsp;+</b>",
+      ].join("");
+      row.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openCustomProviderPrompt();
+      });
+      return row;
+    }
+
     function renderProviderRow(provider) {
+      const isCustom = provider.kind === "custom";
       const canUpdateKey = provider.auth?.type === "api_key" && provider.connected;
-      const status = canUpdateKey ? "Connected - update key" : providerStatusLabel(provider);
+      const customModelCount = Array.isArray(provider.custom?.models) ? provider.custom.models.length : 0;
+      const status = isCustom
+        ? `${customModelCount} ${customModelCount === 1 ? "model" : "models"} - edit`
+        : canUpdateKey ? "Connected - update key" : providerStatusLabel(provider);
       const row = document.createElement("button");
       row.className = "provider-row";
       row.type = "button";
       row.dataset.providerOption = provider.id;
-      row.title = canUpdateKey
+      row.title = isCustom
+        ? `Edit ${provider.name}`
+        : canUpdateKey
         ? `Update ${provider.name} API key`
         : `Use ${provider.name}`;
       row.innerHTML = [
@@ -231,6 +262,10 @@
       ].join("");
       row.addEventListener("click", (event) => {
         event.stopPropagation();
+        if (isCustom) {
+          openCustomProviderPrompt(provider);
+          return;
+        }
         if (canUpdateKey) {
           chooseProvider(provider.id);
           openProviderKeyPrompt(provider.id);

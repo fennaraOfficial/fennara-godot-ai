@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use super::{
     context_compaction::{self, ContextSummaryChunk, InsertContextSummary, SummaryCandidate},
     ids::{new_id, now_ms},
+    providers::custom::CustomProviderConfig,
     schema::{connection, model_trace_from_selection, to_store_error},
     settings::{self, DEFAULT_MODEL},
 };
@@ -142,26 +143,28 @@ pub(crate) fn open_active_or_create(
     scope: &ProjectScope,
     model: &str,
     reasoning_effort: &str,
+    custom_providers: &[CustomProviderConfig],
 ) -> Result<OpenedChat, String> {
     if let Some(chat_id) = active_chat_id(scope)? {
         if let Ok(opened) = open_chat(scope, &chat_id) {
             return Ok(opened);
         }
     }
-    create_chat(scope, model, reasoning_effort)
+    create_chat(scope, model, reasoning_effort, custom_providers)
 }
 
 pub(crate) fn create_chat(
     scope: &ProjectScope,
     model: &str,
     reasoning_effort: &str,
+    custom_providers: &[CustomProviderConfig],
 ) -> Result<OpenedChat, String> {
     let conn = connection()?;
     let now = now_ms();
     let chat_id = new_id("chat");
     let clean_model = settings::clean_model(model).unwrap_or_else(|| DEFAULT_MODEL.to_string());
     let clean_effort = settings::clean_reasoning_effort(reasoning_effort);
-    let model_trace = model_trace_from_selection(&clean_model);
+    let model_trace = model_trace_from_selection(&clean_model, custom_providers);
     conn.execute(
         "INSERT INTO chats
          (id, title, project_path, project_name, model,
@@ -281,6 +284,7 @@ pub(crate) fn set_chat_model(
     chat_id: &str,
     model: &str,
     reasoning_effort: &str,
+    custom_providers: &[CustomProviderConfig],
 ) -> Result<(), String> {
     let conn = connection()?;
     if get_chat(&conn, chat_id)?.is_none() {
@@ -288,7 +292,7 @@ pub(crate) fn set_chat_model(
     }
     let clean_model = settings::clean_model(model).unwrap_or_else(|| DEFAULT_MODEL.to_string());
     let clean_effort = settings::clean_reasoning_effort(reasoning_effort);
-    let model_trace = model_trace_from_selection(&clean_model);
+    let model_trace = model_trace_from_selection(&clean_model, custom_providers);
     let now = now_ms();
     conn.execute(
         "UPDATE chats
@@ -380,6 +384,7 @@ pub(crate) fn insert_assistant_placeholder_with_generation(
     chat_id: &str,
     model: &str,
     reasoning_effort: &str,
+    custom_providers: &[CustomProviderConfig],
 ) -> Result<(StoredMessage, StartedGeneration), String> {
     let mut conn = connection()?;
     generations::insert_assistant_placeholder_with_generation_on_connection(
@@ -387,6 +392,7 @@ pub(crate) fn insert_assistant_placeholder_with_generation(
         chat_id,
         model,
         reasoning_effort,
+        custom_providers,
     )
 }
 
@@ -406,6 +412,7 @@ pub(crate) fn finish_assistant_message(
     usage: Option<&Value>,
     fallback_model: &str,
     generation_id: Option<&str>,
+    custom_providers: &[CustomProviderConfig],
 ) -> Result<StoredMessage, String> {
     let mut conn = connection()?;
     finish_assistant_message_on_connection(
@@ -417,6 +424,7 @@ pub(crate) fn finish_assistant_message(
         usage,
         fallback_model,
         generation_id,
+        custom_providers,
     )
 }
 
@@ -428,6 +436,7 @@ pub(crate) fn finish_assistant_message_with_tool_calls(
     usage: Option<&Value>,
     fallback_model: &str,
     generation_id: Option<&str>,
+    custom_providers: &[CustomProviderConfig],
 ) -> Result<StoredMessage, String> {
     let mut conn = connection()?;
     finish_assistant_message_on_connection(
@@ -439,6 +448,7 @@ pub(crate) fn finish_assistant_message_with_tool_calls(
         usage,
         fallback_model,
         generation_id,
+        custom_providers,
     )
 }
 
@@ -451,6 +461,7 @@ fn finish_assistant_message_on_connection(
     usage: Option<&Value>,
     fallback_model: &str,
     generation_id: Option<&str>,
+    custom_providers: &[CustomProviderConfig],
 ) -> Result<StoredMessage, String> {
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -465,7 +476,7 @@ fn finish_assistant_message_on_connection(
         .transpose()
         .map_err(|error| error.to_string())?;
     let cost = usage.and_then(usage_cost);
-    let model_trace = model_trace_from_selection(fallback_model);
+    let model_trace = model_trace_from_selection(fallback_model, custom_providers);
     if let Some(tool_calls_json) = tool_calls_json.as_deref() {
         tx.execute(
             "UPDATE chat_messages SET tool_calls_json = ?2, updated_at_ms = ?3 WHERE id = ?1",
@@ -850,6 +861,7 @@ pub(crate) fn insert_context_summary(
     reasoning_effort: &str,
     usage: Option<&Value>,
     metadata: &Value,
+    custom_providers: &[CustomProviderConfig],
 ) -> Result<ContextSummaryChunk, String> {
     let mut conn = connection()?;
     context_compaction::insert_context_summary_on_connection(
@@ -863,6 +875,7 @@ pub(crate) fn insert_context_summary(
             reasoning_effort,
             usage,
             metadata,
+            custom_providers,
         },
     )
 }

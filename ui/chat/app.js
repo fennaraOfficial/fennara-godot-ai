@@ -27,6 +27,7 @@
   const commandOptionButtons = Array.from(document.querySelectorAll("[data-command-option]"));
   const modelPopover = document.querySelector("[data-model-popover]");
   const providerPopover = document.querySelector("[data-provider-popover]");
+  const customProviderPopover = document.querySelector("[data-custom-provider-popover]");
   const providerKeyPopover = document.querySelector("[data-provider-key-popover]");
   const ollamaSetupPopover = document.querySelector("[data-ollama-setup-popover]");
   const modelTrigger = document.querySelector("[data-open-model-picker]");
@@ -174,6 +175,7 @@
   let openrouterCatalogStatus = null;
   let catalogRefreshInFlight = false;
   let pendingProviderKeySaves = new Map();
+  const pendingCustomProviderSaves = window.FennaraCustomProviderDialog.createPendingSaveRegistry();
   let chatStreaming = false;
   let sessionCost = 0;
   let activeTurnCost = 0;
@@ -182,6 +184,7 @@
   let canRevert = false;
   let modelPicker = null;
   let providerPopovers = null;
+  let customProviderDialog = null;
   let projectFileLinks = null;
   let settingsPanel = null;
   let mcpAppsSettings = null;
@@ -257,6 +260,10 @@
       appShell?.setAttribute("data-connection", "offline");
       stopProjectStatusPolling();
       mcpAppsSettings?.handleDisconnect();
+      if (pendingCustomProviderSaves.size) {
+        pendingCustomProviderSaves.clear();
+        customProviderDialog?.handleError("Connection lost before the provider was saved. Try again.");
+      }
     },
     onSendUnavailable() {
       appendSystem("Local daemon is not connected yet.");
@@ -333,12 +340,38 @@
     openModelPicker,
   });
 
+  customProviderDialog = window.FennaraCustomProviderDialog?.createCustomProviderDialog({
+    popover: customProviderPopover,
+    callbacks: {
+      ensureDaemonConnected,
+      closeProviderPicker,
+      openProviderPicker,
+      getProviderIds: () => providerRegistry.map((provider) => provider.id),
+      onSubmit: (customProvider) => {
+        const requestId = nextRequestId("save-custom-provider");
+        pendingCustomProviderSaves.add(requestId, customProvider.provider_id);
+        const sent = send({
+          type: "save_settings",
+          request_id: requestId,
+          custom_provider: customProvider,
+        });
+        if (!sent) {
+          pendingCustomProviderSaves.take(requestId);
+          return false;
+        }
+        return requestId;
+      },
+      onTimeout: (requestId) => pendingCustomProviderSaves.markTimedOut(requestId),
+    },
+  });
+
   providerPopovers = window.FennaraProviderPopovers.createProviderPopovers({
     elements: {
       modelPopover,
       providerPopover,
       providerKeyPopover,
       ollamaSetupPopover,
+      customProviderPopover,
       providerOptionsList,
       providerSearch,
       providerKeyTitle,
@@ -351,6 +384,8 @@
       ensureDaemonConnected,
       setUsagePopoverOpen,
       closeCommandPalette: () => commandPalette.close(),
+      closeCustomProviderPrompt: () => customProviderDialog?.close(),
+      openCustomProviderPrompt: (provider) => customProviderDialog?.open(provider) || false,
       getModelPicker: () => modelPicker,
       getProviderRegistry: () => providerRegistry,
       getProviderMetadata: () => providerMetadata,
@@ -386,6 +421,7 @@
       closeProviderPicker,
       closeProviderKeyPrompt: closeOpenRouterKeyPrompt,
       closeLocalSetupPrompt: closeOllamaSetupPrompt,
+      closeCustomProviderPrompt,
       closeCommandPalette: () => commandPalette.close(),
       cleanChatSurface,
       cleanApprovalMode,
@@ -536,6 +572,7 @@
       positionProviderPopover,
       positionProviderKeyPrompt,
       positionLocalSetupPrompt: positionOllamaSetupPrompt,
+      positionCustomProviderPrompt,
       commandPalette,
       modelPicker,
     },
@@ -675,6 +712,7 @@
   function openModelPicker(forceOpen = false) { return providerPopovers?.openModelPicker(forceOpen); }
   function openProviderPicker() { return providerPopovers?.openProviderPicker() || false; }
   function closeProviderPicker() { return providerPopovers?.closeProviderPicker(); }
+  function closeCustomProviderPrompt() { return customProviderDialog?.close(); }
   function positionProviderPopover() { return providerPopovers?.positionProviderPopover(); }
   function openOpenRouterKeyPrompt() { return providerPopovers?.openOpenRouterKeyPrompt() || false; }
   function openProviderKeyPrompt(providerId) { return providerPopovers?.openProviderKeyPrompt(providerId) || false; }
@@ -697,6 +735,7 @@
 
   function positionProviderKeyPrompt() { return providerPopovers?.positionProviderKeyPrompt(); }
   function positionOllamaSetupPrompt() { return providerPopovers?.positionOllamaSetupPrompt(); }
+  function positionCustomProviderPrompt() { return customProviderDialog?.position(); }
   function renderProviderOptions() { return providerPopovers?.renderProviderOptions(); }
   function syncOllamaSetupFields() { return providerPopovers?.syncOllamaSetupFields(); }
 
@@ -731,6 +770,10 @@
 
   function updateThinkingText(text, status) {
     transcriptRenderer.updateThinkingText(text, status);
+  }
+
+  function updateGenerationStatus(text) {
+    transcriptRenderer.updateGenerationStatus(text);
   }
 
   function updateAssistantText(text) {
@@ -838,6 +881,7 @@
       connected: Boolean(provider?.connected),
       model_prefix: String(provider?.model_prefix || (id ? `${id}/` : "")),
       setup,
+      custom: provider?.custom || null,
     };
   }
 
@@ -1349,6 +1393,9 @@
         : "";
       const isSettingsDialogSave = requestId.startsWith("save-settings-") && !isKeySave;
       const isProviderSetupSave = requestId.startsWith("save-ollama-provider") || requestId.startsWith("save-local-provider");
+      const pendingCustomProviderSave = pendingCustomProviderSaves.peek(requestId);
+      const isCustomProviderSave = Boolean(pendingCustomProviderSave);
+      const customProviderId = pendingCustomProviderSave?.providerId || "";
       const isSilentSave = requestId.startsWith("silent-settings");
       applySettings(message.settings, {
         preserveTypedKey: !isKeySave && !isSettingsDialogSave,
@@ -1374,6 +1421,16 @@
         updateModelUi();
         updateChatSize();
       }
+      if (isCustomProviderSave) {
+        pendingCustomProviderSaves.take(requestId);
+        if (customProviderDialog?.handleSaved(requestId)) {
+          currentProvider = customProviderId || currentProvider;
+          currentModel = "";
+          updateProviderUi();
+          updateModelUi();
+          updateChatSize();
+        }
+      }
       if (message.type === "settings_saved") {
         const restartNeeded = currentChatSurface !== RUNTIME_CHAT_SURFACE;
         if (settingsPanel?.hasPendingRequest(message.request_id)) {
@@ -1392,6 +1449,9 @@
           if (restartNeeded && isSettingsDialogSave) {
             appendSystem("Settings saved. Restart Godot for the chat display change to take effect.");
             window.setTimeout(clearSystemStatus, 7000);
+          } else if (isCustomProviderSave) {
+            appendSystem(`${providerLabel(customProviderId)} added.`);
+            window.setTimeout(clearSystemStatus, 1600);
           } else if (!isSettingsDialogSave) {
             appendSystem("Settings saved locally.");
             window.setTimeout(clearSystemStatus, 1200);
@@ -1399,6 +1459,9 @@
         }
         if (!restartNeeded && isKeySave) {
           refreshModelsAfterProviderKeySave(currentProvider);
+        } else if (isCustomProviderSave) {
+          requestModelList({ refreshLocal: false });
+          modelPicker?.open();
         } else if (!isSettingsDialogSave && !isSilentSave) {
           requestModelList();
         }
@@ -1547,6 +1610,14 @@
       updateAssistantText(message.item.content || "");
       return;
     }
+    if (
+      message.type === "chat_item_update"
+      && message.item?.type === "reasoning"
+      && message.item?.id === "status"
+    ) {
+      updateGenerationStatus(message.item.content || "");
+      return;
+    }
     if (message.type === "chat_item_update" && message.item?.type === "reasoning") {
       updateThinkingText(message.item.content || "", message.item.status);
       return;
@@ -1629,6 +1700,10 @@
       if (requestId.startsWith("save-settings-key")) {
         pendingProviderKeySaves.delete(requestId);
         send({ type: "get_settings", request_id: nextRequestId("settings-after-key-save-error") });
+      }
+      if (pendingCustomProviderSaves.peek(requestId)) {
+        pendingCustomProviderSaves.take(requestId);
+        customProviderDialog?.handleError(errorText, requestId);
       }
       transcriptRenderer.finishActiveThinking();
       transcriptRenderer.endStream();

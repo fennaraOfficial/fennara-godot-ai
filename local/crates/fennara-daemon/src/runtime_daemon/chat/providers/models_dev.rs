@@ -20,6 +20,7 @@ pub(crate) const MINIMAX_PROVIDER_ID: &str = ProviderId::MINIMAX;
 pub(crate) const MINIMAX_CODING_PLAN_PROVIDER_ID: &str = ProviderId::MINIMAX_CODING_PLAN;
 pub(crate) const MINIMAX_CN_PROVIDER_ID: &str = ProviderId::MINIMAX_CN;
 pub(crate) const MINIMAX_CN_CODING_PLAN_PROVIDER_ID: &str = ProviderId::MINIMAX_CN_CODING_PLAN;
+pub(crate) const NVIDIA_PROVIDER_ID: &str = ProviderId::NVIDIA;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct OpenRouterCatalog {
@@ -219,6 +220,10 @@ pub(crate) fn parse_minimax_cn_coding_plan_catalog(
     parse_provider_catalog(bytes, MINIMAX_CN_CODING_PLAN_PROVIDER_ID)
 }
 
+pub(crate) fn parse_nvidia_catalog(bytes: &[u8]) -> Result<OpenRouterCatalog, String> {
+    parse_provider_catalog(bytes, NVIDIA_PROVIDER_ID)
+}
+
 pub(crate) fn parse_provider_catalog(
     bytes: &[u8],
     provider_id: &str,
@@ -376,6 +381,7 @@ fn static_provider_id(provider_id: &str) -> &'static str {
         ProviderId::MINIMAX_CODING_PLAN => ProviderId::MINIMAX_CODING_PLAN,
         ProviderId::MINIMAX_CN => ProviderId::MINIMAX_CN,
         ProviderId::MINIMAX_CN_CODING_PLAN => ProviderId::MINIMAX_CN_CODING_PLAN,
+        ProviderId::NVIDIA => ProviderId::NVIDIA,
         _ => ProviderId::OPENROUTER,
     }
 }
@@ -394,7 +400,8 @@ fn adapter_model_id(provider_id: &str, id: &str) -> String {
         | ProviderId::MINIMAX
         | ProviderId::MINIMAX_CODING_PLAN
         | ProviderId::MINIMAX_CN
-        | ProviderId::MINIMAX_CN_CODING_PLAN => id.to_string(),
+        | ProviderId::MINIMAX_CN_CODING_PLAN
+        | ProviderId::NVIDIA => id.to_string(),
         _ => openrouter::adapter_model_id(id),
     }
 }
@@ -606,6 +613,34 @@ mod tests {
         assert_eq!(model.provider.as_str(), ProviderId::DEEPSEEK);
         assert_eq!(model.id.as_str(), "deepseek-chat");
         assert_eq!(model.adapter_model_id, "deepseek-chat");
+        assert!(model.capabilities.tools);
+    }
+
+    #[test]
+    fn parses_nvidia_models_with_raw_publisher_namespaces() {
+        let raw = br#"{
+            "nvidia": {
+                "id": "nvidia",
+                "models": {
+                    "meta/llama-3.3-70b-instruct": {
+                        "id": "meta/llama-3.3-70b-instruct",
+                        "name": "Llama 3.3 70B Instruct",
+                        "tool_call": true,
+                        "reasoning": false,
+                        "temperature": true,
+                        "limit": { "context": 131072, "output": 32768 },
+                        "modalities": { "input": ["text"], "output": ["text"] }
+                    }
+                }
+            }
+        }"#;
+
+        let catalog = parse_nvidia_catalog(raw).unwrap();
+        let model = &catalog.models[0].definition;
+
+        assert_eq!(model.provider.as_str(), ProviderId::NVIDIA);
+        assert_eq!(model.id.as_str(), "meta/llama-3.3-70b-instruct");
+        assert_eq!(model.adapter_model_id, "meta/llama-3.3-70b-instruct");
         assert!(model.capabilities.tools);
     }
 

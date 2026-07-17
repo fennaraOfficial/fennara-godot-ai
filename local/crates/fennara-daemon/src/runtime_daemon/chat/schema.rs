@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use super::settings;
+use super::{providers::custom::CustomProviderConfig, settings};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ModelTrace {
@@ -613,7 +613,7 @@ fn backfill_chat_model_trace(conn: &Connection) -> Result<(), String> {
     let mut updates = Vec::new();
     for row in rows {
         let (chat_id, model) = row.map_err(to_store_error)?;
-        let Some(trace) = model_trace_from_selection(&model) else {
+        let Some(trace) = legacy_model_trace_from_selection(&model) else {
             continue;
         };
         updates.push((chat_id, trace));
@@ -681,7 +681,7 @@ fn backfill_usage_logs(conn: &Connection) -> Result<(), String> {
             continue;
         };
         let usage_model = usage_string(&usage, "model").unwrap_or_else(|| "unknown".to_string());
-        let trace = model_trace_from_selection(&usage_model);
+        let trace = legacy_model_trace_from_selection(&usage_model);
         conn.execute(
             "INSERT INTO chat_usage_logs
              (id, chat_id, assistant_message_id, generation_id, model,
@@ -744,7 +744,17 @@ fn usage_string(usage: &Value, key: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-pub(crate) fn model_trace_from_selection(model: &str) -> Option<ModelTrace> {
+pub(crate) fn model_trace_from_selection(
+    model: &str,
+    custom_providers: &[CustomProviderConfig],
+) -> Option<ModelTrace> {
+    built_in_model_trace_from_selection(model).or_else(|| {
+        settings::custom_model_trace_parts(custom_providers, model)
+            .and_then(|(provider_id, model_id)| build_model_trace(provider_id, model_id))
+    })
+}
+
+fn built_in_model_trace_from_selection(model: &str) -> Option<ModelTrace> {
     let model = model.trim();
     if model.is_empty() {
         return None;
@@ -777,18 +787,34 @@ pub(crate) fn model_trace_from_selection(model: &str) -> Option<ModelTrace> {
         ("minimax-cn", model_id.trim())
     } else if let Some(model_id) = model.strip_prefix("minimax-cn-coding-plan/") {
         ("minimax-cn-coding-plan", model_id.trim())
+    } else if let Some(model_id) = model.strip_prefix("nvidia/") {
+        ("nvidia", model_id.trim())
     } else if let Some(model_id) = model.strip_prefix("openrouter/") {
         ("openrouter", model_id.trim())
-    } else if model.contains('/') {
-        ("openrouter", model)
     } else {
         return None;
     };
     if model_id.is_empty() {
         return None;
     }
-    let provider_id = provider_id.to_string();
-    let model_id = model_id.to_string();
+    build_model_trace(provider_id.to_string(), model_id.to_string())
+}
+
+// Legacy database migration only. Runtime model routing requires an explicit provider prefix.
+fn legacy_model_trace_from_selection(model: &str) -> Option<ModelTrace> {
+    built_in_model_trace_from_selection(model).or_else(|| {
+        let model = model.trim();
+        model
+            .contains('/')
+            .then(|| build_model_trace("openrouter".to_string(), model.to_string()))
+            .flatten()
+    })
+}
+
+fn build_model_trace(provider_id: String, model_id: String) -> Option<ModelTrace> {
+    if provider_id.is_empty() || model_id.is_empty() {
+        return None;
+    }
     let model_variant = None;
     let model_ref_json = json!({
         "provider_id": &provider_id,
@@ -830,24 +856,24 @@ mod tests {
     }
 
     #[test]
-    fn model_trace_parses_legacy_and_explicit_models() {
-        let ollama = model_trace_from_selection("ollama/llama3.2").unwrap();
+    fn model_trace_parses_explicit_provider_models() {
+        let ollama = model_trace_from_selection("ollama/llama3.2", &[]).unwrap();
         assert_eq!(ollama.provider_id, "ollama");
         assert_eq!(ollama.model_id, "llama3.2");
 
-        let openrouter = model_trace_from_selection("openrouter/google/gemini").unwrap();
+        let openrouter = model_trace_from_selection("openrouter/google/gemini", &[]).unwrap();
         assert_eq!(openrouter.provider_id, "openrouter");
         assert_eq!(openrouter.model_id, "google/gemini");
 
-        let lmstudio = model_trace_from_selection("lmstudio/openai/gpt-oss-20b").unwrap();
+        let lmstudio = model_trace_from_selection("lmstudio/openai/gpt-oss-20b", &[]).unwrap();
         assert_eq!(lmstudio.provider_id, "lmstudio");
         assert_eq!(lmstudio.model_id, "openai/gpt-oss-20b");
 
-        let deepseek = model_trace_from_selection("deepseek/deepseek-chat").unwrap();
+        let deepseek = model_trace_from_selection("deepseek/deepseek-chat", &[]).unwrap();
         assert_eq!(deepseek.provider_id, "deepseek");
         assert_eq!(deepseek.model_id, "deepseek-chat");
 
-        let zai = model_trace_from_selection("zai/glm-5.2").unwrap();
+        let zai = model_trace_from_selection("zai/glm-5.2", &[]).unwrap();
         assert_eq!(zai.provider_id, "zai");
         assert_eq!(zai.model_id, "glm-5.2");
 
@@ -877,19 +903,50 @@ mod tests {
                 "minimax-cn-coding-plan",
                 "MiniMax-M3",
             ),
+            (
+                "nvidia/meta/llama-3.3-70b-instruct",
+                "nvidia",
+                "meta/llama-3.3-70b-instruct",
+            ),
         ] {
-            let trace = model_trace_from_selection(selection).unwrap();
+            let trace = model_trace_from_selection(selection, &[]).unwrap();
             assert_eq!(trace.provider_id, provider_id, "{selection}");
             assert_eq!(trace.model_id, model_id, "{selection}");
         }
 
-        let legacy = model_trace_from_selection("google/gemini").unwrap();
-        assert_eq!(legacy.provider_id, "openrouter");
-        assert_eq!(legacy.model_id, "google/gemini");
+        assert!(model_trace_from_selection("", &[]).is_none());
+        assert!(model_trace_from_selection("not-a-routable-model", &[]).is_none());
+        assert!(model_trace_from_selection("google/gemini", &[]).is_none());
+        assert!(model_trace_from_selection("ollama/", &[]).is_none());
+    }
 
-        assert!(model_trace_from_selection("").is_none());
-        assert!(model_trace_from_selection("not-a-routable-model").is_none());
-        assert!(model_trace_from_selection("ollama/").is_none());
+    #[test]
+    fn model_trace_uses_the_supplied_custom_provider_snapshot() {
+        let providers = [CustomProviderConfig {
+            id: "omniroute".to_string(),
+            name: "OmniRoute".to_string(),
+            base_url: "https://example.com/v1".to_string(),
+            models: vec![super::super::providers::custom::CustomProviderModel {
+                id: "zai/glm-5".to_string(),
+                name: "GLM 5".to_string(),
+                context_length: 131_072,
+                max_output_tokens: 8_192,
+            }],
+            headers: std::collections::BTreeMap::new(),
+        }];
+
+        let trace = model_trace_from_selection("omniroute/zai/glm-5", &providers).unwrap();
+
+        assert_eq!(trace.provider_id, "omniroute");
+        assert_eq!(trace.model_id, "zai/glm-5");
+    }
+
+    #[test]
+    fn legacy_model_trace_treats_bare_slash_models_as_openrouter() {
+        let trace = legacy_model_trace_from_selection("google/gemini").unwrap();
+
+        assert_eq!(trace.provider_id, "openrouter");
+        assert_eq!(trace.model_id, "google/gemini");
     }
 
     #[test]

@@ -84,6 +84,8 @@ mod tests {
             minimax_coding_plan_api_key: None,
             minimax_cn_api_key: None,
             minimax_cn_coding_plan_api_key: None,
+            nvidia_api_key: None,
+            custom_providers: Vec::new(),
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
             custom_models: Vec::new(),
