@@ -131,6 +131,24 @@ mod tests {
     }
 
     #[test]
+    fn run_asset_import_script_description_explains_rejected_setters() {
+        let tool = schemas::tool_from_embedded_definition(include_str!(
+            "../../../../schemas/tools/run_asset_import_script.json"
+        ))
+        .expect("run_asset_import_script definition should parse");
+
+        let description = tool
+            .get("description")
+            .and_then(Value::as_str)
+            .expect("run_asset_import_script should expose description");
+
+        assert!(description.contains("set_import_option()` returns `true"));
+        assert!(description.contains("discards every staged import change"));
+        assert!(description.contains("if not ctx.set_import_option"));
+        assert!(tool.get("description_lines").is_none());
+    }
+
+    #[test]
     fn tools_list_uses_embedded_schemas_without_remote_lookup() {
         let tool_names = listed_tool_names();
 

@@ -2,6 +2,7 @@
 
 #include "fennara/app_paths.hpp"
 #include "fennara/control_auth.hpp"
+#include "fennara/editor_filesystem_state.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/setup/first_run_setup.hpp"
 #include "fennara/snapshot_manager.hpp"
@@ -219,16 +220,13 @@ void FennaraLocalBridge::_on_editor_filesystem_changed() {
 
 void FennaraLocalBridge::_on_resources_reimporting(
     const godot::PackedStringArray &paths) {
-    _is_importing_resources = true;
-    _active_import_count = paths.size();
+    EditorFilesystemState::get_singleton().on_resources_reimporting(paths);
     _send_editor_filesystem_status();
 }
 
 void FennaraLocalBridge::_on_resources_reimported(
     const godot::PackedStringArray &paths) {
-    _is_importing_resources = false;
-    _last_imported_count = paths.size();
-    _active_import_count = 0;
+    EditorFilesystemState::get_singleton().on_resources_reimported(paths);
     _send_editor_filesystem_status();
 }
 

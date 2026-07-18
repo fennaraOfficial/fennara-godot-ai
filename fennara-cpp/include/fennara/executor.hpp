@@ -52,17 +52,28 @@ private:
         godot::Dictionary prepared_args;
     };
     std::vector<PendingRunSceneEditScript> _pending_run_scene_edit_scripts;
+    struct PendingRunAssetImportScript {
+        int tool_index;
+        godot::String script_path;
+        godot::String resolved_script_path;
+        godot::Dictionary prepared_args;
+    };
+    std::vector<PendingRunAssetImportScript>
+        _pending_run_asset_import_scripts;
     std::thread _batch_diag_thread;
     std::mutex _batch_diag_mutex;
     godot::Dictionary _batch_diag_results;  // file_path -> per-file diagnostics dict
 
     void _run_batch_diagnostics(uint64_t batch_generation);
     void _on_batch_diagnostics_complete(uint64_t batch_generation);
+    void _execute_pending_asset_import_scripts(uint64_t batch_generation);
     void _finish_run_scene_edit_script(
         godot::Dictionary &result,
         const godot::Dictionary &prepared_args,
         int tool_index,
         uint64_t batch_generation);
+    bool _asset_import_execution_pending = false;
+    uint64_t _asset_import_batch_generation = 0;
 
     // --- Post-batch engine warning capture for modified scenes ---
     struct ModifiedScene {
@@ -161,6 +172,8 @@ private:
 public:
     FennaraExecutor();
     ~FennaraExecutor();
+
+    void _process(double delta) override;
 
     void execute_tool_calls_async(const godot::Array &tool_calls);
     void cancel();

@@ -79,6 +79,8 @@ void FennaraExecutor::_log_tool_event(const godot::String &message,
     details["pending_script_writes"] = static_cast<int64_t>(_pending_script_writes.size());
     details["pending_run_scene_edit_scripts"] =
         static_cast<int64_t>(_pending_run_scene_edit_scripts.size());
+    details["pending_run_asset_import_scripts"] =
+        static_cast<int64_t>(_pending_run_asset_import_scripts.size());
     FLOG_CTX("TOOL", message, details);
 }
 

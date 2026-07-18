@@ -205,6 +205,9 @@ fn classify_tool(tool_name: &str, arguments: &Value) -> ToolPermission {
         "run_scene_edit_script" => {
             mutates("This tool can run editor-side Godot code and save scene/resource changes.")
         }
+        "run_asset_import_script" => {
+            mutates("This tool can run editor-side Godot code and change asset import settings.")
+        }
         "save_custom_resource" => mutates("This tool creates or updates project resources."),
         "runtime_script" => {
             executes("This tool runs code inside an active project runtime session.")

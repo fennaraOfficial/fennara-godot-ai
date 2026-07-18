@@ -9,6 +9,7 @@
 #include "fennara/tool_results/project_settings.hpp"
 #include "fennara/tool_results/read_file.hpp"
 #include "fennara/tool_results/run_scene_edit_script.hpp"
+#include "fennara/tool_results/run_asset_import_script.hpp"
 #include "fennara/tool_results/runtime_script.hpp"
 #include "fennara/tool_results/runtime_session.hpp"
 #include "fennara/tool_results/save_custom_resource.hpp"
@@ -67,6 +68,9 @@ godot::Dictionary format_for_model(const godot::String &tool_name,
     }
     if (tool_name == "run_scene_edit_script") {
         return append_update_notice(format_run_scene_edit_script(raw_result));
+    }
+    if (tool_name == "run_asset_import_script") {
+        return append_update_notice(format_run_asset_import_script(raw_result));
     }
     if (tool_name == "write_or_update_file") {
         return append_update_notice(format_write_or_update_file(raw_result));

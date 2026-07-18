@@ -25,7 +25,7 @@ protected:
     static void _bind_methods();
 
 public:
-    static constexpr const char *PLUGIN_VERSION = "0.3.12";
+    static constexpr const char *PLUGIN_VERSION = "0.4.0";
 
     void _ready() override;
     void _process(double delta) override;
@@ -64,9 +64,6 @@ private:
     godot::String _active_mcp_target_name;
     godot::String _active_mcp_target_path;
     godot::Ref<FennaraSnapshotManager> _snapshot_mgr;
-    bool _is_importing_resources = false;
-    int64_t _active_import_count = 0;
-    int64_t _last_imported_count = 0;
     std::future<godot::String> _daemon_auth_future;
     std::shared_ptr<std::atomic_bool> _daemon_auth_cancel;
 

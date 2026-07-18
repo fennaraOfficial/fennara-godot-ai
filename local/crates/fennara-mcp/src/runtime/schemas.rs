@@ -5,6 +5,7 @@ const TOOL_GUIDANCE: &str = "Follow the generated Fennara MCP guidelines for God
 const EMBEDDED_TOOL_DEFINITIONS: &[&str] = &[
     include_str!("../../../../schemas/tools/write_or_update_file.json"),
     include_str!("../../../../schemas/tools/run_scene_edit_script.json"),
+    include_str!("../../../../schemas/tools/run_asset_import_script.json"),
     include_str!("../../../../schemas/tools/get_scene_tree.json"),
     include_str!("../../../../schemas/tools/script_diagnostics.json"),
     include_str!("../../../../schemas/tools/screenshot_scene.json"),
@@ -20,6 +21,7 @@ const EMBEDDED_TOOL_DEFINITIONS: &[&str] = &[
 pub(crate) const FORWARDED_TOOLS: &[&str] = &[
     "write_or_update_file",
     "run_scene_edit_script",
+    "run_asset_import_script",
     "get_scene_tree",
     "script_diagnostics",
     "screenshot_scene",

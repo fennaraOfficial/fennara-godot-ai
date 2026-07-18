@@ -7,9 +7,9 @@
     "Power-user inspection model: because the worker is an editor-side `@tool` script, you can use it to inspect many Godot/editor/project things when normal inspection tools are not enough, including ClassDB runtime behavior, native addon/GDExtension classes, ResourceLoader/ResourceSaver flows, standalone `.tres` resources, and project resources. Use this power carefully: keep probes tiny, targeted, and bounded; log concise findings with `ctx.log(...)`; and do not brute-force scan a whole project or run editor-unsafe code.",
     "Tool choice rule: use `get_class_info` first when you only need class API docs, methods, properties, inheritance, enums, or signals. Use `run_scene_edit_script` for class/resource inspection only when you need to execute real editor-side Godot code, such as instantiating an addon class, reading runtime-only property lists, saving a resource through `ResourceSaver`, or probing APIs that static class docs cannot answer.",
     "Scene-as-context rule: for editor-side probes that do not actually need the target scene, pass a small safe existing scene as the context scene. Do not call `ctx.mark_modified()` or scene-mutating helpers unless you intentionally want to save that scene. In this mode `modified=false` and `scene_saved=false` are expected and do not mean the probe failed.",
-    "Scope limit: edit mode is for authored `.tscn` or `.scn` scene nodes, scene-owned or scene-assigned Godot resources, and targeted standalone Godot resources loaded or created through Godot APIs. Inspect mode can load any existing path that Godot exposes as a `PackedScene`, including imported `.glb` and `.gltf` sources, but never saves the inspected source.",
+    "Scope limit: both modes require an authored `.tscn` or `.scn` scene path. Workers may inspect or edit scene-owned and scene-assigned resources, and may load or create targeted standalone Godot resources through Godot APIs. Use `run_asset_import_script` for imported source paths such as `.glb` and `.gltf`.",
     "Inspect-mode safety: `mode=inspect` instantiates the existing `PackedScene` as a detached read-only context, rejects all mutating `ctx` helpers, skips scene save and saved-scene validation, and frees the instance after the worker returns. The worker must still avoid direct filesystem, `ResourceSaver`, import-setting, OS, editor, and project mutations because arbitrary GDScript APIs are outside the context guard.",
-    "Imported-asset rule: it is fine to assign imported assets to nodes, wrap them with authored resources, or create local scene overrides around them. It is NOT the right tool for changing the underlying imported asset file or its import settings; use the appropriate file-editing or import workflow for that.",
+    "Imported-asset rule: it is fine to assign imported assets to nodes, wrap them with authored resources, or create local scene overrides around them. The target `scene_path` must still be authored `.tscn` or `.scn`; use `run_asset_import_script` to inspect the generated imported resource or change its import settings.",
     "Before using this tool for scene or built-in resource edits, use `get_class_info` first to inspect the target class API, including its properties, methods, enums/constants, tutorials, runtime parent chain, and direct children.",
     "The tool accepts either raw `code` or an existing `script_path`. If `code` is provided, it is saved to a temp `.gd` under `res://.fennara/tmp/editor_scripts/`; every response includes the effective `script_path` pointing at that saved file (or the path you passed in).",
     "**CRITICAL — failures and large scripts:** If the worker script was long or the run failed for any reason (parse/type errors from `script_diagnostics`, runtime errors in `runtime_errors`, engine errors triggered by bad logging, wrong output, etc.), **do not discard the temp file and paste a brand-new full `code` argument.** Treat the returned `script_path` as the source of truth: use **`write_or_update_file`** to patch that exact file in small steps, then rerun with **`scene_path` + `script_path`** only. Repeat patch → rerun until diagnostics and runtime are clean.",
@@ -61,7 +61,7 @@
     "properties": {
       "scene_path": {
         "type": "string",
-        "description": "Target scene context. In edit mode this must be an authored `.tscn` or `.scn` file that may be created or saved. In inspect mode this must be an existing path that Godot can load as a `PackedScene`, including imported `.glb` or `.gltf` sources."
+        "description": "Target authored `.tscn` or `.scn` scene. Use `run_asset_import_script` for imported source assets such as `.glb` and `.gltf`."
       },
       "mode": {
         "type": "string",
@@ -70,7 +70,7 @@
           "inspect"
         ],
         "default": "edit",
-        "description": "Use `edit` to allow authored `.tscn` or `.scn` mutation and save. Use `inspect` to load an existing PackedScene as a detached read-only context that is never saved."
+        "description": "Use `edit` to allow authored `.tscn` or `.scn` mutation and save. Use `inspect` to load an existing authored scene as a detached read-only context that is never saved."
       },
       "code": {
         "type": "string",
