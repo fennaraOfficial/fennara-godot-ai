@@ -49,33 +49,6 @@ uint64_t &FennaraScreenshotSceneTool::_next_capture_owner_ref() {
     return value;
 }
 
-godot::String &FennaraScreenshotSceneTool::_cached_bounds_scene_path_ref() {
-    static godot::String *value = new godot::String;
-    return *value;
-}
-
-godot::String &FennaraScreenshotSceneTool::_cached_bounds_target_path_ref() {
-    static godot::String *value = new godot::String;
-    return *value;
-}
-
-godot::AABB &FennaraScreenshotSceneTool::_cached_bounds_ref() {
-    static godot::AABB value;
-    return value;
-}
-
-bool &FennaraScreenshotSceneTool::_cached_bounds_valid_ref() {
-    static bool value = false;
-    return value;
-}
-
-void FennaraScreenshotSceneTool::_reset_bounds_cache() {
-    _cached_bounds_scene_path_ref() = godot::String();
-    _cached_bounds_target_path_ref() = godot::String();
-    _cached_bounds_ref() = godot::AABB();
-    _cached_bounds_valid_ref() = false;
-}
-
 void FennaraScreenshotSceneTool::_discard_temporary_viewport() {
     godot::SubViewport *viewport = _camera_capture_viewport_ref();
     if (viewport) {
@@ -106,6 +79,7 @@ void FennaraScreenshotSceneTool::release_capture(uint64_t owner) {
         return;
     }
     _discard_temporary_viewport();
+    _clear_capture_script();
     _active_capture_owner_ref() = 0;
 }
 
@@ -116,9 +90,6 @@ void FennaraScreenshotSceneTool::_bind_methods() {
     godot::ClassDB::bind_static_method(
         "FennaraScreenshotSceneTool", godot::D_METHOD("navigate", "args"),
         &FennaraScreenshotSceneTool::navigate);
-    godot::ClassDB::bind_static_method(
-        "FennaraScreenshotSceneTool", godot::D_METHOD("make_collage", "images"),
-        &FennaraScreenshotSceneTool::make_collage);
     godot::ClassDB::bind_static_method(
         "FennaraScreenshotSceneTool", godot::D_METHOD("execute", "args"),
         &FennaraScreenshotSceneTool::execute);
@@ -140,8 +111,13 @@ godot::Dictionary FennaraScreenshotSceneTool::execute(const godot::Dictionary &a
         result["error"] = "scene_path is required";
         return result;
     }
+    if (!_prepare_capture_script(args, result)) {
+        return result;
+    }
 
-    return open_scene(scene_path);
+    result = open_scene(scene_path);
+    _append_capture_script_receipt(result);
+    return result;
 }
 
 } // namespace fennara

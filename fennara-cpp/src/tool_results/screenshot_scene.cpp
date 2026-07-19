@@ -86,14 +86,14 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     lines.append("Status: " + status);
     lines.append("Scene: " + godot::String(raw_result.get("scene_path", "")));
     lines.append("3D scene: " + bool_text(raw_result.get("is_3d", false)));
-    if (raw_result.has("target_node_path")) {
-        lines.append("Target node: " + godot::String(raw_result.get("target_node_path", "")));
-    }
-    if (raw_result.has("camera_path")) {
-        lines.append("Camera: " + godot::String(raw_result.get("camera_path", "")));
-    }
     if (raw_result.has("view")) {
         lines.append("View: " + godot::String(raw_result.get("view", "")));
+    }
+    if (raw_result.get("scripted", false) || raw_result.has("script_path")) {
+        lines.append("Script: " +
+                     godot::String(raw_result.get("script_path", "")));
+        lines.append("Script subjects: " + godot::String::num_int64(
+            static_cast<int64_t>(raw_result.get("script_subject_count", 0))));
     }
     if (raw_result.has("current_camera_path")) {
         lines.append("Current camera: " + godot::String(raw_result.get("current_camera_path", "")));
@@ -140,49 +140,68 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
         raw_result["visible_rect"].get_type() == godot::Variant::DICTIONARY) {
         append_rect(lines, "Visible rect", raw_result["visible_rect"]);
     }
-    if (raw_result.has("collage_columns") && raw_result.has("collage_rows")) {
-        lines.append("Collage: " +
-                     godot::String::num_int64(static_cast<int64_t>(raw_result.get("collage_columns", 0))) +
-                     " columns x " +
-                     godot::String::num_int64(static_cast<int64_t>(raw_result.get("collage_rows", 0))) +
-                     " rows");
-    }
     if (raw_result.has("error")) {
         lines.append("Error: " + godot::String(raw_result.get("error", "")));
-    }
-    if (raw_result.has("collage_error")) {
-        lines.append("Collage error: " + godot::String(raw_result.get("collage_error", "")));
     }
     if (raw_result.has("camera_warning")) {
         lines.append("Camera warning: " + godot::String(raw_result.get("camera_warning", "")));
     }
 
-    godot::Array source_images = raw_result.get("images", godot::Array());
-    godot::Array image_metadata;
-    if (!source_images.is_empty()) {
-        lines.append("");
-        lines.append("## Captured views");
-        for (int i = 0; i < source_images.size(); i++) {
-            if (source_images[i].get_type() != godot::Variant::DICTIONARY) {
-                continue;
-            }
-            godot::Dictionary image = source_images[i];
-            image_metadata.append(image_metadata_from_result(image));
-            godot::String view = image.get("view", godot::String::num_int64(i + 1));
-            lines.append("- " + view + ": " + image_summary_line(image));
+    godot::Array script_diagnostics =
+        raw_result.get("script_diagnostics", godot::Array());
+    godot::Array runtime_errors =
+        raw_result.get("runtime_errors", godot::Array());
+    godot::Array logs = raw_result.get("logs", godot::Array());
+    const int script_output_limit = 50;
+    for (int i = 0; i < script_diagnostics.size() && i < script_output_limit; i++) {
+        godot::String message;
+        if (script_diagnostics[i].get_type() == godot::Variant::DICTIONARY) {
+            godot::Dictionary diagnostic = script_diagnostics[i];
+            message = diagnostic.get("message", "");
+        } else {
+            message = script_diagnostics[i];
         }
-    } else if (has_image) {
+        lines.append("Script diagnostic: " + message);
+    }
+    for (int i = 0; i < runtime_errors.size() && i < script_output_limit; i++) {
+        godot::String source = "runtime";
+        godot::String message;
+        if (runtime_errors[i].get_type() == godot::Variant::DICTIONARY) {
+            godot::Dictionary runtime_error = runtime_errors[i];
+            source = runtime_error.get("source", source);
+            message = runtime_error.get("message", "");
+        } else {
+            message = runtime_errors[i];
+        }
+        lines.append("Script error [" + source + "]: " + message);
+    }
+    for (int i = 0; i < logs.size() && i < script_output_limit; i++) {
+        lines.append("Script log: " + godot::String(logs[i]));
+    }
+    if (script_diagnostics.size() > script_output_limit ||
+        runtime_errors.size() > script_output_limit ||
+        logs.size() > script_output_limit) {
+        lines.append("Additional screenshot script output was omitted.");
+    }
+
+    godot::Array image_metadata;
+    if (has_image) {
         image_metadata.append(image_metadata_from_result(raw_result));
     }
 
     godot::Dictionary metadata = make_base_metadata(
         "screenshot_scene", "screenshot_scene-md-v1", status);
     metadata["scene_path"] = raw_result.get("scene_path", "");
-    metadata["target_node_path"] = raw_result.get("target_node_path", "");
-    metadata["camera_path"] = raw_result.get("camera_path", "");
     metadata["current_camera_path"] = raw_result.get("current_camera_path", "");
     metadata["current_camera_type"] = raw_result.get("current_camera_type", "");
     metadata["view"] = raw_result.get("view", "");
+    metadata["scripted"] = raw_result.get("scripted", false);
+    metadata["script_path"] = raw_result.get("script_path", "");
+    metadata["script_subject_count"] =
+        raw_result.get("script_subject_count", 0);
+    metadata["script_diagnostic_count"] = script_diagnostics.size();
+    metadata["runtime_error_count"] = runtime_errors.size();
+    metadata["script_log_count"] = logs.size();
     metadata["is_3d"] = raw_result.get("is_3d", false);
     metadata["image_count"] = image_metadata.size();
     metadata["images"] = image_metadata;
@@ -210,9 +229,12 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     copy_if_present(envelope, raw_result, "screenshot_dir");
     copy_if_present(envelope, raw_result, "screenshot_absolute_dir");
     copy_if_present(envelope, raw_result, "transport");
-    copy_if_present(envelope, raw_result, "images");
-    copy_if_present(envelope, raw_result, "collage_columns");
-    copy_if_present(envelope, raw_result, "collage_rows");
+    copy_if_present(envelope, raw_result, "script_path");
+    copy_if_present(envelope, raw_result, "scripted");
+    copy_if_present(envelope, raw_result, "script_subject_count");
+    copy_if_present(envelope, raw_result, "script_diagnostics");
+    copy_if_present(envelope, raw_result, "runtime_errors");
+    copy_if_present(envelope, raw_result, "logs");
     return envelope;
 }
 

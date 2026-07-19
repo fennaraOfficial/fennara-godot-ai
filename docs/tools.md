@@ -313,13 +313,22 @@ Captures visual evidence from authored scenes and supported imported 3D assets.
 
 Working behavior:
 
-- Imported 3D PackedScenes are instantiated in an isolated SubViewport rather
-  than opened as editable inherited scenes.
+- Every scene is instantiated in an isolated SubViewport. Screenshot capture
+  does not open or modify the authored scene.
 - Automatic 3D framing can add neutral preview lighting when the asset has no
   environment or lights.
-- A seven-view 3D collage can include front, back, left, right, top,
-  perspective, and isometric views.
-- A target node can be framed while leaving surrounding scene context visible.
+- `scene_path` is the only required input. Omitting code captures the detached
+  root with automatic framing.
+- GDScript can select one node or an array of nodes with ordinary
+  Godot code, temporarily alter the detached scene, and request the final
+  capture with `ctx.capture(...)`. Those temporary changes are rendered but
+  never saved to the authored scene.
+- A screenshot worker receives only `ctx.root`, `ctx.capture(...)`,
+  `ctx.log(...)`, and `ctx.error(...)`. It can pass a temporary Camera2D or
+  Camera3D under `ctx.root` in the capture options when it needs exact authored
+  framing.
+- Camera paths, target paths, view rectangles, and top-level framing parameters
+  are not accepted. All selection and framing lives in the worker script.
 - Image-capable MCP clients and built-in chat models can receive the primary
   screenshot as image context. Saved image paths remain available as fallback.
 - Sparse captures are returned with framing metrics and partial status instead
@@ -334,6 +343,9 @@ Important limits and failures:
 - Text-only models receive the receipt and saved paths but cannot directly see
   attached image pixels.
 - Loading, rendering, capture ownership, or file-save failures are reported.
+- Unknown legacy screenshot arguments are rejected with a migration error.
+- Script parse errors, runtime errors, missing capture calls, nodes outside the
+  detached root, and invalid temporary cameras are reported without capturing.
 
 ### `runtime_session`
 

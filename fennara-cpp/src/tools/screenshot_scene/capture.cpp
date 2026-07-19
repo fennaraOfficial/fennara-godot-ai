@@ -8,6 +8,7 @@
 #include <godot_cpp/classes/camera2d.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
+#include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/marshalls.hpp>
 #include <godot_cpp/classes/sub_viewport.hpp>
 #include <godot_cpp/classes/viewport_texture.hpp>
@@ -105,9 +106,9 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
     FLOG_TOOL(godot::String("SS: capture started, is_3d=") + (_is_3d_scene ? "true" : "false"));
 
     godot::SubViewport *viewport = _camera_capture_viewport_ref();
-    bool using_camera_path_viewport = viewport != nullptr;
+    bool using_isolated_viewport = viewport != nullptr;
     if (viewport) {
-        FLOG_TOOL("SS: capturing temporary camera_path viewport");
+        FLOG_TOOL("SS: capturing isolated screenshot viewport");
     } else if (_is_3d_scene) {
         viewport = editor->get_editor_viewport_3d(0);
         if (!viewport) {
@@ -127,7 +128,7 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
     }
 
     auto cleanup_temporary_viewport = [&]() {
-        if (!using_camera_path_viewport) return;
+        if (!using_isolated_viewport) return;
         _discard_temporary_viewport();
     };
 
@@ -174,7 +175,7 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
 
     FLOG_TOOL(godot::String("SS: captured size=") + godot::String::num_int64(image->get_width()) + "x" + godot::String::num_int64(image->get_height()));
     result["success"] = true;
-    if (using_camera_path_viewport) {
+    if (using_isolated_viewport) {
         godot::Node *root = _camera_capture_root_ref();
         godot::Node *current_camera = nullptr;
         godot::Camera2D *camera_2d = viewport->get_camera_2d();

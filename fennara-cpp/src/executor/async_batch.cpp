@@ -333,9 +333,6 @@ void FennaraExecutor::cancel() {
     _screenshot_tool_index = -1;
     _screenshot_args = godot::Dictionary();
     _screenshot_nav_result = godot::Dictionary();
-    _screenshot_views = godot::Array();
-    _screenshot_captures = godot::Array();
-    _screenshot_view_index = 0;
     _pending_screenshot_scenes.clear();
     _screenshot_running = false;
     _pending_validate_scenes.clear();

@@ -8,6 +8,7 @@
 #include "fennara/tools/write_or_update_file.hpp"
 #include "fennara/tools/save_custom_resource.hpp"
 #include "fennara/tools/screenshot_scene.hpp"
+#include "fennara/tools/screenshot_scene_script.hpp"
 #include "fennara/tools/get_node_properties/get_node_properties.hpp"
 #include "fennara/tools/get_class_info/get_class_info.hpp"
 #include "fennara/tools/validate_scene.hpp"
@@ -45,6 +46,7 @@ void initialize_fennara(godot::ModuleInitializationLevel p_level) {
         godot::ClassDB::register_class<fennara::FennaraScriptDiagnosticsTool>();
         godot::ClassDB::register_class<fennara::FennaraSaveCustomResourceTool>();
         godot::ClassDB::register_class<fennara::FennaraScreenshotSceneTool>();
+        godot::ClassDB::register_class<fennara::FennaraScreenshotSceneScriptContext>();
         godot::ClassDB::register_class<fennara::FennaraGetNodePropertiesTool>();
         godot::ClassDB::register_class<fennara::FennaraGetClassInfoTool>();
         godot::ClassDB::register_class<fennara::FennaraValidateSceneTool>();

@@ -391,6 +391,24 @@ Do not consider a scene change complete until validation has been checked.
 
 Use `screenshot_scene` when visual correctness matters.
 
+The public call accepts only `scene_path` plus optional `code` or `script_path`.
+Do not pass camera paths, target paths, view rectangles, or top-level framing
+parameters. If both script fields are omitted, the tool captures `ctx.root`
+with automatic framing.
+
+For specific evidence, use the tool's `code` or `script_path` mode. Write
+`@tool extends RefCounted` with
+`func run(ctx) -> void`, use normal Godot APIs starting at `ctx.root`, then call
+`ctx.capture(node_or_array, options)` exactly once. The script runs only on the
+detached scene instance that is rendered. Temporary nodes, visibility changes,
+poses, materials, and cameras are not saved.
+
+Keep screenshot workers direct. Do not invent intent objects or bookkeeping
+IDs. Select the exact nodes in code. The small context API is `ctx.root`,
+`ctx.capture(...)`, `ctx.log(...)`, and `ctx.error(...)`. Capture options may
+include `context_margin`, a 3D `view`, or a temporary Camera2D/Camera3D under
+`ctx.root` as `camera`.
+
 Use it heavily for Godot work whenever it can provide useful visual confirmation, especially after scene, camera, UI, material, shader, animation, or layout edits. It is not mandatory after every small tool call, but it is one of the best ways to catch mistakes that diagnostics and scene validation cannot see.
 
 Use it for:

@@ -100,9 +100,6 @@ private:
     int _screenshot_tool_index = -1;
     godot::Dictionary _screenshot_args;
     godot::Dictionary _screenshot_nav_result;
-    godot::Array _screenshot_views;
-    godot::Array _screenshot_captures;
-    int _screenshot_view_index = 0;
     uint64_t _screenshot_capture_owner = 0;
     void _start_next_screenshot_scene();
     void _on_screenshot_scene_opened(uint64_t batch_generation);
