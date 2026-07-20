@@ -317,8 +317,8 @@ Working behavior:
   does not open or modify the authored scene.
 - Automatic 3D framing can add neutral preview lighting when the asset has no
   environment or lights.
-- `scene_path` is the only required input. Omitting code captures the detached
-  root with automatic framing.
+- `scene_path` is the only required input. When both `code` and `script_path`
+  are omitted, Fennara captures the detached root with automatic framing.
 - GDScript can select one node or an array of nodes with ordinary
   Godot code, group subjects freely, show or hide scene parts, temporarily
   alter the detached scene, and request captures with `ctx.capture(...)`.

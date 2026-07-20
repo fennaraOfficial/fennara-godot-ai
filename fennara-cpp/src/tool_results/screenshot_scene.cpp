@@ -184,6 +184,12 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     if (raw_result.has("error")) {
         lines.append("Error: " + godot::String(raw_result.get("error", "")));
     }
+    if (raw_result.has("diagnostic_success") &&
+        !(bool)raw_result.get("diagnostic_success", false)) {
+        godot::String diagnostic_error = raw_result.get(
+            "diagnostic_error", "Script diagnostics were unavailable");
+        lines.append("Script diagnostics unavailable: " + diagnostic_error);
+    }
     if (raw_result.has("camera_warning")) {
         lines.append("Camera warning: " + godot::String(raw_result.get("camera_warning", "")));
     }
@@ -247,6 +253,12 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
         raw_result.get("script_subject_count", 0);
     metadata["capture_count"] = raw_result.get("capture_count", 1);
     metadata["script_diagnostic_count"] = script_diagnostics.size();
+    if (raw_result.has("diagnostic_success")) {
+        metadata["diagnostic_success"] = raw_result["diagnostic_success"];
+    }
+    if (raw_result.has("diagnostic_error")) {
+        metadata["diagnostic_error"] = raw_result["diagnostic_error"];
+    }
     metadata["runtime_error_count"] = runtime_errors.size();
     metadata["script_log_count"] = logs.size();
     metadata["is_3d"] = raw_result.get("is_3d", false);
@@ -290,6 +302,8 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     copy_if_present(envelope, raw_result, "scripted");
     copy_if_present(envelope, raw_result, "script_subject_count");
     copy_if_present(envelope, raw_result, "script_diagnostics");
+    copy_if_present(envelope, raw_result, "diagnostic_success");
+    copy_if_present(envelope, raw_result, "diagnostic_error");
     copy_if_present(envelope, raw_result, "runtime_errors");
     copy_if_present(envelope, raw_result, "logs");
     copy_if_present(envelope, raw_result, "selected_node_visibility");

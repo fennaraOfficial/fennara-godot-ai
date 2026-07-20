@@ -391,7 +391,8 @@ Do not consider a scene change complete until validation has been checked.
 
 Use `screenshot_scene` when visual correctness matters.
 
-The public call accepts only `scene_path` plus optional `code` or `script_path`.
+The public call accepts only `scene_path` plus optionally exactly one of `code`
+or `script_path`; never pass both.
 Do not pass camera paths, target paths, view rectangles, or top-level framing
 parameters. If both script fields are omitted, the tool captures `ctx.root`
 with automatic framing.

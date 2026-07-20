@@ -176,7 +176,8 @@ jobs:
           $testTimeoutSeconds = 120
           $testScripts = @(
             "res://tests/first_run_setup_test.gd",
-            "res://tests/asset_import_script_context_test.gd"
+            "res://tests/asset_import_script_context_test.gd",
+            "res://tests/screenshot_scene_contract_test.gd"
           )
           foreach ($testScript in $testScripts) {
             $godot = Start-Process `

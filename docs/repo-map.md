@@ -104,6 +104,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `godot_demo/addons/fennara/dist/` | Packaged web UI assets used by the in-editor chat webview. |
 | `godot_demo/addons/fennara/runtime/` | Synced packaged copy of `runtime/` shipped inside the addon. |
 | `godot_demo/tests/first_run_setup_test.gd` | Headless native first-run setup state and deterministic failure test. |
+| `godot_demo/tests/screenshot_scene_contract_test.gd` | Headless native screenshot argument-contract regression test. |
 
 ## Runtime Helper Source
 

@@ -206,6 +206,14 @@ void FennaraExecutor::execute_tool_calls_async(const godot::Array &tool_calls) {
             if (complete_if_blocked(this, name, args, i, args.get("scene_path", ""), batch_generation)) {
                 continue;
             }
+            godot::String screenshot_script_path =
+                godot::String(args.get("script_path", "")).strip_edges();
+            if (!screenshot_script_path.is_empty() &&
+                complete_if_blocked(
+                    this, name, args, i, screenshot_script_path,
+                    batch_generation)) {
+                continue;
+            }
             godot::Dictionary prepared =
                 FennaraScreenshotSceneTool::prepare_execution(args);
             if (!(bool)prepared.get("success", false)) {

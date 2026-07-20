@@ -149,6 +149,12 @@ void FennaraScreenshotSceneTool::_bind_methods() {
     godot::ClassDB::bind_static_method(
         "FennaraScreenshotSceneTool", godot::D_METHOD("execute", "args"),
         &FennaraScreenshotSceneTool::execute);
+#ifdef FENNARA_SETUP_TEST_HOOKS
+    godot::ClassDB::bind_static_method(
+        "FennaraScreenshotSceneTool",
+        godot::D_METHOD("prepare_execution_for_test", "args"),
+        &FennaraScreenshotSceneTool::prepare_execution);
+#endif
 }
 
 godot::Dictionary FennaraScreenshotSceneTool::prepare_execution(

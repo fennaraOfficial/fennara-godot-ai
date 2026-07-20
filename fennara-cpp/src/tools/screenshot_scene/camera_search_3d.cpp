@@ -148,7 +148,8 @@ godot::Array measure_subjects(const godot::Ref<godot::Image> &mask,
     }
     const int width = mask->get_width();
     const int height = mask->get_height();
-    const int subject_count = std::min(int(subjects.size()), 8);
+    const int subject_count =
+        std::min(int(subjects.size()), SUBJECT_COLOR_COUNT);
     std::vector<MaskBounds> bounds(subject_count);
     godot::PackedByteArray pixel_data = mask->get_data();
     const uint8_t *pixels = pixel_data.ptr();
