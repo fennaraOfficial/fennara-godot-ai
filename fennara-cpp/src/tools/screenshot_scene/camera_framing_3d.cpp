@@ -127,8 +127,17 @@ void FennaraScreenshotSceneTool::_accumulate_3d_bounds(godot::Node *node,
 
 godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(
     godot::Node *root, const godot::Array &capture_nodes,
-    const godot::Dictionary &capture_options) {
+    const godot::Dictionary &capture_options,
+    bool use_default_camera_search) {
     godot::Dictionary result;
+
+    if (use_default_camera_search &&
+        capture_nodes.size() > SCREENSHOT_CAMERA_SEARCH_SUBJECT_LIMIT) {
+        result["success"] = false;
+        result["error"] =
+            "Automatic 3D camera search accepts at most eight selected subjects per capture. Select a shared parent, split them across captures, or provide an explicit view or camera.";
+        return result;
+    }
 
     godot::EditorInterface *editor = godot::EditorInterface::get_singleton();
     if (!editor) {
@@ -149,6 +158,7 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(
         _discard_temporary_viewport();
     }
     _capture_requires_content_ref() = false;
+    _clear_camera_search_capture_state();
 
     godot::SubViewport *viewport = memnew(godot::SubViewport);
     viewport->set_name("FennaraFramedScreenshotViewport");
@@ -382,15 +392,30 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(
     _camera_capture_root_ref() = root;
     _capture_requires_content_ref() = true;
 
+    if (use_default_camera_search) {
+        godot::Dictionary &state = _camera_search_capture_state_ref();
+        state["enabled"] = true;
+        state["root"] = root;
+        state["camera"] = camera;
+        state["capture_nodes"] = capture_nodes;
+        state["bounds_center"] = center;
+        state["bounds_size"] = size;
+        state["primary_view"] = view;
+    }
+
     godot::Dictionary bounds_dict;
     bounds_dict["center"] = center;
     bounds_dict["size"] = size;
     result["success"] = true;
     result["is_3d"] = true;
     result["scene_path"] = _current_scene_path_ref();
-    result["view"] = view;
-    result["note"] =
-        "3D scene: isolated capture auto-framed around ctx.capture subjects";
+    result["view"] = use_default_camera_search
+        ? godot::String("camera_search") : view;
+    result["note"] = use_default_camera_search
+        ? godot::String(
+            "3D scene: deterministic camera search around ctx.capture subjects")
+        : godot::String(
+            "3D scene: isolated capture auto-framed around ctx.capture subjects");
     result["framed_bounds"] = bounds_dict;
     result["camera_distance"] = distance;
     result["camera_position"] = camera_position;
@@ -406,8 +431,9 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(
     viewport_dict["height"] = height;
     result["viewport_size"] = viewport_dict;
     _append_capture_script_receipt(result);
-    _capture_name_hint_ref() =
-        _make_name_hint(_current_scene_path_ref(), "selection", view);
+    _capture_name_hint_ref() = _make_name_hint(
+        _current_scene_path_ref(), "selection",
+        use_default_camera_search ? godot::String("camera_search") : view);
 
     FLOG_TOOL(godot::String("SS: auto-framed 3D bounds center=") +
               godot::String(center) + " size=" + godot::String(size) +

@@ -320,9 +320,18 @@ Working behavior:
 - `scene_path` is the only required input. Omitting code captures the detached
   root with automatic framing.
 - GDScript can select one node or an array of nodes with ordinary
-  Godot code, temporarily alter the detached scene, and request the final
-  capture with `ctx.capture(...)`. Those temporary changes are rendered but
-  never saved to the authored scene.
+  Godot code, group subjects freely, show or hide scene parts, temporarily
+  alter the detached scene, and request captures with `ctx.capture(...)`.
+  Those temporary changes are rendered but never saved to the authored scene.
+- A worker can request up to six captures with different subject groups,
+  views, margins, or cameras. They are returned as separate model image inputs
+  in call order, not combined into a collage.
+- For up to eight selected subjects, when a scripted 3D capture omits `view`
+  and `camera`, Fennara checks 17
+  deterministic viewpoints and chooses one that favors selected-node
+  visibility, readable size, edge clearance, and low overlap. Use an explicit
+  view or camera when the useful direction is already known, and use multiple
+  captures when distant subjects would become too small in one frame.
 - A screenshot worker receives only `ctx.root`, `ctx.capture(...)`,
   `ctx.log(...)`, and `ctx.error(...)`. It can pass a temporary Camera2D or
   Camera3D under `ctx.root` in the capture options when it needs exact authored

@@ -13,6 +13,8 @@ namespace fennara {
 
 namespace {
 
+constexpr int MAX_SCREENSHOT_CAPTURES = 6;
+
 godot::String &capture_script_path() {
     static godot::String *value = new godot::String;
     return *value;
@@ -53,9 +55,7 @@ void FennaraScreenshotSceneScriptContext::_bind_methods() {
 
 void FennaraScreenshotSceneScriptContext::configure(godot::Node *root) {
     _root = root;
-    _capture_requested = false;
-    _capture_nodes.clear();
-    _capture_options.clear();
+    _capture_requests.clear();
     _logs.clear();
     _errors.clear();
 }
@@ -66,14 +66,12 @@ godot::Node *FennaraScreenshotSceneScriptContext::get_root() const {
 
 void FennaraScreenshotSceneScriptContext::capture(
     const godot::Variant &nodes, const godot::Dictionary &options) {
-    if (_capture_requested) {
+    if (_capture_requests.size() >= MAX_SCREENSHOT_CAPTURES) {
         _errors.append(script_error(
-            "ctx.capture() may only be called once per screenshot script.",
+            "A screenshot script may request at most six captures.",
             "contract"));
         return;
     }
-    _capture_requested = true;
-    _capture_options = options.duplicate();
 
     godot::Array requested;
     if (nodes.get_type() == godot::Variant::ARRAY) {
@@ -86,6 +84,7 @@ void FennaraScreenshotSceneScriptContext::capture(
         return;
     }
 
+    godot::Array capture_nodes;
     for (int i = 0; i < requested.size(); i++) {
         godot::Object *object = requested[i];
         godot::Node *node = godot::Object::cast_to<godot::Node>(object);
@@ -95,15 +94,21 @@ void FennaraScreenshotSceneScriptContext::capture(
                 "contract"));
             continue;
         }
-        if (!_capture_nodes.has(node)) {
-            _capture_nodes.append(node);
+        if (!capture_nodes.has(node)) {
+            capture_nodes.append(node);
         }
     }
 
-    if (_capture_nodes.is_empty()) {
+    if (capture_nodes.is_empty()) {
         _errors.append(script_error(
             "ctx.capture() did not receive any valid scene nodes.", "contract"));
+        return;
     }
+
+    godot::Dictionary request;
+    request["nodes"] = capture_nodes;
+    request["options"] = options.duplicate();
+    _capture_requests.append(request);
 }
 
 void FennaraScreenshotSceneScriptContext::log(const godot::String &message) {
@@ -115,15 +120,11 @@ void FennaraScreenshotSceneScriptContext::error(const godot::String &message) {
 }
 
 bool FennaraScreenshotSceneScriptContext::was_capture_requested() const {
-    return _capture_requested;
+    return !_capture_requests.is_empty();
 }
 
-godot::Array FennaraScreenshotSceneScriptContext::get_capture_nodes() const {
-    return _capture_nodes;
-}
-
-godot::Dictionary FennaraScreenshotSceneScriptContext::get_capture_options() const {
-    return _capture_options;
+godot::Array FennaraScreenshotSceneScriptContext::get_capture_requests() const {
+    return _capture_requests;
 }
 
 godot::Array FennaraScreenshotSceneScriptContext::get_logs() const {
@@ -134,56 +135,31 @@ godot::Array FennaraScreenshotSceneScriptContext::get_errors() const {
     return _errors;
 }
 
-bool FennaraScreenshotSceneTool::_prepare_capture_script(
+bool FennaraScreenshotSceneTool::_configure_capture_script(
     const godot::Dictionary &args, godot::Dictionary &result) {
     _clear_capture_script();
 
-    godot::Array keys = args.keys();
-    for (int i = 0; i < keys.size(); i++) {
-        godot::String key = keys[i];
-        if (key == "scene_path" || key == "code" || key == "script_path" ||
-            key == "_fennara_tool_artifact_dir") {
-            continue;
-        }
-        result["success"] = false;
-        result["error"] =
-            "Unsupported screenshot_scene argument: " + key +
-            ". Select nodes and configure framing inside ctx.capture(...).";
-        return false;
-    }
-
-    godot::String code = args.get("code", "");
-    godot::String script_path = args.get("script_path", "");
-    if (code.is_empty() && script_path.is_empty()) {
+    godot::String prepared_script_path =
+        args.get("_fennara_screenshot_script_path", "");
+    if (prepared_script_path.is_empty()) {
         return true;
     }
-    if (!code.is_empty() && !script_path.is_empty()) {
-        result["success"] = false;
-        result["error"] = "Provide exactly one of code or script_path.";
-        return false;
-    }
 
-    godot::String scene_path = normalize_path(args.get("scene_path", ""));
-    capture_script_path() =
-        run_scene_edit_script_internal::write_or_resolve_script_path(
-            scene_path, code, script_path, result);
-    if (capture_script_path().is_empty()) {
-        return false;
+    capture_script_path() = prepared_script_path;
+    godot::Dictionary diagnostics;
+    diagnostics["diagnostic_success"] =
+        args.get("diagnostic_success", false);
+    diagnostics["diagnostics"] =
+        args.get("script_diagnostics", godot::Array());
+    diagnostics["total_errors"] = args.get("total_errors", 0);
+    diagnostics["total_warnings"] = args.get("total_warnings", 0);
+    if (args.has("diagnostic_error")) {
+        diagnostics["diagnostic_error"] = args["diagnostic_error"];
     }
-
-    capture_script_diagnostics() =
-        run_scene_edit_script_internal::collect_script_diagnostics(
-            capture_script_path());
+    capture_script_diagnostics() = diagnostics;
     run_scene_edit_script_internal::apply_diagnostics_to_result(
-        capture_script_diagnostics(), result);
+        diagnostics, result);
     result["script_path"] = capture_script_path();
-    if ((bool)capture_script_diagnostics().get("diagnostic_success", false) &&
-        (int)capture_script_diagnostics().get("total_errors", 0) > 0) {
-        result["success"] = false;
-        result["error"] =
-            "Screenshot script diagnostics reported errors. Patch script_path and rerun.";
-        return false;
-    }
     return true;
 }
 
@@ -208,74 +184,107 @@ void FennaraScreenshotSceneTool::_clear_capture_script() {
 
 bool FennaraScreenshotSceneTool::_run_capture_script(
     godot::Node *root, godot::Dictionary &result,
-    godot::Array &capture_nodes, godot::Dictionary &capture_options) {
+    godot::Array &capture_nodes, godot::Dictionary &capture_options,
+    int capture_index) {
     capture_nodes.clear();
     capture_options.clear();
     if (!_has_capture_script()) {
+        if (capture_index != 0) {
+            result["success"] = false;
+            result["error"] = "Whole-scene capture has only one image.";
+            return false;
+        }
         capture_nodes.append(root);
+        result["capture_index"] = 0;
+        result["capture_count"] = 1;
         return true;
     }
 
-    godot::Ref<godot::GDScript> script =
-        run_scene_edit_script_internal::load_script(capture_script_path(), result);
-    if (!script.is_valid()) {
-        return false;
+    godot::Array &capture_requests = _script_capture_requests_ref();
+    if (capture_index > 0) {
+        if (root != _script_capture_root_ref() || capture_requests.is_empty()) {
+            result["success"] = false;
+            result["error"] =
+                "Screenshot capture queue was not available for the retained scene.";
+            return false;
+        }
+        result = _script_capture_receipt_ref().duplicate();
+    } else {
+        _clear_script_capture_session(false);
+
+        godot::Ref<godot::GDScript> script =
+            run_scene_edit_script_internal::load_script(capture_script_path(), result);
+        if (!script.is_valid()) {
+            return false;
+        }
+
+        godot::StringName base_type = script->get_instance_base_type();
+        godot::StringName ref_counted_type("RefCounted");
+        if (base_type != ref_counted_type &&
+            !godot::ClassDB::is_parent_class(base_type, ref_counted_type)) {
+            result["success"] = false;
+            result["error"] =
+                "screenshot_scene scripts must use `@tool extends RefCounted`.";
+            result["runtime_errors"] = godot::Array::make(script_error(
+                "Expected `@tool extends RefCounted`.", "contract"));
+            return false;
+        }
+
+        godot::Variant runner_variant = script->new_();
+        godot::Object *runner = runner_variant;
+        if (runner == nullptr || !runner->has_method("run")) {
+            result["success"] = false;
+            result["error"] = "Screenshot script must define func run(ctx) -> void.";
+            result["runtime_errors"] = godot::Array::make(script_error(
+                "Missing required run(ctx) entrypoint.", "contract"));
+            return false;
+        }
+
+        godot::Ref<FennaraScreenshotSceneScriptContext> ctx;
+        ctx.instantiate();
+        ctx->configure(root);
+
+        godot::Ref<FennaraWarningCapture> warning_capture;
+        warning_capture.instantiate();
+        godot::OS::get_singleton()->add_logger(warning_capture);
+        runner->call("run", ctx.ptr());
+        godot::OS::get_singleton()->remove_logger(warning_capture);
+
+        godot::Array runtime_errors = ctx->get_errors();
+        run_scene_edit_script_internal::append_capture_errors(
+            warning_capture->get_captured(), runtime_errors);
+        if (!ctx->was_capture_requested()) {
+            runtime_errors.append(script_error(
+                "Screenshot script must call ctx.capture(nodes, options) at least once.",
+                "contract"));
+        }
+
+        result["logs"] = ctx->get_logs();
+        result["runtime_errors"] = runtime_errors;
+        _append_capture_script_receipt(result);
+        if (!runtime_errors.is_empty()) {
+            result["success"] = false;
+            result["error"] = "Screenshot script execution failed.";
+            return false;
+        }
+
+        capture_requests = ctx->get_capture_requests();
+        _script_capture_root_ref() = root;
+        _script_capture_receipt_ref() = result.duplicate();
     }
 
-    godot::StringName base_type = script->get_instance_base_type();
-    godot::StringName ref_counted_type("RefCounted");
-    if (base_type != ref_counted_type &&
-        !godot::ClassDB::is_parent_class(base_type, ref_counted_type)) {
+    if (capture_index < 0 || capture_index >= capture_requests.size()) {
         result["success"] = false;
-        result["error"] =
-            "screenshot_scene scripts must use `@tool extends RefCounted`.";
-        result["runtime_errors"] = godot::Array::make(script_error(
-            "Expected `@tool extends RefCounted`.", "contract"));
+        result["error"] = "Screenshot capture index was outside the script request queue.";
         return false;
     }
-
-    godot::Variant runner_variant = script->new_();
-    godot::Object *runner = runner_variant;
-    if (runner == nullptr || !runner->has_method("run")) {
-        result["success"] = false;
-        result["error"] = "Screenshot script must define func run(ctx) -> void.";
-        result["runtime_errors"] = godot::Array::make(script_error(
-            "Missing required run(ctx) entrypoint.", "contract"));
-        return false;
-    }
-
-    godot::Ref<FennaraScreenshotSceneScriptContext> ctx;
-    ctx.instantiate();
-    ctx->configure(root);
-
-    godot::Ref<FennaraWarningCapture> warning_capture;
-    warning_capture.instantiate();
-    godot::OS::get_singleton()->add_logger(warning_capture);
-    runner->call("run", ctx.ptr());
-    godot::OS::get_singleton()->remove_logger(warning_capture);
-
-    godot::Array runtime_errors = ctx->get_errors();
-    run_scene_edit_script_internal::append_capture_errors(
-        warning_capture->get_captured(), runtime_errors);
-    if (!ctx->was_capture_requested()) {
-        runtime_errors.append(script_error(
-            "Screenshot script must call ctx.capture(nodes, options) exactly once.",
-            "contract"));
-    }
-
-    result["logs"] = ctx->get_logs();
-    result["runtime_errors"] = runtime_errors;
-    _append_capture_script_receipt(result);
-    if (!runtime_errors.is_empty()) {
-        result["success"] = false;
-        result["error"] = "Screenshot script execution failed.";
-        return false;
-    }
-
-    capture_nodes = ctx->get_capture_nodes();
-    capture_options = ctx->get_capture_options();
+    godot::Dictionary request = capture_requests[capture_index];
+    capture_nodes = request.get("nodes", godot::Array());
+    capture_options = request.get("options", godot::Dictionary());
     result["scripted"] = true;
     result["script_subject_count"] = capture_nodes.size();
+    result["capture_index"] = capture_index;
+    result["capture_count"] = capture_requests.size();
     return true;
 }
 

@@ -399,8 +399,10 @@ with automatic framing.
 For specific evidence, use the tool's `code` or `script_path` mode. Write
 `@tool extends RefCounted` with
 `func run(ctx) -> void`, use normal Godot APIs starting at `ctx.root`, then call
-`ctx.capture(node_or_array, options)` exactly once. The script runs only on the
-detached scene instance that is rendered. Temporary nodes, visibility changes,
+`ctx.capture(node_or_array, options)` one to six times. Each call produces a
+separate clean RGB image input in call order; images are never combined into a
+collage or modified with visual annotations. Every capture observes the final
+detached scene state after `run(ctx)` returns. Temporary nodes, visibility changes,
 poses, materials, and cameras are not saved.
 
 Keep screenshot workers direct. Do not invent intent objects or bookkeeping

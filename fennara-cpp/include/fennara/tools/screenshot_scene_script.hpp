@@ -26,16 +26,13 @@ public:
     void error(const godot::String &message);
 
     bool was_capture_requested() const;
-    godot::Array get_capture_nodes() const;
-    godot::Dictionary get_capture_options() const;
+    godot::Array get_capture_requests() const;
     godot::Array get_logs() const;
     godot::Array get_errors() const;
 
 private:
     godot::Node *_root = nullptr;
-    bool _capture_requested = false;
-    godot::Array _capture_nodes;
-    godot::Dictionary _capture_options;
+    godot::Array _capture_requests;
     godot::Array _logs;
     godot::Array _errors;
 };

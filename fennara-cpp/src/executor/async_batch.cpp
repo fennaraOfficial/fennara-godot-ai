@@ -206,7 +206,14 @@ void FennaraExecutor::execute_tool_calls_async(const godot::Array &tool_calls) {
             if (complete_if_blocked(this, name, args, i, args.get("scene_path", ""), batch_generation)) {
                 continue;
             }
-            _pending_screenshot_scenes.push_back({i, args});
+            godot::Dictionary prepared =
+                FennaraScreenshotSceneTool::prepare_execution(args);
+            if (!(bool)prepared.get("success", false)) {
+                _on_async_tool_complete(
+                    prepared, i, name, args, batch_generation);
+            } else {
+                _pending_screenshot_scenes.push_back({i, prepared});
+            }
         } else if (name == "validate_scene") {
             godot::Array scene_paths = args.get("scene_paths", godot::Array());
             bool blocked = false;
@@ -288,20 +295,56 @@ void FennaraExecutor::execute_tool_calls_async(const godot::Array &tool_calls) {
     bool has_batch_diagnostics = !_pending_script_writes.empty() ||
         !_pending_run_scene_edit_scripts.empty() ||
         !_pending_run_asset_import_scripts.empty();
+    for (const auto &pending : _pending_screenshot_scenes) {
+        if (!godot::String(pending.args.get(
+                "_fennara_screenshot_script_path", "")).is_empty()) {
+            has_batch_diagnostics = true;
+            break;
+        }
+    }
     if (has_batch_diagnostics) {
+        godot::Array diagnostic_targets;
         godot::String diag_files;
-        for (size_t i = 0; i < _pending_script_writes.size(); i++) {
-            if (i > 0) diag_files += ",";
-            diag_files += _pending_script_writes[i].file_path;
+        auto append_diagnostic_target =
+            [&diagnostic_targets, &diag_files](
+                const godot::String &diagnostic_path,
+                const godot::String &result_path) {
+                for (int i = 0; i < diagnostic_targets.size(); i++) {
+                    godot::Dictionary existing = diagnostic_targets[i];
+                    if (godot::String(existing.get("result_path", "")) ==
+                        result_path) {
+                        return;
+                    }
+                }
+                godot::Dictionary target;
+                target["diagnostic_path"] = diagnostic_path;
+                target["result_path"] = result_path;
+                diagnostic_targets.append(target);
+                if (!diag_files.is_empty()) diag_files += ",";
+                diag_files += diagnostic_path;
+            };
+        for (const auto &pending : _pending_script_writes) {
+            append_diagnostic_target(
+                file_utils::resolve_path(pending.file_path),
+                pending.file_path);
         }
-        for (size_t i = 0; i < _pending_run_scene_edit_scripts.size(); i++) {
-            if (!diag_files.is_empty()) diag_files += ",";
-            diag_files += _pending_run_scene_edit_scripts[i].resolved_script_path;
+        for (const auto &pending : _pending_run_scene_edit_scripts) {
+            append_diagnostic_target(
+                pending.resolved_script_path,
+                pending.resolved_script_path);
         }
-        for (size_t i = 0; i < _pending_run_asset_import_scripts.size(); i++) {
-            if (!diag_files.is_empty()) diag_files += ",";
-            diag_files +=
-                _pending_run_asset_import_scripts[i].resolved_script_path;
+        for (const auto &pending : _pending_run_asset_import_scripts) {
+            append_diagnostic_target(
+                pending.resolved_script_path,
+                pending.resolved_script_path);
+        }
+        for (const auto &pending : _pending_screenshot_scenes) {
+            godot::String script_path = pending.args.get(
+                "_fennara_screenshot_script_path", "");
+            if (!script_path.is_empty()) {
+                godot::String resolved = file_utils::resolve_path(script_path);
+                append_diagnostic_target(resolved, resolved);
+            }
         }
         godot::Dictionary diag_context = _batch_log_context();
         if (!diag_files.is_empty()) {
@@ -310,7 +353,9 @@ void FennaraExecutor::execute_tool_calls_async(const godot::Array &tool_calls) {
         _log_tool_event("Batch diagnostics start", diag_context);
         _print_fennara_activity("Checking edited scripts before continuing...");
         _batch_diag_thread = std::thread(
-            [this, batch_generation]() { _run_batch_diagnostics(batch_generation); });
+            [this, batch_generation, diagnostic_targets]() {
+                _run_batch_diagnostics(batch_generation, diagnostic_targets);
+            });
     } else {
         _start_next_validate_scene();
     }
@@ -333,6 +378,10 @@ void FennaraExecutor::cancel() {
     _screenshot_tool_index = -1;
     _screenshot_args = godot::Dictionary();
     _screenshot_nav_result = godot::Dictionary();
+    _screenshot_primary_result = godot::Dictionary();
+    _screenshot_additional_images = godot::Array();
+    _screenshot_capture_index = 0;
+    _screenshot_capture_count = 1;
     _pending_screenshot_scenes.clear();
     _screenshot_running = false;
     _pending_validate_scenes.clear();

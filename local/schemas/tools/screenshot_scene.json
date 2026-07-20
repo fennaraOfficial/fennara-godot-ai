@@ -4,10 +4,12 @@
     "Capture a PNG from a loadable PackedScene, including authored `.tscn`/`.scn` scenes and imported 3D sources such as GLB/GLTF.",
     "The public tool surface is intentionally small: pass `scene_path` and optionally exactly one of `code` or `script_path`. Camera paths, target paths, view rectangles, and other parameter-driven screenshot modes are not accepted.",
     "If code and script_path are both omitted, the tool captures `ctx.root` using deterministic automatic framing.",
-    "Screenshot scripts must use `@tool extends RefCounted`, define `func run(ctx) -> void`, and call `ctx.capture(node_or_array, options)` exactly once. `ctx.root` is the detached scene root.",
-    "Use normal Godot APIs to find nodes, construct arrays, temporarily change visibility or transforms, add markers, or create a Camera2D/Camera3D. The detached scene instance is rendered and then discarded; the authored scene is not saved.",
+    "Screenshot scripts must use `@tool extends RefCounted`, define `func run(ctx) -> void`, and call `ctx.capture(node_or_array, options)` one to six times. `ctx.root` is the detached scene root.",
+    "Use normal Godot APIs to choose any nodes, build groups, show or hide scene parts, change transforms, add temporary visual aids, or create a Camera2D/Camera3D. Frame the evidence however the task requires. Changes affect only the detached capture and are never saved to the authored scene.",
     "The complete context API is `ctx.root`, `ctx.capture(...)`, `ctx.log(...)`, and `ctx.error(...)`.",
-    "Capture options support `context_margin`, 3D `view` (`front`, `back`, `left`, `right`, `top`, `perspective`, or `isometric`), and `camera` containing a Camera2D or Camera3D under ctx.root. Omit options for automatic framing.",
+    "For up to eight selected 3D subjects, omit `view` and `camera` when the best direction is unknown or several nodes must fit together. Fennara checks 17 deterministic viewpoints and chooses the one that keeps the most selected nodes visible, away from image edges, readable, and minimally overlapping. It returns one clean, unannotated RGB image; selection colors and measurements stay outside the image.",
+    "The 17-view search costs more than a direct capture and cannot make a huge world readable in one image. When the useful direction is already known, supply 3D `view` (`front`, `back`, `left`, `right`, `top`, `perspective`, or `isometric`) or a Camera2D/Camera3D in `camera`. Use multiple captures for distant groups or when different angles communicate different facts.",
+    "Call `ctx.capture(...)` up to six times with different node groups, views, margins, or cameras. Each result is a separate clean RGB image forwarded in call order as its own model image input, never a collage. Every capture observes the final detached scene state after `run(ctx)` returns.",
     "Inline code is saved under `res://.fennara/tmp/editor_scripts/`; the response returns the effective script_path. Patch and reuse that script_path on retries instead of resending large code.",
     "A successfully encoded screenshot is saved under user://.fennara/screenshots and returned as image_res_path plus a cross-platform absolute image_path.",
     "Image-capable clients receive the screenshot as transient model image context. Text receipts and saved paths remain available as fallback.",
@@ -23,7 +25,7 @@
       },
       "code": {
         "type": "string",
-        "description": "Inline GDScript for the first procedural capture. Provide code or script_path, never both. Contract: `@tool extends RefCounted`, `func run(ctx) -> void`, and exactly one `ctx.capture(node_or_array, options)` call."
+        "description": "Inline GDScript for the first procedural capture. Provide code or script_path, never both. Contract: `@tool extends RefCounted`, `func run(ctx) -> void`, and one to six ordered `ctx.capture(node_or_array, options)` calls."
       },
       "script_path": {
         "type": "string",

@@ -127,27 +127,42 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
         }
     }
 
-    auto cleanup_temporary_viewport = [&]() {
+    auto cleanup_temporary_viewport = [&](bool preserve_script_root = false) {
         if (!using_isolated_viewport) return;
-        _discard_temporary_viewport();
+        _discard_temporary_viewport(preserve_script_root);
     };
 
-    godot::Ref<godot::ViewportTexture> tex = viewport->get_texture();
-    if (!tex.is_valid()) {
-        FLOG_ERR("SS: viewport texture null");
-        result["success"] = false;
-        result["error"] = "Could not get viewport texture";
-        cleanup_temporary_viewport();
-        return result;
-    }
-
-    godot::Ref<godot::Image> image = tex->get_image();
-    if (!image.is_valid()) {
-        FLOG_ERR("SS: image from viewport null");
-        result["success"] = false;
-        result["error"] = "Could not get image from viewport texture";
-        cleanup_temporary_viewport();
-        return result;
+    godot::Ref<godot::Image> image;
+    if ((bool)_camera_search_capture_state_ref().get("enabled", false)) {
+        image = _capture_camera_searched_3d(viewport, result);
+        if ((bool)result.get("pending", false)) {
+            return result;
+        }
+        if (image.is_null()) {
+            result["success"] = false;
+            if (!result.has("error")) {
+                result["error"] = "Could not render the camera-searched 3D capture";
+            }
+            cleanup_temporary_viewport();
+            return result;
+        }
+    } else {
+        godot::Ref<godot::ViewportTexture> tex = viewport->get_texture();
+        if (!tex.is_valid()) {
+            FLOG_ERR("SS: viewport texture null");
+            result["success"] = false;
+            result["error"] = "Could not get viewport texture";
+            cleanup_temporary_viewport();
+            return result;
+        }
+        image = tex->get_image();
+        if (!image.is_valid()) {
+            FLOG_ERR("SS: image from viewport null");
+            result["success"] = false;
+            result["error"] = "Could not get image from viewport texture";
+            cleanup_temporary_viewport();
+            return result;
+        }
     }
 
     ContentMetrics content;
@@ -198,7 +213,9 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
     result["mime_type"] = "image/png";
     result["width"] = image->get_width();
     result["height"] = image->get_height();
-    result["image_role"] = _is_3d_scene ? "view" : "single";
+    if (!result.has("image_role")) {
+        result["image_role"] = _is_3d_scene ? "view" : "single";
+    }
     if (_capture_requires_content_ref()) {
         result["content_validation"] =
             content_is_meaningful ? "passed" : "failed";
@@ -215,7 +232,7 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
     }
     _save_png_data(png_data, hint, result);
 
-    cleanup_temporary_viewport();
+    cleanup_temporary_viewport(_preserve_script_root_after_capture_ref());
 
     return result;
 }
