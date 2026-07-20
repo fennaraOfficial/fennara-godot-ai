@@ -338,8 +338,9 @@ Working behavior:
   framing.
 - Camera paths, target paths, view rectangles, and top-level framing parameters
   are not accepted. All selection and framing lives in the worker script.
-- Image-capable MCP clients and built-in chat models can receive the primary
-  screenshot as image context. Saved image paths remain available as fallback.
+- Image-capable MCP clients and built-in chat models receive every returned
+  capture as separate image context in call order. Saved image paths remain
+  available as fallback.
 - Sparse captures are returned with framing metrics and partial status instead
   of hiding the image.
 
