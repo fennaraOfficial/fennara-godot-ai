@@ -241,7 +241,11 @@ already present:
       ai/
         guidelines.md
         index.md
+        operations.md
+        runtime-observation.md
         visual-observation.md
+        clients/
+          cursor.md
 ```
 
 When a complete addon is already present, the CLI validates its `VERSION` and

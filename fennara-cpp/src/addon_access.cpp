@@ -5,6 +5,9 @@
 #include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 
+#include <filesystem>
+#include <system_error>
+
 namespace fennara::addon_access {
 
 namespace {
@@ -65,6 +68,40 @@ godot::String display_name_for_addon(const godot::String &root) {
         }
     }
     return root.get_file();
+}
+
+std::filesystem::path native_path_for(const godot::String &path) {
+    const godot::String globalized =
+        godot::ProjectSettings::get_singleton()->globalize_path(path);
+    return std::filesystem::u8path(globalized.utf8().get_data());
+}
+
+bool is_canonical_descendant(const std::filesystem::path &path,
+                             const std::filesystem::path &root) {
+    std::error_code error;
+    const std::filesystem::path canonical_root =
+        std::filesystem::canonical(root, error);
+    if (error) {
+        return false;
+    }
+
+    const std::filesystem::path canonical_path =
+        std::filesystem::canonical(path, error);
+    if (error) {
+        return false;
+    }
+
+    const std::filesystem::path relative =
+        canonical_path.lexically_relative(canonical_root);
+    if (relative.empty() || relative.is_absolute()) {
+        return false;
+    }
+    for (const std::filesystem::path &part : relative) {
+        if (part == "..") {
+            return false;
+        }
+    }
+    return true;
 }
 
 godot::Dictionary addon_entry(const godot::String &root,
@@ -143,7 +180,10 @@ bool is_ai_guidance_path(const godot::String &path) {
             return false;
         }
     }
-    return !parts.is_empty();
+    return !parts.is_empty() &&
+           is_canonical_descendant(
+               native_path_for(normalized),
+               native_path_for(kAiGuidanceRoot));
 }
 
 godot::Array allowed_addon_roots() {

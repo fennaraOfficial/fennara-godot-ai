@@ -256,15 +256,17 @@ godot::Dictionary read_single_file(const godot::String &file_path,
     }
     bool user_path = normalized.begins_with("user://");
     if (!user_path) {
+        const bool ai_guidance =
+            addon_access::is_ai_guidance_path(normalized);
         godot::Dictionary addon_block;
-        if (!addon_access::is_ai_guidance_path(normalized) &&
+        if (!ai_guidance &&
             !addon_access::is_path_allowed(normalized, false, addon_block)) {
             FLOG_ERR(godot::String("Read: blocked addon path ") + normalized);
             return make_blocked_file(addon_block);
         }
 
         if (normalized != "res://project.godot" &&
-            !addon_access::is_ai_guidance_path(normalized) &&
+            !ai_guidance &&
             is_protected_path(normalized)) {
             FLOG_ERR(godot::String("Read: protected path ") + file_path);
             return make_failed_file(normalized, protected_path_error(normalized));
