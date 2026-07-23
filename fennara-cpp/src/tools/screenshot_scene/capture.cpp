@@ -8,6 +8,7 @@
 #include <godot_cpp/classes/camera2d.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
+#include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/marshalls.hpp>
 #include <godot_cpp/classes/sub_viewport.hpp>
 #include <godot_cpp/classes/viewport_texture.hpp>
@@ -86,7 +87,8 @@ ContentMetrics analyze_content(const godot::Ref<godot::Image> &image) {
 
 } // namespace
 
-godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
+godot::Dictionary FennaraScreenshotSceneTool::capture_image_owned(
+    uint64_t owner) {
     godot::Dictionary result;
 
     if (owner == 0 || owner != _active_capture_owner_ref()) {
@@ -105,9 +107,9 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
     FLOG_TOOL(godot::String("SS: capture started, is_3d=") + (_is_3d_scene ? "true" : "false"));
 
     godot::SubViewport *viewport = _camera_capture_viewport_ref();
-    bool using_camera_path_viewport = viewport != nullptr;
+    bool using_isolated_viewport = viewport != nullptr;
     if (viewport) {
-        FLOG_TOOL("SS: capturing temporary camera_path viewport");
+        FLOG_TOOL("SS: capturing isolated screenshot viewport");
     } else if (_is_3d_scene) {
         viewport = editor->get_editor_viewport_3d(0);
         if (!viewport) {
@@ -126,27 +128,43 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
         }
     }
 
-    auto cleanup_temporary_viewport = [&]() {
-        if (!using_camera_path_viewport) return;
-        _discard_temporary_viewport();
+    auto cleanup_temporary_viewport = [&](bool preserve_script_root = false) {
+        if (!using_isolated_viewport) return;
+        if (preserve_script_root) return;
+        _discard_temporary_viewport(preserve_script_root);
     };
 
-    godot::Ref<godot::ViewportTexture> tex = viewport->get_texture();
-    if (!tex.is_valid()) {
-        FLOG_ERR("SS: viewport texture null");
-        result["success"] = false;
-        result["error"] = "Could not get viewport texture";
-        cleanup_temporary_viewport();
-        return result;
-    }
-
-    godot::Ref<godot::Image> image = tex->get_image();
-    if (!image.is_valid()) {
-        FLOG_ERR("SS: image from viewport null");
-        result["success"] = false;
-        result["error"] = "Could not get image from viewport texture";
-        cleanup_temporary_viewport();
-        return result;
+    godot::Ref<godot::Image> image;
+    if ((bool)_camera_search_capture_state_ref().get("enabled", false)) {
+        image = _capture_camera_searched_3d(viewport, result);
+        if ((bool)result.get("pending", false)) {
+            return result;
+        }
+        if (image.is_null()) {
+            result["success"] = false;
+            if (!result.has("error")) {
+                result["error"] = "Could not render the camera-searched 3D capture";
+            }
+            cleanup_temporary_viewport();
+            return result;
+        }
+    } else {
+        godot::Ref<godot::ViewportTexture> tex = viewport->get_texture();
+        if (!tex.is_valid()) {
+            FLOG_ERR("SS: viewport texture null");
+            result["success"] = false;
+            result["error"] = "Could not get viewport texture";
+            cleanup_temporary_viewport();
+            return result;
+        }
+        image = tex->get_image();
+        if (!image.is_valid()) {
+            FLOG_ERR("SS: image from viewport null");
+            result["success"] = false;
+            result["error"] = "Could not get image from viewport texture";
+            cleanup_temporary_viewport();
+            return result;
+        }
     }
 
     ContentMetrics content;
@@ -161,20 +179,9 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
                   " span=" + godot::String::num(content.max_span, 4));
     }
 
-    godot::PackedByteArray png_data = image->save_png_to_buffer();
-    if (png_data.size() == 0) {
-        FLOG_ERR("SS: PNG encode failed");
-        result["success"] = false;
-        result["error"] = "Failed to encode image as PNG";
-        cleanup_temporary_viewport();
-        return result;
-    }
-
-    godot::String base64 = godot::Marshalls::get_singleton()->raw_to_base64(png_data);
-
     FLOG_TOOL(godot::String("SS: captured size=") + godot::String::num_int64(image->get_width()) + "x" + godot::String::num_int64(image->get_height()));
     result["success"] = true;
-    if (using_camera_path_viewport) {
+    if (using_isolated_viewport) {
         godot::Node *root = _camera_capture_root_ref();
         godot::Node *current_camera = nullptr;
         godot::Camera2D *camera_2d = viewport->get_camera_2d();
@@ -192,30 +199,56 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
             result["camera_warning"] = "No current Camera2D or Camera3D was active in the temporary SubViewport at capture time.";
         }
     }
-    result["image_base64"] = base64;
-    result["format"] = "png";
-    result["mime_type"] = "image/png";
+    result["image"] = image;
     result["width"] = image->get_width();
     result["height"] = image->get_height();
-    result["image_role"] = _is_3d_scene ? "view" : "single";
+    if (!result.has("image_role")) {
+        result["image_role"] = _is_3d_scene ? "view" : "single";
+    }
     if (_capture_requires_content_ref()) {
-        result["content_validation"] =
+        result["render_presence_validation"] =
             content_is_meaningful ? "passed" : "failed";
-        result["content_coverage"] = content.coverage;
-        result["content_max_span"] = content.max_span;
+        result["render_presence_coverage"] = content.coverage;
+        result["render_presence_max_span"] = content.max_span;
         if (!content_is_meaningful) {
-            result["content_warning"] =
-                "Captured image was returned, but automatic framing may be too small or visually sparse.";
+            result["render_presence_warning"] =
+                "Captured image was returned, but non-background pixels were sparse. This check does not judge semantic usefulness.";
         }
     }
+    cleanup_temporary_viewport(_preserve_script_root_after_capture_ref());
+
+    return result;
+}
+
+godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
+    godot::Dictionary result = capture_image_owned(owner);
+    if ((bool)result.get("pending", false) ||
+        !(bool)result.get("success", false)) {
+        return result;
+    }
+
+    godot::Ref<godot::Image> image = result.get("image", godot::Variant());
+    result.erase("image");
+    if (image.is_null()) {
+        result["success"] = false;
+        result["error"] = "Captured image was unavailable.";
+        return result;
+    }
+    godot::PackedByteArray png_data = image->save_png_to_buffer();
+    if (png_data.is_empty()) {
+        result["success"] = false;
+        result["error"] = "Failed to encode image as PNG";
+        return result;
+    }
+    result["image_base64"] =
+        godot::Marshalls::get_singleton()->raw_to_base64(png_data);
+    result["format"] = "png";
+    result["mime_type"] = "image/png";
     godot::String hint = _capture_name_hint_ref();
     if (hint.is_empty()) {
         hint = _is_3d_scene ? "3d_view" : "2d";
     }
     _save_png_data(png_data, hint, result);
-
-    cleanup_temporary_viewport();
-
     return result;
 }
 

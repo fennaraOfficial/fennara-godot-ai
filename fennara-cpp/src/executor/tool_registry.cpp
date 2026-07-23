@@ -21,12 +21,8 @@ namespace fennara {
 
 namespace {
 
-constexpr const char *kFennaraGuidelinesPath =
-    "res://addons/fennara/ai/guidelines.md";
-
 bool is_read_file_exception(const godot::String &path) {
-    return addon_access::normalize_res_path(path) ==
-           godot::String(kFennaraGuidelinesPath);
+    return addon_access::is_ai_guidance_path(path);
 }
 
 bool append_if_blocked(const godot::String &path,

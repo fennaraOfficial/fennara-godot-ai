@@ -1,54 +1,52 @@
 {
   "name": "screenshot_scene",
   "description_lines": [
-    "Open a scene file and capture a PNG image. Imported 3D PackedScene sources such as GLB and GLTF are loaded into an isolated SubViewport without opening or changing the edited scene.",
-    "Use camera_path to render from a specific Camera2D or Camera3D through a temporary SubViewport when authored camera framing matters.",
-    "For 2D scenes, optionally specify a world-coordinate view_rect for editor viewport capture; camera_path overrides view_rect and uses the Camera2D view.",
-    "For 3D scenes, optionally specify view and target_node_path to frame a specific node/subtree in an isolated SubViewport with surrounding context; camera_path overrides view/target framing and uses the Camera3D view.",
-    "For 3D view=all captures front, back, left, right, top, perspective, and isometric into one labeled collage.",
-    "For 3D target_node_path captures, the camera is framed around the target subtree while the rest of the scene remains visible for context.",
-    "A successfully encoded screenshot is always returned. Visually sparse or weakly framed 3D captures, including Camera3D captures, use partial status with coverage/span metrics and a warning instead of hiding the image.",
-    "Defaults to perspective.",
-    "Every generated screenshot is saved under user://.fennara/screenshots and returned as image_res_path plus cross-platform absolute image_path.",
-    "External MCP responses include the primary screenshot as model image context when the client/model supports image content; visible text still returns image_path values and metadata as a fallback.",
-    "Built-in chat attaches the primary screenshot as transient model image context only when the selected model supports image input; non-vision models receive the text receipt and saved paths only.",
-    "Built-in chat UI/history render screenshots from saved-file references instead of storing raw image bytes in raw results, markdown, replay, or summaries.",
-    "Multi-view responses include per-view image_path entries."
+    "Capture a PNG from a loadable PackedScene, including authored `.tscn`/`.scn` scenes and imported 3D sources such as GLB/GLTF.",
+    "The public tool surface is intentionally small: pass `scene_path` and optionally exactly one of `code` or `script_path`. Camera paths, target paths, view rectangles, and other parameter-driven screenshot modes are not accepted.",
+    "If code and script_path are both omitted, the tool captures `ctx.root` using deterministic automatic framing. A scene containing both 2D and 3D content but no Camera3D is ambiguous and requires a script that selects one dimension or creates a camera.",
+    "Screenshot scripts must use `@tool extends RefCounted` and define `func run(ctx) -> void`. `ctx.root` is the detached scene root. Render the current state with `var image: Image = await ctx.capture(node_or_array, options)`, optionally compose captured Images with `ctx.sheet(images, options)`, then publish useful Images with `ctx.output(image, description)`.",
+    "Before the first ctx.capture(), ctx.root is not inside a SceneTree. Local properties are available, but tree-dependent APIs such as global_transform are not. If global-space measurement is needed first, await one initialization capture and discard its Image; the scene is initialized afterward. Skip this extra render when tree-dependent state is unnecessary.",
+    "Use normal Godot APIs to choose any nodes, build groups, show or hide scene parts, change transforms, add temporary visual aids, or create a Camera2D/Camera3D. Frame the evidence however the task requires. Changes affect only the detached capture and are never saved to the authored scene.",
+    "The complete context API is `ctx.root`, `await ctx.capture(...) -> Image`, `ctx.sheet(images, options) -> Array[Image]`, `ctx.output(image, description)`, `ctx.log(...)`, and `ctx.error(...)`.",
+    "Use `ctx.sheet()` when many moments, poses, angles, or states communicate better as one ordered image. Capture each desired state into an Image, pass those Images in intentional order, then publish the returned pages.",
+    "Minimal screenshot sheet pattern:",
+    "```gdscript",
+    "var frames: Array[Image] = []",
+    "frames.append(await ctx.capture(ctx.root))",
+    "# Change the detached state here.",
+    "frames.append(await ctx.capture(ctx.root))",
+    "var pages: Array[Image] = ctx.sheet(frames, {",
+    "    \"columns\": 2,",
+    "    \"labels\": [\"P00\", \"P01\"],",
+    "})",
+    "for page_index: int in range(pages.size()):",
+    "    ctx.output(pages[page_index], \"Moments page %d\" % (page_index + 1))",
+    "```",
+    "`ctx.sheet()` is a pure Image composer. It never captures, changes the scene, selects states, or publishes output. Pass Images in the exact desired order. Options are `columns` (positive integer), `cell_size` (Vector2i, default 384x216), `cells_per_sheet` (positive integer, default all images), `labels` (optional Array), `gap` (non-negative integer), `fit` (`contain`, `cover`, or `stretch`; default `contain`), `background` (Color), and `label_scale` (positive number). It returns one or more sheet Images in page order and reports invalid input through ctx.error().",
+    "For up to eight selected 3D subjects, omit `view` and `camera` when the best direction is unknown or several nodes must fit together. Fennara checks 17 deterministic viewpoints and chooses the one that keeps the most selected nodes visible, away from image edges, readable, and minimally overlapping. It returns one clean, unannotated RGB image; selection colors and measurements stay outside the image.",
+    "The 17-view search costs more than a direct capture and cannot make a huge world readable in one image. When the useful direction is already known, supply 3D `view` (`front`, `back`, `left`, `right`, `top`, `perspective`, or `isometric`) or a Camera2D/Camera3D in `camera`. Use multiple captures for distant groups or when different angles communicate different facts.",
+    "Each awaited capture observes the scene exactly when that line runs. Between captures, use normal Godot code to change animation poses, visibility, transforms, materials, cameras, or temporary scene content. Captured Images are ordinary Godot Images, so code may inspect, resize, compare, discard, or combine them before choosing what to publish.",
+    "Fennara does not impose a capture or output count on the script. It saves every ctx.output() image and lists every path. To keep one tool result bounded, only the first six published images are attached as model image context; later outputs remain available by saved path and are explicitly reported as omitted from model context.",
+    "Inline code is saved under `res://.fennara/tmp/editor_scripts/`; the response returns the effective script_path. Patch and reuse that script_path on retries instead of resending large code.",
+    "A successfully encoded screenshot is saved under user://.fennara/screenshots and returned as image_res_path plus a cross-platform absolute image_path.",
+    "Image-capable clients receive the screenshot as transient model image context. Text receipts and saved paths remain available as fallback.",
+    "Automatic framing reports render-presence validation and pixel-occupancy metrics. These detect sparse or empty rendering only; they do not judge whether an image is semantically useful."
   ],
   "parameters": {
     "type": "object",
+    "additionalProperties": false,
     "properties": {
       "scene_path": {
         "type": "string",
-        "description": "Path to a loadable PackedScene to capture, including authored .tscn/.scn scenes and imported sources such as .glb/.gltf (e.g. 'res://scenes/level1.tscn')"
+        "description": "Path to a loadable PackedScene, such as `res://scenes/level.tscn` or `res://assets/model.glb`."
       },
-      "view_rect": {
-        "type": "object",
-        "description": "2D editor-viewport capture only. World-coordinate bounding box to frame. Omit to use the project's viewport resolution from Project Settings as the default view area. Ignored when camera_path is provided.",
-        "properties": {
-          "x1": { "type": "number", "description": "Left edge X coordinate" },
-          "y1": { "type": "number", "description": "Top edge Y coordinate" },
-          "x2": { "type": "number", "description": "Right edge X coordinate" },
-          "y2": { "type": "number", "description": "Bottom edge Y coordinate" }
-        },
-        "required": ["x1", "y1", "x2", "y2"]
-      },
-      "camera_path": {
+      "code": {
         "type": "string",
-        "description": "Optional node path relative to the scene root for a Camera2D or Camera3D to capture from. The tool instantiates the scene into a temporary SubViewport, makes that camera current, captures the viewport texture, then removes the temporary viewport. This is an authored scene-camera render, not a runtime `_ready()`/Play-mode capture."
+        "description": "Inline GDScript for procedural capture. Provide code or script_path, never both. Contract: `@tool extends RefCounted`, `func run(ctx) -> void`, one or more `await ctx.capture(node_or_array, options)` calls returning Images, optional `ctx.sheet(images, options)` composition, and one or more `ctx.output(image, description)` calls."
       },
-      "view": {
+      "script_path": {
         "type": "string",
-        "description": "3D isolated capture only. Camera view to capture: front, back, left, right, top, perspective, isometric, or all. `all` captures all seven listed views into one labeled collage. Defaults to perspective. Ignored when camera_path is provided.",
-        "enum": ["front", "back", "left", "right", "top", "perspective", "isometric", "all"]
-      },
-      "target_node_path": {
-        "type": "string",
-        "description": "3D only. Optional node path relative to the scene root. Frames the camera around this node/subtree instead of the whole scene while leaving the rest of the scene visible for context. Choose the smallest meaningful visual subtree: if you target a very large node such as a floor, terrain, or whole level section, the tool must fit all of that node's bounds in frame and smaller objects on/near it will appear tiny."
-      },
-      "context_margin": {
-        "type": "number",
-        "description": "3D only. Multiplier applied to the framed bounds before positioning the camera. Smaller values zoom closer; larger values show more surrounding context. Defaults to 0.75 for target_node_path captures and 1.1 for whole-scene captures. Values below 1.0 are valid for close inspection."
+        "description": "Existing `.gd` screenshot worker. Prefer the returned temp script_path for patch-and-rerun workflows. Provide code or script_path, never both."
       }
     },
     "required": ["scene_path"]

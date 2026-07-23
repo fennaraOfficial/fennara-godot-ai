@@ -22,7 +22,7 @@ The release zip containing local Fennara executables such as the MCP server, dae
 
 **Project Guidance**
 
-Generated guidance files placed in a Godot project, mainly `AGENTS.md` and `addons/fennara/ai/guidelines.md`, so AI coding agents know when and how to use Fennara.
+Generated guidance files placed in a Godot project, including `AGENTS.md` and the routed references under `addons/fennara/ai/`, so AI coding agents know when and how to use Fennara.
 
 ## MCP Terms
 

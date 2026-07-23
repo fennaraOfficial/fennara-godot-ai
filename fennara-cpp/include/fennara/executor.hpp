@@ -64,7 +64,8 @@ private:
     std::mutex _batch_diag_mutex;
     godot::Dictionary _batch_diag_results;  // file_path -> per-file diagnostics dict
 
-    void _run_batch_diagnostics(uint64_t batch_generation);
+    void _run_batch_diagnostics(uint64_t batch_generation,
+                                const godot::Array &diagnostic_targets);
     void _on_batch_diagnostics_complete(uint64_t batch_generation);
     void _execute_pending_asset_import_scripts(uint64_t batch_generation);
     void _finish_run_scene_edit_script(
@@ -100,13 +101,25 @@ private:
     int _screenshot_tool_index = -1;
     godot::Dictionary _screenshot_args;
     godot::Dictionary _screenshot_nav_result;
-    godot::Array _screenshot_views;
-    godot::Array _screenshot_captures;
-    int _screenshot_view_index = 0;
+    godot::Dictionary _screenshot_primary_result;
+    godot::Array _screenshot_additional_images;
+    int _screenshot_capture_index = 0;
+    int _screenshot_capture_count = 1;
     uint64_t _screenshot_capture_owner = 0;
+    bool _screenshot_script_active = false;
     void _start_next_screenshot_scene();
     void _on_screenshot_scene_opened(uint64_t batch_generation);
+    void _schedule_screenshot_capture(uint64_t batch_generation);
     void _on_screenshot_capture(uint64_t batch_generation);
+    void _on_screenshot_script_capture_requested(
+        uint64_t batch_generation);
+    void _begin_screenshot_script_capture(uint64_t batch_generation);
+    void _schedule_screenshot_script_capture(uint64_t batch_generation);
+    void _on_screenshot_script_capture(uint64_t batch_generation);
+    void _on_screenshot_script_completed(uint64_t batch_generation);
+    void _on_screenshot_script_timeout(
+        uint64_t batch_generation,
+        uint64_t capture_owner);
 
     // --- Validate scene async (structural checks + daemon runtime batch) ---
     struct PendingValidateScene {

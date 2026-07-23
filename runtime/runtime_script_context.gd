@@ -1,6 +1,7 @@
 extends RefCounted
 
 const RuntimeInputDriver := preload("res://addons/fennara/runtime/runtime_input_driver.gd")
+const ImageSheet := preload("res://addons/fennara/runtime/image_sheet.gd")
 const RuntimeNodeSnapshot := preload("res://addons/fennara/runtime/runtime_node_snapshot.gd")
 const RuntimePhysicsQuery := preload("res://addons/fennara/runtime/runtime_physics_query.gd")
 
@@ -118,6 +119,36 @@ func capture(label: String, max_resolution: int = 1280) -> Dictionary:
 	if result.get("success", false):
 		_captures.append(result)
 	return result
+
+
+func frame(max_resolution: int = 1280) -> Image:
+	var result: Dictionary = await _helper._frame_runtime_script(max_resolution)
+	if not result.get("success", false):
+		error(str(result.get("error", "Runtime viewport image was unavailable.")))
+		return null
+	return result.get("image") as Image
+
+
+func output(image: Image, description: String = "") -> Dictionary:
+	var result: Dictionary = _helper._output_runtime_script(
+		self,
+		image,
+		description,
+	)
+	if result.get("success", false):
+		_captures.append(result)
+	return result
+
+
+func sheet(images: Array, options: Dictionary = {}) -> Array[Image]:
+	var result: Dictionary = ImageSheet.compose(images, options)
+	if not result.get("success", false):
+		error(str(result.get("error", "ctx.sheet() failed.")))
+		return []
+	var sheets: Array[Image] = []
+	for image: Variant in result.get("sheets", []):
+		sheets.append(image as Image)
+	return sheets
 
 
 func press_action(action: String, strength: float = 1.0) -> bool:

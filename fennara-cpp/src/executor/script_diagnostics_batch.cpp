@@ -116,51 +116,28 @@ void FennaraExecutor::_finish_run_scene_edit_script(
         batch_generation);
 }
 
-void FennaraExecutor::_run_batch_diagnostics(uint64_t batch_generation) {
+void FennaraExecutor::_run_batch_diagnostics(
+    uint64_t batch_generation, const godot::Array &diagnostic_targets) {
     godot::Dictionary per_file_results;
     bool batch_success = false;
     godot::String batch_error;
 
     godot::Array files_to_check;
-    for (const auto &pw : _pending_script_writes) {
-        godot::String abs_path = file_utils::resolve_path(pw.file_path);
-        if (godot::FileAccess::file_exists(abs_path)) {
-            files_to_check.append(abs_path);
-        }
-    }
-    for (const auto &pending : _pending_run_scene_edit_scripts) {
-        if (godot::FileAccess::file_exists(pending.resolved_script_path)) {
-            bool already_added = false;
-            for (int i = 0; i < files_to_check.size(); i++) {
-                if (godot::String(files_to_check[i]) ==
-                    pending.resolved_script_path) {
-                    already_added = true;
-                    break;
-                }
-            }
-            if (!already_added) {
-                files_to_check.append(pending.resolved_script_path);
-            }
-        }
-    }
-    for (const auto &pending : _pending_run_asset_import_scripts) {
-        if (godot::FileAccess::file_exists(pending.resolved_script_path)) {
-            bool already_added = false;
-            for (int i = 0; i < files_to_check.size(); i++) {
-                if (godot::String(files_to_check[i]) ==
-                    pending.resolved_script_path) {
-                    already_added = true;
-                    break;
-                }
-            }
-            if (!already_added) {
-                files_to_check.append(pending.resolved_script_path);
-            }
+    for (int i = 0; i < diagnostic_targets.size(); i++) {
+        godot::Dictionary target = diagnostic_targets[i];
+        godot::String diagnostic_path = target.get("diagnostic_path", "");
+        if (!diagnostic_path.is_empty() &&
+            godot::FileAccess::file_exists(diagnostic_path) &&
+            !files_to_check.has(diagnostic_path)) {
+            files_to_check.append(diagnostic_path);
         }
     }
 
     if (files_to_check.is_empty()) {
-        for (const auto &pw : _pending_script_writes) {
+        for (int i = 0; i < diagnostic_targets.size(); i++) {
+            godot::Dictionary target = diagnostic_targets[i];
+            godot::String result_path = target.get("result_path", "");
+            if (result_path.is_empty()) continue;
             godot::Dictionary file_result;
             file_result["diagnostics"] = godot::Array();
             file_result["total_errors"] = 0;
@@ -168,27 +145,7 @@ void FennaraExecutor::_run_batch_diagnostics(uint64_t batch_generation) {
             file_result["total_info"] = 0;
             file_result["total_hints"] = 0;
             file_result["total_diagnostics"] = 0;
-            per_file_results[pw.file_path] = file_result;
-        }
-        for (const auto &pending : _pending_run_scene_edit_scripts) {
-            godot::Dictionary file_result;
-            file_result["diagnostics"] = godot::Array();
-            file_result["total_errors"] = 0;
-            file_result["total_warnings"] = 0;
-            file_result["total_info"] = 0;
-            file_result["total_hints"] = 0;
-            file_result["total_diagnostics"] = 0;
-            per_file_results[pending.resolved_script_path] = file_result;
-        }
-        for (const auto &pending : _pending_run_asset_import_scripts) {
-            godot::Dictionary file_result;
-            file_result["diagnostics"] = godot::Array();
-            file_result["total_errors"] = 0;
-            file_result["total_warnings"] = 0;
-            file_result["total_info"] = 0;
-            file_result["total_hints"] = 0;
-            file_result["total_diagnostics"] = 0;
-            per_file_results[pending.resolved_script_path] = file_result;
+            per_file_results[result_path] = file_result;
         }
         batch_success = true;
         goto done;
@@ -206,11 +163,14 @@ void FennaraExecutor::_run_batch_diagnostics(uint64_t batch_generation) {
         godot::Dictionary abs_per_file =
             diag_result.get("per_file", godot::Dictionary());
 
-        for (const auto &pw : _pending_script_writes) {
-            godot::String resolved = file_utils::resolve_path(pw.file_path);
+        for (int i = 0; i < diagnostic_targets.size(); i++) {
+            godot::Dictionary target = diagnostic_targets[i];
+            godot::String diagnostic_path = target.get("diagnostic_path", "");
+            godot::String result_path = target.get("result_path", "");
+            if (result_path.is_empty()) continue;
             godot::Dictionary file_result;
-            if (abs_per_file.has(resolved)) {
-                file_result = abs_per_file[resolved];
+            if (abs_per_file.has(diagnostic_path)) {
+                file_result = abs_per_file[diagnostic_path];
             } else {
                 file_result["diagnostics"] = godot::Array();
                 file_result["total_errors"] = 0;
@@ -219,36 +179,7 @@ void FennaraExecutor::_run_batch_diagnostics(uint64_t batch_generation) {
                 file_result["total_hints"] = 0;
                 file_result["total_diagnostics"] = 0;
             }
-            per_file_results[pw.file_path] = file_result;
-        }
-
-        for (const auto &pending : _pending_run_scene_edit_scripts) {
-            godot::Dictionary file_result;
-            if (abs_per_file.has(pending.resolved_script_path)) {
-                file_result = abs_per_file[pending.resolved_script_path];
-            } else {
-                file_result["diagnostics"] = godot::Array();
-                file_result["total_errors"] = 0;
-                file_result["total_warnings"] = 0;
-                file_result["total_info"] = 0;
-                file_result["total_hints"] = 0;
-                file_result["total_diagnostics"] = 0;
-            }
-            per_file_results[pending.resolved_script_path] = file_result;
-        }
-        for (const auto &pending : _pending_run_asset_import_scripts) {
-            godot::Dictionary file_result;
-            if (abs_per_file.has(pending.resolved_script_path)) {
-                file_result = abs_per_file[pending.resolved_script_path];
-            } else {
-                file_result["diagnostics"] = godot::Array();
-                file_result["total_errors"] = 0;
-                file_result["total_warnings"] = 0;
-                file_result["total_info"] = 0;
-                file_result["total_hints"] = 0;
-                file_result["total_diagnostics"] = 0;
-            }
-            per_file_results[pending.resolved_script_path] = file_result;
+            per_file_results[result_path] = file_result;
         }
 
         batch_success = true;
@@ -266,12 +197,7 @@ done:
     }
     godot::Dictionary diag_done = _batch_log_context();
     diag_done["success"] = batch_success;
-    diag_done["pending_script_writes"] =
-        static_cast<int64_t>(_pending_script_writes.size());
-    diag_done["pending_run_scene_edit_scripts"] =
-        static_cast<int64_t>(_pending_run_scene_edit_scripts.size());
-    diag_done["pending_run_asset_import_scripts"] =
-        static_cast<int64_t>(_pending_run_asset_import_scripts.size());
+    diag_done["target_count"] = diagnostic_targets.size();
     if (!batch_error.is_empty()) {
         diag_done["error"] = batch_error;
     }
@@ -280,16 +206,12 @@ done:
 }
 
 void FennaraExecutor::_on_batch_diagnostics_complete(uint64_t batch_generation) {
-    if (_batch_diag_thread.joinable()) {
-        _batch_diag_thread.join();
+    if (_batch_cancelled || batch_generation != _async_batch_generation) {
+        return;
     }
 
-    if (_batch_cancelled || batch_generation != _async_batch_generation) {
-        _pending_script_writes.clear();
-        _pending_run_scene_edit_scripts.clear();
-        _pending_run_asset_import_scripts.clear();
-        _batch_diag_results = godot::Dictionary();
-        return;
+    if (_batch_diag_thread.joinable()) {
+        _batch_diag_thread.join();
     }
 
     godot::Dictionary batch_results;
@@ -375,6 +297,38 @@ void FennaraExecutor::_on_batch_diagnostics_complete(uint64_t batch_generation) 
     }
 
     _pending_run_scene_edit_scripts.clear();
+
+    std::vector<PendingScreenshotScene> runnable_screenshots;
+    runnable_screenshots.reserve(_pending_screenshot_scenes.size());
+    for (auto pending : _pending_screenshot_scenes) {
+        godot::String script_path = pending.args.get(
+            "_fennara_screenshot_script_path", "");
+        if (script_path.is_empty()) {
+            runnable_screenshots.push_back(pending);
+            continue;
+        }
+
+        godot::String resolved = file_utils::resolve_path(script_path);
+        apply_batch_script_diagnostics(
+            pending.args, per_file, resolved, batch_success);
+        if (!batch_success) {
+            pending.args["diagnostic_error"] = batch_error;
+            runnable_screenshots.push_back(pending);
+            continue;
+        }
+        if ((int)pending.args.get("total_errors", 0) > 0) {
+            godot::Dictionary failed = pending.args;
+            failed["success"] = false;
+            failed["error"] =
+                "Screenshot script diagnostics reported errors. Patch script_path and rerun.";
+            _on_async_tool_complete(
+                failed, pending.tool_index, "screenshot_scene",
+                godot::Dictionary(), batch_generation);
+            continue;
+        }
+        runnable_screenshots.push_back(pending);
+    }
+    _pending_screenshot_scenes.swap(runnable_screenshots);
     if (!_pending_run_asset_import_scripts.empty()) {
         _asset_import_execution_pending = true;
         _asset_import_batch_generation = batch_generation;
