@@ -247,4 +247,4 @@ AGENTS.md
 addons/fennara/ai/
 ```
 
-The AI directory contains compact always-read guidelines, an index, and specialized pages loaded only when relevant. If you copy files manually instead of running `fennara install`, those guidance files are not created automatically.
+The AI directory contains compact always-read guidelines, an index, and specialized pages loaded only when relevant. A manually copied addon ZIP can include this packaged directory, but it does not create or refresh the project-root `AGENTS.md`. Use `fennara install` and `fennara update` when Fennara should manage and refresh the complete project guidance.

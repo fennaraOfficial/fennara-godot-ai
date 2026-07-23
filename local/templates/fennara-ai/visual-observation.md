@@ -40,7 +40,7 @@ await ctx.capture(subject, {"view": "front"})
 
 After that capture, the scene is initialized and global-space measurements are valid. Use a cheap explicit view for this discarded initialization instead of automatic camera search. Do this only when tree-dependent state is required because the initialization is a real render and adds capture cost.
 
-For a temporary Camera3D configured before that initialization, use `look_at_from_position(position, target)` rather than `global_position` plus `look_at()`. Godot requires the latter APIs to be inside a SceneTree.
+When the initialization uses a temporary Camera3D, add the unconfigured camera under `ctx.root` and perform the discarded explicit-camera capture first. Configure its global transform only after that capture places the detached scene inside the retained SceneTree.
 
 ## 2D Framing
 
@@ -66,7 +66,8 @@ Keep the camera position, height, pitch, FOV, projection, environment, and scene
 
 ```gdscript
 # Initialize the detached scene with one discarded explicit-camera render.
-camera.look_at_from_position(Vector3(0.0, 1.0, 5.0), Vector3.ZERO)
+var camera := Camera3D.new()
+ctx.root.add_child(camera)
 await ctx.capture(ctx.root, {"camera": camera})
 
 var eye := anchor.global_position + Vector3(0.0, eye_height, 0.0)

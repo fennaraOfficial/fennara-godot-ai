@@ -171,6 +171,12 @@ jobs:
           curl --fail --location \
             "https://github.com/godotengine/godot/releases/download/4.5-stable/Godot_v4.5-stable_linux.x86_64.zip" \
             --output "${archive}"
+          expected_sha256="c7316e1fd782ad276a4d985a7673b5976eaaa8d90561a2bea5289210dc53e9ba"
+          actual_sha256="$(sha256sum "${archive}" | awk '{print $1}')"
+          if [[ "${actual_sha256}" != "${expected_sha256}" ]]; then
+            echo "::error::Godot Linux archive SHA-256 did not match the pinned release digest."
+            exit 1
+          fi
           mkdir -p "${directory}"
           unzip -q "${archive}" -d "${directory}"
           executable="$(find "${directory}" -maxdepth 1 -type f -name 'Godot_*_linux.x86_64' -print -quit)"

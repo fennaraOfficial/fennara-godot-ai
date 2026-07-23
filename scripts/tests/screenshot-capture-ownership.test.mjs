@@ -27,10 +27,11 @@ test("screenshot capture is only reachable with an internal ownership token", ()
 });
 
 test("screenshot script paths use the addon access boundary", () => {
-  const screenshotBranch = asyncBatch.slice(
-    asyncBatch.indexOf('name == "screenshot_scene"'),
-    asyncBatch.indexOf('name == "validate_scene"'),
-  );
+  const start = asyncBatch.indexOf('name == "screenshot_scene"');
+  const end = asyncBatch.indexOf('name == "validate_scene"');
+  assert.ok(start >= 0, "screenshot_scene branch marker not found");
+  assert.ok(end > start, "validate_scene marker must follow screenshot_scene");
+  const screenshotBranch = asyncBatch.slice(start, end);
   assert.match(screenshotBranch, /screenshot_script_path/);
   assert.match(
     screenshotBranch,
