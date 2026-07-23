@@ -13,6 +13,7 @@ class Callable;
 class RefCounted;
 class Image;
 class SubViewport;
+struct Vector2i;
 }
 
 namespace fennara {
@@ -55,6 +56,9 @@ public:
     static uint64_t try_reserve_capture();
     static bool owns_capture(uint64_t owner);
     static void release_capture(uint64_t owner);
+#ifdef FENNARA_SETUP_TEST_HOOKS
+    static godot::Dictionary test_script_viewport_reuse();
+#endif
 
 private:
     static godot::String _save_png_data(const godot::PackedByteArray &png_data,
@@ -86,6 +90,11 @@ private:
     static godot::String &_artifact_dir_ref();
     static godot::SubViewport *&_camera_capture_viewport_ref();
     static godot::Node *&_camera_capture_root_ref();
+    static godot::SubViewport *_prepare_capture_viewport(
+        godot::Node *root, const godot::String &name,
+        const godot::Vector2i &size, bool use_own_world_3d,
+        godot::Dictionary &result);
+    static void _cleanup_failed_capture_setup();
     static bool &_capture_requires_content_ref();
     static godot::Dictionary &_camera_search_capture_state_ref();
     static void _clear_camera_search_capture_state();

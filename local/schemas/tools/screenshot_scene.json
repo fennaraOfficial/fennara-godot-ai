@@ -3,7 +3,7 @@
   "description_lines": [
     "Capture a PNG from a loadable PackedScene, including authored `.tscn`/`.scn` scenes and imported 3D sources such as GLB/GLTF.",
     "The public tool surface is intentionally small: pass `scene_path` and optionally exactly one of `code` or `script_path`. Camera paths, target paths, view rectangles, and other parameter-driven screenshot modes are not accepted.",
-    "If code and script_path are both omitted, the tool captures `ctx.root` using deterministic automatic framing.",
+    "If code and script_path are both omitted, the tool captures `ctx.root` using deterministic automatic framing. A scene containing both 2D and 3D content but no Camera3D is ambiguous and requires a script that selects one dimension or creates a camera.",
     "Screenshot scripts must use `@tool extends RefCounted` and define `func run(ctx) -> void`. `ctx.root` is the detached scene root. Render the current state with `var image: Image = await ctx.capture(node_or_array, options)`, optionally compose captured Images with `ctx.sheet(images, options)`, then publish useful Images with `ctx.output(image, description)`.",
     "Before the first ctx.capture(), ctx.root is not inside a SceneTree. Local properties are available, but tree-dependent APIs such as global_transform are not. If global-space measurement is needed first, await one initialization capture and discard its Image; the scene is initialized afterward. Skip this extra render when tree-dependent state is unnecessary.",
     "Use normal Godot APIs to choose any nodes, build groups, show or hide scene parts, change transforms, add temporary visual aids, or create a Camera2D/Camera3D. Frame the evidence however the task requires. Changes affect only the detached capture and are never saved to the authored scene.",
@@ -30,7 +30,7 @@
     "Inline code is saved under `res://.fennara/tmp/editor_scripts/`; the response returns the effective script_path. Patch and reuse that script_path on retries instead of resending large code.",
     "A successfully encoded screenshot is saved under user://.fennara/screenshots and returned as image_res_path plus a cross-platform absolute image_path.",
     "Image-capable clients receive the screenshot as transient model image context. Text receipts and saved paths remain available as fallback.",
-    "Sparse 3D captures return the image with coverage/span metrics and a warning instead of hiding it."
+    "Automatic framing reports render-presence validation and pixel-occupancy metrics. These detect sparse or empty rendering only; they do not judge whether an image is semantically useful."
   ],
   "parameters": {
     "type": "object",

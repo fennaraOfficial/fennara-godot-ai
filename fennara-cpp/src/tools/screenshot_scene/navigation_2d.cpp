@@ -18,6 +18,7 @@ namespace {
 struct CaptureDimensions {
     bool has_2d = false;
     bool has_3d = false;
+    bool has_camera3d = false;
 };
 
 void collect_capture_dimensions(godot::Node *node,
@@ -27,6 +28,9 @@ void collect_capture_dimensions(godot::Node *node,
     }
     if (godot::Object::cast_to<godot::Node3D>(node)) {
         dimensions.has_3d = true;
+    }
+    if (godot::Object::cast_to<godot::Camera3D>(node)) {
+        dimensions.has_camera3d = true;
     }
     if (godot::Object::cast_to<godot::CanvasItem>(node)) {
         dimensions.has_2d = true;
@@ -126,6 +130,16 @@ godot::Dictionary FennaraScreenshotSceneTool::navigate(
     godot::Array capture_nodes;
     capture_nodes.append(root);
     godot::Dictionary capture_options;
+    CaptureDimensions dimensions;
+    collect_capture_dimensions(root, dimensions);
+    if (dimensions.has_2d && dimensions.has_3d &&
+        !dimensions.has_camera3d) {
+        result["success"] = false;
+        result["error"] =
+            "Whole-scene automatic capture is ambiguous because the scene contains both 2D and 3D content without a Camera3D. Provide a screenshot script that selects one dimension or creates a Camera2D or Camera3D.";
+        memdelete(root);
+        return result;
+    }
     if (_is_3d_scene) {
         FLOG_TOOL("SS: preparing isolated 3D capture");
         result = _frame_3d_editor_camera(
@@ -162,7 +176,6 @@ FennaraScreenshotSceneTool::navigate_pending_script_capture() {
                 "Retained screenshot scene had an unexpected parent.";
             return result;
         }
-        _discard_temporary_viewport(true);
     }
 
     godot::Dictionary request = ctx->take_pending_capture();

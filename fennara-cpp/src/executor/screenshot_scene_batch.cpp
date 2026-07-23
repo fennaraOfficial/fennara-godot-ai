@@ -29,8 +29,9 @@ godot::Dictionary screenshot_image_record(const godot::Dictionary &result) {
         "current_camera_path", "current_camera_type", "script_subject_count",
         "image_base64", "format", "mime_type", "width", "height",
         "image_role", "image_res_path", "image_path", "transport",
-        "content_validation", "content_coverage", "content_max_span",
-        "content_warning", "selected_node_visibility", "camera_search",
+        "render_presence_validation", "render_presence_coverage",
+        "render_presence_max_span", "render_presence_warning",
+        "selected_node_visibility", "camera_search",
         "camera_search_warning", "output_index", "description",
         "model_image_omitted"};
     for (const char *key : keys) {
@@ -225,17 +226,21 @@ void FennaraExecutor::_on_screenshot_capture(uint64_t batch_generation) {
         merged["success"] = false;
         merged["error"] = capture_result.get("error", "Capture failed");
     }
-    if (capture_result.has("content_validation")) {
-        merged["content_validation"] = capture_result["content_validation"];
+    if (capture_result.has("render_presence_validation")) {
+        merged["render_presence_validation"] =
+            capture_result["render_presence_validation"];
     }
-    if (capture_result.has("content_coverage")) {
-        merged["content_coverage"] = capture_result["content_coverage"];
+    if (capture_result.has("render_presence_coverage")) {
+        merged["render_presence_coverage"] =
+            capture_result["render_presence_coverage"];
     }
-    if (capture_result.has("content_max_span")) {
-        merged["content_max_span"] = capture_result["content_max_span"];
+    if (capture_result.has("render_presence_max_span")) {
+        merged["render_presence_max_span"] =
+            capture_result["render_presence_max_span"];
     }
-    if (capture_result.has("content_warning")) {
-        merged["content_warning"] = capture_result["content_warning"];
+    if (capture_result.has("render_presence_warning")) {
+        merged["render_presence_warning"] =
+            capture_result["render_presence_warning"];
     }
 
     if (!(bool)merged.get("success", false)) {

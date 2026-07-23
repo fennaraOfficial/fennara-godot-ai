@@ -5,7 +5,6 @@
 #include <godot_cpp/classes/camera2d.hpp>
 #include <godot_cpp/classes/canvas_item.hpp>
 #include <godot_cpp/classes/control.hpp>
-#include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/node2d.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/sub_viewport.hpp>
@@ -74,18 +73,8 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_2d_script_capture(
     godot::Node *root, const godot::Array &capture_nodes,
     const godot::Dictionary &capture_options) {
     godot::Dictionary result;
-    godot::EditorInterface *editor = godot::EditorInterface::get_singleton();
-    godot::Node *base = editor
-        ? godot::Object::cast_to<godot::Node>(editor->get_base_control())
-        : nullptr;
-    if (!base) {
-        result["success"] = false;
-        result["error"] = "Editor base control not available";
-        return result;
-    }
-
-    _discard_temporary_viewport();
     _capture_requires_content_ref() = false;
+    _clear_camera_search_capture_state();
     const godot::String scene_path = _current_scene_path_ref();
 
     godot::ProjectSettings *ps = godot::ProjectSettings::get_singleton();
@@ -94,14 +83,12 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_2d_script_capture(
     int height = std::max(
         int(ps->get_setting("display/window/size/viewport_height", 1080)), 64);
 
-    godot::SubViewport *viewport = memnew(godot::SubViewport);
-    viewport->set_name("FennaraScripted2DScreenshotViewport");
-    viewport->set_size(godot::Vector2i(width, height));
-    viewport->set_update_mode(godot::SubViewport::UPDATE_ALWAYS);
-    viewport->set_clear_mode(godot::SubViewport::CLEAR_MODE_ALWAYS);
-    viewport->set_transparent_background(false);
-    base->add_child(viewport);
-    viewport->add_child(root);
+    godot::SubViewport *viewport = _prepare_capture_viewport(
+        root, "FennaraScripted2DScreenshotViewport",
+        godot::Vector2i(width, height), false, result);
+    if (!viewport) {
+        return result;
+    }
 
     godot::Camera2D *camera = nullptr;
     if (capture_options.has("camera")) {
@@ -110,10 +97,10 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_2d_script_capture(
         camera = godot::Object::cast_to<godot::Camera2D>(camera_node);
         if (!camera ||
             (camera_node != root && !root->is_ancestor_of(camera_node))) {
-            viewport->queue_free();
             result["success"] = false;
             result["error"] =
                 "Script capture option `camera` must be a Camera2D under ctx.root for this scene.";
+            _cleanup_failed_capture_setup();
             return result;
         }
     }
@@ -127,10 +114,10 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_2d_script_capture(
             accumulate_2d_bounds(node, bounds, has_bounds);
         }
         if (!has_bounds) {
-            viewport->queue_free();
             result["success"] = false;
             result["error"] =
                 "No visible 2D bounds found for the scripted capture subjects.";
+            _cleanup_failed_capture_setup();
             return result;
         }
 
@@ -164,8 +151,6 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_2d_script_capture(
     camera->set_enabled(true);
     camera->make_current();
     camera->force_update_scroll();
-    _camera_capture_viewport_ref() = viewport;
-    _camera_capture_root_ref() = root;
     _capture_name_hint_ref() =
         _make_name_hint(scene_path, "selection", result["view"]);
 

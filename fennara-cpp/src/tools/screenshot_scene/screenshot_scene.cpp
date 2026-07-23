@@ -192,6 +192,10 @@ void FennaraScreenshotSceneTool::_bind_methods() {
         "FennaraScreenshotSceneTool",
         godot::D_METHOD("prepare_execution_for_test", "args"),
         &FennaraScreenshotSceneTool::prepare_execution);
+    godot::ClassDB::bind_static_method(
+        "FennaraScreenshotSceneTool",
+        godot::D_METHOD("test_script_viewport_reuse"),
+        &FennaraScreenshotSceneTool::test_script_viewport_reuse);
 #endif
 }
 

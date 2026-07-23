@@ -40,6 +40,8 @@ await ctx.capture(subject, {"view": "front"})
 
 After that capture, the scene is initialized and global-space measurements are valid. Use a cheap explicit view for this discarded initialization instead of automatic camera search. Do this only when tree-dependent state is required because the initialization is a real render and adds capture cost.
 
+For a temporary Camera3D configured before that initialization, use `look_at_from_position(position, target)` rather than `global_position` plus `look_at()`. Godot requires the latter APIs to be inside a SceneTree.
+
 ## 2D Framing
 
 Frame the relevant CanvasItem or group of items with enough surrounding context to interpret placement. Prefer a temporary Camera2D when an explicit crop, zoom, or coordinate region matters. Preserve the authored viewport and UI when judging the actual player-facing composition.
@@ -50,9 +52,41 @@ For SpriteFrames or other discrete frame animation, exact chronological frames m
 
 When the useful direction is already known, use an explicit view or temporary Camera3D. When it is unknown and a small group of subjects must fit together, automatic viewpoint search can choose among deterministic candidates. Camera search is useful for discovery, but it cannot make an enormous world readable in one frame.
 
+For a mixed 2D and 3D scene, select one-dimensional subjects or pass the intended Camera2D or Camera3D. Preserve the gameplay camera, environment, and relevant HUD when judging the player-facing result. If temporary lighting, fog, visibility, or camera changes are needed to inspect geometry, describe that output as a diagnostic view and also keep an authentic contextual view when appearance in the game matters.
+
 For large environments, choose local subjects and capture multiple readable regions. Do not zoom out until the whole world becomes visual clutter. When exact relationships require several directions, publish those directions as separate images rather than shrinking seven views into a default collage.
 
 Treat camera choice as part of the evidence. Keep it fixed when comparing placement, scale, reach, or movement. Vary it only when maximum per-subject detail matters more than spatial comparability.
+
+### Fixed-Position 360 Environment Survey
+
+When one location must be understood in context, place a temporary camera at a meaningful anchor such as a player spawn, doorway, room center, checkpoint, interaction point, or an authored camera position. In large scenes, prefer a known node or a narrow project-source search over traversing the entire scene merely to find an anchor. Verify the first result visually because a technically valid coordinate can still be inside geometry, below terrain, or aimed at an unhelpful area.
+
+Keep the camera position, height, pitch, FOV, projection, environment, and scene state fixed. Rotate only yaw through one complete turn in deterministic order, capture each rectilinear view with the explicit camera, then pass the Images to `ctx.sheet()`. Choose the angular step from the detail and overlap needed by the question rather than enforcing one view count:
+
+```gdscript
+# Initialize the detached scene with one discarded explicit-camera render.
+camera.look_at_from_position(Vector3(0.0, 1.0, 5.0), Vector3.ZERO)
+await ctx.capture(ctx.root, {"camera": camera})
+
+var eye := anchor.global_position + Vector3(0.0, eye_height, 0.0)
+var forward := -anchor.global_basis.z
+forward.y = 0.0
+forward = forward.normalized()
+
+var views: Array[Image] = []
+var labels: Array[String] = []
+for index in range(view_count):
+    var yaw := TAU * float(index) / float(view_count)
+    var direction := forward.rotated(Vector3.UP, yaw)
+    camera.look_at_from_position(eye, eye + direction, Vector3.UP)
+    views.append(await ctx.capture(ctx.root, {"camera": camera}))
+    labels.append("%03d" % int(rad_to_deg(yaw)))
+
+var pages := ctx.sheet(views, {"columns": columns, "labels": labels})
+```
+
+This produces an ordered surrounding-view sheet, not a stitched equirectangular panorama. Rectilinear cells avoid panorama warping and preserve ordinary game-camera evidence. Keep the first direction tied to an explainable project orientation, such as the anchor's forward axis, and return that mapping in text. Hide only confirmed editor/debug visualization that would not appear in the intended game view.
 
 ## Animation Storyboards
 

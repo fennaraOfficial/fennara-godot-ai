@@ -295,6 +295,7 @@ struct CameraSearchJob {
     godot::Array subjects;
     godot::Vector3 center;
     godot::Vector3 size;
+    double context_margin = 1.15;
     godot::Vector2i original_viewport_size;
     godot::Transform3D original_transform;
     godot::Camera3D::ProjectionType original_projection =
@@ -369,7 +370,8 @@ void configure_candidate(CameraSearchJob &job, int candidate_index) {
     const Candidate &candidate = job.candidates[candidate_index];
     double distance = fit_perspective_distance(
         job.center, job.size, candidate.direction,
-        float(search_width) / float(search_height), 1.15f);
+        float(search_width) / float(search_height),
+        float(job.context_margin));
     double radius = std::max(double(job.size.length()) * 0.5, 1.0);
     godot::Vector3 camera_position =
         job.center + candidate.direction * float(distance);
@@ -446,6 +448,8 @@ godot::Ref<godot::Image> FennaraScreenshotSceneTool::_capture_camera_searched_3d
         job->subjects = subjects;
         job->center = state.get("bounds_center", godot::Vector3());
         job->size = state.get("bounds_size", godot::Vector3(2, 2, 2));
+        job->context_margin =
+            double(state.get("context_margin", 1.15));
         job->original_viewport_size = viewport->get_size();
         job->original_transform = camera->get_transform();
         job->original_projection = camera->get_projection();
@@ -559,7 +563,8 @@ godot::Ref<godot::Image> FennaraScreenshotSceneTool::_capture_camera_searched_3d
                   float(job->original_viewport_size.y)
             : 1.0f;
         job->best_distance = fit_perspective_distance(
-            job->center, job->size, best.direction, output_aspect, 1.15f);
+            job->center, job->size, best.direction, output_aspect,
+            float(job->context_margin));
         double radius = std::max(double(job->size.length()) * 0.5, 1.0);
         job->best_position =
             job->center + best.direction * float(job->best_distance);

@@ -84,7 +84,8 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
         status = "partial";
     }
     if (raw_success && has_image &&
-        godot::String(raw_result.get("content_validation", "passed")) !=
+        godot::String(raw_result.get(
+            "render_presence_validation", "passed")) !=
             "passed") {
         status = "partial";
     }
@@ -150,23 +151,31 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
                 raw_result.get("camera_search_warning", "")));
         }
     }
-    if (raw_result.has("content_validation")) {
-        lines.append("Content validation: " +
-                     godot::String(raw_result.get("content_validation", "")));
+    if (raw_result.has("render_presence_validation")) {
+        lines.append(
+            "Render presence: " +
+            godot::String(raw_result.get(
+                "render_presence_validation", "")) +
+            " (non-background pixels only)");
     }
-    if (raw_result.has("content_coverage") && raw_result.has("content_max_span")) {
-        lines.append("Content framing: coverage " +
+    if (raw_result.has("render_presence_coverage") &&
+        raw_result.has("render_presence_max_span")) {
+        lines.append("Pixel occupancy: coverage " +
                      godot::String::num(
-                         double(raw_result.get("content_coverage", 0.0)) * 100.0,
+                         double(raw_result.get(
+                             "render_presence_coverage", 0.0)) * 100.0,
                          2) +
                      "%, maximum span " +
                      godot::String::num(
-                         double(raw_result.get("content_max_span", 0.0)) * 100.0,
+                         double(raw_result.get(
+                             "render_presence_max_span", 0.0)) * 100.0,
                          2) + "%");
     }
-    if (raw_result.has("content_warning")) {
-        lines.append("Content warning: " +
-                     godot::String(raw_result.get("content_warning", "")));
+    if (raw_result.has("render_presence_warning")) {
+        lines.append(
+            "Render presence warning: " +
+            godot::String(raw_result.get(
+                "render_presence_warning", "")));
     }
     if (raw_result.has("image_res_path")) {
         lines.append("Saved resource: " + godot::String(raw_result.get("image_res_path", "")));
@@ -281,11 +290,14 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     metadata["image_count"] = image_metadata.size();
     metadata["images"] = image_metadata;
     metadata["has_primary_image"] = has_image;
-    metadata["content_validation"] =
-        raw_result.get("content_validation", "not_run");
-    metadata["content_coverage"] = raw_result.get("content_coverage", 0.0);
-    metadata["content_max_span"] = raw_result.get("content_max_span", 0.0);
-    metadata["content_warning"] = raw_result.get("content_warning", "");
+    metadata["render_presence_validation"] =
+        raw_result.get("render_presence_validation", "not_run");
+    metadata["render_presence_coverage"] =
+        raw_result.get("render_presence_coverage", 0.0);
+    metadata["render_presence_max_span"] =
+        raw_result.get("render_presence_max_span", 0.0);
+    metadata["render_presence_warning"] =
+        raw_result.get("render_presence_warning", "");
     metadata["previewed"] = false;
     metadata["selected_node_visibility"] = raw_result.get(
         "selected_node_visibility", godot::Array());

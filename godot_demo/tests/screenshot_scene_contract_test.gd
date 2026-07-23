@@ -43,6 +43,25 @@ func _initialize() -> void:
 		)
 	)
 
+	var mixed_open: Dictionary = ClassDB.class_call_static(
+		"FennaraScreenshotSceneTool",
+		"open_scene",
+		"res://tests/fixtures/mixed_2d_3d_no_camera.tscn",
+	)
+	assert(mixed_open.get("success", false))
+	var mixed_capture: Dictionary = ClassDB.class_call_static(
+		"FennaraScreenshotSceneTool",
+		"navigate",
+		{},
+		0,
+	)
+	assert(not mixed_capture.get("success", true))
+	assert(
+		str(mixed_capture.get("error", "")).begins_with(
+			"Whole-scene automatic capture is ambiguous",
+		)
+	)
+
 	print("screenshot scene contract test passed")
 	quit()
 

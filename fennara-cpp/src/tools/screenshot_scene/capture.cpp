@@ -206,13 +206,13 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_image_owned(
         result["image_role"] = _is_3d_scene ? "view" : "single";
     }
     if (_capture_requires_content_ref()) {
-        result["content_validation"] =
+        result["render_presence_validation"] =
             content_is_meaningful ? "passed" : "failed";
-        result["content_coverage"] = content.coverage;
-        result["content_max_span"] = content.max_span;
+        result["render_presence_coverage"] = content.coverage;
+        result["render_presence_max_span"] = content.max_span;
         if (!content_is_meaningful) {
-            result["content_warning"] =
-                "Captured image was returned, but automatic framing may be too small or visually sparse.";
+            result["render_presence_warning"] =
+                "Captured image was returned, but non-background pixels were sparse. This check does not judge semantic usefulness.";
         }
     }
     cleanup_temporary_viewport(_preserve_script_root_after_capture_ref());
