@@ -9,11 +9,16 @@
 #include <godot_cpp/variant/transform3d.hpp>
 
 namespace godot {
+class Callable;
+class RefCounted;
 class Image;
 class SubViewport;
 }
 
 namespace fennara {
+
+class FennaraScreenshotSceneScriptContext;
+class FennaraWarningCapture;
 
 inline constexpr int SCREENSHOT_CAMERA_SEARCH_SUBJECT_LIMIT = 8;
 
@@ -31,8 +36,24 @@ public:
     static godot::Dictionary navigate(const godot::Dictionary &args,
                                         int capture_index = 0);
     static godot::Dictionary capture_owned(uint64_t owner);
+    static godot::Dictionary capture_image_owned(uint64_t owner);
+    static godot::Dictionary begin_script_session(
+        const godot::Callable &capture_requested,
+        const godot::Callable &script_completed);
+    static godot::Dictionary navigate_pending_script_capture();
+    static void complete_script_capture(
+        const godot::Ref<godot::Image> &image);
+    static void fail_script_capture(const godot::String &message);
+    static void cancel_script_session(const godot::String &message);
+    static godot::Dictionary finish_script_session();
+    static bool has_script_session();
+    static godot::Dictionary publish_image(
+        const godot::Ref<godot::Image> &image,
+        const godot::String &description,
+        int output_index);
     static godot::Dictionary execute(const godot::Dictionary &args);
     static uint64_t try_reserve_capture();
+    static bool owns_capture(uint64_t owner);
     static void release_capture(uint64_t owner);
 
 private:
@@ -55,11 +76,6 @@ private:
     static bool _configure_capture_script(const godot::Dictionary &args,
                                           godot::Dictionary &result);
     static bool _has_capture_script();
-    static bool _run_capture_script(godot::Node *root,
-                                    godot::Dictionary &result,
-                                    godot::Array &capture_nodes,
-                                    godot::Dictionary &capture_options,
-                                    int capture_index);
     static void _append_capture_script_receipt(godot::Dictionary &result);
     static void _clear_capture_script();
     static godot::String _make_name_hint(const godot::String &scene_path,
@@ -75,8 +91,11 @@ private:
     static void _clear_camera_search_capture_state();
     static void _reset_camera_search_job();
     static godot::Node *&_script_capture_root_ref();
-    static godot::Array &_script_capture_requests_ref();
-    static godot::Dictionary &_script_capture_receipt_ref();
+    static godot::Ref<FennaraScreenshotSceneScriptContext>
+        &_script_context_ref();
+    static godot::Ref<godot::RefCounted> &_script_runner_ref();
+    static godot::Ref<godot::RefCounted> &_script_instance_ref();
+    static godot::Ref<FennaraWarningCapture> &_script_warning_capture_ref();
     static bool &_preserve_script_root_after_capture_ref();
     static void _clear_script_capture_session(bool free_detached_root);
     static uint64_t &_active_capture_owner_ref();

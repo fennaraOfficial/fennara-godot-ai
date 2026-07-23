@@ -10,6 +10,7 @@ godot::String normalize_res_path(const godot::String &path);
 godot::String addon_root_for_path(const godot::String &path);
 bool is_addons_root(const godot::String &path);
 bool is_locked_addon_root(const godot::String &addon_root);
+bool is_ai_guidance_path(const godot::String &path);
 
 godot::Array allowed_addon_roots();
 void set_allowed_addon_roots(const godot::Array &roots);

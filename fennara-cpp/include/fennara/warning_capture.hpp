@@ -8,6 +8,7 @@
 #include <godot_cpp/variant/typed_array.hpp>
 
 #include <mutex>
+#include <vector>
 
 namespace fennara {
 
@@ -28,10 +29,20 @@ public:
 
     godot::Array get_captured() const;
     void clear();
+    void configure_source_filter(
+        const std::vector<godot::String> &source_paths,
+        int max_entries);
 
 private:
+    bool _matches_source_filter(
+        const godot::String &file,
+        const godot::Array &backtrace_frames) const;
+
     mutable std::mutex _captured_mutex;
     godot::Array _captured;
+    std::vector<godot::String> _source_paths;
+    int _max_entries = 0;
+    int _dropped_entries = 0;
 };
 
 } // namespace fennara

@@ -30,6 +30,10 @@ godot::String image_summary_line(const godot::Dictionary &image) {
     if (!role.is_empty()) {
         line += " (" + role + ")";
     }
+    godot::String description = image.get("description", "");
+    if (!description.is_empty()) {
+        line += ": " + description;
+    }
     return line;
 }
 
@@ -63,6 +67,10 @@ godot::Dictionary image_metadata_from_result(const godot::Dictionary &result) {
     image["image_res_path"] = result.get("image_res_path", "");
     image["image_path"] = result.get("image_path", "");
     image["transport"] = result.get("transport", "");
+    image["output_index"] = result.get("output_index", -1);
+    image["description"] = result.get("description", "");
+    image["model_image_omitted"] =
+        result.get("model_image_omitted", false);
     return image;
 }
 
@@ -193,6 +201,10 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     if (raw_result.has("camera_warning")) {
         lines.append("Camera warning: " + godot::String(raw_result.get("camera_warning", "")));
     }
+    if (raw_result.has("image_output_warning")) {
+        lines.append("Image output warning: " + godot::String(
+            raw_result.get("image_output_warning", "")));
+    }
 
     godot::Array script_diagnostics =
         raw_result.get("script_diagnostics", godot::Array());
@@ -252,6 +264,10 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     metadata["script_subject_count"] =
         raw_result.get("script_subject_count", 0);
     metadata["capture_count"] = raw_result.get("capture_count", 1);
+    metadata["output_count"] = raw_result.get("output_count", 0);
+    metadata["model_image_count"] = raw_result.get("model_image_count", 0);
+    metadata["omitted_image_count"] =
+        raw_result.get("omitted_image_count", 0);
     metadata["script_diagnostic_count"] = script_diagnostics.size();
     if (raw_result.has("diagnostic_success")) {
         metadata["diagnostic_success"] = raw_result["diagnostic_success"];
@@ -290,6 +306,12 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     copy_if_present(envelope, raw_result, "capture_index");
     copy_if_present(envelope, raw_result, "capture_count");
     copy_if_present(envelope, raw_result, "captured_image_count");
+    copy_if_present(envelope, raw_result, "output_count");
+    copy_if_present(envelope, raw_result, "model_image_count");
+    copy_if_present(envelope, raw_result, "omitted_image_count");
+    copy_if_present(envelope, raw_result, "image_output_warning");
+    copy_if_present(envelope, raw_result, "output_index");
+    copy_if_present(envelope, raw_result, "description");
     copy_if_present(envelope, raw_result, "images");
     copy_if_present(envelope, raw_result, "current_camera_path");
     copy_if_present(envelope, raw_result, "current_camera_type");

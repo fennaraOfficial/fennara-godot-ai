@@ -177,7 +177,10 @@ jobs:
           $testScripts = @(
             "res://tests/first_run_setup_test.gd",
             "res://tests/asset_import_script_context_test.gd",
-            "res://tests/screenshot_scene_contract_test.gd"
+            "res://tests/screenshot_scene_contract_test.gd",
+            "res://tests/image_sheet_test.gd",
+            "res://tests/runtime_image_context_test.gd",
+            "res://tests/ai_guidance_read_test.gd"
           )
           foreach ($testScript in $testScripts) {
             $godot = Start-Process `

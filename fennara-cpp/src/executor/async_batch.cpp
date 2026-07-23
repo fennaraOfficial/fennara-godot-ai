@@ -77,8 +77,15 @@ bool complete_if_blocked(FennaraExecutor *executor,
 } // namespace
 
 void FennaraExecutor::_cancel_active_async_tools() {
+    if (FennaraScreenshotSceneTool::owns_capture(
+            _screenshot_capture_owner) &&
+        FennaraScreenshotSceneTool::has_script_session()) {
+        FennaraScreenshotSceneTool::cancel_script_session(
+            "Screenshot capture was cancelled.");
+    }
     FennaraScreenshotSceneTool::release_capture(_screenshot_capture_owner);
     _screenshot_capture_owner = 0;
+    _screenshot_script_active = false;
     for (int i = 0; i < _active_async_tools.size(); i++) {
         godot::Ref<FennaraScriptDiagnosticsTool> tool = _active_async_tools[i];
         if (tool.is_valid()) {

@@ -240,6 +240,8 @@ already present:
     fennara/
       ai/
         guidelines.md
+        index.md
+        visual-observation.md
 ```
 
 When a complete addon is already present, the CLI validates its `VERSION` and
@@ -337,7 +339,7 @@ It can update:
 
 - the installed CLI and local runtime package
 - the project addon
-- generated project guidance in `AGENTS.md` and `addons/fennara/ai/guidelines.md`
+- generated project guidance in `AGENTS.md` and `addons/fennara/ai/`
 - shared webview runtime assets needed by the current platform, such as Linux CEF
 - webview prerequisite warnings for the optional built-in chat dock
 

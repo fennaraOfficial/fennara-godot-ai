@@ -37,7 +37,13 @@ into the Godot project:
 
 ```text
 AGENTS.md
-addons/fennara/ai/guidelines.md
+addons/fennara/ai/
+  guidelines.md
+  index.md
+  visual-observation.md
+  runtime-observation.md
+  operations.md
+  clients/cursor.md
 ```
 
 Build:

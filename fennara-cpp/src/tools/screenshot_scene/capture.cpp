@@ -87,7 +87,8 @@ ContentMetrics analyze_content(const godot::Ref<godot::Image> &image) {
 
 } // namespace
 
-godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
+godot::Dictionary FennaraScreenshotSceneTool::capture_image_owned(
+    uint64_t owner) {
     godot::Dictionary result;
 
     if (owner == 0 || owner != _active_capture_owner_ref()) {
@@ -129,6 +130,7 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
 
     auto cleanup_temporary_viewport = [&](bool preserve_script_root = false) {
         if (!using_isolated_viewport) return;
+        if (preserve_script_root) return;
         _discard_temporary_viewport(preserve_script_root);
     };
 
@@ -177,17 +179,6 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
                   " span=" + godot::String::num(content.max_span, 4));
     }
 
-    godot::PackedByteArray png_data = image->save_png_to_buffer();
-    if (png_data.size() == 0) {
-        FLOG_ERR("SS: PNG encode failed");
-        result["success"] = false;
-        result["error"] = "Failed to encode image as PNG";
-        cleanup_temporary_viewport();
-        return result;
-    }
-
-    godot::String base64 = godot::Marshalls::get_singleton()->raw_to_base64(png_data);
-
     FLOG_TOOL(godot::String("SS: captured size=") + godot::String::num_int64(image->get_width()) + "x" + godot::String::num_int64(image->get_height()));
     result["success"] = true;
     if (using_isolated_viewport) {
@@ -208,9 +199,7 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
             result["camera_warning"] = "No current Camera2D or Camera3D was active in the temporary SubViewport at capture time.";
         }
     }
-    result["image_base64"] = base64;
-    result["format"] = "png";
-    result["mime_type"] = "image/png";
+    result["image"] = image;
     result["width"] = image->get_width();
     result["height"] = image->get_height();
     if (!result.has("image_role")) {
@@ -226,14 +215,40 @@ godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
                 "Captured image was returned, but automatic framing may be too small or visually sparse.";
         }
     }
+    cleanup_temporary_viewport(_preserve_script_root_after_capture_ref());
+
+    return result;
+}
+
+godot::Dictionary FennaraScreenshotSceneTool::capture_owned(uint64_t owner) {
+    godot::Dictionary result = capture_image_owned(owner);
+    if ((bool)result.get("pending", false) ||
+        !(bool)result.get("success", false)) {
+        return result;
+    }
+
+    godot::Ref<godot::Image> image = result.get("image", godot::Variant());
+    result.erase("image");
+    if (image.is_null()) {
+        result["success"] = false;
+        result["error"] = "Captured image was unavailable.";
+        return result;
+    }
+    godot::PackedByteArray png_data = image->save_png_to_buffer();
+    if (png_data.is_empty()) {
+        result["success"] = false;
+        result["error"] = "Failed to encode image as PNG";
+        return result;
+    }
+    result["image_base64"] =
+        godot::Marshalls::get_singleton()->raw_to_base64(png_data);
+    result["format"] = "png";
+    result["mime_type"] = "image/png";
     godot::String hint = _capture_name_hint_ref();
     if (hint.is_empty()) {
         hint = _is_3d_scene ? "3d_view" : "2d";
     }
     _save_png_data(png_data, hint, result);
-
-    cleanup_temporary_viewport(_preserve_script_root_after_capture_ref());
-
     return result;
 }
 

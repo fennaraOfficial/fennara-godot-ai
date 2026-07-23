@@ -5,10 +5,13 @@
 #include <godot_cpp/classes/scene_tree.hpp>
 #include <godot_cpp/classes/scene_tree_timer.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/classes/image.hpp>
 
 namespace fennara {
 
 namespace {
+
+constexpr double SCREENSHOT_SCRIPT_TIMEOUT_SECONDS = 300.0;
 
 void copy_if_present(godot::Dictionary &target,
                      const godot::Dictionary &source,
@@ -28,7 +31,8 @@ godot::Dictionary screenshot_image_record(const godot::Dictionary &result) {
         "image_role", "image_res_path", "image_path", "transport",
         "content_validation", "content_coverage", "content_max_span",
         "content_warning", "selected_node_visibility", "camera_search",
-        "camera_search_warning"};
+        "camera_search_warning", "output_index", "description",
+        "model_image_omitted"};
     for (const char *key : keys) {
         copy_if_present(image, result, key);
     }
@@ -81,6 +85,7 @@ void FennaraExecutor::_start_next_screenshot_scene() {
     _screenshot_additional_images = godot::Array();
     _screenshot_capture_index = 0;
     _screenshot_capture_count = 1;
+    _screenshot_script_active = false;
 
     godot::SceneTree *tree = get_tree();
     if (tree) {
@@ -93,6 +98,49 @@ void FennaraExecutor::_start_next_screenshot_scene() {
 
 void FennaraExecutor::_on_screenshot_scene_opened(uint64_t batch_generation) {
     if (_batch_cancelled || batch_generation != _async_batch_generation) {
+        return;
+    }
+
+    godot::String script_path = _screenshot_args.get(
+        "_fennara_screenshot_script_path", "");
+    if (!script_path.is_empty() && !_screenshot_script_active) {
+        _screenshot_script_active = true;
+        godot::Dictionary start_result =
+            FennaraScreenshotSceneTool::begin_script_session(
+                callable_mp(
+                    this,
+                    &FennaraExecutor::_on_screenshot_script_capture_requested)
+                    .bind(batch_generation),
+                callable_mp(
+                    this,
+                    &FennaraExecutor::_on_screenshot_script_completed)
+                    .bind(batch_generation));
+        if ((bool)start_result.get("success", false)) {
+            godot::SceneTree *tree = get_tree();
+            if (tree) {
+                godot::Ref<godot::SceneTreeTimer> timeout =
+                    tree->create_timer(SCREENSHOT_SCRIPT_TIMEOUT_SECONDS);
+                timeout->connect(
+                    "timeout",
+                    callable_mp(
+                        this,
+                        &FennaraExecutor::_on_screenshot_script_timeout)
+                        .bind(batch_generation, _screenshot_capture_owner));
+            }
+            return;
+        }
+
+        int idx = _screenshot_tool_index;
+        godot::Dictionary args = _screenshot_args;
+        _screenshot_tool_index = -1;
+        _screenshot_args = godot::Dictionary();
+        FennaraScreenshotSceneTool::release_capture(_screenshot_capture_owner);
+        _screenshot_capture_owner = 0;
+        _screenshot_running = false;
+        _screenshot_script_active = false;
+        _on_async_tool_complete(start_result, idx, "screenshot_scene", args,
+                                batch_generation);
+        _start_next_screenshot_scene();
         return;
     }
 
@@ -256,6 +304,133 @@ void FennaraExecutor::_on_screenshot_capture(uint64_t batch_generation) {
     _on_async_tool_complete(
         final_result, idx, "screenshot_scene", args, batch_generation);
     _start_next_screenshot_scene();
+}
+
+void FennaraExecutor::_on_screenshot_script_capture_requested(
+    uint64_t batch_generation) {
+    if (_batch_cancelled || batch_generation != _async_batch_generation ||
+        !_screenshot_running || !_screenshot_script_active) {
+        return;
+    }
+    call_deferred("_begin_screenshot_script_capture", batch_generation);
+}
+
+void FennaraExecutor::_begin_screenshot_script_capture(
+    uint64_t batch_generation) {
+    if (_batch_cancelled || batch_generation != _async_batch_generation ||
+        !_screenshot_running || !_screenshot_script_active) {
+        return;
+    }
+
+    godot::Dictionary nav_result =
+        FennaraScreenshotSceneTool::navigate_pending_script_capture();
+    if (!(bool)nav_result.get("success", false)) {
+        FennaraScreenshotSceneTool::fail_script_capture(
+            nav_result.get("error", "Could not frame ctx.capture()."));
+        return;
+    }
+    _screenshot_nav_result = nav_result;
+
+    double capture_delay = double(nav_result.get("capture_delay_seconds", 0.15));
+    if (capture_delay < 0.0) capture_delay = 0.0;
+    if (capture_delay > 10.0) capture_delay = 10.0;
+    godot::SceneTree *tree = get_tree();
+    if (tree) {
+        godot::Ref<godot::SceneTreeTimer> timer =
+            tree->create_timer(capture_delay);
+        timer->connect(
+            "timeout",
+            callable_mp(this,
+                        &FennaraExecutor::_on_screenshot_script_capture)
+                .bind(batch_generation));
+    } else {
+        _on_screenshot_script_capture(batch_generation);
+    }
+}
+
+void FennaraExecutor::_on_screenshot_script_capture(
+    uint64_t batch_generation) {
+    if (_batch_cancelled || batch_generation != _async_batch_generation ||
+        !_screenshot_running || !_screenshot_script_active) {
+        return;
+    }
+
+    godot::Dictionary capture_result =
+        FennaraScreenshotSceneTool::capture_image_owned(
+            _screenshot_capture_owner);
+    if ((bool)capture_result.get("pending", false)) {
+        call_deferred("_schedule_screenshot_script_capture", batch_generation);
+        return;
+    }
+    if (!(bool)capture_result.get("success", false)) {
+        FennaraScreenshotSceneTool::fail_script_capture(
+            capture_result.get("error", "ctx.capture() failed."));
+        return;
+    }
+
+    godot::Ref<godot::Image> image =
+        capture_result.get("image", godot::Variant());
+    if (image.is_null()) {
+        FennaraScreenshotSceneTool::fail_script_capture(
+            "ctx.capture() rendered no image.");
+        return;
+    }
+    FennaraScreenshotSceneTool::complete_script_capture(image);
+}
+
+void FennaraExecutor::_schedule_screenshot_script_capture(
+    uint64_t batch_generation) {
+    if (_batch_cancelled || batch_generation != _async_batch_generation ||
+        !_screenshot_running || !_screenshot_script_active) {
+        return;
+    }
+    godot::RenderingServer::get_singleton()->request_frame_drawn_callback(
+        callable_mp(this, &FennaraExecutor::_on_screenshot_script_capture)
+            .bind(batch_generation));
+}
+
+void FennaraExecutor::_on_screenshot_script_completed(
+    uint64_t batch_generation) {
+    if (_batch_cancelled || batch_generation != _async_batch_generation ||
+        !_screenshot_running || !_screenshot_script_active) {
+        return;
+    }
+
+    godot::Dictionary final_result =
+        FennaraScreenshotSceneTool::finish_script_session();
+    int idx = _screenshot_tool_index;
+    godot::Dictionary args = _screenshot_args;
+    _screenshot_tool_index = -1;
+    _screenshot_args = godot::Dictionary();
+    _screenshot_nav_result = godot::Dictionary();
+    _screenshot_primary_result = godot::Dictionary();
+    _screenshot_additional_images = godot::Array();
+    _screenshot_capture_index = 0;
+    _screenshot_capture_count = 1;
+    _screenshot_script_active = false;
+    FennaraScreenshotSceneTool::release_capture(_screenshot_capture_owner);
+    _screenshot_capture_owner = 0;
+    _screenshot_running = false;
+
+    _on_async_tool_complete(final_result, idx, "screenshot_scene", args,
+                            batch_generation);
+    _start_next_screenshot_scene();
+}
+
+void FennaraExecutor::_on_screenshot_script_timeout(
+    uint64_t batch_generation,
+    uint64_t capture_owner) {
+    if (_batch_cancelled || batch_generation != _async_batch_generation ||
+        !_screenshot_running || !_screenshot_script_active ||
+        _screenshot_capture_owner != capture_owner ||
+        !FennaraScreenshotSceneTool::owns_capture(capture_owner) ||
+        !FennaraScreenshotSceneTool::has_script_session()) {
+        return;
+    }
+
+    FennaraScreenshotSceneTool::cancel_script_session(
+        "Screenshot script exceeded the 300 second execution limit.");
+    _on_screenshot_script_completed(batch_generation);
 }
 
 void FennaraExecutor::_schedule_screenshot_capture(

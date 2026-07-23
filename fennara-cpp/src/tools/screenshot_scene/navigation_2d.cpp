@@ -1,4 +1,5 @@
 #include "fennara/tools/screenshot_scene.hpp"
+#include "fennara/tools/screenshot_scene_script.hpp"
 
 #include "fennara/logger.hpp"
 
@@ -8,6 +9,7 @@
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
+#include <godot_cpp/classes/sub_viewport.hpp>
 
 namespace fennara {
 
@@ -91,86 +93,106 @@ godot::Dictionary FennaraScreenshotSceneTool::navigate(
     const godot::Dictionary &args, int capture_index) {
     godot::Dictionary result;
     godot::String scene_path = _current_scene_path_ref();
-    const bool scripted = _has_capture_script();
-    godot::Node *root = nullptr;
-    if (scripted && capture_index > 0) {
-        root = _script_capture_root_ref();
-        if (!root || root->get_parent()) {
-            result["success"] = false;
-            result["error"] =
-                "Retained screenshot scene was unavailable for the next capture.";
-            return result;
-        }
-    } else {
-        godot::Ref<godot::PackedScene> packed =
-            godot::ResourceLoader::get_singleton()->load(
-                scene_path, "PackedScene",
-                godot::ResourceLoader::CACHE_MODE_IGNORE);
-        if (packed.is_null() || !packed->can_instantiate()) {
-            result["success"] = false;
-            result["error"] =
-                "Could not load scene for isolated capture: " + scene_path;
-            return result;
-        }
-        root = packed->instantiate();
-        if (!root) {
-            result["success"] = false;
-            result["error"] =
-                "Could not instantiate scene for isolated capture: " + scene_path;
-            return result;
-        }
+    if (_has_capture_script()) {
+        result["success"] = false;
+        result["error"] =
+            "Scripted screenshots require the asynchronous screenshot executor.";
+        return result;
+    }
+    if (capture_index != 0) {
+        result["success"] = false;
+        result["error"] = "Whole-scene capture has only one image.";
+        return result;
+    }
+
+    godot::Ref<godot::PackedScene> packed =
+        godot::ResourceLoader::get_singleton()->load(
+            scene_path, "PackedScene",
+            godot::ResourceLoader::CACHE_MODE_IGNORE);
+    if (packed.is_null() || !packed->can_instantiate()) {
+        result["success"] = false;
+        result["error"] =
+            "Could not load scene for isolated capture: " + scene_path;
+        return result;
+    }
+    godot::Node *root = packed->instantiate();
+    if (!root) {
+        result["success"] = false;
+        result["error"] =
+            "Could not instantiate scene for isolated capture: " + scene_path;
+        return result;
     }
 
     godot::Array capture_nodes;
+    capture_nodes.append(root);
     godot::Dictionary capture_options;
-    if (!_run_capture_script(
-            root, result, capture_nodes, capture_options, capture_index)) {
-        if (!root->get_parent()) {
-            memdelete(root);
-        }
-        _clear_script_capture_session(false);
-        return result;
-    }
-    godot::Dictionary script_receipt;
-    if (scripted) {
-        script_receipt = result.duplicate();
-    }
-
-    bool capture_is_3d = _is_3d_scene;
-    if (scripted && !resolve_scripted_dimension(
-                        root, capture_nodes, capture_options, capture_is_3d,
-                        result)) {
-        if (!root->get_parent()) {
-            memdelete(root);
-        }
-        _clear_script_capture_session(false);
-        return result;
-    }
-
-    if (capture_is_3d) {
+    if (_is_3d_scene) {
         FLOG_TOOL("SS: preparing isolated 3D capture");
-        const bool use_default_camera_search =
-            scripted && !capture_options.has("view") &&
-            !capture_options.has("camera");
         result = _frame_3d_editor_camera(
-            root, capture_nodes, capture_options, use_default_camera_search);
+            root, capture_nodes, capture_options, false);
     } else {
         FLOG_TOOL("SS: preparing isolated 2D capture");
         result = _frame_2d_script_capture(root, capture_nodes, capture_options);
     }
-    if (scripted) {
-        result.merge(script_receipt, false);
-    }
-    if (!(bool)result.get("success", false)) {
-        _clear_script_capture_session(false);
-    } else {
-        _preserve_script_root_after_capture_ref() =
-            scripted && capture_index + 1 <
-                            int(result.get("capture_count", 1));
-    }
+    result["capture_index"] = 0;
+    result["capture_count"] = 1;
     if (!root->get_parent()) {
         memdelete(root);
     }
+    return result;
+}
+
+godot::Dictionary
+FennaraScreenshotSceneTool::navigate_pending_script_capture() {
+    godot::Dictionary result;
+    godot::Ref<FennaraScreenshotSceneScriptContext> ctx =
+        _script_context_ref();
+    godot::Node *root = _script_capture_root_ref();
+    if (ctx.is_null() || !root) {
+        result["success"] = false;
+        result["error"] =
+            "Retained screenshot scene was unavailable for capture.";
+        return result;
+    }
+    godot::Node *parent = root->get_parent();
+    if (parent) {
+        if (parent != _camera_capture_viewport_ref()) {
+            result["success"] = false;
+            result["error"] =
+                "Retained screenshot scene had an unexpected parent.";
+            return result;
+        }
+        _discard_temporary_viewport(true);
+    }
+
+    godot::Dictionary request = ctx->take_pending_capture();
+    if (request.is_empty()) {
+        result["success"] = false;
+        result["error"] = "No pending ctx.capture() request was available.";
+        return result;
+    }
+    godot::Array capture_nodes = request.get("nodes", godot::Array());
+    godot::Dictionary capture_options =
+        request.get("options", godot::Dictionary());
+    bool capture_is_3d = _is_3d_scene;
+    if (!resolve_scripted_dimension(root, capture_nodes, capture_options,
+                                    capture_is_3d, result)) {
+        return result;
+    }
+
+    if (capture_is_3d) {
+        const bool use_default_camera_search =
+            !capture_options.has("view") && !capture_options.has("camera");
+        result = _frame_3d_editor_camera(
+            root, capture_nodes, capture_options, use_default_camera_search);
+    } else {
+        result = _frame_2d_script_capture(root, capture_nodes, capture_options);
+    }
+    result["scripted"] = true;
+    result["script_subject_count"] = capture_nodes.size();
+    result["capture_index"] = ctx->get_capture_count() - 1;
+    _preserve_script_root_after_capture_ref() =
+        (bool)result.get("success", false);
     return result;
 }
 

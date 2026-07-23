@@ -46,6 +46,15 @@ void FennaraExecutor::_bind_methods() {
         godot::D_METHOD("_schedule_screenshot_capture", "batch_generation"),
         &FennaraExecutor::_schedule_screenshot_capture);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("_begin_screenshot_script_capture", "batch_generation"),
+        &FennaraExecutor::_begin_screenshot_script_capture);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("_schedule_screenshot_script_capture", "batch_generation"),
+        &FennaraExecutor::_schedule_screenshot_script_capture);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("_on_screenshot_script_completed", "batch_generation"),
+        &FennaraExecutor::_on_screenshot_script_completed);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("_on_runtime_script_check_complete", "batch_generation"),
         &FennaraExecutor::_on_runtime_script_check_complete);
 

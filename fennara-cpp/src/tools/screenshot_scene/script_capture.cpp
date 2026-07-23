@@ -1,29 +1,13 @@
 #include "fennara/tools/screenshot_scene.hpp"
 #include "fennara/tools/screenshot_scene_script.hpp"
 
-#include "fennara/helpers.hpp"
 #include "fennara/tools/run_scene_edit_script/internal.hpp"
-#include "fennara/warning_capture.hpp"
 
-#include <godot_cpp/classes/gd_script.hpp>
-#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
 namespace fennara {
 
 namespace {
-
-constexpr int MAX_SCREENSHOT_CAPTURES = 6;
-
-godot::String &capture_script_path() {
-    static godot::String *value = new godot::String;
-    return *value;
-}
-
-godot::Dictionary &capture_script_diagnostics() {
-    static godot::Dictionary *value = new godot::Dictionary;
-    return *value;
-}
 
 godot::Dictionary script_error(const godot::String &message,
                                const godot::String &source) {
@@ -37,6 +21,14 @@ bool is_scene_node(godot::Node *root, godot::Node *node) {
 
 } // namespace
 
+FennaraScreenshotSceneScriptContext::
+    ~FennaraScreenshotSceneScriptContext() {
+    if (_root && !_root->get_parent()) {
+        memdelete(_root);
+    }
+    _root = nullptr;
+}
+
 void FennaraScreenshotSceneScriptContext::_bind_methods() {
     godot::ClassDB::bind_method(godot::D_METHOD("get_root"),
                                 &FennaraScreenshotSceneScriptContext::get_root);
@@ -44,33 +36,61 @@ void FennaraScreenshotSceneScriptContext::_bind_methods() {
         godot::D_METHOD("capture", "nodes", "options"),
         &FennaraScreenshotSceneScriptContext::capture,
         DEFVAL(godot::Dictionary()));
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("output", "image", "description"),
+        &FennaraScreenshotSceneScriptContext::output,
+        DEFVAL(godot::String()));
     godot::ClassDB::bind_method(godot::D_METHOD("log", "message"),
                                 &FennaraScreenshotSceneScriptContext::log);
     godot::ClassDB::bind_method(godot::D_METHOD("error", "message"),
                                 &FennaraScreenshotSceneScriptContext::error);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("_emit_empty_capture_completed"),
+        &FennaraScreenshotSceneScriptContext::_emit_empty_capture_completed);
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::OBJECT, "root",
                                      godot::PROPERTY_HINT_NODE_TYPE, "Node"),
                  "", "get_root");
+    ADD_SIGNAL(godot::MethodInfo("capture_requested"));
+    ADD_SIGNAL(godot::MethodInfo(
+        "capture_completed",
+        godot::PropertyInfo(godot::Variant::OBJECT, "image",
+                            godot::PROPERTY_HINT_RESOURCE_TYPE, "Image")));
 }
 
-void FennaraScreenshotSceneScriptContext::configure(godot::Node *root) {
+void FennaraScreenshotSceneScriptContext::configure(
+    godot::Node *root, const godot::String &scene_path) {
     _root = root;
-    _capture_requests.clear();
+    _root_accessible = true;
+    _scene_path = scene_path;
+    _pending_capture.clear();
+    _capture_pending = false;
+    _cancelled = false;
+    _capture_count = 0;
+    _outputs.clear();
     _logs.clear();
     _errors.clear();
 }
 
 godot::Node *FennaraScreenshotSceneScriptContext::get_root() const {
-    return _root;
+    return _root_accessible ? _root : nullptr;
 }
 
-void FennaraScreenshotSceneScriptContext::capture(
+godot::Signal FennaraScreenshotSceneScriptContext::capture(
     const godot::Variant &nodes, const godot::Dictionary &options) {
-    if (_capture_requests.size() >= MAX_SCREENSHOT_CAPTURES) {
+    godot::Signal completed(this, "capture_completed");
+    if (_cancelled) {
         _errors.append(script_error(
-            "A screenshot script may request at most six captures.",
+            "ctx.capture() was called after the screenshot run was cancelled.",
             "contract"));
-        return;
+        call_deferred("_emit_empty_capture_completed");
+        return completed;
+    }
+    if (_capture_pending) {
+        _errors.append(script_error(
+            "Await each ctx.capture() before requesting another capture.",
+            "contract"));
+        call_deferred("_emit_empty_capture_completed");
+        return completed;
     }
 
     godot::Array requested;
@@ -81,7 +101,8 @@ void FennaraScreenshotSceneScriptContext::capture(
     } else {
         _errors.append(script_error(
             "ctx.capture() expects a Node or Array[Node].", "contract"));
-        return;
+        call_deferred("_emit_empty_capture_completed");
+        return completed;
     }
 
     godot::Array capture_nodes;
@@ -101,30 +122,113 @@ void FennaraScreenshotSceneScriptContext::capture(
 
     if (capture_nodes.is_empty()) {
         _errors.append(script_error(
-            "ctx.capture() did not receive any valid scene nodes.", "contract"));
-        return;
+            "ctx.capture() did not receive any valid scene nodes.",
+            "contract"));
+        call_deferred("_emit_empty_capture_completed");
+        return completed;
     }
 
-    godot::Dictionary request;
-    request["nodes"] = capture_nodes;
-    request["options"] = options.duplicate();
-    _capture_requests.append(request);
+    _pending_capture["nodes"] = capture_nodes;
+    _pending_capture["options"] = options.duplicate(true);
+    _capture_pending = true;
+    _capture_count++;
+    emit_signal("capture_requested");
+    return completed;
 }
 
-void FennaraScreenshotSceneScriptContext::log(const godot::String &message) {
+godot::Dictionary FennaraScreenshotSceneScriptContext::output(
+    const godot::Ref<godot::Image> &image,
+    const godot::String &description) {
+    if (_cancelled) {
+        godot::Dictionary result;
+        result["success"] = false;
+        result["error"] =
+            "ctx.output() was called after the screenshot run was cancelled.";
+        return result;
+    }
+    godot::Dictionary result = FennaraScreenshotSceneTool::publish_image(
+        image, description, _outputs.size());
+    if ((bool)result.get("success", false)) {
+        _outputs.append(result);
+    } else {
+        _errors.append(script_error(
+            result.get("error", "ctx.output() failed to publish the image."),
+            "ctx.output"));
+    }
+    return result;
+}
+
+void FennaraScreenshotSceneScriptContext::log(
+    const godot::String &message) {
+    if (_cancelled) {
+        return;
+    }
     _logs.append(message);
 }
 
-void FennaraScreenshotSceneScriptContext::error(const godot::String &message) {
+void FennaraScreenshotSceneScriptContext::error(
+    const godot::String &message) {
+    if (_cancelled) {
+        return;
+    }
     _errors.append(script_error(message, "ctx"));
 }
 
 bool FennaraScreenshotSceneScriptContext::was_capture_requested() const {
-    return !_capture_requests.is_empty();
+    return _capture_count > 0;
 }
 
-godot::Array FennaraScreenshotSceneScriptContext::get_capture_requests() const {
-    return _capture_requests;
+bool FennaraScreenshotSceneScriptContext::has_pending_capture() const {
+    return _capture_pending;
+}
+
+godot::Dictionary
+FennaraScreenshotSceneScriptContext::take_pending_capture() {
+    if (!_capture_pending) {
+        return godot::Dictionary();
+    }
+    godot::Dictionary request = _pending_capture.duplicate(true);
+    _pending_capture.clear();
+    return request;
+}
+
+void FennaraScreenshotSceneScriptContext::complete_capture(
+    const godot::Ref<godot::Image> &image) {
+    if (!_capture_pending) {
+        return;
+    }
+    _capture_pending = false;
+    emit_signal("capture_completed", image);
+}
+
+void FennaraScreenshotSceneScriptContext::fail_capture(
+    const godot::String &message) {
+    if (!message.is_empty()) {
+        _errors.append(script_error(message, "capture"));
+    }
+    complete_capture(godot::Ref<godot::Image>());
+}
+
+void FennaraScreenshotSceneScriptContext::cancel(
+    const godot::String &message) {
+    _cancelled = true;
+    _root_accessible = false;
+    const godot::String cancellation_message =
+        message.is_empty()
+            ? godot::String("Screenshot capture was cancelled.")
+            : message;
+    _errors.append(script_error(cancellation_message, "session"));
+    if (_capture_pending) {
+        complete_capture(godot::Ref<godot::Image>());
+    }
+}
+
+int FennaraScreenshotSceneScriptContext::get_capture_count() const {
+    return _capture_count;
+}
+
+godot::Array FennaraScreenshotSceneScriptContext::get_outputs() const {
+    return _outputs;
 }
 
 godot::Array FennaraScreenshotSceneScriptContext::get_logs() const {
@@ -135,157 +239,8 @@ godot::Array FennaraScreenshotSceneScriptContext::get_errors() const {
     return _errors;
 }
 
-bool FennaraScreenshotSceneTool::_configure_capture_script(
-    const godot::Dictionary &args, godot::Dictionary &result) {
-    _clear_capture_script();
-
-    godot::String prepared_script_path =
-        args.get("_fennara_screenshot_script_path", "");
-    if (prepared_script_path.is_empty()) {
-        return true;
-    }
-
-    capture_script_path() = prepared_script_path;
-    godot::Dictionary diagnostics;
-    diagnostics["diagnostic_success"] =
-        args.get("diagnostic_success", false);
-    diagnostics["diagnostics"] =
-        args.get("script_diagnostics", godot::Array());
-    diagnostics["total_errors"] = args.get("total_errors", 0);
-    diagnostics["total_warnings"] = args.get("total_warnings", 0);
-    if (args.has("diagnostic_error")) {
-        diagnostics["diagnostic_error"] = args["diagnostic_error"];
-    }
-    capture_script_diagnostics() = diagnostics;
-    run_scene_edit_script_internal::apply_diagnostics_to_result(
-        diagnostics, result);
-    result["script_path"] = capture_script_path();
-    return true;
-}
-
-bool FennaraScreenshotSceneTool::_has_capture_script() {
-    return !capture_script_path().is_empty();
-}
-
-void FennaraScreenshotSceneTool::_append_capture_script_receipt(
-    godot::Dictionary &result) {
-    if (!_has_capture_script()) {
-        return;
-    }
-    result["script_path"] = capture_script_path();
-    run_scene_edit_script_internal::apply_diagnostics_to_result(
-        capture_script_diagnostics(), result);
-}
-
-void FennaraScreenshotSceneTool::_clear_capture_script() {
-    capture_script_path() = godot::String();
-    capture_script_diagnostics() = godot::Dictionary();
-}
-
-bool FennaraScreenshotSceneTool::_run_capture_script(
-    godot::Node *root, godot::Dictionary &result,
-    godot::Array &capture_nodes, godot::Dictionary &capture_options,
-    int capture_index) {
-    capture_nodes.clear();
-    capture_options.clear();
-    if (!_has_capture_script()) {
-        if (capture_index != 0) {
-            result["success"] = false;
-            result["error"] = "Whole-scene capture has only one image.";
-            return false;
-        }
-        capture_nodes.append(root);
-        result["capture_index"] = 0;
-        result["capture_count"] = 1;
-        return true;
-    }
-
-    godot::Array &capture_requests = _script_capture_requests_ref();
-    if (capture_index > 0) {
-        if (root != _script_capture_root_ref() || capture_requests.is_empty()) {
-            result["success"] = false;
-            result["error"] =
-                "Screenshot capture queue was not available for the retained scene.";
-            return false;
-        }
-        result = _script_capture_receipt_ref().duplicate();
-    } else {
-        _clear_script_capture_session(false);
-
-        godot::Ref<godot::GDScript> script =
-            run_scene_edit_script_internal::load_script(capture_script_path(), result);
-        if (!script.is_valid()) {
-            return false;
-        }
-
-        godot::StringName base_type = script->get_instance_base_type();
-        godot::StringName ref_counted_type("RefCounted");
-        if (base_type != ref_counted_type &&
-            !godot::ClassDB::is_parent_class(base_type, ref_counted_type)) {
-            result["success"] = false;
-            result["error"] =
-                "screenshot_scene scripts must use `@tool extends RefCounted`.";
-            result["runtime_errors"] = godot::Array::make(script_error(
-                "Expected `@tool extends RefCounted`.", "contract"));
-            return false;
-        }
-
-        godot::Variant runner_variant = script->new_();
-        godot::Object *runner = runner_variant;
-        if (runner == nullptr || !runner->has_method("run")) {
-            result["success"] = false;
-            result["error"] = "Screenshot script must define func run(ctx) -> void.";
-            result["runtime_errors"] = godot::Array::make(script_error(
-                "Missing required run(ctx) entrypoint.", "contract"));
-            return false;
-        }
-
-        godot::Ref<FennaraScreenshotSceneScriptContext> ctx;
-        ctx.instantiate();
-        ctx->configure(root);
-
-        godot::Ref<FennaraWarningCapture> warning_capture;
-        warning_capture.instantiate();
-        godot::OS::get_singleton()->add_logger(warning_capture);
-        runner->call("run", ctx.ptr());
-        godot::OS::get_singleton()->remove_logger(warning_capture);
-
-        godot::Array runtime_errors = ctx->get_errors();
-        run_scene_edit_script_internal::append_capture_errors(
-            warning_capture->get_captured(), runtime_errors);
-        if (!ctx->was_capture_requested()) {
-            runtime_errors.append(script_error(
-                "Screenshot script must call ctx.capture(nodes, options) at least once.",
-                "contract"));
-        }
-
-        result["logs"] = ctx->get_logs();
-        result["runtime_errors"] = runtime_errors;
-        _append_capture_script_receipt(result);
-        if (!runtime_errors.is_empty()) {
-            result["success"] = false;
-            result["error"] = "Screenshot script execution failed.";
-            return false;
-        }
-
-        capture_requests = ctx->get_capture_requests();
-        _script_capture_root_ref() = root;
-        _script_capture_receipt_ref() = result.duplicate();
-    }
-
-    if (capture_index < 0 || capture_index >= capture_requests.size()) {
-        result["success"] = false;
-        result["error"] = "Screenshot capture index was outside the script request queue.";
-        return false;
-    }
-    godot::Dictionary request = capture_requests[capture_index];
-    capture_nodes = request.get("nodes", godot::Array());
-    capture_options = request.get("options", godot::Dictionary());
-    result["scripted"] = true;
-    result["script_subject_count"] = capture_nodes.size();
-    result["capture_index"] = capture_index;
-    result["capture_count"] = capture_requests.size();
-    return true;
+void FennaraScreenshotSceneScriptContext::_emit_empty_capture_completed() {
+    emit_signal("capture_completed", godot::Ref<godot::Image>());
 }
 
 } // namespace fennara

@@ -20,3 +20,7 @@ inside an installed Godot project. Keep helpers primitive and project-agnostic:
 input, waiting, node snapshots, captures, physics queries, and scene lifecycle
 support are good fits; game-specific movement, combat, quests, inventory, or UI
 flow assumptions are not.
+
+`image_sheet.gd` is also used by the screenshot script facade. Keep its
+composition deterministic and independent of scene, animation, or gameplay
+state.

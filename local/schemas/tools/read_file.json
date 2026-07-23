@@ -6,7 +6,7 @@
     "Use start_line/end_line for a specific range when reading large text files.",
     "Scene files (.tscn) are not readable; use get_scene_tree instead.",
     "Supported image files are sent to the model as vision inputs while visible tool text shows only metadata, dimensions, and byte size.",
-    "Blocked res:// paths: res://.godot/, res://.git/, and res://addons/fennara/, except res://addons/fennara/ai/guidelines.md.",
+    "Blocked res:// paths: res://.godot/, res://.git/, and res://addons/fennara/, except Markdown files under res://addons/fennara/ai/.",
     "Hard limit: at most 5 files per call."
   ],
   "parameters": {

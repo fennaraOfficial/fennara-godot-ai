@@ -3,8 +3,11 @@
 #include "fennara/helpers.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/tools/run_scene_edit_script/internal.hpp"
+#include "fennara/tools/screenshot_scene_script.hpp"
+#include "fennara/warning_capture.hpp"
 
 #include <godot_cpp/classes/sub_viewport.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
 namespace fennara {
@@ -51,13 +54,31 @@ godot::Node *&FennaraScreenshotSceneTool::_script_capture_root_ref() {
     return value;
 }
 
-godot::Array &FennaraScreenshotSceneTool::_script_capture_requests_ref() {
-    static godot::Array *value = new godot::Array;
+godot::Ref<FennaraScreenshotSceneScriptContext>
+    &FennaraScreenshotSceneTool::_script_context_ref() {
+    static godot::Ref<FennaraScreenshotSceneScriptContext> *value =
+        new godot::Ref<FennaraScreenshotSceneScriptContext>;
     return *value;
 }
 
-godot::Dictionary &FennaraScreenshotSceneTool::_script_capture_receipt_ref() {
-    static godot::Dictionary *value = new godot::Dictionary;
+godot::Ref<godot::RefCounted>
+    &FennaraScreenshotSceneTool::_script_runner_ref() {
+    static godot::Ref<godot::RefCounted> *value =
+        new godot::Ref<godot::RefCounted>;
+    return *value;
+}
+
+godot::Ref<godot::RefCounted>
+    &FennaraScreenshotSceneTool::_script_instance_ref() {
+    static godot::Ref<godot::RefCounted> *value =
+        new godot::Ref<godot::RefCounted>;
+    return *value;
+}
+
+godot::Ref<FennaraWarningCapture>
+    &FennaraScreenshotSceneTool::_script_warning_capture_ref() {
+    static godot::Ref<FennaraWarningCapture> *value =
+        new godot::Ref<FennaraWarningCapture>;
     return *value;
 }
 
@@ -68,13 +89,26 @@ bool &FennaraScreenshotSceneTool::_preserve_script_root_after_capture_ref() {
 
 void FennaraScreenshotSceneTool::_clear_script_capture_session(
     bool free_detached_root) {
+    const bool context_owns_root = _script_context_ref().is_valid();
     godot::Node *root = _script_capture_root_ref();
-    if (free_detached_root && root && !root->get_parent()) {
+    if (context_owns_root && root && root->get_parent() ==
+            _camera_capture_viewport_ref()) {
+        _discard_temporary_viewport(true);
+    }
+    godot::Ref<FennaraWarningCapture> &warning_capture =
+        _script_warning_capture_ref();
+    if (warning_capture.is_valid()) {
+        godot::OS::get_singleton()->remove_logger(warning_capture);
+        warning_capture.unref();
+    }
+    _script_context_ref().unref();
+    _script_runner_ref().unref();
+    _script_instance_ref().unref();
+    if (!context_owns_root && free_detached_root && root &&
+        !root->get_parent()) {
         memdelete(root);
     }
     _script_capture_root_ref() = nullptr;
-    _script_capture_requests_ref().clear();
-    _script_capture_receipt_ref().clear();
     _preserve_script_root_after_capture_ref() = false;
 }
 
@@ -127,6 +161,10 @@ uint64_t FennaraScreenshotSceneTool::try_reserve_capture() {
     if (next_owner == 0) next_owner++;
     _active_capture_owner_ref() = next_owner;
     return next_owner;
+}
+
+bool FennaraScreenshotSceneTool::owns_capture(uint64_t owner) {
+    return owner != 0 && _active_capture_owner_ref() == owner;
 }
 
 void FennaraScreenshotSceneTool::release_capture(uint64_t owner) {

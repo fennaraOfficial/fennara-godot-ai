@@ -106,10 +106,20 @@ private:
     int _screenshot_capture_index = 0;
     int _screenshot_capture_count = 1;
     uint64_t _screenshot_capture_owner = 0;
+    bool _screenshot_script_active = false;
     void _start_next_screenshot_scene();
     void _on_screenshot_scene_opened(uint64_t batch_generation);
     void _schedule_screenshot_capture(uint64_t batch_generation);
     void _on_screenshot_capture(uint64_t batch_generation);
+    void _on_screenshot_script_capture_requested(
+        uint64_t batch_generation);
+    void _begin_screenshot_script_capture(uint64_t batch_generation);
+    void _schedule_screenshot_script_capture(uint64_t batch_generation);
+    void _on_screenshot_script_capture(uint64_t batch_generation);
+    void _on_screenshot_script_completed(uint64_t batch_generation);
+    void _on_screenshot_script_timeout(
+        uint64_t batch_generation,
+        uint64_t capture_owner);
 
     // --- Validate scene async (structural checks + daemon runtime batch) ---
     struct PendingValidateScene {

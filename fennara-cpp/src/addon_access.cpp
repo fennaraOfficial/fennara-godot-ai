@@ -11,6 +11,7 @@ namespace {
 
 constexpr const char *kConfigPath = "user://.fennara/addon_access.json";
 constexpr const char *kFennaraAddonRoot = "res://addons/fennara";
+constexpr const char *kAiGuidanceRoot = "res://addons/fennara/ai/";
 
 godot::String config_path_abs() {
     return godot::ProjectSettings::get_singleton()->globalize_path(kConfigPath);
@@ -125,6 +126,24 @@ bool is_addons_root(const godot::String &path) {
 
 bool is_locked_addon_root(const godot::String &addon_root) {
     return normalize_res_path(addon_root) == godot::String(kFennaraAddonRoot);
+}
+
+bool is_ai_guidance_path(const godot::String &path) {
+    const godot::String normalized = normalize_res_path(path);
+    if (!normalized.begins_with(kAiGuidanceRoot) ||
+        !normalized.to_lower().ends_with(".md")) {
+        return false;
+    }
+
+    const godot::String relative =
+        normalized.substr(godot::String(kAiGuidanceRoot).length());
+    const godot::PackedStringArray parts = relative.split("/");
+    for (int i = 0; i < parts.size(); i++) {
+        if (parts[i].is_empty() || parts[i] == "." || parts[i] == "..") {
+            return false;
+        }
+    }
+    return !parts.is_empty();
 }
 
 godot::Array allowed_addon_roots() {

@@ -3,13 +3,37 @@ use std::fs;
 use std::path::Path;
 
 const AGENTS_BLOCK: &str = include_str!("../../../templates/AGENTS.block.md");
-const GUIDELINES_MD: &str = include_str!("../../../templates/fennara-guidelines.md");
 const AGENTS_START: &str = "<!-- fennara-agents-start -->";
 const AGENTS_END: &str = "<!-- fennara-agents-end -->";
-const GUIDELINES_PATH: &[&str] = &["addons", "fennara", "ai", "guidelines.md"];
+const AI_GUIDANCE_FILES: &[(&[&str], &str)] = &[
+    (
+        &["addons", "fennara", "ai", "guidelines.md"],
+        include_str!("../../../templates/fennara-guidelines.md"),
+    ),
+    (
+        &["addons", "fennara", "ai", "index.md"],
+        include_str!("../../../templates/fennara-ai/index.md"),
+    ),
+    (
+        &["addons", "fennara", "ai", "visual-observation.md"],
+        include_str!("../../../templates/fennara-ai/visual-observation.md"),
+    ),
+    (
+        &["addons", "fennara", "ai", "runtime-observation.md"],
+        include_str!("../../../templates/fennara-ai/runtime-observation.md"),
+    ),
+    (
+        &["addons", "fennara", "ai", "operations.md"],
+        include_str!("../../../templates/fennara-ai/operations.md"),
+    ),
+    (
+        &["addons", "fennara", "ai", "clients", "cursor.md"],
+        include_str!("../../../templates/fennara-ai/clients/cursor.md"),
+    ),
+];
 
 pub fn write(project_dir: &Path) -> Result<(), String> {
-    write_guidelines(project_dir)?;
+    write_ai_guidance(project_dir)?;
     write_project_files(project_dir)
 }
 
@@ -18,20 +42,20 @@ pub fn write_project_files(project_dir: &Path) -> Result<(), String> {
     update_gitignore_if_present(project_dir)
 }
 
-fn write_guidelines(project_dir: &Path) -> Result<(), String> {
-    let guidelines_path = GUIDELINES_PATH
-        .iter()
-        .fold(project_dir.to_path_buf(), |path, part| path.join(part));
+fn write_ai_guidance(project_dir: &Path) -> Result<(), String> {
+    for (parts, template) in AI_GUIDANCE_FILES {
+        let target = parts
+            .iter()
+            .fold(project_dir.to_path_buf(), |path, part| path.join(part));
 
-    if let Some(parent) = guidelines_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("failed to create {}: {err}", display_path(parent)))?;
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|err| format!("failed to create {}: {err}", display_path(parent)))?;
+        }
+
+        write_if_changed(&target, normalize_template(template).as_bytes())?;
     }
-
-    write_if_changed(
-        &guidelines_path,
-        normalize_template(GUIDELINES_MD).as_bytes(),
-    )
+    Ok(())
 }
 
 fn update_agents(project_dir: &Path) -> Result<(), String> {
@@ -147,15 +171,17 @@ mod tests {
     }
 
     #[test]
-    fn project_files_do_not_modify_addon_guidelines() {
+    fn project_files_do_not_modify_addon_guidance() {
         let temp = std::env::temp_dir().join(format!(
             "fennara-guidance-project-files-test-{}",
             std::process::id()
         ));
         let _ = fs::remove_dir_all(&temp);
         let guidelines = temp.join("addons/fennara/ai/guidelines.md");
+        let index = temp.join("addons/fennara/ai/index.md");
         fs::create_dir_all(guidelines.parent().unwrap()).unwrap();
         fs::write(&guidelines, "store addon content\n").unwrap();
+        fs::write(&index, "store index\n").unwrap();
 
         write_project_files(&temp).unwrap();
 
@@ -163,7 +189,51 @@ mod tests {
             fs::read_to_string(guidelines).unwrap(),
             "store addon content\n"
         );
+        assert_eq!(fs::read_to_string(index).unwrap(), "store index\n");
         assert!(temp.join("AGENTS.md").is_file());
         let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn write_installs_every_ai_guidance_file() {
+        let temp = std::env::temp_dir().join(format!(
+            "fennara-guidance-all-files-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).unwrap();
+
+        write(&temp).unwrap();
+
+        for (parts, template) in AI_GUIDANCE_FILES {
+            let target = parts
+                .iter()
+                .fold(temp.to_path_buf(), |path, part| path.join(part));
+            assert_eq!(
+                fs::read_to_string(&target).unwrap(),
+                normalize_template(template),
+                "unexpected generated guidance at {}",
+                target.display()
+            );
+        }
+        let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn guidelines_stay_compact_and_index_routes_specialized_pages() {
+        let guidelines = AI_GUIDANCE_FILES[0].1;
+        assert!(
+            guidelines.split_whitespace().count() <= 1_200,
+            "always-read guidelines exceeded the 1,200-word budget"
+        );
+
+        let index = AI_GUIDANCE_FILES[1].1;
+        for (parts, _) in &AI_GUIDANCE_FILES[2..] {
+            let resource_path = format!("res://{}", parts.join("/"));
+            assert!(
+                index.contains(&resource_path),
+                "index does not route to {resource_path}"
+            );
+        }
     }
 }
