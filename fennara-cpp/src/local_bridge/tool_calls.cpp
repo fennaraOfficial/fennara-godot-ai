@@ -31,6 +31,8 @@ namespace fennara {
 
 namespace {
 
+constexpr int MAX_SCREENSHOT_MODEL_IMAGES = 6;
+
 bool _is_local_bridge_tool(const godot::String &tool) {
     return tool == "fennara_status" ||
            tool == "read_file" ||
@@ -194,6 +196,13 @@ godot::String _screenshot_model_image_label(const godot::Dictionary &image) {
     if (!parts.is_empty()) {
         suffix = " (" + godot::String(", ").join(parts) + ")";
     }
+    int capture_count = int(image.get("capture_count", 1));
+    int capture_index = int(image.get("capture_index", 0));
+    if (capture_count > 1) {
+        return "Screenshot capture " +
+               godot::String::num_int64(capture_index + 1) + " of " +
+               godot::String::num_int64(capture_count) + suffix;
+    }
     return "Screenshot from screenshot_scene" + suffix;
 }
 
@@ -212,6 +221,8 @@ godot::Dictionary _screenshot_model_image_payload(const godot::Dictionary &image
     _copy_if_present(payload, image, "height");
     _copy_if_present(payload, image, "image_role");
     _copy_if_present(payload, image, "view");
+    _copy_if_present(payload, image, "capture_index");
+    _copy_if_present(payload, image, "capture_count");
     _copy_if_present(payload, image, "image_res_path");
     _copy_if_present(payload, image, "image_path");
     return payload;
@@ -226,6 +237,18 @@ godot::Array _model_images_from_screenshot_result(const godot::Dictionary &resul
     godot::Dictionary primary = _screenshot_model_image_payload(result);
     if (!primary.is_empty()) {
         images.append(primary);
+    }
+    godot::Array additional = result.get("images", godot::Array());
+    for (int i = 0;
+         i < additional.size() && images.size() < MAX_SCREENSHOT_MODEL_IMAGES;
+         i++) {
+        if (additional[i].get_type() != godot::Variant::DICTIONARY) {
+            continue;
+        }
+        godot::Dictionary payload = _screenshot_model_image_payload(additional[i]);
+        if (!payload.is_empty()) {
+            images.append(payload);
+        }
     }
     return images;
 }

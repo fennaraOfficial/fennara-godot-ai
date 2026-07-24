@@ -8,16 +8,12 @@
 
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
-#include <godot_cpp/classes/control.hpp>
 #include <godot_cpp/classes/directional_light3d.hpp>
-#include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/environment.hpp>
 #include <godot_cpp/classes/light3d.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/node3d.hpp>
-#include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
-#include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/skeleton3d.hpp>
 #include <godot_cpp/classes/skin_reference.hpp>
 #include <godot_cpp/classes/sub_viewport.hpp>
@@ -127,113 +123,118 @@ void FennaraScreenshotSceneTool::_accumulate_3d_bounds(godot::Node *node,
     }
 }
 
-godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godot::Dictionary &args) {
+godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(
+    godot::Node *root, const godot::Array &capture_nodes,
+    const godot::Dictionary &capture_options,
+    bool use_default_camera_search) {
     godot::Dictionary result;
 
-    godot::EditorInterface *editor = godot::EditorInterface::get_singleton();
-    if (!editor) {
+    if (use_default_camera_search &&
+        capture_nodes.size() > SCREENSHOT_CAMERA_SEARCH_SUBJECT_LIMIT) {
         result["success"] = false;
-        result["error"] = "EditorInterface not available";
+        result["error"] =
+            "Automatic 3D camera search accepts at most eight selected subjects per capture. Select a shared parent, split them across captures, or provide an explicit view or camera.";
         return result;
     }
 
-    godot::Node *base = godot::Object::cast_to<godot::Node>(editor->get_base_control());
-    if (!base) {
-        result["success"] = false;
-        result["error"] = "Editor base control not available";
-        return result;
-    }
-
-    godot::SubViewport *previous = _camera_capture_viewport_ref();
-    if (previous) {
-        _discard_temporary_viewport();
-    }
     _capture_requires_content_ref() = false;
+    _clear_camera_search_capture_state();
 
-    godot::String scene_path = _current_scene_path_ref();
-    godot::Ref<godot::PackedScene> packed =
-        godot::ResourceLoader::get_singleton()->load(
-            scene_path, "PackedScene", godot::ResourceLoader::CACHE_MODE_IGNORE);
-    if (packed.is_null() || !packed->can_instantiate()) {
-        result["success"] = false;
-        result["error"] = "Could not load scene for framed 3D capture: " + scene_path;
+    godot::ProjectSettings *ps = godot::ProjectSettings::get_singleton();
+    int width = std::max(
+        int(ps->get_setting("display/window/size/viewport_width", 1920)), 64);
+    int height = std::max(
+        int(ps->get_setting("display/window/size/viewport_height", 1080)), 64);
+    godot::Vector2i viewport_size(width, height);
+    godot::SubViewport *viewport = _prepare_capture_viewport(
+        root, "FennaraFramedScreenshotViewport", viewport_size, true, result);
+    if (!viewport) {
         return result;
     }
-
-    godot::Node *root = packed->instantiate();
-    if (!root) {
-        result["success"] = false;
-        result["error"] = "Could not instantiate scene for framed 3D capture: " + scene_path;
-        return result;
-    }
-
-    godot::SubViewport *viewport = memnew(godot::SubViewport);
-    viewport->set_name("FennaraFramedScreenshotViewport");
-    viewport->set_update_mode(godot::SubViewport::UPDATE_ALWAYS);
-    viewport->set_clear_mode(godot::SubViewport::CLEAR_MODE_ALWAYS);
-    viewport->set_transparent_background(false);
-    viewport->set_use_own_world_3d(true);
-    base->add_child(viewport);
-    viewport->add_child(root);
     force_skeleton_updates(root);
 
-    godot::Node *bounds_root = root;
-    godot::String target_path = args.get("target_node_path", "");
-    bool has_target = !target_path.is_empty();
-    if (has_target) {
-        bounds_root = _resolve_scene_node(root, target_path);
-        if (!bounds_root) {
-            viewport->queue_free();
+    godot::Camera3D *script_camera = nullptr;
+    if (capture_options.has("camera")) {
+        godot::Object *camera_object = capture_options["camera"];
+        godot::Node *camera_node = godot::Object::cast_to<godot::Node>(camera_object);
+        script_camera = godot::Object::cast_to<godot::Camera3D>(camera_node);
+        if (!script_camera ||
+            (camera_node != root && !root->is_ancestor_of(camera_node))) {
             result["success"] = false;
-            result["error"] = "target_node_path not found: " + target_path;
+            result["error"] =
+                "Script capture option `camera` must be a Camera3D under ctx.root for this scene.";
+            _cleanup_failed_capture_setup();
             return result;
         }
+    }
+
+    if (script_camera) {
+        script_camera->make_current();
+        _capture_requires_content_ref() = true;
+        _capture_name_hint_ref() = _make_name_hint(
+            _current_scene_path_ref(), "script", "camera_3d");
+        result["success"] = true;
+        result["is_3d"] = true;
+        result["scene_path"] = _current_scene_path_ref();
+        result["view"] = "camera_3d";
+        result["capture_delay_seconds"] = 0.15;
+        result["note"] =
+            "3D scene captured from the Camera3D supplied to ctx.capture.";
+        godot::Dictionary viewport_dict;
+        viewport_dict["width"] = width;
+        viewport_dict["height"] = height;
+        result["viewport_size"] = viewport_dict;
+        _append_capture_script_receipt(result);
+        return result;
     }
 
     godot::AABB bounds;
     bool has_bounds = false;
-    bool can_reuse_bounds =
-        _cached_bounds_valid_ref() &&
-        _cached_bounds_scene_path_ref() == scene_path &&
-        _cached_bounds_target_path_ref() == target_path;
-    if (can_reuse_bounds) {
-        bounds = _cached_bounds_ref();
-        has_bounds = true;
-    } else {
-        _accumulate_3d_bounds(bounds_root, bounds, has_bounds);
+    for (int i = 0; i < capture_nodes.size(); i++) {
+        godot::Object *object = capture_nodes[i];
+        godot::Node *node = godot::Object::cast_to<godot::Node>(object);
+        _accumulate_3d_bounds(node, bounds, has_bounds);
     }
     if (!has_bounds) {
-        godot::Node3D *target_3d = godot::Object::cast_to<godot::Node3D>(bounds_root);
-        if (target_3d) {
+        for (int i = 0; i < capture_nodes.size(); i++) {
+            godot::Object *object = capture_nodes[i];
+            godot::Node3D *target_3d =
+                godot::Object::cast_to<godot::Node3D>(object);
+            if (!target_3d) continue;
             godot::Vector3 target_position =
                 _local_tree_3d_transform(target_3d).origin;
-            bounds = godot::AABB(target_position - godot::Vector3(1, 1, 1),
-                                 godot::Vector3(2, 2, 2));
-            has_bounds = true;
-        } else {
-            viewport->queue_free();
+            godot::AABB point_bounds(
+                target_position - godot::Vector3(1, 1, 1),
+                godot::Vector3(2, 2, 2));
+            if (has_bounds) {
+                bounds.merge_with(point_bounds);
+            } else {
+                bounds = point_bounds;
+                has_bounds = true;
+            }
+        }
+        if (!has_bounds) {
             result["success"] = false;
             result["error"] = "No visible 3D geometry bounds found for isolated capture";
+            _cleanup_failed_capture_setup();
             return result;
         }
     }
-    if (!can_reuse_bounds) {
-        _cached_bounds_scene_path_ref() = scene_path;
-        _cached_bounds_target_path_ref() = target_path;
-        _cached_bounds_ref() = bounds;
-        _cached_bounds_valid_ref() = true;
-    }
-
-    godot::String view = args.get("view", "perspective");
+    godot::String view = capture_options.get("view", "perspective");
     view = view.to_lower();
-    if (view == "all") view = "perspective";
 
     godot::Vector3 center = bounds.get_center();
     godot::Vector3 size = bounds.get_size();
     double diagonal = std::sqrt(double(size.x * size.x + size.y * size.y + size.z * size.z));
     double radius = std::max(diagonal * 0.5, 1.0);
-    double margin = double(args.get("context_margin", has_target ? 0.75 : 1.1));
+    const double default_margin =
+        use_default_camera_search ? 1.15 : 1.1;
+    double margin = double(
+        capture_options.get("context_margin", default_margin));
     margin = std::max(margin, 0.25);
+    const bool use_single_subject_auto_margin =
+        use_default_camera_search && capture_nodes.size() == 1 &&
+        !capture_options.has("context_margin");
 
     godot::Vector3 view_dir = godot::Vector3(1.0, 0.65, 1.0).normalized();
     godot::Vector3 up = godot::Vector3(0.0, 1.0, 0.0);
@@ -253,9 +254,9 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
     } else if (view == "perspective") {
         view_dir = godot::Vector3(1.0, 0.65, 1.0).normalized();
     } else {
-        viewport->queue_free();
         result["success"] = false;
         result["error"] = "Unsupported 3D view: " + view;
+        _cleanup_failed_capture_setup();
         return result;
     }
 
@@ -265,12 +266,6 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
     const double fov_degrees = 70.0;
     double fov_rad = fov_degrees * 3.14159265358979323846 / 180.0;
     double tan_vertical = std::tan(fov_rad * 0.5);
-    godot::ProjectSettings *ps = godot::ProjectSettings::get_singleton();
-    int width = int(ps->get_setting("display/window/size/viewport_width", 1920));
-    int height = int(ps->get_setting("display/window/size/viewport_height", 1080));
-    width = std::max(width, 64);
-    height = std::max(height, 64);
-    godot::Vector2i viewport_size(width, height);
     double aspect = viewport_size.y > 0 ? double(viewport_size.x) / double(viewport_size.y) : 1.0;
     double tan_horizontal = tan_vertical * aspect;
 
@@ -295,7 +290,8 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
         }
     }
 
-    double effective_margin = margin;
+    double effective_margin =
+        use_single_subject_auto_margin ? std::max(margin, 1.3) : margin;
     double distance = std::max(fit_distance * effective_margin, 0.75);
     godot::Vector3 camera_position = center + view_dir * distance;
 
@@ -325,8 +321,6 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
         distance = std::max(radius * 3.0, orthographic_size + radius + 1.0);
         camera_position = center + view_dir * distance;
     }
-
-    viewport->set_size(viewport_size);
 
     godot::Camera3D *camera = memnew(godot::Camera3D);
     camera->set_name("FennaraFramedScreenshotCamera");
@@ -368,9 +362,19 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
     camera->look_at_from_position(camera_position, center, up);
     camera->make_current();
 
-    _camera_capture_viewport_ref() = viewport;
-    _camera_capture_root_ref() = root;
     _capture_requires_content_ref() = true;
+
+    if (use_default_camera_search) {
+        godot::Dictionary &state = _camera_search_capture_state_ref();
+        state["enabled"] = true;
+        state["root"] = root;
+        state["camera"] = camera;
+        state["capture_nodes"] = capture_nodes;
+        state["bounds_center"] = center;
+        state["bounds_size"] = size;
+        state["context_margin"] = effective_margin;
+        state["primary_view"] = view;
+    }
 
     godot::Dictionary bounds_dict;
     bounds_dict["center"] = center;
@@ -378,9 +382,13 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
     result["success"] = true;
     result["is_3d"] = true;
     result["scene_path"] = _current_scene_path_ref();
-    result["view"] = view;
-    if (has_target) result["target_node_path"] = target_path;
-    result["note"] = "3D scene: isolated capture auto-framed visible geometry bounds";
+    result["view"] = use_default_camera_search
+        ? godot::String("camera_search") : view;
+    result["note"] = use_default_camera_search
+        ? godot::String(
+            "3D scene: deterministic camera search around ctx.capture subjects")
+        : godot::String(
+            "3D scene: isolated capture auto-framed around ctx.capture subjects");
     result["framed_bounds"] = bounds_dict;
     result["camera_distance"] = distance;
     result["camera_position"] = camera_position;
@@ -395,7 +403,10 @@ godot::Dictionary FennaraScreenshotSceneTool::_frame_3d_editor_camera(const godo
     viewport_dict["width"] = width;
     viewport_dict["height"] = height;
     result["viewport_size"] = viewport_dict;
-    _capture_name_hint_ref() = _make_name_hint(_current_scene_path_ref(), target_path, view);
+    _append_capture_script_receipt(result);
+    _capture_name_hint_ref() = _make_name_hint(
+        _current_scene_path_ref(), "selection",
+        use_default_camera_search ? godot::String("camera_search") : view);
 
     FLOG_TOOL(godot::String("SS: auto-framed 3D bounds center=") +
               godot::String(center) + " size=" + godot::String(size) +

@@ -30,6 +30,10 @@ godot::String image_summary_line(const godot::Dictionary &image) {
     if (!role.is_empty()) {
         line += " (" + role + ")";
     }
+    godot::String description = image.get("description", "");
+    if (!description.is_empty()) {
+        line += ": " + description;
+    }
     return line;
 }
 
@@ -63,6 +67,10 @@ godot::Dictionary image_metadata_from_result(const godot::Dictionary &result) {
     image["image_res_path"] = result.get("image_res_path", "");
     image["image_path"] = result.get("image_path", "");
     image["transport"] = result.get("transport", "");
+    image["output_index"] = result.get("output_index", -1);
+    image["description"] = result.get("description", "");
+    image["model_image_omitted"] =
+        result.get("model_image_omitted", false);
     return image;
 }
 
@@ -76,7 +84,8 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
         status = "partial";
     }
     if (raw_success && has_image &&
-        godot::String(raw_result.get("content_validation", "passed")) !=
+        godot::String(raw_result.get(
+            "render_presence_validation", "passed")) !=
             "passed") {
         status = "partial";
     }
@@ -86,14 +95,14 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     lines.append("Status: " + status);
     lines.append("Scene: " + godot::String(raw_result.get("scene_path", "")));
     lines.append("3D scene: " + bool_text(raw_result.get("is_3d", false)));
-    if (raw_result.has("target_node_path")) {
-        lines.append("Target node: " + godot::String(raw_result.get("target_node_path", "")));
-    }
-    if (raw_result.has("camera_path")) {
-        lines.append("Camera: " + godot::String(raw_result.get("camera_path", "")));
-    }
     if (raw_result.has("view")) {
         lines.append("View: " + godot::String(raw_result.get("view", "")));
+    }
+    if (raw_result.get("scripted", false) || raw_result.has("script_path")) {
+        lines.append("Script: " +
+                     godot::String(raw_result.get("script_path", "")));
+        lines.append("Script subjects: " + godot::String::num_int64(
+            static_cast<int64_t>(raw_result.get("script_subject_count", 0))));
     }
     if (raw_result.has("current_camera_path")) {
         lines.append("Current camera: " + godot::String(raw_result.get("current_camera_path", "")));
@@ -101,23 +110,72 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     if (has_image) {
         lines.append(image_summary_line(raw_result));
     }
-    if (raw_result.has("content_validation")) {
-        lines.append("Content validation: " +
-                     godot::String(raw_result.get("content_validation", "")));
+    godot::Array additional_images = raw_result.get("images", godot::Array());
+    for (int i = 0; i < additional_images.size(); i++) {
+        if (additional_images[i].get_type() != godot::Variant::DICTIONARY) {
+            continue;
+        }
+        godot::Dictionary image = additional_images[i];
+        lines.append(
+            "Capture " + godot::String::num_int64(i + 2) + ": " +
+            image_summary_line(image));
     }
-    if (raw_result.has("content_coverage") && raw_result.has("content_max_span")) {
-        lines.append("Content framing: coverage " +
+    if (raw_result.has("camera_search")) {
+        godot::Dictionary search = raw_result.get(
+            "camera_search", godot::Dictionary());
+        if (!search.is_empty()) {
+            lines.append(
+                "Camera search: chose candidate " +
+                godot::String::num_int64(int64_t(search.get("chosen_index", -1))) +
+                " of " +
+                godot::String::num_int64(int64_t(search.get("candidate_count", 0))) +
+                "; " +
+                godot::String::num_int64(int64_t(search.get("visible_count", 0))) +
+                " of " +
+                godot::String::num_int64(int64_t(search.get("selected_count", 0))) +
+                " selected nodes visible.");
+        }
+        godot::Array visibility = raw_result.get(
+            "selected_node_visibility", godot::Array());
+        for (int i = 0; i < visibility.size() && i < 8; i++) {
+            if (visibility[i].get_type() != godot::Variant::DICTIONARY) continue;
+            godot::Dictionary item = visibility[i];
+            godot::String state = item.get("visible", false)
+                ? godot::String("visible") : godot::String("not visible");
+            lines.append(
+                "Selection: " + godot::String(item.get("path", "")) +
+                " (" + state + ")");
+        }
+        if (raw_result.has("camera_search_warning")) {
+            lines.append("Camera search warning: " + godot::String(
+                raw_result.get("camera_search_warning", "")));
+        }
+    }
+    if (raw_result.has("render_presence_validation")) {
+        lines.append(
+            "Render presence: " +
+            godot::String(raw_result.get(
+                "render_presence_validation", "")) +
+            " (non-background pixels only)");
+    }
+    if (raw_result.has("render_presence_coverage") &&
+        raw_result.has("render_presence_max_span")) {
+        lines.append("Pixel occupancy: coverage " +
                      godot::String::num(
-                         double(raw_result.get("content_coverage", 0.0)) * 100.0,
+                         double(raw_result.get(
+                             "render_presence_coverage", 0.0)) * 100.0,
                          2) +
                      "%, maximum span " +
                      godot::String::num(
-                         double(raw_result.get("content_max_span", 0.0)) * 100.0,
+                         double(raw_result.get(
+                             "render_presence_max_span", 0.0)) * 100.0,
                          2) + "%");
     }
-    if (raw_result.has("content_warning")) {
-        lines.append("Content warning: " +
-                     godot::String(raw_result.get("content_warning", "")));
+    if (raw_result.has("render_presence_warning")) {
+        lines.append(
+            "Render presence warning: " +
+            godot::String(raw_result.get(
+                "render_presence_warning", "")));
     }
     if (raw_result.has("image_res_path")) {
         lines.append("Saved resource: " + godot::String(raw_result.get("image_res_path", "")));
@@ -140,59 +198,113 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
         raw_result["visible_rect"].get_type() == godot::Variant::DICTIONARY) {
         append_rect(lines, "Visible rect", raw_result["visible_rect"]);
     }
-    if (raw_result.has("collage_columns") && raw_result.has("collage_rows")) {
-        lines.append("Collage: " +
-                     godot::String::num_int64(static_cast<int64_t>(raw_result.get("collage_columns", 0))) +
-                     " columns x " +
-                     godot::String::num_int64(static_cast<int64_t>(raw_result.get("collage_rows", 0))) +
-                     " rows");
-    }
     if (raw_result.has("error")) {
         lines.append("Error: " + godot::String(raw_result.get("error", "")));
     }
-    if (raw_result.has("collage_error")) {
-        lines.append("Collage error: " + godot::String(raw_result.get("collage_error", "")));
+    if (raw_result.has("diagnostic_success") &&
+        !(bool)raw_result.get("diagnostic_success", false)) {
+        godot::String diagnostic_error = raw_result.get(
+            "diagnostic_error", "Script diagnostics were unavailable");
+        lines.append("Script diagnostics unavailable: " + diagnostic_error);
     }
     if (raw_result.has("camera_warning")) {
         lines.append("Camera warning: " + godot::String(raw_result.get("camera_warning", "")));
     }
+    if (raw_result.has("image_output_warning")) {
+        lines.append("Image output warning: " + godot::String(
+            raw_result.get("image_output_warning", "")));
+    }
 
-    godot::Array source_images = raw_result.get("images", godot::Array());
-    godot::Array image_metadata;
-    if (!source_images.is_empty()) {
-        lines.append("");
-        lines.append("## Captured views");
-        for (int i = 0; i < source_images.size(); i++) {
-            if (source_images[i].get_type() != godot::Variant::DICTIONARY) {
-                continue;
-            }
-            godot::Dictionary image = source_images[i];
-            image_metadata.append(image_metadata_from_result(image));
-            godot::String view = image.get("view", godot::String::num_int64(i + 1));
-            lines.append("- " + view + ": " + image_summary_line(image));
+    godot::Array script_diagnostics =
+        raw_result.get("script_diagnostics", godot::Array());
+    godot::Array runtime_errors =
+        raw_result.get("runtime_errors", godot::Array());
+    godot::Array logs = raw_result.get("logs", godot::Array());
+    const int script_output_limit = 50;
+    for (int i = 0; i < script_diagnostics.size() && i < script_output_limit; i++) {
+        godot::String message;
+        if (script_diagnostics[i].get_type() == godot::Variant::DICTIONARY) {
+            godot::Dictionary diagnostic = script_diagnostics[i];
+            message = diagnostic.get("message", "");
+        } else {
+            message = script_diagnostics[i];
         }
-    } else if (has_image) {
+        lines.append("Script diagnostic: " + message);
+    }
+    for (int i = 0; i < runtime_errors.size() && i < script_output_limit; i++) {
+        godot::String source = "runtime";
+        godot::String message;
+        if (runtime_errors[i].get_type() == godot::Variant::DICTIONARY) {
+            godot::Dictionary runtime_error = runtime_errors[i];
+            source = runtime_error.get("source", source);
+            message = runtime_error.get("message", "");
+        } else {
+            message = runtime_errors[i];
+        }
+        lines.append("Script error [" + source + "]: " + message);
+    }
+    for (int i = 0; i < logs.size() && i < script_output_limit; i++) {
+        lines.append("Script log: " + godot::String(logs[i]));
+    }
+    if (script_diagnostics.size() > script_output_limit ||
+        runtime_errors.size() > script_output_limit ||
+        logs.size() > script_output_limit) {
+        lines.append("Additional screenshot script output was omitted.");
+    }
+
+    godot::Array image_metadata;
+    if (has_image) {
         image_metadata.append(image_metadata_from_result(raw_result));
+    }
+    for (int i = 0; i < additional_images.size(); i++) {
+        if (additional_images[i].get_type() == godot::Variant::DICTIONARY) {
+            image_metadata.append(image_metadata_from_result(additional_images[i]));
+        }
     }
 
     godot::Dictionary metadata = make_base_metadata(
         "screenshot_scene", "screenshot_scene-md-v1", status);
     metadata["scene_path"] = raw_result.get("scene_path", "");
-    metadata["target_node_path"] = raw_result.get("target_node_path", "");
-    metadata["camera_path"] = raw_result.get("camera_path", "");
     metadata["current_camera_path"] = raw_result.get("current_camera_path", "");
     metadata["current_camera_type"] = raw_result.get("current_camera_type", "");
     metadata["view"] = raw_result.get("view", "");
+    metadata["scripted"] = raw_result.get("scripted", false);
+    metadata["script_path"] = raw_result.get("script_path", "");
+    metadata["script_subject_count"] =
+        raw_result.get("script_subject_count", 0);
+    metadata["capture_count"] = raw_result.get("capture_count", 1);
+    metadata["output_count"] = raw_result.get("output_count", 0);
+    metadata["model_image_count"] = raw_result.get("model_image_count", 0);
+    metadata["omitted_image_count"] =
+        raw_result.get("omitted_image_count", 0);
+    metadata["script_diagnostic_count"] = script_diagnostics.size();
+    if (raw_result.has("diagnostic_success")) {
+        metadata["diagnostic_success"] = raw_result["diagnostic_success"];
+    }
+    if (raw_result.has("diagnostic_error")) {
+        metadata["diagnostic_error"] = raw_result["diagnostic_error"];
+    }
+    metadata["runtime_error_count"] = runtime_errors.size();
+    metadata["script_log_count"] = logs.size();
     metadata["is_3d"] = raw_result.get("is_3d", false);
     metadata["image_count"] = image_metadata.size();
     metadata["images"] = image_metadata;
     metadata["has_primary_image"] = has_image;
-    metadata["content_validation"] =
-        raw_result.get("content_validation", "not_run");
-    metadata["content_coverage"] = raw_result.get("content_coverage", 0.0);
-    metadata["content_max_span"] = raw_result.get("content_max_span", 0.0);
-    metadata["content_warning"] = raw_result.get("content_warning", "");
+    metadata["render_presence_validation"] =
+        raw_result.get("render_presence_validation", "not_run");
+    metadata["render_presence_coverage"] =
+        raw_result.get("render_presence_coverage", 0.0);
+    metadata["render_presence_max_span"] =
+        raw_result.get("render_presence_max_span", 0.0);
+    metadata["render_presence_warning"] =
+        raw_result.get("render_presence_warning", "");
     metadata["previewed"] = false;
+    metadata["selected_node_visibility"] = raw_result.get(
+        "selected_node_visibility", godot::Array());
+    metadata["camera_search"] = raw_result.get(
+        "camera_search", godot::Dictionary());
+    metadata["camera_search_warning"] = raw_result.get(
+        "camera_search_warning", "");
 
     godot::Dictionary envelope = make_envelope(
         godot::String("\n").join(lines), metadata, raw_success);
@@ -203,6 +315,16 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     copy_if_present(envelope, raw_result, "width");
     copy_if_present(envelope, raw_result, "height");
     copy_if_present(envelope, raw_result, "image_role");
+    copy_if_present(envelope, raw_result, "capture_index");
+    copy_if_present(envelope, raw_result, "capture_count");
+    copy_if_present(envelope, raw_result, "captured_image_count");
+    copy_if_present(envelope, raw_result, "output_count");
+    copy_if_present(envelope, raw_result, "model_image_count");
+    copy_if_present(envelope, raw_result, "omitted_image_count");
+    copy_if_present(envelope, raw_result, "image_output_warning");
+    copy_if_present(envelope, raw_result, "output_index");
+    copy_if_present(envelope, raw_result, "description");
+    copy_if_present(envelope, raw_result, "images");
     copy_if_present(envelope, raw_result, "current_camera_path");
     copy_if_present(envelope, raw_result, "current_camera_type");
     copy_if_present(envelope, raw_result, "image_res_path");
@@ -210,9 +332,17 @@ godot::Dictionary format_screenshot_scene(const godot::Dictionary &raw_result) {
     copy_if_present(envelope, raw_result, "screenshot_dir");
     copy_if_present(envelope, raw_result, "screenshot_absolute_dir");
     copy_if_present(envelope, raw_result, "transport");
-    copy_if_present(envelope, raw_result, "images");
-    copy_if_present(envelope, raw_result, "collage_columns");
-    copy_if_present(envelope, raw_result, "collage_rows");
+    copy_if_present(envelope, raw_result, "script_path");
+    copy_if_present(envelope, raw_result, "scripted");
+    copy_if_present(envelope, raw_result, "script_subject_count");
+    copy_if_present(envelope, raw_result, "script_diagnostics");
+    copy_if_present(envelope, raw_result, "diagnostic_success");
+    copy_if_present(envelope, raw_result, "diagnostic_error");
+    copy_if_present(envelope, raw_result, "runtime_errors");
+    copy_if_present(envelope, raw_result, "logs");
+    copy_if_present(envelope, raw_result, "selected_node_visibility");
+    copy_if_present(envelope, raw_result, "camera_search");
+    copy_if_present(envelope, raw_result, "camera_search_warning");
     return envelope;
 }
 

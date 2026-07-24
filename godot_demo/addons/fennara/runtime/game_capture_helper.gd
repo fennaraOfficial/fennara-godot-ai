@@ -163,6 +163,21 @@ func _capture_runtime_script(ctx, label: String, max_resolution: int = 1280) -> 
 	_ensure_runtime_helpers()
 	return await _capture_store.capture_runtime_script(ctx, label, max_resolution)
 
+
+func _frame_runtime_script(max_resolution: int = 1280) -> Dictionary:
+	_ensure_runtime_helpers()
+	return await _capture_store.wait_for_viewport_image(max_resolution)
+
+
+func _output_runtime_script(
+	ctx,
+	image: Image,
+	description: String = "",
+) -> Dictionary:
+	_ensure_runtime_helpers()
+	return _capture_store.output_runtime_script(ctx, image, description)
+
+
 func _print_runtime_orientation(reason: String = "startup") -> void:
 	var tree := get_tree()
 	var root := tree.current_scene

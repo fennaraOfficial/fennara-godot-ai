@@ -76,6 +76,62 @@ func capture_runtime_script(ctx, label: String, max_resolution: int = 1280) -> D
 	return result
 
 
+func output_runtime_script(
+	ctx,
+	image: Image,
+	description: String = "",
+) -> Dictionary:
+	if image == null or image.is_empty():
+		var empty_result := _capture_error_result(
+			{"description": description},
+			"ctx.output() expects a non-empty Image.",
+		)
+		ctx.error(str(empty_result.error))
+		return empty_result
+	if not ensure_dir(ctx._captures_dir):
+		var dir_result := _capture_error_result(
+			{"description": description},
+			"Could not create runtime capture directory.",
+		)
+		ctx.error(str(dir_result.error))
+		return dir_result
+
+	var output_index: int = ctx._captures.size()
+	var label := (
+		description.strip_edges()
+		if not description.strip_edges().is_empty()
+		else "output_%d" % (output_index + 1)
+	)
+	var file_name := "%s_output_%02d_%d.png" % [
+		safe_file_component(ctx._script_run_id, "script"),
+		output_index + 1,
+		Time.get_ticks_usec(),
+	]
+	var image_res_path: String = ctx._captures_dir.path_join(file_name)
+	if image.save_png(image_res_path) != OK:
+		var save_result := _capture_error_result(
+			{"description": description},
+			"Failed to save ctx.output() image as PNG.",
+		)
+		ctx.error(str(save_result.error))
+		return save_result
+
+	var result := {
+		"success": true,
+		"label": label,
+		"description": description,
+		"image_role": "runtime_script_output",
+		"image_res_path": image_res_path,
+		"image_path": absolute_path(image_res_path),
+		"width": image.get_width(),
+		"height": image.get_height(),
+		"original_width": image.get_width(),
+		"original_height": image.get_height(),
+	}
+	ctx._print_event("FENNARA_SCRIPT_CAPTURE", result)
+	return result
+
+
 func capture_runtime_session_start(captures_dir: String, session_id: String, scene_path: String, max_resolution: int = 1280) -> Dictionary:
 	var file_name := "%s_startup_%d.png" % [
 		safe_file_component(session_id, "runtime"),

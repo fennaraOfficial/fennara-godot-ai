@@ -1,0 +1,22 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="BoxMesh" id="BoxMesh_mixed"]
+
+[node name="MixedRoot" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Overlay" type="ColorRect" parent="."]
+layout_mode = 0
+offset_right = 64.0
+offset_bottom = 64.0
+color = Color(0.2, 0.4, 0.8, 1)
+
+[node name="World" type="Node3D" parent="."]
+
+[node name="Box" type="MeshInstance3D" parent="World"]
+mesh = SubResource("BoxMesh_mixed")

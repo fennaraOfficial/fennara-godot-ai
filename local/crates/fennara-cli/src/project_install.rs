@@ -81,13 +81,13 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     operation::phase(Phase::Staging, "Installing the project addon")?;
     println!("addon: copying from {}", display_path(&source));
     install_addon(&project_dir, &source)?;
-    println!("guidance: writing AGENTS.md and addons/fennara/ai/guidelines.md");
+    println!("guidance: writing AGENTS.md and addons/fennara/ai knowledge files");
     project_guidance::write(&project_dir)?;
     operation::phase(Phase::Validating, "Checking platform prerequisites")?;
     println!("Installed Fennara");
     println!("version: {version}");
     println!("project: {}", display_path(&project_dir));
-    println!("guidance: wrote AGENTS.md and addons/fennara/ai/guidelines.md");
+    println!("guidance: wrote AGENTS.md and addons/fennara/ai knowledge files");
     webview_prereq::warn_for_current_platform()?;
     println!("next: run `fennara update` inside this project when a new release is available");
     Ok(())

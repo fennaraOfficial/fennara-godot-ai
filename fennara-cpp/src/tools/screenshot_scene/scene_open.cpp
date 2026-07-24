@@ -3,7 +3,6 @@
 #include "fennara/helpers.hpp"
 #include "fennara/logger.hpp"
 
-#include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/control.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
@@ -42,7 +41,7 @@ void collect_scene_view_hints(godot::Node *node, SceneViewHints &hints) {
     }
 }
 
-bool should_open_3d_editor(godot::Node *root, const SceneViewHints &hints) {
+bool is_3d_scene(godot::Node *root, const SceneViewHints &hints) {
     if (!root) {
         return false;
     }
@@ -55,15 +54,6 @@ bool should_open_3d_editor(godot::Node *root, const SceneViewHints &hints) {
     return hints.node3d_count > 0 && hints.control_count == 0;
 }
 
-void switch_main_screen(godot::EditorInterface *editor,
-                        const godot::String &screen_name) {
-    if (!editor) {
-        return;
-    }
-    editor->set_main_screen_editor(screen_name);
-    editor->call_deferred("set_main_screen_editor", screen_name);
-}
-
 } // namespace
 
 godot::Dictionary FennaraScreenshotSceneTool::open_scene(const godot::String &scene_path) {
@@ -72,7 +62,6 @@ godot::Dictionary FennaraScreenshotSceneTool::open_scene(const godot::String &sc
     godot::String path = normalize_path(scene_path);
     _current_scene_path_ref() = path;
     _capture_requires_content_ref() = false;
-    _reset_bounds_cache();
     _capture_name_hint_ref() = _make_name_hint(path, "", _is_3d_scene ? "3d" : "2d");
     FLOG_TOOL(godot::String("SS: opening scene=") + path);
 
@@ -100,28 +89,14 @@ godot::Dictionary FennaraScreenshotSceneTool::open_scene(const godot::String &sc
     }
     SceneViewHints view_hints;
     collect_scene_view_hints(root, view_hints);
-    _is_3d_scene = should_open_3d_editor(root, view_hints);
+    _is_3d_scene = is_3d_scene(root, view_hints);
     memdelete(root);
 
-    if (_is_3d_scene) {
-        FLOG_TOOL(
-            godot::String("SS: detected 3D scene for isolated capture node3d=") +
-            godot::String::num_int64(view_hints.node3d_count) +
-            " control=" + godot::String::num_int64(view_hints.control_count));
-    } else {
-        godot::EditorInterface *editor = godot::EditorInterface::get_singleton();
-        if (!editor) {
-            result["success"] = false;
-            result["error"] = "EditorInterface not available";
-            return result;
-        }
-        editor->open_scene_from_path(path);
-        switch_main_screen(editor, "2D");
-        FLOG_TOOL(
-            godot::String("SS: detected 2D scene, switching to 2D editor node3d=") +
-            godot::String::num_int64(view_hints.node3d_count) +
-            " control=" + godot::String::num_int64(view_hints.control_count));
-    }
+    FLOG_TOOL(
+        godot::String("SS: detected isolated ") +
+        (_is_3d_scene ? "3D" : "2D") + " capture node3d=" +
+        godot::String::num_int64(view_hints.node3d_count) +
+        " control=" + godot::String::num_int64(view_hints.control_count));
     _capture_name_hint_ref() = _make_name_hint(path, "", _is_3d_scene ? "3d" : "2d");
 
     result["success"] = true;
@@ -131,7 +106,7 @@ godot::Dictionary FennaraScreenshotSceneTool::open_scene(const godot::String &sc
     result["node3d_count"] = view_hints.node3d_count;
     result["control_count"] = view_hints.control_count;
     result["has_camera3d"] = view_hints.has_camera3d;
-    result["capture_mode"] = _is_3d_scene ? "isolated_subviewport" : "editor_2d";
+    result["capture_mode"] = "isolated_subviewport";
     return result;
 }
 

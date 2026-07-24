@@ -5,12 +5,16 @@
 #include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 
+#include <filesystem>
+#include <system_error>
+
 namespace fennara::addon_access {
 
 namespace {
 
 constexpr const char *kConfigPath = "user://.fennara/addon_access.json";
 constexpr const char *kFennaraAddonRoot = "res://addons/fennara";
+constexpr const char *kAiGuidanceRoot = "res://addons/fennara/ai/";
 
 godot::String config_path_abs() {
     return godot::ProjectSettings::get_singleton()->globalize_path(kConfigPath);
@@ -64,6 +68,40 @@ godot::String display_name_for_addon(const godot::String &root) {
         }
     }
     return root.get_file();
+}
+
+std::filesystem::path native_path_for(const godot::String &path) {
+    const godot::String globalized =
+        godot::ProjectSettings::get_singleton()->globalize_path(path);
+    return std::filesystem::u8path(globalized.utf8().get_data());
+}
+
+bool is_canonical_descendant(const std::filesystem::path &path,
+                             const std::filesystem::path &root) {
+    std::error_code error;
+    const std::filesystem::path canonical_root =
+        std::filesystem::canonical(root, error);
+    if (error) {
+        return false;
+    }
+
+    const std::filesystem::path canonical_path =
+        std::filesystem::canonical(path, error);
+    if (error) {
+        return false;
+    }
+
+    const std::filesystem::path relative =
+        canonical_path.lexically_relative(canonical_root);
+    if (relative.empty() || relative.is_absolute()) {
+        return false;
+    }
+    for (const std::filesystem::path &part : relative) {
+        if (part == "..") {
+            return false;
+        }
+    }
+    return true;
 }
 
 godot::Dictionary addon_entry(const godot::String &root,
@@ -125,6 +163,27 @@ bool is_addons_root(const godot::String &path) {
 
 bool is_locked_addon_root(const godot::String &addon_root) {
     return normalize_res_path(addon_root) == godot::String(kFennaraAddonRoot);
+}
+
+bool is_ai_guidance_path(const godot::String &path) {
+    const godot::String normalized = normalize_res_path(path);
+    if (!normalized.begins_with(kAiGuidanceRoot) ||
+        !normalized.to_lower().ends_with(".md")) {
+        return false;
+    }
+
+    const godot::String relative =
+        normalized.substr(godot::String(kAiGuidanceRoot).length());
+    const godot::PackedStringArray parts = relative.split("/");
+    for (int i = 0; i < parts.size(); i++) {
+        if (parts[i].is_empty() || parts[i] == "." || parts[i] == "..") {
+            return false;
+        }
+    }
+    return !parts.is_empty() &&
+           is_canonical_descendant(
+               native_path_for(normalized),
+               native_path_for(kAiGuidanceRoot));
 }
 
 godot::Array allowed_addon_roots() {

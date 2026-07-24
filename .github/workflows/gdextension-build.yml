@@ -160,6 +160,33 @@ jobs:
           }
           "console=$($console.FullName)" >> $env:GITHUB_OUTPUT
 
+      - name: Download Godot for Linux guidance test
+        if: steps.source.outputs.available == 'true' && matrix.platform == 'linux'
+        id: godot_linux
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/godot.zip"
+          directory="${RUNNER_TEMP}/godot"
+          curl --fail --location \
+            "https://github.com/godotengine/godot/releases/download/4.5-stable/Godot_v4.5-stable_linux.x86_64.zip" \
+            --output "${archive}"
+          expected_sha256="c7316e1fd782ad276a4d985a7673b5976eaaa8d90561a2bea5289210dc53e9ba"
+          actual_sha256="$(sha256sum "${archive}" | awk '{print $1}')"
+          if [[ "${actual_sha256}" != "${expected_sha256}" ]]; then
+            echo "::error::Godot Linux archive SHA-256 did not match the pinned release digest."
+            exit 1
+          fi
+          mkdir -p "${directory}"
+          unzip -q "${archive}" -d "${directory}"
+          executable="$(find "${directory}" -maxdepth 1 -type f -name 'Godot_*_linux.x86_64' -print -quit)"
+          if [[ -z "${executable}" ]]; then
+            echo "::error::Godot Linux executable was not found after extraction."
+            exit 1
+          fi
+          chmod +x "${executable}"
+          echo "executable=${executable}" >> "$GITHUB_OUTPUT"
+
       - name: Test native editor states
         if: steps.source.outputs.available == 'true' && matrix.platform == 'windows'
         timeout-minutes: 20
@@ -176,7 +203,12 @@ jobs:
           $testTimeoutSeconds = 120
           $testScripts = @(
             "res://tests/first_run_setup_test.gd",
-            "res://tests/asset_import_script_context_test.gd"
+            "res://tests/asset_import_script_context_test.gd",
+            "res://tests/screenshot_scene_contract_test.gd",
+            "res://tests/screenshot_session_viewport_test.gd",
+            "res://tests/image_sheet_test.gd",
+            "res://tests/runtime_image_context_test.gd",
+            "res://tests/ai_guidance_read_test.gd"
           )
           foreach ($testScript in $testScripts) {
             $godot = Start-Process `
@@ -199,3 +231,15 @@ jobs:
               exit $godot.ExitCode
             }
           }
+
+      - name: Test Linux guidance containment
+        if: steps.source.outputs.available == 'true' && matrix.platform == 'linux'
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120 \
+            "${{ steps.godot_linux.outputs.executable }}" \
+            --headless \
+            --path "${{ github.workspace }}/godot_demo" \
+            --script res://tests/ai_guidance_read_test.gd

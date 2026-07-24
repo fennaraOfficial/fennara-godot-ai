@@ -61,9 +61,9 @@ The CEF scripts operate on copied staging files only. They must not mutate the d
 
 ## Guidance Sync
 
-- `sync-guidance.mjs`: copies `local/templates/fennara-guidelines.md` into `godot_demo/addons/fennara/ai/guidelines.md`, matching the file that `fennara install` and `fennara update` write into user projects.
+- `sync-guidance.mjs`: copies the compact guidelines and on-demand knowledge pages from `local/templates/` into `godot_demo/addons/fennara/ai/`, matching the files that `fennara install` and `fennara update` write into user projects.
 
-`godot_demo/addons/fennara/ai/guidelines.md` is intentionally committed because the demo addon mirrors an installed addon layout. Make changes in `local/templates/`, run the sync script, and commit both source and generated addon guidance together.
+`godot_demo/addons/fennara/ai/` is intentionally committed because the demo addon mirrors an installed addon layout. Make changes in `local/templates/`, run the sync script, and commit both source and generated addon guidance together.
 
 ## Boundaries
 

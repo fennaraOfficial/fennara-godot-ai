@@ -68,7 +68,7 @@ void cleanup_screenshot_cache(const godot::String &dir) {
 
 godot::String FennaraScreenshotSceneTool::_make_name_hint(
     const godot::String &scene_path,
-    const godot::String &target_node_path,
+    const godot::String &subject_label,
     const godot::String &view) {
     godot::String scene_name = scene_path.get_file().get_basename();
     if (scene_name.is_empty()) {
@@ -76,8 +76,8 @@ godot::String FennaraScreenshotSceneTool::_make_name_hint(
     }
 
     godot::String hint = scene_name;
-    if (!target_node_path.strip_edges().is_empty()) {
-        hint += "__" + target_node_path.get_file();
+    if (!subject_label.strip_edges().is_empty()) {
+        hint += "__" + subject_label.get_file();
     }
     if (!view.strip_edges().is_empty()) {
         hint += "__" + view;

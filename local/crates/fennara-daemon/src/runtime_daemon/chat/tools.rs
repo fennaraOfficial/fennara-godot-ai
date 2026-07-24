@@ -949,6 +949,51 @@ mod tests {
     }
 
     #[test]
+    fn screenshot_model_images_create_multiple_model_messages_in_order() {
+        let images = model_images_from_response(
+            "screenshot_scene",
+            &json!({
+                "model_images": [
+                    {
+                        "data": PNG_1X1,
+                        "mime_type": "image/png",
+                        "label": "Screenshot capture 1 of 2"
+                    },
+                    {
+                        "data": PNG_1X1,
+                        "mime_type": "image/png",
+                        "label": "Screenshot capture 2 of 2"
+                    }
+                ]
+            }),
+        );
+        let result = ExecutedTool {
+            ok: true,
+            raw_result: json!({}),
+            mcp_markdown: "Tool: screenshot_scene\nStatus: success".to_string(),
+            plugin_markdown: "Tool: screenshot_scene\nStatus: success".to_string(),
+            metadata: json!({}),
+            target_keys: Vec::new(),
+            model_followup_messages: Vec::new(),
+            model_images: images,
+        };
+
+        let messages = model_messages_for_tool_result("screenshot_scene", &result, true);
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(
+            messages[0]["content"][0]["text"],
+            "[Screenshot capture 1 of 2]"
+        );
+        assert_eq!(messages[0]["content"][1]["type"], "image_url");
+        assert_eq!(
+            messages[1]["content"][0]["text"],
+            "[Screenshot capture 2 of 2]"
+        );
+        assert_eq!(messages[1]["content"][1]["type"], "image_url");
+    }
+
+    #[test]
     fn runtime_script_model_images_create_multiple_transient_model_messages() {
         let images = model_images_from_response(
             "runtime_script",

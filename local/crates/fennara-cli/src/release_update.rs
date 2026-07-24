@@ -102,14 +102,14 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     };
     if project_version == package.version {
         if !options.prepare {
-            println!("guidance: refreshing AGENTS.md and addons/fennara/ai/guidelines.md");
+            println!("guidance: refreshing AGENTS.md and addons/fennara/ai knowledge files");
             project_guidance::write(&project_dir)?;
         }
         println!("Fennara is already up to date.");
         println!("version: {}", package.version);
         println!("project: {}", display_path(&project_dir));
         if !options.prepare {
-            println!("guidance: refreshed AGENTS.md and addons/fennara/ai/guidelines.md");
+            println!("guidance: refreshed AGENTS.md and addons/fennara/ai knowledge files");
         }
         webview_prereq::warn_for_current_platform()?;
         return Ok(());
@@ -146,7 +146,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     println!("addon: copying from {}", display_path(&package.addon_dir));
     project_install::install_addon(&project_dir, &package.addon_dir)
         .map_err(|error| operation::failure(FailureClass::StageFilesystem, error))?;
-    println!("guidance: refreshing AGENTS.md and addons/fennara/ai/guidelines.md");
+    println!("guidance: refreshing AGENTS.md and addons/fennara/ai knowledge files");
     project_guidance::write(&project_dir)
         .map_err(|error| operation::failure(FailureClass::StageFilesystem, error))?;
     operation::phase(Phase::Validating, "Checking the updated installation")?;
@@ -154,7 +154,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     println!("from: {project_version}");
     println!("to: {}", package.version);
     println!("project: {}", display_path(&project_dir));
-    println!("guidance: refreshed AGENTS.md and addons/fennara/ai/guidelines.md");
+    println!("guidance: refreshed AGENTS.md and addons/fennara/ai knowledge files");
     webview_prereq::warn_for_current_platform()?;
     Ok(())
 }

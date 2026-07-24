@@ -808,6 +808,40 @@ mod tests {
     }
 
     #[test]
+    fn forwarded_screenshot_result_attaches_multiple_mcp_images_in_order() {
+        let response = json!({
+            "ok": true,
+            "result": "Tool: screenshot_scene\nStatus: success\nImages: 2",
+            "model_images": [
+                {
+                    "data": PNG_1X1,
+                    "mime_type": "image/png",
+                    "label": "Screenshot capture 1 of 2 (camera_search)"
+                },
+                {
+                    "data": PNG_1X1,
+                    "mime_type": "image/png",
+                    "label": "Screenshot capture 2 of 2 (view=top)"
+                }
+            ]
+        });
+
+        let result = forwarded_tool_result("screenshot_scene", &response, false);
+
+        assert_eq!(result["content"].as_array().unwrap().len(), 5);
+        assert_eq!(
+            result["content"][1]["text"],
+            "[Screenshot capture 1 of 2 (camera_search)]"
+        );
+        assert_eq!(result["content"][2]["type"], "image");
+        assert_eq!(
+            result["content"][3]["text"],
+            "[Screenshot capture 2 of 2 (view=top)]"
+        );
+        assert_eq!(result["content"][4]["type"], "image");
+    }
+
+    #[test]
     fn forwarded_screenshot_result_uses_legacy_raw_result_image_content() {
         let response = json!({
             "ok": true,

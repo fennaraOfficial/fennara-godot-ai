@@ -7,8 +7,8 @@ tools rather than replacing them.
 This page explains what each tool can do, what a successful call means, and the
 important limitations or failure cases. The live tool schemas remain the source
 of truth for exact arguments, result fields, limits, and agent instructions.
-Installed projects also receive generated agent guidance at
-`addons/fennara/ai/guidelines.md`.
+Installed projects also receive compact guidelines and on-demand knowledge at
+`addons/fennara/ai/`.
 
 ## Tool Surfaces
 
@@ -313,15 +313,38 @@ Captures visual evidence from authored scenes and supported imported 3D assets.
 
 Working behavior:
 
-- Imported 3D PackedScenes are instantiated in an isolated SubViewport rather
-  than opened as editable inherited scenes.
+- Every scene is instantiated in an isolated SubViewport. Screenshot capture
+  does not open or modify the authored scene.
 - Automatic 3D framing can add neutral preview lighting when the asset has no
   environment or lights.
-- A seven-view 3D collage can include front, back, left, right, top,
-  perspective, and isometric views.
-- A target node can be framed while leaving surrounding scene context visible.
-- Image-capable MCP clients and built-in chat models can receive the primary
-  screenshot as image context. Saved image paths remain available as fallback.
+- `scene_path` is the only required input. When both `code` and `script_path`
+  are omitted, Fennara captures the detached root with automatic framing.
+- GDScript can select one node or an array of nodes with ordinary
+  Godot code, group subjects freely, show or hide scene parts, temporarily
+  alter the detached scene, and request captures with `ctx.capture(...)`.
+  Those temporary changes are rendered but never saved to the authored scene.
+- `await ctx.capture(...)` renders the scene state at that exact point and
+  returns an ordinary Godot `Image`. The worker may inspect, compare, resize,
+  discard, or combine captured images before publishing selected results with
+  `ctx.output(image, description)`.
+- For up to eight selected subjects, when a scripted 3D capture omits `view`
+  and `camera`, Fennara checks 17
+  deterministic viewpoints and chooses one that favors selected-node
+  visibility, readable size, edge clearance, and low overlap. Use an explicit
+  view or camera when the useful direction is already known, and use multiple
+  captures when distant subjects would become too small in one frame.
+- A screenshot worker receives only `ctx.root`, `await ctx.capture(...)`,
+  `ctx.sheet(...)`, `ctx.output(...)`, `ctx.log(...)`, and `ctx.error(...)`.
+  `ctx.sheet(...)` composes caller-ordered Images into deterministic,
+  optionally labelled pages without choosing states or publishing them. It can pass a
+  temporary Camera2D or Camera3D under `ctx.root` in the capture options when
+  it needs exact authored framing.
+- Camera paths, target paths, view rectangles, and top-level framing parameters
+  are not accepted. All selection and framing lives in the worker script.
+- Every published image is saved and listed. Image-capable MCP clients and
+  built-in chat models receive the first six published outputs as separate
+  image context in call order. Later outputs remain available by saved path,
+  with an explicit omitted-image count in the receipt.
 - Sparse captures are returned with framing metrics and partial status instead
   of hiding the image.
 
@@ -334,6 +357,9 @@ Important limits and failures:
 - Text-only models receive the receipt and saved paths but cannot directly see
   attached image pixels.
 - Loading, rendering, capture ownership, or file-save failures are reported.
+- Unknown legacy screenshot arguments are rejected with a migration error.
+- Script parse errors, runtime errors, missing capture calls, nodes outside the
+  detached root, and invalid temporary cameras are reported without capturing.
 
 ### `runtime_session`
 
@@ -370,6 +396,10 @@ Working behavior:
 
 - Can inspect live nodes, log findings, wait for state, send mapped or low-level
   input, perform raycasts, interact with basic UI, and capture frames.
+- Can collect unsaved viewport Images with `ctx.frame()`, compose the same
+  caller-controlled sheets available to screenshot workers with `ctx.sheet()`,
+  and publish derived Images directly with `ctx.output()` without displaying
+  them inside the game.
 - A script can finish while the managed scene remains open for another probe.
 - Results include diagnostics, runtime findings, capture paths, log paths, and
   session state when available.
