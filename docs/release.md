@@ -401,7 +401,11 @@ clearly.
 The CLI must publish Linux CEF runtime updates atomically: extract and validate
 in a staging directory, write the runtime marker only after required files are
 present, then publish the version directory and update `current.json` with a
-temp-file rename. Running editors keep using the runtime they already loaded.
+temp-file rename. The installed `fennara-cef-runtime.json` marker must identify
+the native loader contract with `"runtime": "cef"`. Install and update repair a
+matching legacy marker that only contains `"kind": "cef"` without downloading
+the CEF payload again. Running editors keep using the runtime they already
+loaded.
 
 The CLI embeds the generated project guidance templates from `local/templates/`.
 When release packaging builds the CLI, those templates are compiled into the binary with the rest of the CLI code.

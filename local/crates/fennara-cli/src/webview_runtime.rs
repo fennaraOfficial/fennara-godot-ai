@@ -106,10 +106,19 @@ fn ensure_linux_cef_manifest(
     }
 
     let target_dir = layout.linux_cef_runtime_dir(platform_arch, version);
-    if runtime_complete(&target_dir, manifest) {
+    if runtime_repairable(&target_dir, manifest) {
+        let repaired = !runtime_complete(&target_dir, manifest);
+        if repaired {
+            write_runtime_marker(&target_dir, manifest)?;
+        }
         write_current_runtime(&target_dir, manifest)?;
         return Ok(Some(format!(
-            "webview runtime: Linux CEF runtime is installed at {}",
+            "webview runtime: Linux CEF runtime {} at {}",
+            if repaired {
+                "marker repaired"
+            } else {
+                "is installed"
+            },
             display_path(&target_dir)
         )));
     }
@@ -169,10 +178,14 @@ pub fn report_for_doctor(layout: &AppLayout, repair: bool) -> Result<(), String>
         layout.linux_cef_runtime_dir(platform_arch, version)
     };
     println!("linux cef runtime: {}", display_path(&runtime_dir));
+    let runtime_complete = runtime_complete(&runtime_dir, &manifest);
+    let runtime_repairable = runtime_repairable(&runtime_dir, &manifest);
     println!(
         "linux cef runtime status: {}",
-        if runtime_complete(&runtime_dir, &manifest) {
+        if runtime_complete {
             "installed"
+        } else if runtime_repairable {
+            "installed; marker repair required"
         } else if manifest
             .get("enabled")
             .and_then(Value::as_bool)
@@ -194,7 +207,10 @@ pub fn report_for_doctor(layout: &AppLayout, repair: bool) -> Result<(), String>
     if repair {
         let removed = cleanup_stale_process_dirs(&layout.webview_profile_root().join("cef"))?;
         println!("linux cef stale profile cleanup: removed {removed}");
-        if runtime_complete(&runtime_dir, &manifest) {
+        if runtime_repairable {
+            if !runtime_complete {
+                write_runtime_marker(&runtime_dir, &manifest)?;
+            }
             write_current_runtime(&runtime_dir, &manifest)?;
             println!("linux cef current marker: repaired");
         }
@@ -237,6 +253,10 @@ fn runtime_matches_current_platform(manifest: &Value) -> bool {
 }
 
 fn runtime_complete(runtime_dir: &Path, manifest: &Value) -> bool {
+    runtime_repairable(runtime_dir, manifest) && runtime_marker_is_native_compatible(runtime_dir)
+}
+
+fn runtime_repairable(runtime_dir: &Path, manifest: &Value) -> bool {
     runtime_dir.join("fennara-cef-runtime.json").is_file()
         && runtime_marker_matches(runtime_dir, manifest)
         && manifest
@@ -245,6 +265,19 @@ fn runtime_complete(runtime_dir: &Path, manifest: &Value) -> bool {
             .map(|version| runtime_dir.ends_with(version))
             .unwrap_or(false)
         && required_files_present(runtime_dir, manifest).is_ok()
+}
+
+fn runtime_marker_is_native_compatible(runtime_dir: &Path) -> bool {
+    let marker_path = runtime_dir.join("fennara-cef-runtime.json");
+    let Ok(raw) = fs::read_to_string(marker_path) else {
+        return false;
+    };
+    let Ok(marker) = serde_json::from_str::<Value>(&raw) else {
+        return false;
+    };
+
+    marker_string(&marker, "runtime") == Some("cef")
+        && marker_string(&marker, "platform") == Some("linux")
 }
 
 fn runtime_marker_matches(runtime_dir: &Path, manifest: &Value) -> bool {
@@ -357,18 +390,7 @@ fn download_and_install_zip(
     let install_result = (|| {
         copy_dir(&extract_dir, &staging_dir)?;
         required_files_present(&staging_dir, manifest)?;
-        let raw = serde_json::to_string_pretty(manifest)
-            .map_err(|err| format!("failed to serialize Linux CEF runtime manifest: {err}"))?;
-        fs::write(
-            staging_dir.join("fennara-cef-runtime.json"),
-            format!("{raw}\n"),
-        )
-        .map_err(|err| {
-            format!(
-                "failed to write Linux CEF runtime marker in {}: {err}",
-                display_path(&staging_dir)
-            )
-        })?;
+        write_runtime_marker(&staging_dir, manifest)?;
         publish_runtime_dir(&staging_dir, target_dir, manifest)
     })();
 
@@ -376,6 +398,9 @@ fn download_and_install_zip(
         let _ = fs::remove_dir_all(&staging_dir);
     }
     install_result?;
+    if !runtime_complete(target_dir, manifest) {
+        write_runtime_marker(target_dir, manifest)?;
+    }
     write_current_runtime(target_dir, manifest)
 }
 
@@ -386,7 +411,7 @@ fn publish_runtime_dir(
 ) -> Result<(), String> {
     let mut moved_aside: Option<PathBuf> = None;
     if target_dir.exists() {
-        if runtime_complete(target_dir, manifest) {
+        if runtime_repairable(target_dir, manifest) {
             fs::remove_dir_all(staging_dir).map_err(|err| {
                 format!(
                     "failed to remove redundant Linux CEF staging dir {}: {err}",
@@ -419,7 +444,7 @@ fn publish_runtime_dir(
                 let _ = fs::remove_dir_all(backup);
             }
         }
-        Err(_) if target_dir.exists() && runtime_complete(target_dir, manifest) => {
+        Err(_) if target_dir.exists() && runtime_repairable(target_dir, manifest) => {
             let _ = fs::remove_dir_all(staging_dir);
             if let Some(backup) = moved_aside {
                 let _ = fs::remove_dir_all(backup);
@@ -437,16 +462,50 @@ fn publish_runtime_dir(
             ));
         }
     }
-    let raw = serde_json::to_string_pretty(manifest)
-        .map_err(|err| format!("failed to serialize Linux CEF runtime manifest: {err}"))?;
-    let marker_path = target_dir.join("fennara-cef-runtime.json");
-    fs::write(&marker_path, format!("{raw}\n")).map_err(|err| {
+    required_files_present(target_dir, manifest)
+}
+
+fn write_runtime_marker(runtime_dir: &Path, manifest: &Value) -> Result<(), String> {
+    let mut marker = manifest.clone();
+    let marker_object = marker
+        .as_object_mut()
+        .ok_or_else(|| "Linux CEF runtime manifest must be an object".to_string())?;
+    marker_object.insert("runtime".to_string(), Value::String("cef".to_string()));
+    marker_object.insert("platform".to_string(), Value::String("linux".to_string()));
+
+    let raw = serde_json::to_string_pretty(&marker)
+        .map_err(|err| format!("failed to serialize Linux CEF runtime marker: {err}"))?;
+    let marker_path = runtime_dir.join("fennara-cef-runtime.json");
+    let temp_path =
+        marker_path.with_file_name(format!("fennara-cef-runtime.json.tmp-{}", unique_suffix()));
+    fs::write(&temp_path, format!("{raw}\n")).map_err(|err| {
         format!(
-            "failed to verify Linux CEF runtime marker in {}: {err}",
-            display_path(&marker_path)
+            "failed to write Linux CEF runtime marker {}: {err}",
+            display_path(&temp_path)
         )
     })?;
-    required_files_present(target_dir, manifest)
+    publish_runtime_marker(&temp_path, &marker_path)
+}
+
+fn publish_runtime_marker(temp_path: &Path, marker_path: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    if marker_path.is_file() {
+        fs::remove_file(marker_path).map_err(|err| {
+            let _ = fs::remove_file(temp_path);
+            format!(
+                "failed to replace Linux CEF runtime marker {}: {err}",
+                display_path(marker_path)
+            )
+        })?;
+    }
+
+    fs::rename(temp_path, marker_path).map_err(|err| {
+        let _ = fs::remove_file(temp_path);
+        format!(
+            "failed to publish Linux CEF runtime marker {}: {err}",
+            display_path(marker_path)
+        )
+    })
 }
 
 fn create_temp_dir() -> Result<PathBuf, String> {
@@ -585,6 +644,9 @@ fn write_current_runtime(target_dir: &Path, manifest: &Value) -> Result<(), Stri
         )
     })
 }
+
+#[cfg(test)]
+mod tests;
 
 fn cleanup_stale_process_dirs(root: &Path) -> Result<usize, String> {
     if !root.is_dir() {
