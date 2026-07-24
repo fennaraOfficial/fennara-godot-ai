@@ -113,7 +113,6 @@ pub(crate) fn settings_from_chat(settings: &ChatSettings) -> ProviderSettings {
         ollama_base_url: settings.ollama_base_url.clone(),
         lmstudio_base_url: settings
             .provider_base_url(types::ProviderId::LMSTUDIO, lmstudio::DEFAULT_BASE_URL),
-        custom_models: settings.custom_models.clone(),
         local_model_limits: local_model_limits_from_settings(&settings.local_model_context_lengths),
     }
 }
@@ -879,7 +878,6 @@ pub(crate) fn parse_model_ref(model: &str) -> Result<String, LlmError> {
         custom_providers: Vec::new(),
         ollama_base_url: super::settings::DEFAULT_OLLAMA_BASE_URL.to_string(),
         lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
-        custom_models: Vec::new(),
         local_model_limits: BTreeMap::new(),
     });
     catalog::model_ref_from_selection(model, &catalog).map(|model_ref| model_ref.canonical())

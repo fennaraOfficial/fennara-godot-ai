@@ -840,15 +840,6 @@
     updateChatSize();
     syncReasoningControls();
     updateComposerEffort();
-    const list = document.querySelector("#model-suggestions");
-    if (list && Array.isArray(settings.text_model_suggestions)) {
-      list.replaceChildren();
-      for (const model of settings.text_model_suggestions) {
-        const option = document.createElement("option");
-        option.value = model;
-        list.append(option);
-      }
-    }
     if (options.refreshModels !== false) {
       requestModelList();
     }
