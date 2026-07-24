@@ -440,18 +440,24 @@
       connect,
       appendSystem,
       clearSystemStatus,
-      buildSavePayload: ({ chatSurface, approvalMode, telemetryEnabled: nextTelemetryEnabled }) => ({
-        type: "save_settings",
-        request_id: nextRequestId("save-settings"),
-        model: cleanUiModelId(modelInput?.value || currentModel),
-        reasoning_effort: currentReasoningEffort,
-        ollama_base_url: ollamaBaseUrl,
-        provider_base_urls: providerBaseUrlPayload(),
-        local_model_context_lengths: localModelContextLengthPayload(),
-        chat_surface: chatSurface,
-        approval_mode: approvalMode,
-        telemetry_enabled: nextTelemetryEnabled,
-      }),
+      buildSavePayload: ({ chatSurface, approvalMode, telemetryEnabled: nextTelemetryEnabled }) => {
+        const payload = {
+          type: "save_settings",
+          request_id: nextRequestId("save-settings"),
+          model: cleanUiModelId(modelInput?.value || currentModel),
+          reasoning_effort: currentReasoningEffort,
+          ollama_base_url: ollamaBaseUrl,
+          provider_base_urls: providerBaseUrlPayload(),
+          local_model_context_lengths: localModelContextLengthPayload(),
+          chat_surface: chatSurface,
+          approval_mode: approvalMode,
+        };
+        return window.FennaraSettingsPanel.includeTelemetryPreference(
+          payload,
+          nextTelemetryEnabled,
+          telemetryControlledByEnvironment,
+        );
+      },
     },
     constants: {
       savedNoticeMs: SETTINGS_SAVED_NOTICE_MS,

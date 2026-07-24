@@ -27,6 +27,19 @@ fn telemetry_environment_flags_accept_only_explicit_truthy_values() {
 }
 
 #[test]
+fn telemetry_environment_override_does_not_change_saved_preference() {
+    let settings = ChatSettings {
+        telemetry_enabled: true,
+        ..ChatSettings::default()
+    };
+
+    assert!(settings.telemetry_enabled);
+    assert!(settings.public().telemetry_enabled);
+    assert!(!settings.telemetry_is_enabled_with_environment(true));
+    assert!(settings.telemetry_is_enabled_with_environment(false));
+}
+
+#[test]
 fn provider_edit_replaces_a_removed_selected_model() {
     let mut settings = ChatSettings {
         model: "omniroute/removed/model".to_string(),

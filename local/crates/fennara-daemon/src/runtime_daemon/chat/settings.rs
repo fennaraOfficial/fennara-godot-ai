@@ -110,13 +110,17 @@ impl ChatSettings {
             chat_surface: clean_chat_surface(&self.chat_surface).to_string(),
             approval_mode: self.approval_mode.as_str().to_string(),
             approval_mode_options: approval_mode_options(),
-            telemetry_enabled: self.telemetry_is_enabled(),
+            telemetry_enabled: self.telemetry_enabled,
             telemetry_controlled_by_environment: telemetry_disabled_by_environment(),
         }
     }
 
     pub(crate) fn telemetry_is_enabled(&self) -> bool {
-        self.telemetry_enabled && !telemetry_disabled_by_environment()
+        self.telemetry_is_enabled_with_environment(telemetry_disabled_by_environment())
+    }
+
+    fn telemetry_is_enabled_with_environment(&self, disabled_by_environment: bool) -> bool {
+        self.telemetry_enabled && !disabled_by_environment
     }
 }
 

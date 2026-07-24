@@ -1,4 +1,11 @@
 (function () {
+  function includeTelemetryPreference(payload, telemetryEnabled, controlledByEnvironment) {
+    if (!controlledByEnvironment) {
+      payload.telemetry_enabled = Boolean(telemetryEnabled);
+    }
+    return payload;
+  }
+
   function createSettingsPanel(options = {}) {
     const elements = options.elements || {};
     const callbacks = options.callbacks || {};
@@ -267,5 +274,6 @@
 
   window.FennaraSettingsPanel = {
     createSettingsPanel,
+    includeTelemetryPreference,
   };
 })();
