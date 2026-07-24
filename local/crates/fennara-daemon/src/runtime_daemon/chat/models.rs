@@ -16,7 +16,6 @@ const LOCAL_MODELS_TIMEOUT: Duration = Duration::from_secs(5);
 pub(crate) struct ModelCatalog {
     pub(crate) models: Vec<ModelInfo>,
     pub(crate) recommended_ids: Vec<&'static str>,
-    pub(crate) custom_ids: Vec<String>,
     pub(crate) live: bool,
     pub(crate) error: Option<String>,
     pub(crate) catalog_status: CatalogStatus,
@@ -80,7 +79,6 @@ pub(crate) struct ModelInfo {
 
 pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) -> ModelCatalog {
     let recommended_ids = settings::recommended_model_ids();
-    let custom_ids = settings.custom_models.clone();
     catalog_cache::spawn_refresh_if_stale();
     let has_openai_key = auth::has_api_key(ProviderId::OPENAI)
         || std::env::var("OPENAI_API_KEY")
@@ -164,7 +162,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &mut models,
                 &cached_catalog.catalog,
                 &recommended_ids,
-                &custom_ids,
             );
         }
     }
@@ -175,7 +172,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.openai,
                 "OpenAI",
                 ProviderId::OPENAI,
-                &custom_ids,
             );
         }
     }
@@ -186,7 +182,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.anthropic,
                 "Anthropic",
                 ProviderId::ANTHROPIC,
-                &custom_ids,
             );
         }
     }
@@ -197,19 +192,12 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.ollama_cloud,
                 "Ollama Cloud",
                 ProviderId::OLLAMA_CLOUD,
-                &custom_ids,
             );
         }
     }
     if has_zai_key {
         if let Ok(cached_catalog) = &cached_catalog {
-            append_hosted_catalog_models(
-                &mut models,
-                &cached_catalog.zai,
-                "Z.AI",
-                ProviderId::ZAI,
-                &custom_ids,
-            );
+            append_hosted_catalog_models(&mut models, &cached_catalog.zai, "Z.AI", ProviderId::ZAI);
         }
     }
     if has_deepseek_key {
@@ -219,7 +207,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.deepseek,
                 "DeepSeek",
                 ProviderId::DEEPSEEK,
-                &custom_ids,
             );
         }
     }
@@ -230,7 +217,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.moonshot,
                 "Moonshot AI",
                 ProviderId::MOONSHOTAI,
-                &custom_ids,
             );
         }
     }
@@ -241,7 +227,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.moonshot_cn,
                 "Moonshot AI (China)",
                 ProviderId::MOONSHOTAI_CN,
-                &custom_ids,
             );
         }
     }
@@ -252,7 +237,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.kimi_for_coding,
                 "Kimi For Coding",
                 ProviderId::KIMI_FOR_CODING,
-                &custom_ids,
             );
         }
     }
@@ -263,7 +247,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.minimax,
                 "MiniMax (minimax.io)",
                 ProviderId::MINIMAX,
-                &custom_ids,
             );
         }
     }
@@ -274,7 +257,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.minimax_coding_plan,
                 "MiniMax Token Plan (minimax.io)",
                 ProviderId::MINIMAX_CODING_PLAN,
-                &custom_ids,
             );
         }
     }
@@ -285,7 +267,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.minimax_cn,
                 "MiniMax (minimaxi.com)",
                 ProviderId::MINIMAX_CN,
-                &custom_ids,
             );
         }
     }
@@ -296,7 +277,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.minimax_cn_coding_plan,
                 "MiniMax Token Plan (minimaxi.com)",
                 ProviderId::MINIMAX_CN_CODING_PLAN,
-                &custom_ids,
             );
         }
     }
@@ -307,7 +287,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
                 &cached_catalog.nvidia,
                 "NVIDIA",
                 ProviderId::NVIDIA,
-                &custom_ids,
             );
         }
     }
@@ -328,7 +307,7 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
         .unwrap_or_else(|_| Err("Ollama models request timed out.".to_string()));
         let ollama_status = match ollama_result {
             Ok(ollama_models) => {
-                append_ollama_models(&mut models, &ollama_models, &custom_ids);
+                append_ollama_models(&mut models, &ollama_models);
                 OllamaStatus {
                     state: if ollama_models.is_empty() {
                         "empty"
@@ -357,7 +336,7 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
         let lmstudio_status = match lmstudio_result {
             Ok(lmstudio_models) => {
                 let catalog = cached_catalog.as_ref().ok().map(|cached| &cached.lmstudio);
-                append_lmstudio_models(&mut models, &lmstudio_models, catalog, &custom_ids);
+                append_lmstudio_models(&mut models, &lmstudio_models, catalog);
                 LocalProviderStatus {
                     state: if lmstudio_models.is_empty() {
                         "empty"
@@ -415,7 +394,6 @@ pub(crate) async fn list_models(settings: &ChatSettings, refresh_local: bool) ->
     ModelCatalog {
         models,
         recommended_ids,
-        custom_ids,
         live,
         error: if needs_hosted_catalog {
             openrouter_error
@@ -469,7 +447,6 @@ fn append_openrouter_catalog_models(
     models: &mut Vec<ModelInfo>,
     catalog: &OpenRouterCatalog,
     recommended_ids: &[&'static str],
-    custom_ids: &[String],
 ) {
     for model in &catalog.models {
         let id = model.definition.id.as_str();
@@ -477,31 +454,7 @@ fn append_openrouter_catalog_models(
         models.push(openrouter_catalog_model_info(
             model,
             recommended_ids.contains(&prefixed_id.as_str()),
-            custom_ids
-                .iter()
-                .any(|custom| custom == id || custom == &prefixed_id),
         ));
-    }
-    for id in custom_ids
-        .iter()
-        .filter_map(|selection| selection.strip_prefix("openrouter/"))
-    {
-        let prefixed_id = openrouter_model_id(id);
-        if models
-            .iter()
-            .any(|model| model.id == prefixed_id || model.canonical_slug.as_deref() == Some(id))
-        {
-            continue;
-        }
-        let mut model = model_info(
-            &prefixed_id,
-            None,
-            recommended_ids.contains(&prefixed_id.as_str()),
-            true,
-        );
-        model.provider_id = ProviderId::OPENROUTER.to_string();
-        model.provider = "OpenRouter".to_string();
-        models.push(model);
     }
 }
 
@@ -510,16 +463,9 @@ fn append_hosted_catalog_models(
     catalog: &OpenRouterCatalog,
     provider_label: &str,
     provider_id: &str,
-    custom_ids: &[String],
 ) {
     for catalog_model in &catalog.models {
-        let mut model = openrouter_catalog_model_info(
-            catalog_model,
-            false,
-            custom_ids
-                .iter()
-                .any(|custom| custom == &format!("{provider_id}/{}", catalog_model.definition.id)),
-        );
+        let mut model = openrouter_catalog_model_info(catalog_model, false);
         model.id = format!("{provider_id}/{}", catalog_model.definition.id);
         model.provider_id = provider_id.to_string();
         model.provider = provider_label.to_string();
@@ -564,7 +510,6 @@ fn append_custom_provider_models(
 fn openrouter_catalog_model_info(
     catalog_model: &OpenRouterCatalogModel,
     recommended: bool,
-    custom: bool,
 ) -> ModelInfo {
     let definition = &catalog_model.definition;
     let mut modalities = definition
@@ -587,9 +532,9 @@ fn openrouter_catalog_model_info(
         display_name: definition.display_name.clone(),
         provider_id: ProviderId::OPENROUTER.to_string(),
         provider: "OpenRouter".to_string(),
-        source: if custom { "custom" } else { "catalog" },
+        source: "catalog",
         recommended,
-        custom,
+        custom: false,
         verified: true,
         latest_alias: false,
         canonical_slug: Some(definition.id.to_string()),
@@ -636,7 +581,7 @@ async fn fetch_lmstudio_models(base_url: &str) -> Result<Vec<Value>, String> {
     providers::fetch_lmstudio_models(base_url, api_key.as_deref()).await
 }
 
-fn append_ollama_models(models: &mut Vec<ModelInfo>, raw_models: &[Value], custom_ids: &[String]) {
+fn append_ollama_models(models: &mut Vec<ModelInfo>, raw_models: &[Value]) {
     for raw in raw_models {
         let Some(local_id) = raw
             .get("name")
@@ -649,12 +594,7 @@ fn append_ollama_models(models: &mut Vec<ModelInfo>, raw_models: &[Value], custo
         if models.iter().any(|model| model.id == id) {
             continue;
         }
-        models.push(ollama_model_info(
-            &id,
-            Some(raw),
-            custom_ids.iter().any(|custom| custom == &id),
-            true,
-        ));
+        models.push(ollama_model_info(&id, Some(raw), true));
     }
 }
 
@@ -662,7 +602,6 @@ fn append_lmstudio_models(
     models: &mut Vec<ModelInfo>,
     raw_models: &[Value],
     catalog: Option<&OpenRouterCatalog>,
-    custom_ids: &[String],
 ) {
     for raw in raw_models {
         let Some(local_id) = raw
@@ -681,110 +620,11 @@ fn append_lmstudio_models(
             &id,
             Some(raw),
             catalog.and_then(|catalog| catalog.model(local_id)),
-            custom_ids.iter().any(|custom| custom == &id),
         ));
     }
 }
 
-fn model_info(id: &str, raw: Option<&Value>, recommended: bool, custom: bool) -> ModelInfo {
-    let display_name = raw
-        .and_then(|model| model.get("name"))
-        .and_then(Value::as_str)
-        .map(clean_display_name)
-        .unwrap_or_else(|| fallback_display_name(id));
-    let provider = raw
-        .and_then(|model| model.get("name"))
-        .and_then(Value::as_str)
-        .and_then(|name| name.split(':').next())
-        .map(str::trim)
-        .filter(|provider| !provider.is_empty())
-        .map(ToString::to_string)
-        .unwrap_or_else(|| fallback_provider(id));
-    let architecture = raw.and_then(|model| model.get("architecture"));
-    let input_modalities = string_array(
-        architecture
-            .and_then(|value| value.get("input_modalities"))
-            .or_else(|| raw.and_then(|value| value.get("input_modalities"))),
-    );
-    let output_modalities = string_array(
-        architecture
-            .and_then(|value| value.get("output_modalities"))
-            .or_else(|| raw.and_then(|value| value.get("output_modalities"))),
-    );
-    let mut modalities = input_modalities
-        .iter()
-        .map(|modality| format!("in:{modality}"))
-        .chain(
-            output_modalities
-                .iter()
-                .map(|modality| format!("out:{modality}")),
-        )
-        .collect::<Vec<_>>();
-    modalities.sort();
-    modalities.dedup();
-
-    let supported_parameters =
-        string_array(raw.and_then(|model| model.get("supported_parameters")));
-    let reasoning = raw.and_then(|model| model.get("reasoning"));
-    let supported_reasoning_efforts = string_array(
-        reasoning
-            .and_then(|value| value.get("supported_efforts"))
-            .or_else(|| reasoning.and_then(|value| value.get("efforts"))),
-    );
-
-    ModelInfo {
-        id: id.to_string(),
-        display_name,
-        provider_id: fallback_provider_id(id).to_string(),
-        provider,
-        source: if custom { "custom" } else { "recommended" },
-        recommended,
-        custom,
-        verified: raw.is_some_and(model_supports_text_chat),
-        latest_alias: id.starts_with('~') || id.ends_with("-latest"),
-        canonical_slug: raw
-            .and_then(|model| model.get("canonical_slug"))
-            .and_then(Value::as_str)
-            .map(ToString::to_string),
-        context_length: raw
-            .and_then(|model| model.get("context_length"))
-            .and_then(Value::as_u64),
-        max_output_tokens: raw
-            .and_then(|model| model.get("top_provider"))
-            .and_then(|provider| provider.get("max_completion_tokens"))
-            .and_then(Value::as_u64),
-        input_cost_per_million: raw
-            .and_then(|model| model.get("pricing"))
-            .and_then(|pricing| pricing.get("prompt"))
-            .and_then(price_per_million),
-        output_cost_per_million: raw
-            .and_then(|model| model.get("pricing"))
-            .and_then(|pricing| pricing.get("completion"))
-            .and_then(price_per_million),
-        cache_read_cost_per_million: None,
-        cache_write_cost_per_million: None,
-        tokens_per_second: raw
-            .and_then(|model| model.get("top_provider"))
-            .and_then(|provider| provider.get("throughput"))
-            .or_else(|| raw.and_then(|model| model.get("throughput")))
-            .and_then(Value::as_f64),
-        modalities,
-        supports_tools: supported_parameters
-            .iter()
-            .any(|parameter| parameter == "tools" || parameter == "tool_choice"),
-        supports_reasoning: reasoning.is_some()
-            || supported_parameters
-                .iter()
-                .any(|parameter| parameter == "reasoning" || parameter == "include_reasoning"),
-        supported_reasoning_efforts,
-        description: raw
-            .and_then(|model| model.get("description"))
-            .and_then(Value::as_str)
-            .map(|description| description.trim().to_string()),
-    }
-}
-
-fn ollama_model_info(id: &str, raw: Option<&Value>, custom: bool, verified: bool) -> ModelInfo {
+fn ollama_model_info(id: &str, raw: Option<&Value>, verified: bool) -> ModelInfo {
     let local_id = providers::ollama_model_id(id).unwrap_or(id);
     let capabilities = string_array(raw.and_then(|model| model.get("capabilities")));
     let mut modalities = vec!["in:text".to_string(), "out:text".to_string()];
@@ -796,9 +636,9 @@ fn ollama_model_info(id: &str, raw: Option<&Value>, custom: bool, verified: bool
         display_name: fallback_display_name(local_id),
         provider_id: ProviderId::OLLAMA.to_string(),
         provider: "Ollama".to_string(),
-        source: if custom { "custom" } else { "local" },
+        source: "local",
         recommended: false,
-        custom,
+        custom: false,
         verified,
         latest_alias: false,
         canonical_slug: raw
@@ -826,11 +666,10 @@ fn lmstudio_model_info(
     id: &str,
     raw: Option<&Value>,
     catalog_model: Option<&OpenRouterCatalogModel>,
-    custom: bool,
 ) -> ModelInfo {
     let local_id = providers::lmstudio_model_id(id).unwrap_or(id);
     if let Some(catalog_model) = catalog_model {
-        let mut model = openrouter_catalog_model_info(catalog_model, false, custom);
+        let mut model = openrouter_catalog_model_info(catalog_model, false);
         model.id = id.to_string();
         model.provider_id = ProviderId::LMSTUDIO.to_string();
         model.provider = "LM Studio".to_string();
@@ -861,9 +700,9 @@ fn lmstudio_model_info(
             .unwrap_or_else(|| fallback_display_name(local_id)),
         provider_id: ProviderId::LMSTUDIO.to_string(),
         provider: "LM Studio".to_string(),
-        source: if custom { "custom" } else { "local" },
+        source: "local",
         recommended: false,
-        custom,
+        custom: false,
         verified: true,
         latest_alias: false,
         canonical_slug: Some(local_id.to_string()),
@@ -934,13 +773,6 @@ pub(crate) fn model_supports_image_chat(model: &Value) -> bool {
             .is_some_and(|modality| modality.to_ascii_lowercase().contains("image"))
 }
 
-fn clean_display_name(name: &str) -> String {
-    name.split_once(':')
-        .map(|(_, display)| display.trim())
-        .unwrap_or(name.trim())
-        .to_string()
-}
-
 fn fallback_display_name(id: &str) -> String {
     id.trim_start_matches('~')
         .split('/')
@@ -948,82 +780,6 @@ fn fallback_display_name(id: &str) -> String {
         .unwrap_or(id)
         .replace('-', " ")
         .replace("latest", "Latest")
-}
-
-fn fallback_provider(id: &str) -> String {
-    let provider = id
-        .trim_start_matches('~')
-        .split('/')
-        .next()
-        .unwrap_or("OpenRouter");
-    match provider {
-        "openai" => "OpenAI".to_string(),
-        "anthropic" => "Anthropic".to_string(),
-        "z-ai" => "Z.ai".to_string(),
-        "x-ai" => "xAI".to_string(),
-        "moonshotai" => "Moonshot AI".to_string(),
-        "moonshotai-cn" => "Moonshot AI (China)".to_string(),
-        "kimi-for-coding" => "Kimi For Coding".to_string(),
-        "minimax" => "MiniMax (minimax.io)".to_string(),
-        "minimax-coding-plan" => "MiniMax Token Plan (minimax.io)".to_string(),
-        "minimax-cn" => "MiniMax (minimaxi.com)".to_string(),
-        "minimax-cn-coding-plan" => "MiniMax Token Plan (minimaxi.com)".to_string(),
-        "nvidia" => "NVIDIA".to_string(),
-        other => {
-            let mut chars = other.chars();
-            match chars.next() {
-                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
-                None => "OpenRouter".to_string(),
-            }
-        }
-    }
-}
-
-fn fallback_provider_id(id: &str) -> &'static str {
-    if id.starts_with("ollama/") {
-        ProviderId::OLLAMA
-    } else if id.starts_with("openai/") {
-        ProviderId::OPENAI
-    } else if id.starts_with("anthropic/") {
-        ProviderId::ANTHROPIC
-    } else if id.starts_with("ollama-cloud/") {
-        ProviderId::OLLAMA_CLOUD
-    } else if id.starts_with("lmstudio/") {
-        ProviderId::LMSTUDIO
-    } else if id.starts_with("deepseek/") {
-        ProviderId::DEEPSEEK
-    } else if id.starts_with("zai/") {
-        ProviderId::ZAI
-    } else if id.starts_with("moonshotai-cn/") {
-        ProviderId::MOONSHOTAI_CN
-    } else if id.starts_with("moonshotai/") {
-        ProviderId::MOONSHOTAI
-    } else if id.starts_with("kimi-for-coding/") {
-        ProviderId::KIMI_FOR_CODING
-    } else if id.starts_with("minimax-cn-coding-plan/") {
-        ProviderId::MINIMAX_CN_CODING_PLAN
-    } else if id.starts_with("minimax-coding-plan/") {
-        ProviderId::MINIMAX_CODING_PLAN
-    } else if id.starts_with("minimax-cn/") {
-        ProviderId::MINIMAX_CN
-    } else if id.starts_with("minimax/") {
-        ProviderId::MINIMAX
-    } else if id.starts_with("nvidia/") {
-        ProviderId::NVIDIA
-    } else {
-        ProviderId::OPENROUTER
-    }
-}
-
-fn price_per_million(value: &Value) -> Option<f64> {
-    let price = value
-        .as_str()
-        .and_then(|raw| raw.parse::<f64>().ok())
-        .or_else(|| value.as_f64())?;
-    if price < 0.0 {
-        return None;
-    }
-    Some(price * 1_000_000.0)
 }
 
 fn string_array(value: Option<&Value>) -> Vec<String> {
@@ -1073,15 +829,8 @@ mod tests {
         }"#;
         let catalog = parse_moonshot_catalog(raw).unwrap();
         let mut models = Vec::new();
-        let custom_ids = Vec::new();
 
-        append_hosted_catalog_models(
-            &mut models,
-            &catalog,
-            "Moonshot AI",
-            ProviderId::MOONSHOTAI,
-            &custom_ids,
-        );
+        append_hosted_catalog_models(&mut models, &catalog, "Moonshot AI", ProviderId::MOONSHOTAI);
 
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].id, "moonshotai/kimi-k2.7-code");
@@ -1111,14 +860,12 @@ mod tests {
         }"#;
         let catalog = super::super::providers::models_dev::parse_minimax_catalog(raw).unwrap();
         let mut models = Vec::new();
-        let custom_ids = Vec::new();
 
         append_hosted_catalog_models(
             &mut models,
             &catalog,
             "MiniMax (minimax.io)",
             ProviderId::MINIMAX,
-            &custom_ids,
         );
 
         assert_eq!(models.len(), 1);
@@ -1148,15 +895,8 @@ mod tests {
         }"#;
         let catalog = parse_nvidia_catalog(raw).unwrap();
         let mut models = Vec::new();
-        let custom_ids = Vec::new();
 
-        append_hosted_catalog_models(
-            &mut models,
-            &catalog,
-            "NVIDIA",
-            ProviderId::NVIDIA,
-            &custom_ids,
-        );
+        append_hosted_catalog_models(&mut models, &catalog, "NVIDIA", ProviderId::NVIDIA);
 
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].id, "nvidia/meta/llama-3.3-70b-instruct");
@@ -1209,9 +949,39 @@ mod tests {
             "capabilities": ["completion", "tools"]
         });
 
-        let model = ollama_model_info("ollama/gemma4", Some(&raw), false, true);
+        let model = ollama_model_info("ollama/gemma4", Some(&raw), true);
 
         assert_eq!(model.context_length, Some(4096));
+    }
+
+    #[test]
+    fn selected_uncatalogued_lmstudio_model_remains_local() {
+        let settings: ChatSettings = serde_json::from_value(json!({
+            "model": "lmstudio/qwen/qwen3.6-27b",
+            "custom_models": ["lmstudio/qwen/qwen3.6-27b"]
+        }))
+        .unwrap();
+        let raw = json!({
+            "type": "llm",
+            "key": "qwen/qwen3.6-27b",
+            "display_name": "Qwen3.6 27B",
+            "loaded_instances": [],
+            "max_context_length": 262144
+        });
+        let mut models = Vec::new();
+
+        append_lmstudio_models(&mut models, &[raw], None);
+
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, settings.model);
+        assert_eq!(models[0].source, "local");
+        assert!(!models[0].custom);
+        assert!(
+            serde_json::to_value(settings)
+                .unwrap()
+                .get("custom_models")
+                .is_none()
+        );
     }
 
     #[test]
@@ -1232,7 +1002,7 @@ mod tests {
         });
         let mut models = Vec::new();
 
-        append_lmstudio_models(&mut models, &[raw], None, &[]);
+        append_lmstudio_models(&mut models, &[raw], None);
 
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].id, "lmstudio/google/gemma-4-26b-a4b");
@@ -1250,7 +1020,7 @@ mod tests {
         });
         let mut models = Vec::new();
 
-        append_lmstudio_models(&mut models, &[raw], None, &[]);
+        append_lmstudio_models(&mut models, &[raw], None);
 
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].context_length, Some(131072));

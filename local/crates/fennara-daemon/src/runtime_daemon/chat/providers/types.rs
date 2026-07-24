@@ -294,7 +294,6 @@ pub(crate) struct ProviderSettings {
     pub(crate) custom_providers: Vec<CustomProviderRuntime>,
     pub(crate) ollama_base_url: String,
     pub(crate) lmstudio_base_url: String,
-    pub(crate) custom_models: Vec<String>,
     pub(crate) local_model_limits: BTreeMap<String, Limits>,
 }
 

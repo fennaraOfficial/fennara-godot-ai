@@ -220,11 +220,6 @@ impl Catalog {
         catalog.insert_hosted_catalog(hosted_minimax_cn);
         catalog.insert_hosted_catalog(hosted_minimax_cn_coding_plan);
         catalog.insert_hosted_catalog(hosted_nvidia);
-        for model in &settings.custom_models {
-            if let Ok(model_ref) = model_ref_from_selection(model, &catalog) {
-                catalog.ensure_model_for_ref(&model_ref);
-            }
-        }
         catalog.default_model = Some(ModelRef::new(
             ProviderId::unchecked(ProviderId::OPENROUTER),
             ModelId::new(settings::DEFAULT_OPENROUTER_MODEL_ID).expect("default model id is valid"),
@@ -299,16 +294,6 @@ impl Catalog {
                 self.insert_model(model.definition.clone());
             }
         }
-    }
-
-    fn ensure_model_for_ref(&mut self, model_ref: &ModelRef) {
-        if self
-            .models
-            .contains_key(&(model_ref.provider.clone(), model_ref.model.clone()))
-        {
-            return;
-        }
-        self.insert_model(dynamic_model(&model_ref.provider, &model_ref.model));
     }
 }
 
@@ -426,7 +411,6 @@ mod tests {
             custom_providers: Vec::new(),
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
-            custom_models: Vec::new(),
             local_model_limits: BTreeMap::new(),
         }
     }
@@ -561,7 +545,6 @@ mod tests {
             custom_providers: Vec::new(),
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
-            custom_models: Vec::new(),
             local_model_limits,
         });
 

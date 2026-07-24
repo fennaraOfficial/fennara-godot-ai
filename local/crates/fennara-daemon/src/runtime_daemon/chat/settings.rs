@@ -42,8 +42,6 @@ pub(crate) struct ChatSettings {
     #[serde(default = "default_reasoning_effort")]
     pub(crate) reasoning_effort: String,
     #[serde(default)]
-    pub(crate) custom_models: Vec<String>,
-    #[serde(default)]
     pub(crate) custom_providers: Vec<CustomProviderConfig>,
     #[serde(default)]
     pub(crate) local_model_context_lengths: BTreeMap<String, u32>,
@@ -64,8 +62,6 @@ pub(crate) struct PublicChatSettings {
     pub(crate) default_model: &'static str,
     pub(crate) reasoning_effort: String,
     pub(crate) reasoning_effort_options: Vec<&'static str>,
-    pub(crate) text_model_suggestions: Vec<String>,
-    pub(crate) custom_models: Vec<String>,
     pub(crate) local_model_context_lengths: BTreeMap<String, u32>,
     pub(crate) chat_surface: String,
     pub(crate) approval_mode: String,
@@ -80,7 +76,6 @@ impl Default for ChatSettings {
             provider_base_urls: default_provider_base_urls(),
             model: DEFAULT_MODEL.to_string(),
             reasoning_effort: DEFAULT_REASONING_EFFORT.to_string(),
-            custom_models: Vec::new(),
             custom_providers: Vec::new(),
             local_model_context_lengths: BTreeMap::new(),
             chat_surface: DEFAULT_CHAT_SURFACE.to_string(),
@@ -104,12 +99,6 @@ impl ChatSettings {
             default_model: DEFAULT_MODEL,
             reasoning_effort: clean_reasoning_effort(&self.reasoning_effort).to_string(),
             reasoning_effort_options: vec!["low", DEFAULT_REASONING_EFFORT, "high"],
-            text_model_suggestions: suggestion_models(
-                &self.custom_models,
-                &self.custom_providers,
-                has_openrouter_key,
-            ),
-            custom_models: self.custom_models.clone(),
             local_model_context_lengths: self.local_model_context_lengths.clone(),
             chat_surface: clean_chat_surface(&self.chat_surface).to_string(),
             approval_mode: self.approval_mode.as_str().to_string(),
@@ -130,44 +119,6 @@ pub(crate) fn recommended_model_ids() -> Vec<&'static str> {
         "deepseek/deepseek-v4-pro",
         "openrouter/z-ai/glm-5.2",
     ]
-}
-
-fn suggestion_models(
-    custom_models: &[String],
-    custom_providers: &[CustomProviderConfig],
-    has_openrouter_key: bool,
-) -> Vec<String> {
-    let mut models = if has_openrouter_key {
-        recommended_model_ids()
-            .into_iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-    for model in custom_models {
-        if !has_openrouter_key
-            && !model.starts_with("openai/")
-            && !model.starts_with("anthropic/")
-            && !model.starts_with("ollama/")
-            && !model.starts_with("lmstudio/")
-            && !model.starts_with("moonshotai/")
-            && !model.starts_with("moonshotai-cn/")
-            && !model.starts_with("kimi-for-coding/")
-            && !model.starts_with("minimax/")
-            && !model.starts_with("minimax-coding-plan/")
-            && !model.starts_with("minimax-cn/")
-            && !model.starts_with("minimax-cn-coding-plan/")
-            && !model.starts_with("nvidia/")
-            && custom::split_model_selection(custom_providers, model).is_none()
-        {
-            continue;
-        }
-        if !models.iter().any(|existing| existing == model) {
-            models.push(model.clone());
-        }
-    }
-    models
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -229,13 +180,6 @@ fn load_settings_unlocked() -> (ChatSettings, bool) {
         ProviderId::OLLAMA.to_string(),
         settings.ollama_base_url.clone(),
     );
-    let clean_custom_models = clean_model_list(&settings.custom_models);
-    let migrated_custom_models = clean_custom_models
-        .iter()
-        .map(|model| migrate_legacy_openrouter_selection(model, &settings.custom_providers))
-        .collect::<Vec<_>>();
-    settings.custom_models = clean_model_list(&migrated_custom_models);
-    let custom_models_migrated = settings.custom_models != clean_custom_models;
     settings.local_model_context_lengths =
         clean_local_model_context_lengths(&settings.local_model_context_lengths);
     settings.chat_surface = clean_chat_surface(&settings.chat_surface).to_string();
@@ -244,10 +188,7 @@ fn load_settings_unlocked() -> (ChatSettings, bool) {
         auth::migrate_legacy_api_key(ProviderId::OPENROUTER, legacy_openrouter_key);
     }
     if !custom_headers_migration_failed
-        && (had_legacy_openrouter_key
-            || model_migrated
-            || custom_models_migrated
-            || custom_headers_migrated)
+        && (had_legacy_openrouter_key || model_migrated || custom_headers_migrated)
     {
         if write_settings_file(&settings).is_ok() && custom_headers_migrated {
             let _ = fs::remove_file(previous);
@@ -379,7 +320,6 @@ pub(crate) fn save_settings(update: SaveSettingsRequest) -> Result<ChatSettings,
     }
     if let Some(model) = update.model {
         settings.model = clean_model(&model).unwrap_or_else(|| DEFAULT_MODEL.to_string());
-        remember_custom_model(&mut settings.custom_models, &settings.model);
     }
     if let Some(reasoning_effort) = update.reasoning_effort {
         settings.reasoning_effort = clean_reasoning_effort(&reasoning_effort).to_string();
@@ -514,25 +454,6 @@ fn replace_settings_file(temp: &Path, path: &Path) -> Result<(), String> {
     }
 }
 
-fn remember_custom_model(custom_models: &mut Vec<String>, model: &str) {
-    if recommended_model_ids()
-        .into_iter()
-        .any(|recommended| recommended == model)
-    {
-        return;
-    }
-    if model == DEFAULT_MODEL || model == "openrouter/auto" {
-        return;
-    }
-    if !model.contains('/') {
-        return;
-    }
-    if !custom_models.iter().any(|existing| existing == model) {
-        custom_models.push(model.to_string());
-    }
-    *custom_models = clean_model_list(custom_models);
-}
-
 fn reconcile_custom_provider_models(settings: &mut ChatSettings, provider: &CustomProviderConfig) {
     let prefix = format!("{}/", provider.id);
     let is_configured = |selection: &str| {
@@ -541,31 +462,9 @@ fn reconcile_custom_provider_models(settings: &mut ChatSettings, provider: &Cust
             .is_some_and(|model_id| provider.models.iter().any(|model| model.id == model_id))
     };
 
-    settings
-        .custom_models
-        .retain(|selection| !selection.starts_with(&prefix) || is_configured(selection));
-
     if settings.model.starts_with(&prefix) && !is_configured(&settings.model) {
-        let replacement = format!("{prefix}{}", provider.models[0].id);
-        settings.model = replacement.clone();
-        remember_custom_model(&mut settings.custom_models, &replacement);
+        settings.model = format!("{prefix}{}", provider.models[0].id);
     }
-}
-
-fn clean_model_list(models: &[String]) -> Vec<String> {
-    let mut clean = Vec::new();
-    for model in models {
-        let Some(model) = clean_model(model) else {
-            continue;
-        };
-        if !model.contains('/') {
-            continue;
-        }
-        if !clean.iter().any(|existing| existing == &model) {
-            clean.push(model);
-        }
-    }
-    clean
 }
 
 // Legacy compatibility only. New selections must always include their provider prefix.

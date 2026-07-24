@@ -12,10 +12,6 @@ use crate::runtime_daemon::chat::providers::custom::{CustomProviderConfig, Custo
 fn provider_edit_replaces_a_removed_selected_model() {
     let mut settings = ChatSettings {
         model: "omniroute/removed/model".to_string(),
-        custom_models: vec![
-            "omniroute/removed/model".to_string(),
-            "openai/gpt-5.5".to_string(),
-        ],
         ..ChatSettings::default()
     };
     let provider = CustomProviderConfig {
@@ -34,10 +30,6 @@ fn provider_edit_replaces_a_removed_selected_model() {
     reconcile_custom_provider_models(&mut settings, &provider);
 
     assert_eq!(settings.model, "omniroute/replacement/model");
-    assert_eq!(
-        settings.custom_models,
-        vec!["openai/gpt-5.5", "omniroute/replacement/model"]
-    );
 }
 
 #[test]
