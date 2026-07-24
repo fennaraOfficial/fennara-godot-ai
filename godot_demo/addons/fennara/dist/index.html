@@ -493,6 +493,19 @@
                 Restart Godot for this change to take effect.
               </p>
             </fieldset>
+            <fieldset class="settings-group">
+              <legend>Anonymous telemetry</legend>
+              <label class="settings-check">
+                <input type="checkbox" data-telemetry-enabled checked />
+                <span>Share anonymous daily usage</span>
+              </label>
+              <p class="settings-note">
+                Sends an anonymous installation ID, Fennara and Godot versions, operating system, and CPU architecture at most once per UTC day. It never sends project names, paths, prompts, tool inputs, tool results, logs, or screenshots.
+              </p>
+              <p class="settings-status" data-telemetry-environment-status hidden>
+                Telemetry is disabled by an environment variable.
+              </p>
+            </fieldset>
           </section>
           <section class="settings-page mcp-apps-page" data-settings-page="mcp" hidden>
             <div class="mcp-apps-intro">

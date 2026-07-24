@@ -1,7 +1,9 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{
     collections::BTreeMap,
-    env, fs,
+    env,
+    ffi::OsStr,
+    fs,
     io::Write,
     path::{Path, PathBuf},
     sync::{
@@ -49,6 +51,8 @@ pub(crate) struct ChatSettings {
     pub(crate) chat_surface: String,
     #[serde(default, deserialize_with = "deserialize_approval_mode")]
     pub(crate) approval_mode: ApprovalMode,
+    #[serde(default = "default_true")]
+    pub(crate) telemetry_enabled: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -66,6 +70,8 @@ pub(crate) struct PublicChatSettings {
     pub(crate) chat_surface: String,
     pub(crate) approval_mode: String,
     pub(crate) approval_mode_options: Vec<serde_json::Value>,
+    pub(crate) telemetry_enabled: bool,
+    pub(crate) telemetry_controlled_by_environment: bool,
 }
 
 impl Default for ChatSettings {
@@ -80,6 +86,7 @@ impl Default for ChatSettings {
             local_model_context_lengths: BTreeMap::new(),
             chat_surface: DEFAULT_CHAT_SURFACE.to_string(),
             approval_mode: ApprovalMode::Ask,
+            telemetry_enabled: true,
         }
     }
 }
@@ -103,7 +110,13 @@ impl ChatSettings {
             chat_surface: clean_chat_surface(&self.chat_surface).to_string(),
             approval_mode: self.approval_mode.as_str().to_string(),
             approval_mode_options: approval_mode_options(),
+            telemetry_enabled: self.telemetry_is_enabled(),
+            telemetry_controlled_by_environment: telemetry_disabled_by_environment(),
         }
+    }
+
+    pub(crate) fn telemetry_is_enabled(&self) -> bool {
+        self.telemetry_enabled && !telemetry_disabled_by_environment()
     }
 }
 
@@ -134,6 +147,7 @@ pub(crate) struct SaveSettingsRequest {
     pub(crate) local_model_context_lengths: Option<BTreeMap<String, u32>>,
     pub(crate) chat_surface: Option<String>,
     pub(crate) approval_mode: Option<String>,
+    pub(crate) telemetry_enabled: Option<bool>,
 }
 
 pub(crate) fn load_settings() -> ChatSettings {
@@ -332,6 +346,9 @@ pub(crate) fn save_settings(update: SaveSettingsRequest) -> Result<ChatSettings,
     }
     if let Some(approval_mode) = update.approval_mode {
         settings.approval_mode = clean_approval_mode(&approval_mode);
+    }
+    if let Some(telemetry_enabled) = update.telemetry_enabled {
+        settings.telemetry_enabled = telemetry_enabled;
     }
 
     write_settings_file(&settings)?;
@@ -626,6 +643,24 @@ fn default_reasoning_effort() -> String {
 
 fn default_chat_surface() -> String {
     DEFAULT_CHAT_SURFACE.to_string()
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn telemetry_disabled_by_environment() -> bool {
+    env_truthy(env::var_os("FENNARA_DISABLE_TELEMETRY").as_deref())
+        || env_truthy(env::var_os("DO_NOT_TRACK").as_deref())
+}
+
+fn env_truthy(value: Option<&OsStr>) -> bool {
+    value.is_some_and(|value| {
+        matches!(
+            value.to_string_lossy().trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
 }
 
 fn deserialize_approval_mode<'de, D>(deserializer: D) -> Result<ApprovalMode, D::Error>

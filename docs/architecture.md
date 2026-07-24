@@ -132,6 +132,24 @@ not captured by default. The daemon exposes a small local debug read endpoint at
 `/chat/traces` for filtering by `chat_id`, `trace_id`, `turn_id`, or
 `generation_id`.
 
+## Anonymous Telemetry
+
+After a real Godot editor connection, the daemon can enqueue one anonymous
+active-installation event per UTC day. The bounded queue and background HTTP
+worker are separate from tool execution, chat generation, and the Godot bridge,
+so telemetry cannot delay or fail a user operation.
+
+The daemon persists one random installation UUID and the last accepted UTC day
+under `Fennara/telemetry/state.json`. The event contains only that UUID, the
+Fennara and numeric Godot versions, platform, and CPU architecture. The
+`fennara.io` receiver validates the exact payload and converts the UUID to a
+server-side HMAC before forwarding a personless event to PostHog.
+
+The saved Chat Settings preference is enabled by default. The UI can disable it,
+and `FENNARA_DISABLE_TELEMETRY` or `DO_NOT_TRACK` can enforce an environment
+override. Disabling deletes the local telemetry state. See
+[Anonymous Telemetry](telemetry.md) for the complete privacy contract.
+
 ## Install Layout
 
 For the manually copied release-addon flow, the GDExtension first presents a native
@@ -182,6 +200,8 @@ Fennara/
     fennara-daemon
   daemon-control-token
   current.json
+  telemetry/
+    state.json
   versions/
     <version>/
       fennara-mcp-runtime

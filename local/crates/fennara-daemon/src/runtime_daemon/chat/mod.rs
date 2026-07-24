@@ -28,7 +28,7 @@ mod models;
 mod prompt;
 mod providers;
 mod schema;
-mod settings;
+pub(crate) mod settings;
 mod store;
 mod tools;
 pub(crate) mod trace;
@@ -63,6 +63,7 @@ struct ClientRequest {
     provider_base_urls: Option<BTreeMap<String, String>>,
     custom_provider: Option<SaveCustomProviderRequest>,
     approval_mode: Option<String>,
+    telemetry_enabled: Option<bool>,
     local_model_context_lengths: Option<BTreeMap<String, u32>>,
     approval_id: Option<String>,
     decision: Option<String>,
@@ -446,9 +447,13 @@ where
                 local_model_context_lengths: request.local_model_context_lengths,
                 chat_surface: request.chat_surface,
                 approval_mode: request.approval_mode,
+                telemetry_enabled: request.telemetry_enabled,
             };
             match save_settings(update) {
                 Ok(settings) => {
+                    if let Some(telemetry) = state.telemetry.read().await.as_ref().cloned() {
+                        telemetry.set_enabled(settings.telemetry_is_enabled());
+                    }
                     models::spawn_catalog_refresh_if_needed();
                     send_json(
                         sender,

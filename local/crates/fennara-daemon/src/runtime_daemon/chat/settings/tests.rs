@@ -3,10 +3,28 @@ use std::collections::BTreeMap;
 #[cfg(windows)]
 use super::replace_settings_file;
 use super::{
-    ChatSettings, CustomHeaderMigration, migrate_custom_provider_headers,
+    ChatSettings, CustomHeaderMigration, env_truthy, migrate_custom_provider_headers,
     migrate_legacy_openrouter_selection, reconcile_custom_provider_models,
 };
 use crate::runtime_daemon::chat::providers::custom::{CustomProviderConfig, CustomProviderModel};
+
+#[test]
+fn legacy_settings_default_to_anonymous_telemetry_enabled() {
+    let settings: ChatSettings =
+        serde_json::from_str(r#"{"model":"openrouter/google/gemini-3.5-flash"}"#).unwrap();
+
+    assert!(settings.telemetry_enabled);
+}
+
+#[test]
+fn telemetry_environment_flags_accept_only_explicit_truthy_values() {
+    assert!(env_truthy(Some(std::ffi::OsStr::new("true"))));
+    assert!(env_truthy(Some(std::ffi::OsStr::new(" YES "))));
+    assert!(env_truthy(Some(std::ffi::OsStr::new("1"))));
+    assert!(!env_truthy(Some(std::ffi::OsStr::new("false"))));
+    assert!(!env_truthy(Some(std::ffi::OsStr::new(""))));
+    assert!(!env_truthy(None));
+}
 
 #[test]
 fn provider_edit_replaces_a_removed_selected_model() {

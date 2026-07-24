@@ -23,6 +23,7 @@ and keeps advanced details lower on the page.
 | [Slash commands](slash-commands.md) | `/provider` and `/model` in the chat dock |
 | [FAQ](faq.md) | Short answers to common questions |
 | [Demos](demos.md) | Videos and project walkthroughs |
+| [Anonymous telemetry](telemetry.md) | Data collected, delivery behavior, and opt-out controls |
 
 ## Reference And Recovery
 
