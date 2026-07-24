@@ -169,8 +169,8 @@ after Godot connects. It contains a random installation UUID, Fennara and Godot
 versions, operating system, and CPU architecture. It does not contain project
 data, paths, prompts, tool activity, logs, screenshots, or account information.
 
-Telemetry can be disabled in **Chat Settings > Chat > Anonymous telemetry** or
-with `FENNARA_DISABLE_TELEMETRY=true`. See [Anonymous
+Telemetry can be disabled in **Chat Settings > Chat > Anonymous telemetry**,
+with `FENNARA_DISABLE_TELEMETRY=true`, or with `DO_NOT_TRACK=1`. See [Anonymous
 Telemetry](docs/telemetry.md) for the complete payload, storage, transport, and
 opt-out contract.
 
