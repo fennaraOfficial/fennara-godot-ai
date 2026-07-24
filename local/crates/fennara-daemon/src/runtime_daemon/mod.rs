@@ -20,6 +20,7 @@ pub(crate) mod scene_runner;
 #[cfg(test)]
 mod shutdown_tests;
 pub(crate) mod state;
+pub(crate) mod telemetry;
 pub(crate) mod util;
 
 use state::AppState;
@@ -82,7 +83,7 @@ pub async fn run() {
         .route("/chat/ws", get(chat::chat_ws))
         .merge(privileged)
         .layer(Extension(control_token))
-        .with_state(state);
+        .with_state(state.clone());
 
     let addr: SocketAddr = format!("{DAEMON_HOST}:{DAEMON_PORT}")
         .parse()
@@ -90,6 +91,9 @@ pub async fn run() {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("failed to bind fennara daemon");
+    let telemetry =
+        telemetry::TelemetryRuntime::start(chat::settings::load_settings().telemetry_is_enabled());
+    *state.telemetry.write().await = Some(telemetry.handle());
 
     eprintln!("fennara-daemon listening on http://{addr}");
     axum::serve(listener, app)
@@ -98,6 +102,8 @@ pub async fn run() {
         })
         .await
         .expect("fennara daemon stopped unexpectedly");
+    state.telemetry.write().await.take();
+    telemetry.shutdown().await;
 }
 
 async fn health() -> Json<Value> {

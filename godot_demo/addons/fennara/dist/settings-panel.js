@@ -1,4 +1,11 @@
 (function () {
+  function includeTelemetryPreference(payload, telemetryEnabled, controlledByEnvironment) {
+    if (!controlledByEnvironment) {
+      payload.telemetry_enabled = Boolean(telemetryEnabled);
+    }
+    return payload;
+  }
+
   function createSettingsPanel(options = {}) {
     const elements = options.elements || {};
     const callbacks = options.callbacks || {};
@@ -7,6 +14,8 @@
     const chatSurfaceBrowserInput = elements.chatSurfaceBrowserInput || null;
     const chatSurfaceRestartStatus = elements.chatSurfaceRestartStatus || null;
     const approvalModeControls = Array.from(elements.approvalModeControls || []);
+    const telemetryEnabledInput = elements.telemetryEnabledInput || null;
+    const telemetryEnvironmentStatus = elements.telemetryEnvironmentStatus || null;
     const settingsSavedToast = elements.settingsSavedToast || null;
     const saveSettingsButton = elements.saveSettingsButton || null;
     const openProvidersButton = elements.openProvidersButton || null;
@@ -27,6 +36,8 @@
     const cleanApprovalMode = callbacks.cleanApprovalMode || ((mode) => mode === approvalModeFullAccess ? approvalModeFullAccess : approvalModeAsk);
     const getCurrentChatSurface = callbacks.getCurrentChatSurface || (() => chatSurfaceEmbedded);
     const getCurrentApprovalMode = callbacks.getCurrentApprovalMode || (() => approvalModeAsk);
+    const getTelemetryEnabled = callbacks.getTelemetryEnabled || (() => true);
+    const getTelemetryControlledByEnvironment = callbacks.getTelemetryControlledByEnvironment || (() => false);
     const openProviderPicker = callbacks.openProviderPicker || function () {};
     const buildSavePayload = callbacks.buildSavePayload || (() => null);
     const sendIfOpen = callbacks.sendIfOpen || (() => false);
@@ -52,6 +63,7 @@
       const payload = buildSavePayload({
         chatSurface: selectedChatSurface(),
         approvalMode: selectedApprovalMode(),
+        telemetryEnabled: selectedTelemetryEnabled(),
       });
       if (payload) {
         queueSave(payload);
@@ -67,6 +79,10 @@
       control.addEventListener("change", () => {
         setDirty(true);
       });
+    });
+
+    telemetryEnabledInput?.addEventListener("change", () => {
+      setDirty(true);
     });
 
     openProvidersButton?.addEventListener("click", (event) => {
@@ -89,6 +105,7 @@
         chatSurfaceBrowserInput.checked = getCurrentChatSurface() === chatSurfaceBrowser;
       }
       syncApprovalModeControls();
+      syncTelemetryControl();
       updateChatSurfaceRestartNotice(getCurrentChatSurface());
       markClean();
       if (settingsDialog && typeof settingsDialog.showModal === "function") {
@@ -105,11 +122,26 @@
       return cleanApprovalMode(selected?.value || getCurrentApprovalMode());
     }
 
+    function selectedTelemetryEnabled() {
+      return telemetryEnabledInput?.checked ?? getTelemetryEnabled();
+    }
+
     function syncApprovalModeControls() {
       const currentApprovalMode = getCurrentApprovalMode();
       approvalModeControls.forEach((control) => {
         control.checked = cleanApprovalMode(control.value) === currentApprovalMode;
       });
+    }
+
+    function syncTelemetryControl() {
+      const controlledByEnvironment = Boolean(getTelemetryControlledByEnvironment());
+      if (telemetryEnabledInput) {
+        telemetryEnabledInput.checked = Boolean(getTelemetryEnabled());
+        telemetryEnabledInput.disabled = controlledByEnvironment;
+      }
+      if (telemetryEnvironmentStatus) {
+        telemetryEnvironmentStatus.hidden = !controlledByEnvironment;
+      }
     }
 
     function updateChatSurfaceRestartNotice(surface = selectedChatSurface()) {
@@ -230,9 +262,11 @@
       queueSave,
       selectedApprovalMode,
       selectedChatSurface,
+      selectedTelemetryEnabled,
       setDirty,
       setSaving,
       syncApprovalModeControls,
+      syncTelemetryControl,
       updateChatSurfaceRestartNotice,
       updateSaveButton,
     };
@@ -240,5 +274,6 @@
 
   window.FennaraSettingsPanel = {
     createSettingsPanel,
+    includeTelemetryPreference,
   };
 })();

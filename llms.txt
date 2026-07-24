@@ -32,6 +32,7 @@ User guides:
 - docs/providers.md
 - docs/slash-commands.md
 - docs/manual-install.md
+- docs/telemetry.md
 
 Contributor reference:
 - docs/repo-map.md

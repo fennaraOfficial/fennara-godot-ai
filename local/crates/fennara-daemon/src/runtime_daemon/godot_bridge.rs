@@ -636,6 +636,7 @@ async fn handle_project_state_message(
             chat_token: optional_string(value, "chat_token"),
             tools: string_array(value, "tools"),
         };
+        let telemetry_godot_version = project.godot_version.clone();
 
         *session_id = Some(next_session_id.clone());
         state
@@ -648,6 +649,11 @@ async fn handle_project_state_message(
             .write()
             .await
             .insert(next_session_id.clone(), project);
+        if let Some(godot_version) = telemetry_godot_version
+            && let Some(telemetry) = state.telemetry.read().await.as_ref()
+        {
+            telemetry.record_activity(&godot_version);
+        }
         ensure_active_project_after_connect(state, &next_session_id).await;
         broadcast_active_project_changed(state).await;
         return true;

@@ -14,6 +14,7 @@ use tokio::sync::{Mutex, RwLock, mpsc, oneshot};
 
 use super::chat::context::ChatContextSnippet;
 use super::permissions::PendingToolApproval;
+use super::telemetry::TelemetryHandle;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
@@ -32,6 +33,7 @@ pub(crate) struct AppState {
     pub(crate) runtime_sessions: Arc<Mutex<HashMap<String, RuntimeSession>>>,
     pub(crate) shutdown_sender: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     pub(crate) docs_warmup_running: Arc<AtomicBool>,
+    pub(crate) telemetry: Arc<RwLock<Option<TelemetryHandle>>>,
 }
 
 impl AppState {
@@ -53,6 +55,7 @@ impl AppState {
             runtime_sessions: Arc::new(Mutex::new(HashMap::new())),
             shutdown_sender: Arc::new(Mutex::new(Some(shutdown_tx))),
             docs_warmup_running: Arc::new(AtomicBool::new(false)),
+            telemetry: Arc::new(RwLock::new(None)),
         }
     }
 }

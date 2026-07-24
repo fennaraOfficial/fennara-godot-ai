@@ -162,6 +162,18 @@ Fennara exposes a small set of Godot-aware tools:
 
 The goal is not to replace an agent's normal file tools. Fennara gives the missing Godot feedback loop.
 
+## Privacy
+
+Fennara sends one anonymous active-installation event at most once per UTC day
+after Godot connects. It contains a random installation UUID, Fennara and Godot
+versions, operating system, and CPU architecture. It does not contain project
+data, paths, prompts, tool activity, logs, screenshots, or account information.
+
+Telemetry can be disabled in **Chat Settings > Chat > Anonymous telemetry**,
+with `FENNARA_DISABLE_TELEMETRY=true`, or with `DO_NOT_TRACK=1`. See [Anonymous
+Telemetry](docs/telemetry.md) for the complete payload, storage, transport, and
+opt-out contract.
+
 ## Demos
 
 Watch a hands-on Fennara walkthrough:
@@ -194,6 +206,7 @@ See [Demos](docs/demos.md) for more videos from the Fennara channel.
 | [Chat providers](docs/providers.md) | Built-in chat models and keys |
 | [MCP setup](docs/mcp-setup.md) | Codex, Claude, Cursor, and other MCP apps |
 | [Tools](docs/tools.md) | The Godot feedback available to agents |
+| [Anonymous telemetry](docs/telemetry.md) | Data collected, delivery behavior, and opt-out controls |
 | [Contributing](CONTRIBUTING.md) | Development and pull request guidance |
 
 ## Community

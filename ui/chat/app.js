@@ -56,6 +56,8 @@
   const chatSurfaceBrowserInput = document.querySelector("[data-chat-surface-browser]");
   const chatSurfaceRestartStatus = document.querySelector("[data-chat-surface-restart]");
   const approvalModeControls = document.querySelectorAll("[data-approval-mode]");
+  const telemetryEnabledInput = document.querySelector("[data-telemetry-enabled]");
+  const telemetryEnvironmentStatus = document.querySelector("[data-telemetry-environment-status]");
   const settingsSavedToast = document.querySelector("[data-settings-saved-toast]");
   const openSettingsProvidersButton = document.querySelector("[data-open-settings-providers]");
   const modelInput = document.querySelector("[data-model]");
@@ -159,6 +161,8 @@
   let currentReasoningEffort = "medium";
   let currentChatSurface = CHAT_SURFACE_EMBEDDED;
   let currentApprovalMode = APPROVAL_MODE_ASK;
+  let telemetryEnabled = true;
+  let telemetryControlledByEnvironment = false;
   let hasOpenRouterKey = false;
   let hasOllamaCloudKey = false;
   let providerRegistry = [];
@@ -411,6 +415,8 @@
       chatSurfaceBrowserInput,
       chatSurfaceRestartStatus,
       approvalModeControls,
+      telemetryEnabledInput,
+      telemetryEnvironmentStatus,
       settingsSavedToast,
       saveSettingsButton,
       openProvidersButton: openSettingsProvidersButton,
@@ -427,22 +433,31 @@
       cleanApprovalMode,
       getCurrentChatSurface: () => currentChatSurface,
       getCurrentApprovalMode: () => currentApprovalMode,
+      getTelemetryEnabled: () => telemetryEnabled,
+      getTelemetryControlledByEnvironment: () => telemetryControlledByEnvironment,
       openProviderPicker,
       sendIfOpen: daemonClient.sendIfOpen,
       connect,
       appendSystem,
       clearSystemStatus,
-      buildSavePayload: ({ chatSurface, approvalMode }) => ({
-        type: "save_settings",
-        request_id: nextRequestId("save-settings"),
-        model: cleanUiModelId(modelInput?.value || currentModel),
-        reasoning_effort: currentReasoningEffort,
-        ollama_base_url: ollamaBaseUrl,
-        provider_base_urls: providerBaseUrlPayload(),
-        local_model_context_lengths: localModelContextLengthPayload(),
-        chat_surface: chatSurface,
-        approval_mode: approvalMode,
-      }),
+      buildSavePayload: ({ chatSurface, approvalMode, telemetryEnabled: nextTelemetryEnabled }) => {
+        const payload = {
+          type: "save_settings",
+          request_id: nextRequestId("save-settings"),
+          model: cleanUiModelId(modelInput?.value || currentModel),
+          reasoning_effort: currentReasoningEffort,
+          ollama_base_url: ollamaBaseUrl,
+          provider_base_urls: providerBaseUrlPayload(),
+          local_model_context_lengths: localModelContextLengthPayload(),
+          chat_surface: chatSurface,
+          approval_mode: approvalMode,
+        };
+        return window.FennaraSettingsPanel.includeTelemetryPreference(
+          payload,
+          nextTelemetryEnabled,
+          telemetryControlledByEnvironment,
+        );
+      },
     },
     constants: {
       savedNoticeMs: SETTINGS_SAVED_NOTICE_MS,
@@ -821,6 +836,8 @@
     currentReasoningEffort = cleanReasoningEffort(settings.reasoning_effort);
     currentChatSurface = cleanChatSurface(settings.chat_surface);
     currentApprovalMode = cleanApprovalMode(settings.approval_mode);
+    telemetryEnabled = settings.telemetry_enabled !== false;
+    telemetryControlledByEnvironment = Boolean(settings.telemetry_controlled_by_environment);
     if (!currentProvider && hasOpenRouterKey) {
       currentProvider = "openrouter";
     }
@@ -828,6 +845,7 @@
       chatSurfaceBrowserInput.checked = currentChatSurface === CHAT_SURFACE_BROWSER;
     }
     syncApprovalModeControls();
+    syncTelemetryControl();
     updateChatSurfaceRestartNotice();
     if (ollamaBaseUrlInput) {
       syncOllamaSetupFields();
@@ -1234,6 +1252,10 @@
 
   function syncApprovalModeControls() {
     return settingsPanel?.syncApprovalModeControls();
+  }
+
+  function syncTelemetryControl() {
+    return settingsPanel?.syncTelemetryControl();
   }
 
   function updateChatSurfaceRestartNotice(surface) {

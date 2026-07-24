@@ -36,6 +36,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `docs/README.md` | Task-oriented documentation index. |
 | `docs/setup.md` | User-facing addon-first setup, chat prerequisites, MCP connection, update flow, and troubleshooting. |
 | `docs/cli.md` | Terminal command reference, CLI-owned install/update behavior, recovery, diagnostics, app-data layout, and automation guidance. |
+| `docs/telemetry.md` | Anonymous activity payload, app-data state, delivery behavior, monthly-active definition, and opt-out controls. |
 | `CONTRIBUTING.md` | Contribution rules. |
 | `SECURITY.md` | Security reporting policy. |
 | `LICENSE.md` | Project license. |
@@ -58,6 +59,8 @@ This is the quick map for contributors and coding agents working in this reposit
 | `local/crates/fennara-cli/src/diagnostics.rs` | User-facing access to the latest or a named sanitized operation report. |
 | `local/crates/fennara-mcp/` | Local stdio MCP server and tool schema forwarding. |
 | `local/crates/fennara-daemon/` | Local daemon used for runtime sessions and Godot bridge work. |
+| `local/crates/fennara-daemon/src/runtime_daemon/telemetry.rs` | Anonymous daily-active scheduler, bounded queue, HTTP delivery, and daemon lifecycle integration. |
+| `local/crates/fennara-daemon/src/runtime_daemon/telemetry/state.rs` | Random installation identity validation, atomic app-data persistence, daily receipt state, and opt-out cleanup. |
 | `local/crates/fennara-daemon/src/runtime_daemon/permissions.rs` | Built-in chat approval modes, tool-risk classification, permission decisions, and pending approval request types. |
 | `local/crates/fennara-daemon/src/runtime_daemon/chat/exec_command.rs` | Daemon-owned built-in chat `exec_command` implementation: shell detection, cwd validation, process spawn, timeout/tree-kill, output capture, result artifact logging, and result formatting. |
 | `local/crates/fennara-daemon/src/runtime_daemon/chat/context_compaction/` | Built-in chat context compaction planner: exact-tail protection, OpenCode-style old tool-result pressure pruning, summary chunk selection/storage/replay, summary prompt serialization, token budgets, and placeholder rendering. |
@@ -174,6 +177,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | Change `runtime_script` ctx helpers, input, snapshots, waits, raycasts, captures, or cleanup | `runtime/`, `scripts/sync-runtime.mjs`, `godot_demo/addons/fennara/runtime/`, `local/schemas/tools/runtime_script.json`, and `docs/tools.md` |
 | Change in-editor chat UI, slash commands, or model/provider picker | `ui/chat/`, `godot_demo/addons/fennara/dist/`, `fennara-cpp/src/ui/dock.cpp`, and `fennara-cpp/src/ui/webview_host*` |
 | Change built-in chat providers | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/`, `local/crates/fennara-daemon/src/runtime_daemon/chat/models.rs`, `local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs`, and `ui/chat/` |
+| Change anonymous telemetry fields, scheduling, or privacy controls | `local/crates/fennara-daemon/src/runtime_daemon/telemetry.rs`, `local/crates/fennara-daemon/src/runtime_daemon/telemetry/`, `local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs`, `ui/chat/`, and `docs/telemetry.md` |
 | Change vendored chat UI libraries | `ui/chat/vendor/`, `godot_demo/addons/fennara/dist/vendor/`, and `THIRD_PARTY_NOTICES.md` |
 | Change C# support | `fennara-cpp/src/csharp/`, `fennara-cpp/include/fennara/csharp/`, and the C# tool schemas and guidance |
 | Change release packages, minimum CLI policy, or CLI self-update | `local/crates/fennara-cli/src/release_manifest.rs`, `local/crates/fennara-cli/src/release_client.rs`, `local/crates/fennara-cli/src/release_package.rs`, `local/crates/fennara-cli/src/self_update.rs`, `scripts/package-preview.mjs`, `scripts/release-policy.mjs`, `scripts/write-release-manifest.mjs`, and `.github/workflows/release.yml` |
