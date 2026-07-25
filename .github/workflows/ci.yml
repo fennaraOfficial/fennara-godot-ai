@@ -50,3 +50,8 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Verify documentation translations
+        run: |
+          node scripts/sync-doc-navigation.mjs --check
+          node scripts/check-doc-i18n.mjs

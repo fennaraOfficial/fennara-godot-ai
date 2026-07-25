@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "canonicalLocale": "en",
+  "locales": [
+    {
+      "code": "en",
+      "nativeName": "English",
+      "docsLabel": "Documentation",
+      "languagesLabel": "Languages"
+    },
+    {
+      "code": "zh-CN",
+      "nativeName": "简体中文",
+      "docsLabel": "文档",
+      "languagesLabel": "语言",
+      "sourceLabel": "英文原文",
+      "reviewNotice": "由 AI 根据英文原文撰写，欢迎母语者审阅。"
+    },
+    {
+      "code": "es",
+      "nativeName": "Español",
+      "docsLabel": "Documentación",
+      "languagesLabel": "Idiomas",
+      "sourceLabel": "Fuente en inglés",
+      "reviewNotice": "Traducción redactada por IA a partir del original en inglés. Se agradece la revisión de hablantes nativos."
+    },
+    {
+      "code": "pt-BR",
+      "nativeName": "Português do Brasil",
+      "docsLabel": "Documentação",
+      "languagesLabel": "Idiomas",
+      "sourceLabel": "Fonte em inglês",
+      "reviewNotice": "Tradução redigida por IA a partir do original em inglês. A revisão por falantes nativos é bem-vinda."
+    },
+    {
+      "code": "ja",
+      "nativeName": "日本語",
+      "docsLabel": "ドキュメント",
+      "languagesLabel": "言語",
+      "sourceLabel": "英語の原文",
+      "reviewNotice": "英語の原文を基に AI が執筆した翻訳です。ネイティブスピーカーによるレビューを歓迎します。"
+    },
+    {
+      "code": "ko",
+      "nativeName": "한국어",
+      "docsLabel": "문서",
+      "languagesLabel": "언어",
+      "sourceLabel": "영문 원본",
+      "reviewNotice": "영문 원본을 바탕으로 AI가 작성한 번역입니다. 원어민 검토를 환영합니다."
+    },
+    {
+      "code": "ru",
+      "nativeName": "Русский",
+      "docsLabel": "Документация",
+      "languagesLabel": "Языки",
+      "sourceLabel": "Источник на английском",
+      "reviewNotice": "Перевод написан ИИ на основе английского оригинала. Приветствуется проверка носителями языка."
+    },
+    {
+      "code": "fr",
+      "nativeName": "Français",
+      "docsLabel": "Documentation",
+      "languagesLabel": "Langues",
+      "sourceLabel": "Source anglaise",
+      "reviewNotice": "Traduction rédigée par une IA à partir de la source anglaise. La relecture par des locuteurs natifs est la bienvenue."
+    },
+    {
+      "code": "de",
+      "nativeName": "Deutsch",
+      "docsLabel": "Dokumentation",
+      "languagesLabel": "Sprachen",
+      "sourceLabel": "Englische Quelle",
+      "reviewNotice": "Diese Übersetzung wurde von einer KI anhand der englischen Quelle verfasst. Eine Prüfung durch Muttersprachler ist willkommen."
+    },
+    {
+      "code": "tr",
+      "nativeName": "Türkçe",
+      "docsLabel": "Belgeler",
+      "languagesLabel": "Diller",
+      "sourceLabel": "İngilizce kaynak",
+      "reviewNotice": "Bu çeviri İngilizce kaynak temel alınarak yapay zeka tarafından yazılmıştır. Ana dil konuşurlarının incelemesi memnuniyetle karşılanır."
+    }
+  ],
+  "documents": [
+    { "source": "README.md", "target": "README.{locale}.md" },
+    { "source": "CONTRIBUTING.md", "target": "docs/i18n/{locale}/CONTRIBUTING.md" },
+    { "source": "CONTEXT.md", "target": "docs/i18n/{locale}/CONTEXT.md" },
+    { "source": "SECURITY.md", "target": "docs/i18n/{locale}/SECURITY.md" },
+    { "source": "docs/README.md", "target": "docs/i18n/{locale}/README.md" },
+    { "source": "docs/languages.md", "target": "docs/i18n/{locale}/languages.md" },
+    { "source": "docs/architecture.md", "target": "docs/i18n/{locale}/architecture.md" },
+    { "source": "docs/chat-vs-mcp.md", "target": "docs/i18n/{locale}/chat-vs-mcp.md" },
+    { "source": "docs/cli.md", "target": "docs/i18n/{locale}/cli.md" },
+    { "source": "docs/demos.md", "target": "docs/i18n/{locale}/demos.md" },
+    { "source": "docs/examples.md", "target": "docs/i18n/{locale}/examples.md" },
+    { "source": "docs/faq.md", "target": "docs/i18n/{locale}/faq.md" },
+    { "source": "docs/fennara-vs-traditional-godot-mcp.md", "target": "docs/i18n/{locale}/fennara-vs-traditional-godot-mcp.md" },
+    { "source": "docs/github-metadata.md", "target": "docs/i18n/{locale}/github-metadata.md" },
+    { "source": "docs/manual-install.md", "target": "docs/i18n/{locale}/manual-install.md" },
+    { "source": "docs/mcp-setup.md", "target": "docs/i18n/{locale}/mcp-setup.md" },
+    { "source": "docs/open-rpg-demo.md", "target": "docs/i18n/{locale}/open-rpg-demo.md" },
+    { "source": "docs/providers.md", "target": "docs/i18n/{locale}/providers.md" },
+    { "source": "docs/release.md", "target": "docs/i18n/{locale}/release.md" },
+    { "source": "docs/repo-map.md", "target": "docs/i18n/{locale}/repo-map.md" },
+    { "source": "docs/setup.md", "target": "docs/i18n/{locale}/setup.md" },
+    { "source": "docs/slash-commands.md", "target": "docs/i18n/{locale}/slash-commands.md" },
+    { "source": "docs/telemetry.md", "target": "docs/i18n/{locale}/telemetry.md" },
+    { "source": "docs/tools.md", "target": "docs/i18n/{locale}/tools.md" },
+    { "source": "godot_demo/README.md", "target": "docs/i18n/{locale}/contributors/godot-payload.md" },
+    { "source": "godot_demo/addons/README.md", "target": "docs/i18n/{locale}/contributors/godot-addons.md" },
+    { "source": "local/README.md", "target": "docs/i18n/{locale}/contributors/local-tools.md" },
+    { "source": "runtime/README.md", "target": "docs/i18n/{locale}/contributors/runtime-helpers.md" },
+    { "source": "scripts/README.md", "target": "docs/i18n/{locale}/contributors/scripts.md" },
+    { "source": "ui/chat/README.md", "target": "docs/i18n/{locale}/contributors/chat-ui.md" }
+  ]
+}

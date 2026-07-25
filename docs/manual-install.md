@@ -1,5 +1,13 @@
 # Manual Install
 
+<!-- fennara-doc-nav:start -->
+[Documentation](README.md)
+
+🌐 **Languages**
+
+**English** · [简体中文](i18n/zh-CN/manual-install.md) · [Español](i18n/es/manual-install.md) · [Português do Brasil](i18n/pt-BR/manual-install.md) · [日本語](i18n/ja/manual-install.md) · [한국어](i18n/ko/manual-install.md) · [Русский](i18n/ru/manual-install.md) · [Français](i18n/fr/manual-install.md) · [Deutsch](i18n/de/manual-install.md) · [Türkçe](i18n/tr/manual-install.md)
+<!-- fennara-doc-nav:end -->
+
 Use this page only when you need to assemble Fennara without the Godot setup
 flow or `fennara install`.
 

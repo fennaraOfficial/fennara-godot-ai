@@ -1,5 +1,13 @@
 # Fennara vs Traditional Godot MCP
 
+<!-- fennara-doc-nav:start -->
+[Documentation](README.md)
+
+🌐 **Languages**
+
+**English** · [简体中文](i18n/zh-CN/fennara-vs-traditional-godot-mcp.md) · [Español](i18n/es/fennara-vs-traditional-godot-mcp.md) · [Português do Brasil](i18n/pt-BR/fennara-vs-traditional-godot-mcp.md) · [日本語](i18n/ja/fennara-vs-traditional-godot-mcp.md) · [한국어](i18n/ko/fennara-vs-traditional-godot-mcp.md) · [Русский](i18n/ru/fennara-vs-traditional-godot-mcp.md) · [Français](i18n/fr/fennara-vs-traditional-godot-mcp.md) · [Deutsch](i18n/de/fennara-vs-traditional-godot-mcp.md) · [Türkçe](i18n/tr/fennara-vs-traditional-godot-mcp.md)
+<!-- fennara-doc-nav:end -->
+
 | Traditional command bridge | Fennara feedback loop |
 | --- | --- |
 | Exposes editor actions | Exposes Godot-aware inspection, actions, and checks |

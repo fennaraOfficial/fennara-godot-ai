@@ -1,5 +1,13 @@
 # Godot Payload
 
+<!-- fennara-doc-nav:start -->
+[Documentation](../docs/README.md)
+
+🌐 **Languages**
+
+**English** · [简体中文](../docs/i18n/zh-CN/contributors/godot-payload.md) · [Español](../docs/i18n/es/contributors/godot-payload.md) · [Português do Brasil](../docs/i18n/pt-BR/contributors/godot-payload.md) · [日本語](../docs/i18n/ja/contributors/godot-payload.md) · [한국어](../docs/i18n/ko/contributors/godot-payload.md) · [Русский](../docs/i18n/ru/contributors/godot-payload.md) · [Français](../docs/i18n/fr/contributors/godot-payload.md) · [Deutsch](../docs/i18n/de/contributors/godot-payload.md) · [Türkçe](../docs/i18n/tr/contributors/godot-payload.md)
+<!-- fennara-doc-nav:end -->
+
 This directory is the source tree for the Godot-facing addon payload that is copied into user projects and packaged into release archives.
 
 ```text

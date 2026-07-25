@@ -1,5 +1,13 @@
 # Setup
 
+<!-- fennara-doc-nav:start -->
+[Documentation](README.md)
+
+🌐 **Languages**
+
+**English** · [简体中文](i18n/zh-CN/setup.md) · [Español](i18n/es/setup.md) · [Português do Brasil](i18n/pt-BR/setup.md) · [日本語](i18n/ja/setup.md) · [한국어](i18n/ko/setup.md) · [Русский](i18n/ru/setup.md) · [Français](i18n/fr/setup.md) · [Deutsch](i18n/de/setup.md) · [Türkçe](i18n/tr/setup.md)
+<!-- fennara-doc-nav:end -->
+
 Install Fennara, choose where you want to chat, and connect your Godot project.
 
 > [!TIP]

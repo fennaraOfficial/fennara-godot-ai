@@ -1,5 +1,13 @@
 # Fennara Chat UI
 
+<!-- fennara-doc-nav:start -->
+[Documentation](../../docs/README.md)
+
+🌐 **Languages**
+
+**English** · [简体中文](../../docs/i18n/zh-CN/contributors/chat-ui.md) · [Español](../../docs/i18n/es/contributors/chat-ui.md) · [Português do Brasil](../../docs/i18n/pt-BR/contributors/chat-ui.md) · [日本語](../../docs/i18n/ja/contributors/chat-ui.md) · [한국어](../../docs/i18n/ko/contributors/chat-ui.md) · [Русский](../../docs/i18n/ru/contributors/chat-ui.md) · [Français](../../docs/i18n/fr/contributors/chat-ui.md) · [Deutsch](../../docs/i18n/de/contributors/chat-ui.md) · [Türkçe](../../docs/i18n/tr/contributors/chat-ui.md)
+<!-- fennara-doc-nav:end -->
+
 This folder contains the source for the optional in-editor chat surface.
 
 The first version is buildless on purpose: plain HTML, CSS, and JavaScript.
