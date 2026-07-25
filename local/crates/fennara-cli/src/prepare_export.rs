@@ -54,7 +54,17 @@ fn remove_runtime_autoload(source: &str) -> (String, bool) {
 }
 
 fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), String> {
-    let suffix = unique_suffix();
+    write_atomic_with_rename(path, contents, &unique_suffix(), |source, destination| {
+        fs::rename(source, destination)
+    })
+}
+
+fn write_atomic_with_rename(
+    path: &Path,
+    contents: &[u8],
+    suffix: &str,
+    mut rename: impl FnMut(&Path, &Path) -> std::io::Result<()>,
+) -> Result<(), String> {
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -74,15 +84,15 @@ fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), String> {
         .map_err(|error| format!("failed to flush {}: {error}", display_path(&staging)))?;
     drop(staging_file);
 
-    fs::rename(path, &backup).map_err(|error| {
+    rename(path, &backup).map_err(|error| {
         let _ = fs::remove_file(&staging);
         format!(
             "failed to stage {} for replacement: {error}",
             display_path(path)
         )
     })?;
-    if let Err(error) = fs::rename(&staging, path) {
-        let restore_error = fs::rename(&backup, path).err();
+    if let Err(error) = rename(&staging, path) {
+        let restore_error = rename(&backup, path).err();
         let _ = fs::remove_file(&staging);
         return Err(match restore_error {
             Some(restore) => format!(
@@ -127,7 +137,7 @@ impl PrepareExportOptions {
                         .ok_or_else(|| "--project requires a path".to_string())?;
                     project_dir = Some(PathBuf::from(value));
                 }
-                "-h" | "--help" => return Err(help_text()),
+                "-h" | "--help" => return Err(print_help()),
                 argument => return Err(format!("unknown prepare-export option: {argument}")),
             }
             index += 1;
@@ -136,7 +146,7 @@ impl PrepareExportOptions {
     }
 }
 
-fn help_text() -> String {
+fn print_help() -> String {
     println!(
         "\
 Prepare a Godot checkout for exporting without the Fennara addon.
@@ -153,4 +163,27 @@ before Godot starts when addons/fennara is excluded from a CI checkout."
 #[cfg(test)]
 pub(crate) fn remove_runtime_autoload_for_test(source: &str) -> (String, bool) {
     remove_runtime_autoload(source)
+}
+
+#[cfg(test)]
+pub(crate) fn write_atomic_for_test(path: &Path, contents: &[u8]) -> Result<(), String> {
+    write_atomic(path, contents)
+}
+
+#[cfg(test)]
+pub(crate) fn write_atomic_rollback_for_test(path: &Path, contents: &[u8]) -> Result<(), String> {
+    let mut rename_count = 0;
+    write_atomic_with_rename(path, contents, "rollback-test", |source, destination| {
+        rename_count += 1;
+        if rename_count == 2 {
+            Err(std::io::Error::other("injected replacement failure"))
+        } else {
+            fs::rename(source, destination)
+        }
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn parse_options_for_test(args: Vec<&str>) -> Result<Option<PathBuf>, String> {
+    PrepareExportOptions::parse(args).map(|options| options.project_dir)
 }
