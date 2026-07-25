@@ -3,10 +3,6 @@
 # Installation manuelle
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Langues**
-
 [English](../../manual-install.md) · [简体中文](../zh-CN/manual-install.md) · [Español](../es/manual-install.md) · [Português do Brasil](../pt-BR/manual-install.md) · [日本語](../ja/manual-install.md) · [한국어](../ko/manual-install.md) · [Русский](../ru/manual-install.md) · **Français** · [Deutsch](../de/manual-install.md) · [Türkçe](../tr/manual-install.md)
 
 > ℹ️ Traduction rédigée par une IA à partir de la source anglaise. La relecture par des locuteurs natifs est la bienvenue. [Source anglaise](../../manual-install.md)

@@ -3,10 +3,6 @@
 # 匿名テレメトリー
 
 <!-- fennara-doc-nav:start -->
-[ドキュメント](README.md)
-
-🌐 **言語**
-
 [English](../../telemetry.md) · [简体中文](../zh-CN/telemetry.md) · [Español](../es/telemetry.md) · [Português do Brasil](../pt-BR/telemetry.md) · **日本語** · [한국어](../ko/telemetry.md) · [Русский](../ru/telemetry.md) · [Français](../fr/telemetry.md) · [Deutsch](../de/telemetry.md) · [Türkçe](../tr/telemetry.md)
 
 > ℹ️ 英語の原文を基に AI が執筆した翻訳です。ネイティブスピーカーによるレビューを歓迎します。 [英語の原文](../../telemetry.md)

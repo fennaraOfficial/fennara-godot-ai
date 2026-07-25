@@ -3,10 +3,6 @@
 # Fennara 术语
 
 <!-- fennara-doc-nav:start -->
-[文档](README.md)
-
-🌐 **语言**
-
 [English](../../../CONTEXT.md) · **简体中文** · [Español](../es/CONTEXT.md) · [Português do Brasil](../pt-BR/CONTEXT.md) · [日本語](../ja/CONTEXT.md) · [한국어](../ko/CONTEXT.md) · [Русский](../ru/CONTEXT.md) · [Français](../fr/CONTEXT.md) · [Deutsch](../de/CONTEXT.md) · [Türkçe](../tr/CONTEXT.md)
 
 > ℹ️ 由 AI 根据英文原文撰写，欢迎母语者审阅。 [英文原文](../../../CONTEXT.md)

@@ -3,10 +3,6 @@
 # Contexto de Fennara
 
 <!-- fennara-doc-nav:start -->
-[Documentación](README.md)
-
-🌐 **Idiomas**
-
 [English](../../../CONTEXT.md) · [简体中文](../zh-CN/CONTEXT.md) · **Español** · [Português do Brasil](../pt-BR/CONTEXT.md) · [日本語](../ja/CONTEXT.md) · [한국어](../ko/CONTEXT.md) · [Русский](../ru/CONTEXT.md) · [Français](../fr/CONTEXT.md) · [Deutsch](../de/CONTEXT.md) · [Türkçe](../tr/CONTEXT.md)
 
 > ℹ️ Traducción redactada por IA a partir del original en inglés. Se agradece la revisión de hablantes nativos. [Fuente en inglés](../../../CONTEXT.md)

@@ -3,10 +3,6 @@
 # 내장 채팅 제공업체
 
 <!-- fennara-doc-nav:start -->
-[문서](README.md)
-
-🌐 **언어**
-
 [English](../../providers.md) · [简体中文](../zh-CN/providers.md) · [Español](../es/providers.md) · [Português do Brasil](../pt-BR/providers.md) · [日本語](../ja/providers.md) · **한국어** · [Русский](../ru/providers.md) · [Français](../fr/providers.md) · [Deutsch](../de/providers.md) · [Türkçe](../tr/providers.md)
 
 > ℹ️ 영문 원본을 바탕으로 AI가 작성한 번역입니다. 원어민 검토를 환영합니다. [영문 원본](../../providers.md)

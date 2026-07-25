@@ -3,10 +3,6 @@
 # Процесс выпуска
 
 <!-- fennara-doc-nav:start -->
-[Документация](README.md)
-
-🌐 **Языки**
-
 [English](../../release.md) · [简体中文](../zh-CN/release.md) · [Español](../es/release.md) · [Português do Brasil](../pt-BR/release.md) · [日本語](../ja/release.md) · [한국어](../ko/release.md) · **Русский** · [Français](../fr/release.md) · [Deutsch](../de/release.md) · [Türkçe](../tr/release.md)
 
 > ℹ️ Перевод написан ИИ на основе английского оригинала. Приветствуется проверка носителями языка. [Источник на английском](../../release.md)

@@ -1,10 +1,6 @@
 # Fennara Context
 
 <!-- fennara-doc-nav:start -->
-[Documentation](docs/README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](docs/i18n/zh-CN/CONTEXT.md) · [Español](docs/i18n/es/CONTEXT.md) · [Português do Brasil](docs/i18n/pt-BR/CONTEXT.md) · [日本語](docs/i18n/ja/CONTEXT.md) · [한국어](docs/i18n/ko/CONTEXT.md) · [Русский](docs/i18n/ru/CONTEXT.md) · [Français](docs/i18n/fr/CONTEXT.md) · [Deutsch](docs/i18n/de/CONTEXT.md) · [Türkçe](docs/i18n/tr/CONTEXT.md)
 <!-- fennara-doc-nav:end -->
 

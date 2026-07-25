@@ -3,10 +3,6 @@
 # Fennara в сравнении с традиционным MCP для Godot
 
 <!-- fennara-doc-nav:start -->
-[Документация](README.md)
-
-🌐 **Языки**
-
 [English](../../fennara-vs-traditional-godot-mcp.md) · [简体中文](../zh-CN/fennara-vs-traditional-godot-mcp.md) · [Español](../es/fennara-vs-traditional-godot-mcp.md) · [Português do Brasil](../pt-BR/fennara-vs-traditional-godot-mcp.md) · [日本語](../ja/fennara-vs-traditional-godot-mcp.md) · [한국어](../ko/fennara-vs-traditional-godot-mcp.md) · **Русский** · [Français](../fr/fennara-vs-traditional-godot-mcp.md) · [Deutsch](../de/fennara-vs-traditional-godot-mcp.md) · [Türkçe](../tr/fennara-vs-traditional-godot-mcp.md)
 
 > ℹ️ Перевод написан ИИ на основе английского оригинала. Приветствуется проверка носителями языка. [Источник на английском](../../fennara-vs-traditional-godot-mcp.md)

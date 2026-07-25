@@ -3,10 +3,6 @@
 # Proveedores del chat integrado
 
 <!-- fennara-doc-nav:start -->
-[Documentación](README.md)
-
-🌐 **Idiomas**
-
 [English](../../providers.md) · [简体中文](../zh-CN/providers.md) · **Español** · [Português do Brasil](../pt-BR/providers.md) · [日本語](../ja/providers.md) · [한국어](../ko/providers.md) · [Русский](../ru/providers.md) · [Français](../fr/providers.md) · [Deutsch](../de/providers.md) · [Türkçe](../tr/providers.md)
 
 > ℹ️ Traducción redactada por IA a partir del original en inglés. Se agradece la revisión de hablantes nativos. [Fuente en inglés](../../providers.md)

@@ -3,10 +3,6 @@
 # Anonyme Telemetrie
 
 <!-- fennara-doc-nav:start -->
-[Dokumentation](README.md)
-
-🌐 **Sprachen**
-
 [English](../../telemetry.md) · [简体中文](../zh-CN/telemetry.md) · [Español](../es/telemetry.md) · [Português do Brasil](../pt-BR/telemetry.md) · [日本語](../ja/telemetry.md) · [한국어](../ko/telemetry.md) · [Русский](../ru/telemetry.md) · [Français](../fr/telemetry.md) · **Deutsch** · [Türkçe](../tr/telemetry.md)
 
 > ℹ️ Diese Übersetzung wurde von einer KI anhand der englischen Quelle verfasst. Eine Prüfung durch Muttersprachler ist willkommen. [Englische Quelle](../../telemetry.md)

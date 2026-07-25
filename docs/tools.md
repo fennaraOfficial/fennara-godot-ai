@@ -1,10 +1,6 @@
 # Tools
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/tools.md) · [Español](i18n/es/tools.md) · [Português do Brasil](i18n/pt-BR/tools.md) · [日本語](i18n/ja/tools.md) · [한국어](i18n/ko/tools.md) · [Русский](i18n/ru/tools.md) · [Français](i18n/fr/tools.md) · [Deutsch](i18n/de/tools.md) · [Türkçe](i18n/tr/tools.md)
 <!-- fennara-doc-nav:end -->
 

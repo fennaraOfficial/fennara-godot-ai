@@ -3,10 +3,6 @@
 # 演示
 
 <!-- fennara-doc-nav:start -->
-[文档](README.md)
-
-🌐 **语言**
-
 [English](../../demos.md) · **简体中文** · [Español](../es/demos.md) · [Português do Brasil](../pt-BR/demos.md) · [日本語](../ja/demos.md) · [한국어](../ko/demos.md) · [Русский](../ru/demos.md) · [Français](../fr/demos.md) · [Deutsch](../de/demos.md) · [Türkçe](../tr/demos.md)
 
 > ℹ️ 由 AI 根据英文原文撰写，欢迎母语者审阅。 [英文原文](../../demos.md)

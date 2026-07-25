@@ -3,10 +3,6 @@
 # Aufschlüsselung der Open-RPG-Demo
 
 <!-- fennara-doc-nav:start -->
-[Dokumentation](README.md)
-
-🌐 **Sprachen**
-
 [English](../../open-rpg-demo.md) · [简体中文](../zh-CN/open-rpg-demo.md) · [Español](../es/open-rpg-demo.md) · [Português do Brasil](../pt-BR/open-rpg-demo.md) · [日本語](../ja/open-rpg-demo.md) · [한국어](../ko/open-rpg-demo.md) · [Русский](../ru/open-rpg-demo.md) · [Français](../fr/open-rpg-demo.md) · **Deutsch** · [Türkçe](../tr/open-rpg-demo.md)
 
 > ℹ️ Diese Übersetzung wurde von einer KI anhand der englischen Quelle verfasst. Eine Prüfung durch Muttersprachler ist willkommen. [Englische Quelle](../../open-rpg-demo.md)

@@ -1,10 +1,6 @@
 # Languages And Translation Status
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/languages.md) · [Español](i18n/es/languages.md) · [Português do Brasil](i18n/pt-BR/languages.md) · [日本語](i18n/ja/languages.md) · [한국어](i18n/ko/languages.md) · [Русский](i18n/ru/languages.md) · [Français](i18n/fr/languages.md) · [Deutsch](i18n/de/languages.md) · [Türkçe](i18n/tr/languages.md)
 <!-- fennara-doc-nav:end -->
 

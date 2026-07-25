@@ -3,10 +3,6 @@
 # Contribuir
 
 <!-- fennara-doc-nav:start -->
-[Documentación](README.md)
-
-🌐 **Idiomas**
-
 [English](../../../CONTRIBUTING.md) · [简体中文](../zh-CN/CONTRIBUTING.md) · **Español** · [Português do Brasil](../pt-BR/CONTRIBUTING.md) · [日本語](../ja/CONTRIBUTING.md) · [한국어](../ko/CONTRIBUTING.md) · [Русский](../ru/CONTRIBUTING.md) · [Français](../fr/CONTRIBUTING.md) · [Deutsch](../de/CONTRIBUTING.md) · [Türkçe](../tr/CONTRIBUTING.md)
 
 > ℹ️ Traducción redactada por IA a partir del original en inglés. Se agradece la revisión de hablantes nativos. [Fuente en inglés](../../../CONTRIBUTING.md)

@@ -3,10 +3,6 @@
 # Metadados do GitHub
 
 <!-- fennara-doc-nav:start -->
-[Documentação](README.md)
-
-🌐 **Idiomas**
-
 [English](../../github-metadata.md) · [简体中文](../zh-CN/github-metadata.md) · [Español](../es/github-metadata.md) · **Português do Brasil** · [日本語](../ja/github-metadata.md) · [한국어](../ko/github-metadata.md) · [Русский](../ru/github-metadata.md) · [Français](../fr/github-metadata.md) · [Deutsch](../de/github-metadata.md) · [Türkçe](../tr/github-metadata.md)
 
 > ℹ️ Tradução redigida por IA a partir do original em inglês. A revisão por falantes nativos é bem-vinda. [Fonte em inglês](../../github-metadata.md)

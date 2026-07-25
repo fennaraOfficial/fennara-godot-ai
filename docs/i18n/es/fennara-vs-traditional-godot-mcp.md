@@ -3,10 +3,6 @@
 # Fennara frente a un MCP tradicional para Godot
 
 <!-- fennara-doc-nav:start -->
-[Documentación](README.md)
-
-🌐 **Idiomas**
-
 [English](../../fennara-vs-traditional-godot-mcp.md) · [简体中文](../zh-CN/fennara-vs-traditional-godot-mcp.md) · **Español** · [Português do Brasil](../pt-BR/fennara-vs-traditional-godot-mcp.md) · [日本語](../ja/fennara-vs-traditional-godot-mcp.md) · [한국어](../ko/fennara-vs-traditional-godot-mcp.md) · [Русский](../ru/fennara-vs-traditional-godot-mcp.md) · [Français](../fr/fennara-vs-traditional-godot-mcp.md) · [Deutsch](../de/fennara-vs-traditional-godot-mcp.md) · [Türkçe](../tr/fennara-vs-traditional-godot-mcp.md)
 
 > ℹ️ Traducción redactada por IA a partir del original en inglés. Se agradece la revisión de hablantes nativos. [Fuente en inglés](../../fennara-vs-traditional-godot-mcp.md)

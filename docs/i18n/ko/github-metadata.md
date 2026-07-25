@@ -3,10 +3,6 @@
 # GitHub 메타데이터
 
 <!-- fennara-doc-nav:start -->
-[문서](README.md)
-
-🌐 **언어**
-
 [English](../../github-metadata.md) · [简体中文](../zh-CN/github-metadata.md) · [Español](../es/github-metadata.md) · [Português do Brasil](../pt-BR/github-metadata.md) · [日本語](../ja/github-metadata.md) · **한국어** · [Русский](../ru/github-metadata.md) · [Français](../fr/github-metadata.md) · [Deutsch](../de/github-metadata.md) · [Türkçe](../tr/github-metadata.md)
 
 > ℹ️ 영문 원본을 바탕으로 AI가 작성한 번역입니다. 원어민 검토를 환영합니다. [영문 원본](../../github-metadata.md)

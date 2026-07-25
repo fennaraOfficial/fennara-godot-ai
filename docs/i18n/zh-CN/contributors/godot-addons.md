@@ -3,10 +3,6 @@
 # Godot 插件
 
 <!-- fennara-doc-nav:start -->
-[文档](../README.md)
-
-🌐 **语言**
-
 [English](../../../../godot_demo/addons/README.md) · **简体中文** · [Español](../../es/contributors/godot-addons.md) · [Português do Brasil](../../pt-BR/contributors/godot-addons.md) · [日本語](../../ja/contributors/godot-addons.md) · [한국어](../../ko/contributors/godot-addons.md) · [Русский](../../ru/contributors/godot-addons.md) · [Français](../../fr/contributors/godot-addons.md) · [Deutsch](../../de/contributors/godot-addons.md) · [Türkçe](../../tr/contributors/godot-addons.md)
 
 > ℹ️ 由 AI 根据英文原文撰写，欢迎母语者审阅。 [英文原文](../../../../godot_demo/addons/README.md)

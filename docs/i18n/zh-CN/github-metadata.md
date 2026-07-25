@@ -3,10 +3,6 @@
 # GitHub 元数据
 
 <!-- fennara-doc-nav:start -->
-[文档](README.md)
-
-🌐 **语言**
-
 [English](../../github-metadata.md) · **简体中文** · [Español](../es/github-metadata.md) · [Português do Brasil](../pt-BR/github-metadata.md) · [日本語](../ja/github-metadata.md) · [한국어](../ko/github-metadata.md) · [Русский](../ru/github-metadata.md) · [Français](../fr/github-metadata.md) · [Deutsch](../de/github-metadata.md) · [Türkçe](../tr/github-metadata.md)
 
 > ℹ️ 由 AI 根据英文原文撰写，欢迎母语者审阅。 [英文原文](../../github-metadata.md)

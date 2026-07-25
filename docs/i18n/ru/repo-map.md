@@ -3,10 +3,6 @@
 # Карта репозитория
 
 <!-- fennara-doc-nav:start -->
-[Документация](README.md)
-
-🌐 **Языки**
-
 [English](../../repo-map.md) · [简体中文](../zh-CN/repo-map.md) · [Español](../es/repo-map.md) · [Português do Brasil](../pt-BR/repo-map.md) · [日本語](../ja/repo-map.md) · [한국어](../ko/repo-map.md) · **Русский** · [Français](../fr/repo-map.md) · [Deutsch](../de/repo-map.md) · [Türkçe](../tr/repo-map.md)
 
 > ℹ️ Перевод написан ИИ на основе английского оригинала. Приветствуется проверка носителями языка. [Источник на английском](../../repo-map.md)

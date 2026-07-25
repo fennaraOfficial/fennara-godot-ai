@@ -3,10 +3,6 @@
 # Comandos de barra do chat integrado
 
 <!-- fennara-doc-nav:start -->
-[Documentação](README.md)
-
-🌐 **Idiomas**
-
 [English](../../slash-commands.md) · [简体中文](../zh-CN/slash-commands.md) · [Español](../es/slash-commands.md) · **Português do Brasil** · [日本語](../ja/slash-commands.md) · [한국어](../ko/slash-commands.md) · [Русский](../ru/slash-commands.md) · [Français](../fr/slash-commands.md) · [Deutsch](../de/slash-commands.md) · [Türkçe](../tr/slash-commands.md)
 
 > ℹ️ Tradução redigida por IA a partir do original em inglês. A revisão por falantes nativos é bem-vinda. [Fonte em inglês](../../slash-commands.md)

@@ -3,10 +3,6 @@
 # Configuração
 
 <!-- fennara-doc-nav:start -->
-[Documentação](README.md)
-
-🌐 **Idiomas**
-
 [English](../../setup.md) · [简体中文](../zh-CN/setup.md) · [Español](../es/setup.md) · **Português do Brasil** · [日本語](../ja/setup.md) · [한국어](../ko/setup.md) · [Русский](../ru/setup.md) · [Français](../fr/setup.md) · [Deutsch](../de/setup.md) · [Türkçe](../tr/setup.md)
 
 > ℹ️ Tradução redigida por IA a partir do original em inglês. A revisão por falantes nativos é bem-vinda. [Fonte em inglês](../../setup.md)

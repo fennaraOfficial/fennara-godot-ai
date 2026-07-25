@@ -1,10 +1,6 @@
 # Architecture
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/architecture.md) · [Español](i18n/es/architecture.md) · [Português do Brasil](i18n/pt-BR/architecture.md) · [日本語](i18n/ja/architecture.md) · [한국어](i18n/ko/architecture.md) · [Русский](i18n/ru/architecture.md) · [Français](i18n/fr/architecture.md) · [Deutsch](i18n/de/architecture.md) · [Türkçe](i18n/tr/architecture.md)
 <!-- fennara-doc-nav:end -->
 

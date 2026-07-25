@@ -3,10 +3,6 @@
 # Auxiliares de ejecución
 
 <!-- fennara-doc-nav:start -->
-[Documentación](../README.md)
-
-🌐 **Idiomas**
-
 [English](../../../../runtime/README.md) · [简体中文](../../zh-CN/contributors/runtime-helpers.md) · **Español** · [Português do Brasil](../../pt-BR/contributors/runtime-helpers.md) · [日本語](../../ja/contributors/runtime-helpers.md) · [한국어](../../ko/contributors/runtime-helpers.md) · [Русский](../../ru/contributors/runtime-helpers.md) · [Français](../../fr/contributors/runtime-helpers.md) · [Deutsch](../../de/contributors/runtime-helpers.md) · [Türkçe](../../tr/contributors/runtime-helpers.md)
 
 > ℹ️ Traducción redactada por IA a partir del original en inglés. Se agradece la revisión de hablantes nativos. [Fuente en inglés](../../../../runtime/README.md)

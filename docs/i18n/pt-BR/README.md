@@ -3,10 +3,6 @@
 # Documentação do Fennara
 
 <!-- fennara-doc-nav:start -->
-[Documentação](README.md)
-
-🌐 **Idiomas**
-
 [English](../../README.md) · [简体中文](../zh-CN/README.md) · [Español](../es/README.md) · **Português do Brasil** · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Русский](../ru/README.md) · [Français](../fr/README.md) · [Deutsch](../de/README.md) · [Türkçe](../tr/README.md)
 
 > ℹ️ Tradução redigida por IA a partir do original em inglês. A revisão por falantes nativos é bem-vinda. [Fonte em inglês](../../README.md)

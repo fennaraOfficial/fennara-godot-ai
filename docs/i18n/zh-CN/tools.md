@@ -3,10 +3,6 @@
 # 工具
 
 <!-- fennara-doc-nav:start -->
-[文档](README.md)
-
-🌐 **语言**
-
 [English](../../tools.md) · **简体中文** · [Español](../es/tools.md) · [Português do Brasil](../pt-BR/tools.md) · [日本語](../ja/tools.md) · [한국어](../ko/tools.md) · [Русский](../ru/tools.md) · [Français](../fr/tools.md) · [Deutsch](../de/tools.md) · [Türkçe](../tr/tools.md)
 
 > ℹ️ 由 AI 根据英文原文撰写，欢迎母语者审阅。 [英文原文](../../tools.md)

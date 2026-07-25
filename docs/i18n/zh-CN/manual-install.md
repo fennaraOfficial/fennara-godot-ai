@@ -3,10 +3,6 @@
 # 手动安装
 
 <!-- fennara-doc-nav:start -->
-[文档](README.md)
-
-🌐 **语言**
-
 [English](../../manual-install.md) · **简体中文** · [Español](../es/manual-install.md) · [Português do Brasil](../pt-BR/manual-install.md) · [日本語](../ja/manual-install.md) · [한국어](../ko/manual-install.md) · [Русский](../ru/manual-install.md) · [Français](../fr/manual-install.md) · [Deutsch](../de/manual-install.md) · [Türkçe](../tr/manual-install.md)
 
 > ℹ️ 由 AI 根据英文原文撰写，欢迎母语者审阅。 [英文原文](../../manual-install.md)

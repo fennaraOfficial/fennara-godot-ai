@@ -3,10 +3,6 @@
 # Fennara Belgeleri
 
 <!-- fennara-doc-nav:start -->
-[Belgeler](README.md)
-
-🌐 **Diller**
-
 [English](../../README.md) · [简体中文](../zh-CN/README.md) · [Español](../es/README.md) · [Português do Brasil](../pt-BR/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Русский](../ru/README.md) · [Français](../fr/README.md) · [Deutsch](../de/README.md) · **Türkçe**
 
 > ℹ️ Bu çeviri İngilizce kaynak temel alınarak yapay zeka tarafından yazılmıştır. Ana dil konuşurlarının incelemesi memnuniyetle karşılanır. [İngilizce kaynak](../../README.md)

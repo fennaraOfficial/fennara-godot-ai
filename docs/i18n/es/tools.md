@@ -3,10 +3,6 @@
 # Herramientas
 
 <!-- fennara-doc-nav:start -->
-[Documentación](README.md)
-
-🌐 **Idiomas**
-
 [English](../../tools.md) · [简体中文](../zh-CN/tools.md) · **Español** · [Português do Brasil](../pt-BR/tools.md) · [日本語](../ja/tools.md) · [한국어](../ko/tools.md) · [Русский](../ru/tools.md) · [Français](../fr/tools.md) · [Deutsch](../de/tools.md) · [Türkçe](../tr/tools.md)
 
 > ℹ️ Traducción redactada por IA a partir del original en inglés. Se agradece la revisión de hablantes nativos. [Fuente en inglés](../../tools.md)

@@ -3,10 +3,6 @@
 # Godot-Addons
 
 <!-- fennara-doc-nav:start -->
-[Dokumentation](../README.md)
-
-🌐 **Sprachen**
-
 [English](../../../../godot_demo/addons/README.md) · [简体中文](../../zh-CN/contributors/godot-addons.md) · [Español](../../es/contributors/godot-addons.md) · [Português do Brasil](../../pt-BR/contributors/godot-addons.md) · [日本語](../../ja/contributors/godot-addons.md) · [한국어](../../ko/contributors/godot-addons.md) · [Русский](../../ru/contributors/godot-addons.md) · [Français](../../fr/contributors/godot-addons.md) · **Deutsch** · [Türkçe](../../tr/contributors/godot-addons.md)
 
 > ℹ️ Diese Übersetzung wurde von einer KI anhand der englischen Quelle verfasst. Eine Prüfung durch Muttersprachler ist willkommen. [Englische Quelle](../../../../godot_demo/addons/README.md)

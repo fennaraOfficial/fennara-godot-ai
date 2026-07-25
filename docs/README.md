@@ -1,10 +1,6 @@
 # Fennara Documentation
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/README.md) · [Español](i18n/es/README.md) · [Português do Brasil](i18n/pt-BR/README.md) · [日本語](i18n/ja/README.md) · [한국어](i18n/ko/README.md) · [Русский](i18n/ru/README.md) · [Français](i18n/fr/README.md) · [Deutsch](i18n/de/README.md) · [Türkçe](i18n/tr/README.md)
 <!-- fennara-doc-nav:end -->
 

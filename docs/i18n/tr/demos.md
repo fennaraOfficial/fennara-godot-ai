@@ -3,10 +3,6 @@
 # Demolar
 
 <!-- fennara-doc-nav:start -->
-[Belgeler](README.md)
-
-🌐 **Diller**
-
 [English](../../demos.md) · [简体中文](../zh-CN/demos.md) · [Español](../es/demos.md) · [Português do Brasil](../pt-BR/demos.md) · [日本語](../ja/demos.md) · [한국어](../ko/demos.md) · [Русский](../ru/demos.md) · [Français](../fr/demos.md) · [Deutsch](../de/demos.md) · **Türkçe**
 
 > ℹ️ Bu çeviri İngilizce kaynak temel alınarak yapay zeka tarafından yazılmıştır. Ana dil konuşurlarının incelemesi memnuniyetle karşılanır. [İngilizce kaynak](../../demos.md)

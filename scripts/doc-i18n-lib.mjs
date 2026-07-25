@@ -43,10 +43,6 @@ export function renderNavigation(document, localeCode) {
     localeCode === config.canonicalLocale
       ? document.source
       : targetFor(document, localeCode);
-  const docsHome =
-    localeCode === config.canonicalLocale
-      ? "docs/README.md"
-      : `docs/i18n/${localeCode}/README.md`;
   const languageLinks = config.locales.map((candidate) => {
     const target =
       candidate.code === config.canonicalLocale
@@ -59,10 +55,6 @@ export function renderNavigation(document, localeCode) {
   });
   const lines = [
     NAV_START,
-    `[${locale.docsLabel}](${relativeLink(currentPath, docsHome)})`,
-    "",
-    `🌐 **${locale.languagesLabel}**`,
-    "",
     languageLinks.join(" · "),
   ];
   if (localeCode !== config.canonicalLocale) {

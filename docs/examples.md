@@ -1,10 +1,6 @@
 # Examples
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/examples.md) · [Español](i18n/es/examples.md) · [Português do Brasil](i18n/pt-BR/examples.md) · [日本語](i18n/ja/examples.md) · [한국어](i18n/ko/examples.md) · [Русский](i18n/ru/examples.md) · [Français](i18n/fr/examples.md) · [Deutsch](i18n/de/examples.md) · [Türkçe](i18n/tr/examples.md)
 <!-- fennara-doc-nav:end -->
 

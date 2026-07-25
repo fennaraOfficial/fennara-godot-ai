@@ -3,10 +3,6 @@
 # MCP アプリと内蔵チャットのどちらを使うべきですか？
 
 <!-- fennara-doc-nav:start -->
-[ドキュメント](README.md)
-
-🌐 **言語**
-
 [English](../../chat-vs-mcp.md) · [简体中文](../zh-CN/chat-vs-mcp.md) · [Español](../es/chat-vs-mcp.md) · [Português do Brasil](../pt-BR/chat-vs-mcp.md) · **日本語** · [한국어](../ko/chat-vs-mcp.md) · [Русский](../ru/chat-vs-mcp.md) · [Français](../fr/chat-vs-mcp.md) · [Deutsch](../de/chat-vs-mcp.md) · [Türkçe](../tr/chat-vs-mcp.md)
 
 > ℹ️ 英語の原文を基に AI が執筆した翻訳です。ネイティブスピーカーによるレビューを歓迎します。 [英語の原文](../../chat-vs-mcp.md)

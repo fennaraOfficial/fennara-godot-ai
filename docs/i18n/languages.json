@@ -4,79 +4,59 @@
   "locales": [
     {
       "code": "en",
-      "nativeName": "English",
-      "docsLabel": "Documentation",
-      "languagesLabel": "Languages"
+      "nativeName": "English"
     },
     {
       "code": "zh-CN",
       "nativeName": "简体中文",
-      "docsLabel": "文档",
-      "languagesLabel": "语言",
       "sourceLabel": "英文原文",
       "reviewNotice": "由 AI 根据英文原文撰写，欢迎母语者审阅。"
     },
     {
       "code": "es",
       "nativeName": "Español",
-      "docsLabel": "Documentación",
-      "languagesLabel": "Idiomas",
       "sourceLabel": "Fuente en inglés",
       "reviewNotice": "Traducción redactada por IA a partir del original en inglés. Se agradece la revisión de hablantes nativos."
     },
     {
       "code": "pt-BR",
       "nativeName": "Português do Brasil",
-      "docsLabel": "Documentação",
-      "languagesLabel": "Idiomas",
       "sourceLabel": "Fonte em inglês",
       "reviewNotice": "Tradução redigida por IA a partir do original em inglês. A revisão por falantes nativos é bem-vinda."
     },
     {
       "code": "ja",
       "nativeName": "日本語",
-      "docsLabel": "ドキュメント",
-      "languagesLabel": "言語",
       "sourceLabel": "英語の原文",
       "reviewNotice": "英語の原文を基に AI が執筆した翻訳です。ネイティブスピーカーによるレビューを歓迎します。"
     },
     {
       "code": "ko",
       "nativeName": "한국어",
-      "docsLabel": "문서",
-      "languagesLabel": "언어",
       "sourceLabel": "영문 원본",
       "reviewNotice": "영문 원본을 바탕으로 AI가 작성한 번역입니다. 원어민 검토를 환영합니다."
     },
     {
       "code": "ru",
       "nativeName": "Русский",
-      "docsLabel": "Документация",
-      "languagesLabel": "Языки",
       "sourceLabel": "Источник на английском",
       "reviewNotice": "Перевод написан ИИ на основе английского оригинала. Приветствуется проверка носителями языка."
     },
     {
       "code": "fr",
       "nativeName": "Français",
-      "docsLabel": "Documentation",
-      "languagesLabel": "Langues",
       "sourceLabel": "Source anglaise",
       "reviewNotice": "Traduction rédigée par une IA à partir de la source anglaise. La relecture par des locuteurs natifs est la bienvenue."
     },
     {
       "code": "de",
       "nativeName": "Deutsch",
-      "docsLabel": "Dokumentation",
-      "languagesLabel": "Sprachen",
       "sourceLabel": "Englische Quelle",
       "reviewNotice": "Diese Übersetzung wurde von einer KI anhand der englischen Quelle verfasst. Eine Prüfung durch Muttersprachler ist willkommen."
     },
     {
       "code": "tr",
       "nativeName": "Türkçe",
-      "docsLabel": "Belgeler",
-      "languagesLabel": "Diller",
       "sourceLabel": "İngilizce kaynak",
       "reviewNotice": "Bu çeviri İngilizce kaynak temel alınarak yapay zeka tarafından yazılmıştır. Ana dil konuşurlarının incelemesi memnuniyetle karşılanır."
     }

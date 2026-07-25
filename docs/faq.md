@@ -1,10 +1,6 @@
 # FAQ
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/faq.md) · [Español](i18n/es/faq.md) · [Português do Brasil](i18n/pt-BR/faq.md) · [日本語](i18n/ja/faq.md) · [한국어](i18n/ko/faq.md) · [Русский](i18n/ru/faq.md) · [Français](i18n/fr/faq.md) · [Deutsch](i18n/de/faq.md) · [Türkçe](i18n/tr/faq.md)
 <!-- fennara-doc-nav:end -->
 

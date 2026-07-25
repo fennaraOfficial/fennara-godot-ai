@@ -3,10 +3,6 @@
 # 도구
 
 <!-- fennara-doc-nav:start -->
-[문서](README.md)
-
-🌐 **언어**
-
 [English](../../tools.md) · [简体中文](../zh-CN/tools.md) · [Español](../es/tools.md) · [Português do Brasil](../pt-BR/tools.md) · [日本語](../ja/tools.md) · **한국어** · [Русский](../ru/tools.md) · [Français](../fr/tools.md) · [Deutsch](../de/tools.md) · [Türkçe](../tr/tools.md)
 
 > ℹ️ 영문 원본을 바탕으로 AI가 작성한 번역입니다. 원어민 검토를 환영합니다. [영문 원본](../../tools.md)

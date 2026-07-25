@@ -3,10 +3,6 @@
 # Godot 负载
 
 <!-- fennara-doc-nav:start -->
-[文档](../README.md)
-
-🌐 **语言**
-
 [English](../../../../godot_demo/README.md) · **简体中文** · [Español](../../es/contributors/godot-payload.md) · [Português do Brasil](../../pt-BR/contributors/godot-payload.md) · [日本語](../../ja/contributors/godot-payload.md) · [한국어](../../ko/contributors/godot-payload.md) · [Русский](../../ru/contributors/godot-payload.md) · [Français](../../fr/contributors/godot-payload.md) · [Deutsch](../../de/contributors/godot-payload.md) · [Türkçe](../../tr/contributors/godot-payload.md)
 
 > ℹ️ 由 AI 根据英文原文撰写，欢迎母语者审阅。 [英文原文](../../../../godot_demo/README.md)

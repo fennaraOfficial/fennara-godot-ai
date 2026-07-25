@@ -1,10 +1,6 @@
 # Scripts
 
 <!-- fennara-doc-nav:start -->
-[Documentation](../docs/README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](../docs/i18n/zh-CN/contributors/scripts.md) · [Español](../docs/i18n/es/contributors/scripts.md) · [Português do Brasil](../docs/i18n/pt-BR/contributors/scripts.md) · [日本語](../docs/i18n/ja/contributors/scripts.md) · [한국어](../docs/i18n/ko/contributors/scripts.md) · [Русский](../docs/i18n/ru/contributors/scripts.md) · [Français](../docs/i18n/fr/contributors/scripts.md) · [Deutsch](../docs/i18n/de/contributors/scripts.md) · [Türkçe](../docs/i18n/tr/contributors/scripts.md)
 <!-- fennara-doc-nav:end -->
 

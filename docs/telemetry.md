@@ -1,10 +1,6 @@
 # Anonymous Telemetry
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/telemetry.md) · [Español](i18n/es/telemetry.md) · [Português do Brasil](i18n/pt-BR/telemetry.md) · [日本語](i18n/ja/telemetry.md) · [한국어](i18n/ko/telemetry.md) · [Русский](i18n/ru/telemetry.md) · [Français](i18n/fr/telemetry.md) · [Deutsch](i18n/de/telemetry.md) · [Türkçe](i18n/tr/telemetry.md)
 <!-- fennara-doc-nav:end -->
 

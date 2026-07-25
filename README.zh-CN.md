@@ -3,10 +3,6 @@
 # Fennara Godot AI
 
 <!-- fennara-doc-nav:start -->
-[文档](docs/i18n/zh-CN/README.md)
-
-🌐 **语言**
-
 [English](README.md) · **简体中文** · [Español](README.es.md) · [Português do Brasil](README.pt-BR.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Русский](README.ru.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Türkçe](README.tr.md)
 
 > ℹ️ 由 AI 根据英文原文撰写，欢迎母语者审阅。 [英文原文](README.md)
