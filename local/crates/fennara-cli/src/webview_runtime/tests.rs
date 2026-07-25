@@ -48,6 +48,37 @@ fn repairs_release_marker_missing_native_runtime_identity() {
     assert_eq!(current["dir"], version);
 }
 
+#[test]
+fn leaves_complete_runtime_marker_unchanged() {
+    let root = TestDir::new("complete-runtime-marker");
+    let version = "139.0.28+chromium-139.0.7258.139";
+    let layout = test_layout(&root);
+    let platform_arch = current_linux_platform_arch();
+    let runtime_dir = layout.linux_cef_runtime_dir(platform_arch, version);
+    fs::create_dir_all(&runtime_dir).unwrap();
+    fs::write(runtime_dir.join("libcef.so"), "cef").unwrap();
+
+    let manifest = release_manifest(version, platform_arch);
+    let mut complete_marker = manifest.clone();
+    complete_marker["runtime"] = json!("cef");
+    complete_marker["platform"] = json!("linux");
+    let marker_bytes = format!(
+        "{}\n",
+        serde_json::to_string_pretty(&complete_marker).unwrap()
+    );
+    let marker_path = runtime_dir.join("fennara-cef-runtime.json");
+    fs::write(&marker_path, &marker_bytes).unwrap();
+
+    assert!(runtime_complete(&runtime_dir, &manifest));
+
+    let message = ensure_linux_cef_manifest(&layout, &manifest, None)
+        .unwrap()
+        .unwrap();
+
+    assert!(message.contains("is installed"));
+    assert_eq!(fs::read_to_string(marker_path).unwrap(), marker_bytes);
+}
+
 fn release_manifest(version: &str, platform_arch: &str) -> Value {
     json!({
         "id": "linux-cef",
