@@ -120,6 +120,7 @@ function sharedRuntimeRecords() {
     {
       id: "linux-cef",
       kind: "cef",
+      runtime: "cef",
       schema_version: linuxCef.schema_version ?? 1,
       platform: linuxCef.platform ?? "linux",
       arch: linuxCef.arch ?? "x86_64",
