@@ -412,6 +412,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
             local_model_limits: BTreeMap::new(),
+            request_timeout: std::time::Duration::from_secs(120),
         }
     }
 
@@ -546,6 +547,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
             local_model_limits,
+            request_timeout: std::time::Duration::from_secs(120),
         });
 
         let ollama_ref = model_ref_from_selection("ollama/llama3.1:8b", &catalog).unwrap();

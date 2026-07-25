@@ -222,6 +222,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
             local_model_limits: std::collections::BTreeMap::new(),
+            request_timeout: std::time::Duration::from_secs(120),
         };
         let catalog = Catalog::from_settings(&settings);
         let model_ref = super::super::catalog::model_ref_from_selection(
@@ -237,6 +238,7 @@ mod tests {
             model: resolved,
             messages: vec![json!({ "role": "user", "content": "x".repeat(2000) })],
             tools: Vec::new(),
+            timeout: std::time::Duration::from_secs(120),
         };
 
         assert!(matches!(
@@ -267,6 +269,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
             local_model_limits: std::collections::BTreeMap::new(),
+            request_timeout: std::time::Duration::from_secs(120),
         };
         let request = LlmRequest::from_chat(
             &settings,
@@ -325,6 +328,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
             local_model_limits: std::collections::BTreeMap::new(),
+            request_timeout: std::time::Duration::from_secs(120),
         };
         let catalog = Catalog::from_settings(&settings);
         let model_ref = super::super::catalog::model_ref_from_selection(
@@ -344,6 +348,7 @@ mod tests {
                 ]
             })],
             tools: Vec::new(),
+            timeout: std::time::Duration::from_secs(120),
         };
         let current_image_request = LlmRequest {
             model: resolved,
@@ -360,6 +365,7 @@ mod tests {
                 ]
             })],
             tools: Vec::new(),
+            timeout: std::time::Duration::from_secs(120),
         };
 
         assert!(estimate_request_tokens(&placeholder_request) < 100);
@@ -388,6 +394,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
             local_model_limits: std::collections::BTreeMap::new(),
+            request_timeout: std::time::Duration::from_secs(120),
         };
         let catalog = Catalog::from_settings(&settings);
         let model_ref = super::super::catalog::model_ref_from_selection(
@@ -413,6 +420,7 @@ mod tests {
                 ]
             })],
             tools: Vec::new(),
+            timeout: std::time::Duration::from_secs(120),
         };
 
         let estimated = estimate_request_tokens(&request);

@@ -6,6 +6,13 @@ use super::{
     ChatSettings, CustomHeaderMigration, env_truthy, migrate_custom_provider_headers,
     migrate_legacy_openrouter_selection, reconcile_custom_provider_models,
 };
+
+#[test]
+fn provider_timeout_is_bounded() {
+    assert_eq!(super::clean_provider_timeout_seconds(1), 30);
+    assert_eq!(super::clean_provider_timeout_seconds(600), 600);
+    assert_eq!(super::clean_provider_timeout_seconds(10_000), 3_600);
+}
 use crate::runtime_daemon::chat::providers::custom::{CustomProviderConfig, CustomProviderModel};
 
 #[test]
@@ -14,6 +21,7 @@ fn legacy_settings_default_to_anonymous_telemetry_enabled() {
         serde_json::from_str(r#"{"model":"openrouter/google/gemini-3.5-flash"}"#).unwrap();
 
     assert!(settings.telemetry_enabled);
+    assert_eq!(settings.provider_timeout_seconds, 120);
 }
 
 #[test]

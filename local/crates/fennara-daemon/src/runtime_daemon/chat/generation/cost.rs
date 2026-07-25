@@ -89,6 +89,7 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
             local_model_limits: std::collections::BTreeMap::new(),
+            request_timeout: std::time::Duration::from_secs(120),
         };
 
         let usage = usage_for_model(

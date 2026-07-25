@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/providers.md sha256=17c492522ed54ff1ffb4942e27572fa7e15709cec2853ac38be5b5f0dc91db0d -->
+<!-- fennara-i18n: locale=tr source=docs/providers.md sha256=cb9c3750ebffd837ab24519959fdac8f39ba41cc32b1a8e0c467c500b56f7cb5 -->
 <a id="built-in-chat-providers"></a>
 # Yerleşik Sohbet Sağlayıcıları
 
@@ -80,10 +80,16 @@ Fennara yerleşik sohbet ayarlarını daemon aracılığıyla, Godot projesinin 
 - yerel sağlayıcı temel URL'leri
 - seçili model
 - akıl yürütme yoğunluğu
+- sağlayıcı yanıt zaman aşımı
 - Godot içine gömülü veya sistem tarayıcısında açılan sohbet görüntüleme modu
 - sohbet geçmişi
 
 Bu ayarlar `res://addons/fennara/` içine yazılmaz ve Claude, Codex, Cursor, Gemini ya da diğer harici MCP uygulamalarıyla paylaşılmaz.
+
+<a id="provider-response-timeout"></a>
+## Sağlayıcı yanıt zaman aşımı
+
+**Provider response timeout** ayarı, yerleşik sohbetin her model isteğinin tamamlanmasını ne kadar süre bekleyeceğini denetler. Varsayılan değer 120 saniyedir ve 30 ile 3600 saniye arasındaki değerleri kabul eder. Değeri artırmak, daha yavaş yerel modellerin veya çok sayıda araç kullanan uzun turların tamamlanmasına yardımcı olabilir. Daemon, seçilen zaman aşımını sağlayıcı isteğine uygular ve sınıra ulaşıldığında isteği iptal eder.
 
 <a id="chat-display-setting"></a>
 ## Sohbet Görüntüleme Ayarı

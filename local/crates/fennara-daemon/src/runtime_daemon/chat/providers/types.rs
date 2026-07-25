@@ -295,6 +295,7 @@ pub(crate) struct ProviderSettings {
     pub(crate) ollama_base_url: String,
     pub(crate) lmstudio_base_url: String,
     pub(crate) local_model_limits: BTreeMap<String, Limits>,
+    pub(crate) request_timeout: std::time::Duration,
 }
 
 #[derive(Clone, Debug)]

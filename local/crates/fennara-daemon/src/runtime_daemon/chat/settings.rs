@@ -28,6 +28,9 @@ pub(crate) const DEFAULT_REASONING_EFFORT: &str = "medium";
 pub(crate) const DEFAULT_OLLAMA_BASE_URL: &str = "http://127.0.0.1:11434";
 pub(crate) const DEFAULT_CHAT_SURFACE: &str = "embedded";
 pub(crate) const BROWSER_CHAT_SURFACE: &str = "browser";
+pub(crate) const DEFAULT_PROVIDER_TIMEOUT_SECONDS: u64 = 120;
+pub(crate) const MIN_PROVIDER_TIMEOUT_SECONDS: u64 = 30;
+pub(crate) const MAX_PROVIDER_TIMEOUT_SECONDS: u64 = 3_600;
 
 static SETTINGS_WRITE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 static SETTINGS_LOCK: Mutex<()> = Mutex::new(());
@@ -49,6 +52,8 @@ pub(crate) struct ChatSettings {
     pub(crate) local_model_context_lengths: BTreeMap<String, u32>,
     #[serde(default = "default_chat_surface")]
     pub(crate) chat_surface: String,
+    #[serde(default = "default_provider_timeout_seconds")]
+    pub(crate) provider_timeout_seconds: u64,
     #[serde(default, deserialize_with = "deserialize_approval_mode")]
     pub(crate) approval_mode: ApprovalMode,
     #[serde(default = "default_true")]
@@ -68,6 +73,7 @@ pub(crate) struct PublicChatSettings {
     pub(crate) reasoning_effort_options: Vec<&'static str>,
     pub(crate) local_model_context_lengths: BTreeMap<String, u32>,
     pub(crate) chat_surface: String,
+    pub(crate) provider_timeout_seconds: u64,
     pub(crate) approval_mode: String,
     pub(crate) approval_mode_options: Vec<serde_json::Value>,
     pub(crate) telemetry_enabled: bool,
@@ -85,6 +91,7 @@ impl Default for ChatSettings {
             custom_providers: Vec::new(),
             local_model_context_lengths: BTreeMap::new(),
             chat_surface: DEFAULT_CHAT_SURFACE.to_string(),
+            provider_timeout_seconds: DEFAULT_PROVIDER_TIMEOUT_SECONDS,
             approval_mode: ApprovalMode::Ask,
             telemetry_enabled: true,
         }
@@ -108,6 +115,7 @@ impl ChatSettings {
             reasoning_effort_options: vec!["low", DEFAULT_REASONING_EFFORT, "high"],
             local_model_context_lengths: self.local_model_context_lengths.clone(),
             chat_surface: clean_chat_surface(&self.chat_surface).to_string(),
+            provider_timeout_seconds: clean_provider_timeout_seconds(self.provider_timeout_seconds),
             approval_mode: self.approval_mode.as_str().to_string(),
             approval_mode_options: approval_mode_options(),
             telemetry_enabled: self.telemetry_enabled,
@@ -150,6 +158,7 @@ pub(crate) struct SaveSettingsRequest {
     pub(crate) reasoning_effort: Option<String>,
     pub(crate) local_model_context_lengths: Option<BTreeMap<String, u32>>,
     pub(crate) chat_surface: Option<String>,
+    pub(crate) provider_timeout_seconds: Option<u64>,
     pub(crate) approval_mode: Option<String>,
     pub(crate) telemetry_enabled: Option<bool>,
 }
@@ -201,6 +210,8 @@ fn load_settings_unlocked() -> (ChatSettings, bool) {
     settings.local_model_context_lengths =
         clean_local_model_context_lengths(&settings.local_model_context_lengths);
     settings.chat_surface = clean_chat_surface(&settings.chat_surface).to_string();
+    settings.provider_timeout_seconds =
+        clean_provider_timeout_seconds(settings.provider_timeout_seconds);
     settings.approval_mode = clean_approval_mode(settings.approval_mode.as_str());
     if had_legacy_openrouter_key {
         auth::migrate_legacy_api_key(ProviderId::OPENROUTER, legacy_openrouter_key);
@@ -347,6 +358,10 @@ pub(crate) fn save_settings(update: SaveSettingsRequest) -> Result<ChatSettings,
     }
     if let Some(chat_surface) = update.chat_surface {
         settings.chat_surface = clean_chat_surface(&chat_surface).to_string();
+    }
+    if let Some(provider_timeout_seconds) = update.provider_timeout_seconds {
+        settings.provider_timeout_seconds =
+            clean_provider_timeout_seconds(provider_timeout_seconds);
     }
     if let Some(approval_mode) = update.approval_mode {
         settings.approval_mode = clean_approval_mode(&approval_mode);
@@ -589,6 +604,10 @@ pub(crate) fn clean_chat_surface(surface: &str) -> &'static str {
     }
 }
 
+pub(crate) fn clean_provider_timeout_seconds(seconds: u64) -> u64 {
+    seconds.clamp(MIN_PROVIDER_TIMEOUT_SECONDS, MAX_PROVIDER_TIMEOUT_SECONDS)
+}
+
 pub(crate) fn clean_ollama_base_url(base_url: &str) -> String {
     let clean = clean_base_url(base_url);
     if clean.is_empty() {
@@ -647,6 +666,10 @@ fn default_reasoning_effort() -> String {
 
 fn default_chat_surface() -> String {
     DEFAULT_CHAT_SURFACE.to_string()
+}
+
+fn default_provider_timeout_seconds() -> u64 {
+    DEFAULT_PROVIDER_TIMEOUT_SECONDS
 }
 
 fn default_true() -> bool {
