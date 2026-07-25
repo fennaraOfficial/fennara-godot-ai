@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/providers.md sha256=17c492522ed54ff1ffb4942e27572fa7e15709cec2853ac38be5b5f0dc91db0d -->
+<!-- fennara-i18n: locale=zh-CN source=docs/providers.md sha256=cb9c3750ebffd837ab24519959fdac8f39ba41cc32b1a8e0c467c500b56f7cb5 -->
 <a id="built-in-chat-providers"></a>
 # 内置聊天提供方
 
@@ -98,10 +98,16 @@ Fennara 通过守护进程在 Godot 项目之外本地存储内置聊天设置�
 - 本地提供方基础 URL
 - 选定模型
 - 推理强度
+- 提供方响应超时
 - 聊天显示模式，即嵌入 Godot 或在系统浏览器中打开
 - 聊天历史
 
 这些设置不会写入 `res://addons/fennara/`，也不会与 Claude、Codex、Cursor、Gemini 或其他外部 MCP 应用共享。
+
+<a id="provider-response-timeout"></a>
+## 提供方响应超时
+
+**Provider response timeout** 设置控制内置聊天等待每个模型请求完成的时间。默认值为 120 秒，可设置为 30 至 3600 秒。增大该值有助于较慢的本地模型或大量使用工具的长轮次顺利完成。守护进程会将选定的超时应用于提供方请求，并在达到限制时取消请求。
 
 <a id="chat-display-setting"></a>
 ## 聊天显示设置

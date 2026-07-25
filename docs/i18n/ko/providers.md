@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/providers.md sha256=17c492522ed54ff1ffb4942e27572fa7e15709cec2853ac38be5b5f0dc91db0d -->
+<!-- fennara-i18n: locale=ko source=docs/providers.md sha256=cb9c3750ebffd837ab24519959fdac8f39ba41cc32b1a8e0c467c500b56f7cb5 -->
 <a id="built-in-chat-providers"></a>
 # 내장 채팅 제공업체
 
@@ -80,10 +80,16 @@ Fennara는 내장 채팅 설정을 Godot 프로젝트 밖에서 데몬을 통해
 - 로컬 제공업체 기본 URL
 - 선택한 모델
 - 추론 강도
+- 제공업체 응답 제한 시간
 - Godot 임베디드 또는 시스템 브라우저로 열기 중 하나인 채팅 표시 모드
 - 채팅 기록
 
 이 설정은 `res://addons/fennara/`에 기록되지 않으며 Claude, Codex, Cursor, Gemini 또는 다른 외부 MCP 앱과 공유되지 않습니다.
+
+<a id="provider-response-timeout"></a>
+## 제공업체 응답 제한 시간
+
+**Provider response timeout** 설정은 내장 채팅이 각 모델 요청의 완료를 기다리는 시간을 제어합니다. 기본값은 120초이며 30초에서 3600초 사이로 설정할 수 있습니다. 값을 늘리면 느린 로컬 모델이나 도구를 많이 사용하는 긴 턴이 완료되는 데 도움이 될 수 있습니다. 데몬은 선택한 제한 시간을 제공업체 요청에 적용하고 제한에 도달하면 요청을 취소합니다.
 
 <a id="chat-display-setting"></a>
 ## 채팅 표시 설정

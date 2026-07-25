@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/providers.md sha256=17c492522ed54ff1ffb4942e27572fa7e15709cec2853ac38be5b5f0dc91db0d -->
+<!-- fennara-i18n: locale=ja source=docs/providers.md sha256=cb9c3750ebffd837ab24519959fdac8f39ba41cc32b1a8e0c467c500b56f7cb5 -->
 <a id="built-in-chat-providers"></a>
 # 内蔵チャットプロバイダー
 
@@ -80,10 +80,16 @@ Fennara は内蔵チャットの設定を、Godot プロジェクトの外にあ
 - ローカルプロバイダーのベース URL
 - 選択したモデル
 - reasoning effort
+- プロバイダー応答タイムアウト
 - Godot 内への埋め込み、またはシステムブラウザーで開くというチャット表示モード
 - チャット履歴
 
 これらの設定は `res://addons/fennara/` に書き込まれず、Claude、Codex、Cursor、Gemini、その他の外部 MCP アプリと共有されることもありません。
+
+<a id="provider-response-timeout"></a>
+## プロバイダー応答タイムアウト
+
+**Provider response timeout** 設定では、内蔵チャットが各モデルリクエストの完了を待つ時間を指定します。既定値は 120 秒で、30 秒から 3600 秒まで設定できます。値を増やすと、低速なローカルモデルやツールを多用する長いターンが完了しやすくなります。デーモンは選択されたタイムアウトをプロバイダーリクエストに適用し、制限時間に達するとリクエストをキャンセルします。
 
 <a id="chat-display-setting"></a>
 ## チャット表示設定

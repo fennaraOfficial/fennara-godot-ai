@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=es source=docs/providers.md sha256=17c492522ed54ff1ffb4942e27572fa7e15709cec2853ac38be5b5f0dc91db0d -->
+<!-- fennara-i18n: locale=es source=docs/providers.md sha256=cb9c3750ebffd837ab24519959fdac8f39ba41cc32b1a8e0c467c500b56f7cb5 -->
 <a id="built-in-chat-providers"></a>
 # Proveedores del chat integrado
 
@@ -111,10 +111,16 @@ Fennara almacena localmente mediante el daemon la configuración del chat integr
 - URL base de proveedores locales
 - modelo seleccionado
 - esfuerzo de razonamiento
+- tiempo de espera de respuesta del proveedor
 - modo de visualización del chat, incrustado en Godot o abierto en el navegador del sistema
 - historial del chat
 
 Esta configuración no se escribe en `res://addons/fennara/` ni se comparte con Claude, Codex, Cursor, Gemini u otras aplicaciones MCP externas.
+
+<a id="provider-response-timeout"></a>
+## Tiempo de espera de respuesta del proveedor
+
+La opción **Provider response timeout** controla cuánto tiempo puede ejecutarse cada solicitud al modelo en el chat integrado. El valor predeterminado es de 120 segundos y admite valores de 30 a 3600 segundos. Aumentarlo puede ayudar a que los modelos locales más lentos o los turnos largos con muchas herramientas finalicen. El daemon aplica el tiempo de espera seleccionado a la solicitud del proveedor y la cancela si se alcanza ese límite.
 
 <a id="chat-display-setting"></a>
 ## Configuración de visualización del chat
