@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=pt-BR source=docs/release.md sha256=23e966649d82728c9ab9802dd2957bb64c1b13fd3e7ae44bd513835bc063ff77 -->
+<!-- fennara-i18n: locale=pt-BR source=docs/release.md sha256=60b8cc51e0fcde9b4e18eadc230aaf1d8cc4fad2fe70cbf5190ab9123bac0073 -->
 <a id="release-process"></a>
 # Processo de lançamento
 
@@ -310,11 +310,12 @@ desabilitada. Ambos os workflows verificam os metadados do lançamento e os byte
 antes de concluir a publicação ou avançar um canal de staging. A publicação dos ativos
 usa o `GITHUB_TOKEN` com escopo do job e acesso de gravação a conteúdo.
 
-A política de lançamento atualmente exige a CLI `0.3.12` para manifestos estáveis e a
+A política de lançamento atualmente exige a CLI `0.4.1` para manifestos estáveis e a
 CLI `0.3.8` para manifestos de staging. A descoberta estável não resolve mais a
-tag `latest` desativada. A versão estável `0.3.12` exige a validação de atualização corrigida,
-a verificação prévia de troca de versão e o tratamento do diário de operações no Windows. Um candidato
-de staging como `0.3.12-pr.123.1` tem precedência inferior à versão estável `0.3.12` no
+tag `latest` desativada. A versão estável `0.4.1` exige a validação de atualização corrigida,
+a verificação prévia de troca de versão, o tratamento do diário de operações no Windows e o reparo
+do marcador de runtime CEF no Linux. Um candidato
+de staging como `0.4.1-pr.123.1` tem precedência inferior à versão estável `0.4.1` no
 SemVer, portanto seu mínimo deve permanecer abaixo da
 versão candidata para que a configuração inicial instale a CLI candidata. Não
 altere nenhum dos mínimos com base apenas na compatibilidade do esquema do manifesto.
