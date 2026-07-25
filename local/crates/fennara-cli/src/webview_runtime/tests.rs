@@ -59,12 +59,18 @@ fn leaves_complete_runtime_marker_unchanged() {
     fs::write(runtime_dir.join("libcef.so"), "cef").unwrap();
 
     let manifest = release_manifest(version, platform_arch);
-    let mut complete_marker = manifest.clone();
-    complete_marker["runtime"] = json!("cef");
-    complete_marker["platform"] = json!("linux");
     let marker_bytes = format!(
-        "{}\n",
-        serde_json::to_string_pretty(&complete_marker).unwrap()
+        concat!(
+            "{{\n",
+            "  \"ignored_test_field\": true,\n",
+            "\t\"runtime\":\"cef\", \"platform\": \"linux\",\n",
+            "  \"version\": {},\n",
+            "  \"platform_arch\": {},\n",
+            "  \"archive\": {{ \"sha256\":\"abc123\" }}\n",
+            "}}\n"
+        ),
+        serde_json::to_string(version).unwrap(),
+        serde_json::to_string(platform_arch).unwrap(),
     );
     let marker_path = runtime_dir.join("fennara-cef-runtime.json");
     fs::write(&marker_path, &marker_bytes).unwrap();
