@@ -387,6 +387,20 @@ all connected Godot editors. A start request runs in the selected or
 chat-bound Godot project, but another running managed scene must be stopped
 before starting a new one.
 
+## Export Boundary
+
+Fennara is active only in the editor. Its export plugin temporarily removes the
+`_fennara_game_capture` autoload before Godot serializes exported project
+settings, skips every file under `res://addons/fennara/` and `res://.fennara/`,
+and temporarily removes its entry from Godot's generated GDExtension registry.
+It restores the original autoload and registry when export ends. It does not
+rewrite or persist changes to `export_presets.cfg` or `project.godot`.
+
+This boundary starts after Godot opens the project. A CI checkout that omits
+`addons/fennara/` must run `fennara prepare-export` or install the addon before
+launching Godot. An export plugin cannot repair a missing autoload target
+before project startup validation.
+
 ## Release Assets
 
 Each public release publishes separate assets so installs can stay modular:

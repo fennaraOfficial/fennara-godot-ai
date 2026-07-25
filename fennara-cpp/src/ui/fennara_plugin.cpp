@@ -4,12 +4,11 @@
 #include "fennara/local_bridge.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/update_notice.hpp"
+#include "fennara/ui/export_plugin.hpp"
 #include "fennara/ui/script_context_menu.hpp"
 
 #include <godot_cpp/classes/engine.hpp>
-#include <godot_cpp/classes/config_file.hpp>
 #include <godot_cpp/classes/display_server.hpp>
-#include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/editor_file_system.hpp>
 #include <godot_cpp/classes/editor_settings.hpp>
@@ -90,10 +89,12 @@ void FennaraPlugin::_enter_tree() {
 
     _ensure_runtime_helper_autoload();
 
+    export_plugin.instantiate();
+    add_export_plugin(export_plugin);
+
     set_process(true);
 
     _configure_editor_settings();
-    _ensure_export_presets_exclude_fennara();
     local_bridge->request_get_class_info_warmup();
 }
 
@@ -172,119 +173,6 @@ void FennaraPlugin::_configure_editor_settings() {
     }
 }
 
-bool FennaraPlugin::_is_export_preset_section(const godot::String &section) const {
-    if (!section.begins_with("preset.") || section.contains(".options")) {
-        return false;
-    }
-    godot::String suffix = section.substr(7);
-    return !suffix.is_empty() && suffix.is_valid_int();
-}
-
-godot::PackedStringArray FennaraPlugin::_split_export_filter(
-    const godot::String &raw) const {
-    godot::PackedStringArray filters;
-    godot::PackedStringArray parts = raw.split(",", false);
-    for (int i = 0; i < parts.size(); i++) {
-        godot::String trimmed = parts[i].strip_edges();
-        if (!trimmed.is_empty() && !filters.has(trimmed)) {
-            filters.append(trimmed);
-        }
-    }
-    return filters;
-}
-
-void FennaraPlugin::_ensure_export_presets_exclude_fennara() {
-    const godot::String presets_path = "res://export_presets.cfg";
-    const godot::String backup_path = "res://export_presets.cfg.fennara.bak";
-    if (!godot::FileAccess::file_exists(presets_path)) {
-        FLOG_SYS("Export preset guard skipped: export_presets.cfg not found");
-        return;
-    }
-
-    godot::Ref<godot::ConfigFile> config;
-    config.instantiate();
-    godot::Error load_err = config->load(presets_path);
-    if (load_err != godot::OK) {
-        FLOG_ERR("Export preset guard load failed code=" +
-                 godot::String::num_int64(static_cast<int64_t>(load_err)));
-        return;
-    }
-
-    static const char *obsolete_filters[] = {
-        "addons/fennara/*",
-    };
-    static const char *required_filters[] = {
-        "addons/fennara/ai/*",
-        "addons/fennara/bin/*",
-        "addons/fennara/dist/*",
-        "addons/fennara/*.gdextension",
-        "addons/fennara/*.gdextension.uid",
-        "addons/fennara/*.md",
-        "addons/fennara/VERSION",
-        ".fennara/*",
-    };
-
-    bool changed = false;
-    int64_t touched_presets = 0;
-    godot::PackedStringArray sections = config->get_sections();
-    for (int i = 0; i < sections.size(); i++) {
-        godot::String section = sections[i];
-        if (!_is_export_preset_section(section)) {
-            continue;
-        }
-
-        godot::PackedStringArray filters =
-            _split_export_filter(config->get_value(section, "exclude_filter", ""));
-        bool section_changed = false;
-        for (const char *filter : obsolete_filters) {
-            godot::String pattern(filter);
-            int existing_index = filters.find(pattern);
-            if (existing_index >= 0) {
-                filters.remove_at(existing_index);
-                section_changed = true;
-            }
-        }
-        for (const char *filter : required_filters) {
-            godot::String pattern(filter);
-            if (!filters.has(pattern)) {
-                filters.append(pattern);
-                section_changed = true;
-            }
-        }
-
-        if (section_changed) {
-            config->set_value(section, "exclude_filter", godot::String(",").join(filters));
-            changed = true;
-            touched_presets++;
-        }
-    }
-
-    if (!changed) {
-        FLOG_SYS("Export preset guard already configured");
-        return;
-    }
-
-    if (!godot::FileAccess::file_exists(backup_path)) {
-        godot::Error copy_err =
-            godot::DirAccess::copy_absolute(presets_path, backup_path);
-        if (copy_err == godot::OK) {
-            FLOG_SYS("Export preset guard backup created: " + backup_path);
-        } else {
-            FLOG_ERR("Export preset guard backup failed code=" +
-                     godot::String::num_int64(static_cast<int64_t>(copy_err)));
-        }
-    }
-
-    godot::Error save_err = config->save(presets_path);
-    if (save_err == godot::OK) {
-        FLOG_SYS("Export preset guard added Fennara excludes to " +
-                 godot::String::num_int64(touched_presets) + " preset(s)");
-    } else {
-        FLOG_ERR("Export preset guard save failed code=" +
-                 godot::String::num_int64(static_cast<int64_t>(save_err)));
-    }
-}
-
 void FennaraPlugin::_exit_tree() {
     set_process(false);
     _stop_update_check();
@@ -305,6 +193,10 @@ void FennaraPlugin::_exit_tree() {
         remove_context_menu_plugin(script_context_menu_plugin);
         script_context_menu_plugin->set_local_bridge(nullptr);
         script_context_menu_plugin.unref();
+    }
+    if (export_plugin.is_valid()) {
+        remove_export_plugin(export_plugin);
+        export_plugin.unref();
     }
     if (local_bridge) {
         local_bridge->queue_free();

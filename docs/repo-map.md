@@ -49,6 +49,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `local/crates/fennara-cli/src/operation.rs` | Public install/update operation coordinator, phases, and CLI handoff entry points. |
 | `local/crates/fennara-cli/src/operation/` | Focused operation journal, durable storage, diagnostic redaction, and test modules. |
 | `local/crates/fennara-cli/src/project_addon.rs` | Existing project-addon version and current-platform GDExtension library validation. |
+| `local/crates/fennara-cli/src/prepare_export.rs` | Addon-free CI export preparation that removes only Fennara's persistent runtime autoload before Godot starts. |
 | `local/crates/fennara-cli/src/release_identity.rs` | Stable/staging addon identity, exact release selectors, pull-request channel validation, and legacy stable compatibility. |
 | `local/crates/fennara-cli/src/release_channel.rs` | Per-channel staging pointer validation and resolution to an exact versioned release. |
 | `local/crates/fennara-cli/src/release_manifest.rs` | Release manifest parsing, asset hash validation, identity binding, and platform package selection. |
@@ -107,6 +108,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `godot_demo/addons/fennara/dist/` | Packaged web UI assets used by the in-editor chat webview. |
 | `godot_demo/addons/fennara/runtime/` | Synced packaged copy of `runtime/` shipped inside the addon. |
 | `godot_demo/tests/first_run_setup_test.gd` | Headless native first-run setup state and deterministic failure test. |
+| `godot_demo/tests/export_plugin_test.gd` | Headless native export exclusion and autoload restoration regression test. |
 | `godot_demo/tests/screenshot_scene_contract_test.gd` | Headless native screenshot argument-contract regression test. |
 | `godot_demo/tests/image_sheet_test.gd` | Headless shared screenshot/runtime sheet composition regression test. |
 | `godot_demo/tests/runtime_image_context_test.gd` | Headless runtime raw-frame, sheet, and arbitrary-Image output regression test. |
@@ -168,6 +170,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | Change CLI commands or terminal behavior | `local/crates/fennara-cli/src/` and `docs/cli.md` |
 | Change native update progress, shutdown confirmation, activation handshake, or recovery | `fennara-cpp/src/update/`, `fennara-cpp/src/ui/update_panel.cpp`, `fennara-cpp/src/ui/dock.cpp`, `local/crates/fennara-daemon/src/runtime_daemon/chat/mod.rs`, and `ui/chat/` |
 | Change native first-run setup or CLI bootstrap | `fennara-cpp/src/setup/`, `fennara-cpp/src/ui/setup_panel.cpp`, and `fennara-cpp/src/ui/dock.cpp` |
+| Change export-time addon exclusion | `fennara-cpp/src/ui/export_plugin.cpp`, `fennara-cpp/include/fennara/ui/export_plugin.hpp`, and `godot_demo/tests/export_plugin_test.gd` |
 | Change install/update operation logs, phases, error codes, or diagnostic reports | `local/crates/fennara-cli/src/operation.rs`, `local/crates/fennara-cli/src/operation/`, and `local/crates/fennara-cli/src/diagnostics.rs` |
 | Change webview prerequisite checks | `local/crates/fennara-cli/src/webview_prereq.rs`, `local/crates/fennara-cli/src/webview_runtime.rs`, and `fennara-cpp/src/ui/webview_host*` |
 | Change generated project guidance | `local/templates/` and `local/crates/fennara-cli/src/project_guidance.rs` |

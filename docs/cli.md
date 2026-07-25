@@ -66,6 +66,7 @@ Linux: ~/.local/share/fennara
 | `fennara doctor` | Inspect or repair the local installation |
 | `fennara diagnostics` | Show a sanitized operation report |
 | `fennara mcp-setup` | Connect an external MCP app |
+| `fennara prepare-export` | Remove Fennara's autoload before an addon-free CI export |
 | `fennara recover` | Restore an interrupted native update |
 | `fennara self-update` | Update only the installed CLI |
 
@@ -102,6 +103,22 @@ Installation has two safe paths:
   the current platform library, and installs that exact version's CLI-managed
   components. It keeps the project addon unchanged. An explicit `--version`
   must match the existing addon.
+
+## Prepare An Addon-Free CI Export
+
+If `addons/fennara/` is excluded from a CI checkout, remove Fennara's persistent
+runtime autoload before Godot starts:
+
+```bash
+fennara prepare-export --project path/to/project
+godot --headless --path path/to/project --export-release "Preset"
+```
+
+The command edits only the `_fennara_game_capture` entry in `project.godot`.
+It preserves other autoloads and settings and is safe to rerun. This step must
+run before Godot because project startup validates autoload paths before editor
+or export plugins can execute. CI may instead install the Fennara addon before
+starting Godot.
 
 ## Update A Project
 

@@ -232,6 +232,27 @@ jobs:
             }
           }
 
+          $exportTest = Start-Process `
+            -FilePath "${{ steps.godot.outputs.console }}" `
+            -ArgumentList @(
+              "--headless",
+              "--editor",
+              "--path",
+              '"${{ github.workspace }}\godot_demo"',
+              "--script",
+              "res://tests/export_plugin_test.gd"
+            ) `
+            -NoNewWindow `
+            -PassThru
+          if (-not $exportTest.WaitForExit($testTimeoutSeconds * 1000)) {
+            Write-Host "::error::Native export plugin test exceeded ${testTimeoutSeconds} seconds."
+            & taskkill.exe /PID $exportTest.Id /T /F
+            exit 124
+          }
+          if ($exportTest.ExitCode -ne 0) {
+            exit $exportTest.ExitCode
+          }
+
       - name: Test Linux guidance containment
         if: steps.source.outputs.available == 'true' && matrix.platform == 'linux'
         timeout-minutes: 5
