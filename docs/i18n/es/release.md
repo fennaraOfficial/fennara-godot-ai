@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=es source=docs/release.md sha256=23e966649d82728c9ab9802dd2957bb64c1b13fd3e7ae44bd513835bc063ff77 -->
+<!-- fennara-i18n: locale=es source=docs/release.md sha256=60b8cc51e0fcde9b4e18eadc230aaf1d8cc4fad2fe70cbf5190ab9123bac0073 -->
 <a id="release-process"></a>
 # Proceso de publicación
 
@@ -320,12 +320,12 @@ de la versión y los bytes de los recursos descargados antes de terminar la
 publicación o avanzar un canal de staging. La publicación de recursos usa el
 `GITHUB_TOKEN` limitado al trabajo con acceso de escritura sobre el contenido.
 
-La política requiere actualmente CLI `0.3.12` para estable y `0.3.8` para
+La política requiere actualmente CLI `0.4.1` para estable y `0.3.8` para
 staging. El descubrimiento estable ya no resuelve la etiqueta retirada `latest`.
-Stable `0.3.12` requiere la validación corregida de actualizaciones, la
-comprobación previa del cambio de versión y el manejo del diario de operaciones
-de Windows. Un candidato de staging como
-`0.3.12-pr.123.1` es menor que `0.3.12` según SemVer, por lo que su mínimo debe
+Stable `0.4.1` requiere la validación corregida de actualizaciones, la
+comprobación previa del cambio de versión, el manejo del diario de operaciones
+de Windows y la reparación del marcador del entorno de ejecución CEF de Linux. Un candidato de staging como
+`0.4.1-pr.123.1` es menor que `0.4.1` según SemVer, por lo que su mínimo debe
 permanecer por debajo de la versión candidata para que la primera configuración
 pueda instalar la CLI candidata. No cambies ninguno de los dos mínimos basándote
 solo en la compatibilidad con el esquema del manifiesto.

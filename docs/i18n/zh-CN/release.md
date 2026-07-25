@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/release.md sha256=23e966649d82728c9ab9802dd2957bb64c1b13fd3e7ae44bd513835bc063ff77 -->
+<!-- fennara-i18n: locale=zh-CN source=docs/release.md sha256=60b8cc51e0fcde9b4e18eadc230aaf1d8cc4fad2fe70cbf5190ab9123bac0073 -->
 <a id="release-process"></a>
 # 发布流程
 
@@ -305,11 +305,11 @@ SHA-256 值。除非明确选择 `publish`，否则发布保持禁用。
 两个工作流都会在完成发布或推进预发布渠道之前，验证发布元数据和下载的资产字节。
 资产发布使用具有 contents 写入权限的作业范围 `GITHUB_TOKEN`。
 
-发布政策目前要求稳定版清单使用 CLI `0.3.12`，
+发布政策目前要求稳定版清单使用 CLI `0.4.1`，
 预发布版清单使用 CLI `0.3.8`。稳定版发现不再解析
-已停用的 `latest` 标签。稳定版 `0.3.12` 要求修正后的更新验证、
-版本切换预检和 Windows 操作日志处理。诸如 `0.3.12-pr.123.1` 的预发布
-候选版本在 SemVer 下低于稳定版 `0.3.12`，因此其最低版本必须保持低于
+已停用的 `latest` 标签。稳定版 `0.4.1` 要求修正后的更新验证、
+版本切换预检、Windows 操作日志处理和 Linux CEF 运行时标记修复。诸如 `0.4.1-pr.123.1` 的预发布
+候选版本在 SemVer 下低于稳定版 `0.4.1`，因此其最低版本必须保持低于
 候选版本，首次运行设置才能安装候选 CLI。不要
 仅根据清单模式兼容性更改任一最低版本。
 

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/release.md sha256=23e966649d82728c9ab9802dd2957bb64c1b13fd3e7ae44bd513835bc063ff77 -->
+<!-- fennara-i18n: locale=tr source=docs/release.md sha256=60b8cc51e0fcde9b4e18eadc230aaf1d8cc4fad2fe70cbf5190ab9123bac0073 -->
 <a id="release-process"></a>
 # Sürüm Süreci
 
@@ -314,12 +314,12 @@ kanalını ilerletmeden önce sürüm meta verilerini ve indirilen yapı baytlar
 doğrular. Yapı yayımlama, içerik yazma erişimine sahip iş kapsamlı
 `GITHUB_TOKEN` kullanır.
 
-Sürüm ilkesi şu anda kararlı manifestler için CLI `0.3.12`, hazırlık
+Sürüm ilkesi şu anda kararlı manifestler için CLI `0.4.1`, hazırlık
 manifestleri için CLI `0.3.8` gerektirir. Kararlı keşif artık kullanımdan
-kaldırılan `latest` etiketini çözümlemez. Kararlı `0.3.12`, düzeltilmiş
-güncelleme doğrulamasını, sürüm geçişi ön denetimini ve Windows işlem günlüğü
-işlemeyi gerektirir. `0.3.12-pr.123.1` gibi bir hazırlık adayı SemVer altında
-kararlı `0.3.12` değerinden küçük karşılaştırılır; bu nedenle ilk çalıştırma
+kaldırılan `latest` etiketini çözümlemez. Kararlı `0.4.1`, düzeltilmiş
+güncelleme doğrulamasını, sürüm geçişi ön denetimini, Windows işlem günlüğü
+işlemeyi ve Linux CEF çalışma zamanı işaretçisi onarımını gerektirir. `0.4.1-pr.123.1` gibi bir hazırlık adayı SemVer altında
+kararlı `0.4.1` değerinden küçük karşılaştırılır; bu nedenle ilk çalıştırma
 kurulumunun aday CLI'ı kurabilmesi için aday sürümün en düşük değeri aday
 sürümden küçük kalmalıdır. İki en düşük değerden hiçbirini yalnızca manifest
 şeması uyumluluğuna dayanarak değiştirmeyin.

@@ -1,5 +1,5 @@
 const MINIMUM_CLI_VERSION_BY_TRACK = Object.freeze({
-  stable: "0.3.12",
+  stable: "0.4.1",
   staging: "0.3.8",
 });
 

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/release.md sha256=23e966649d82728c9ab9802dd2957bb64c1b13fd3e7ae44bd513835bc063ff77 -->
+<!-- fennara-i18n: locale=de source=docs/release.md sha256=60b8cc51e0fcde9b4e18eadc230aaf1d8cc4fad2fe70cbf5190ab9123bac0073 -->
 <a id="release-process"></a>
 # Release-Prozess
 
@@ -318,11 +318,12 @@ heruntergeladene Asset-Bytes, bevor sie die Veröffentlichung abschließen oder 
 Staging-Kanal vorrücken. Die Asset-Veröffentlichung verwendet das Job-bezogene
 `GITHUB_TOKEN` mit Schreibzugriff auf Inhalte.
 
-Die Release-Richtlinie erfordert derzeit CLI `0.3.12` für stabile Manifeste und CLI
+Die Release-Richtlinie erfordert derzeit CLI `0.4.1` für stabile Manifeste und CLI
 `0.3.8` für Staging-Manifeste. Die stabile Erkennung löst den stillgelegten Tag `latest`
-nicht mehr auf. Stable `0.3.12` erfordert die korrigierte Aktualisierungsvalidierung, die
-Vorprüfung für Versionswechsel und die Behandlung des Windows-Betriebsjournals. Ein
-Staging-Kandidat wie `0.3.12-pr.123.1` wird unter SemVer niedriger als Stable `0.3.12`
+nicht mehr auf. Stable `0.4.1` erfordert die korrigierte Aktualisierungsvalidierung, die
+Vorprüfung für Versionswechsel, die Behandlung des Windows-Betriebsjournals und die
+Reparatur der Linux-CEF-Laufzeitmarkierung. Ein
+Staging-Kandidat wie `0.4.1-pr.123.1` wird unter SemVer niedriger als Stable `0.4.1`
 eingestuft, deshalb muss sein Mindestwert unter der Kandidatenversion bleiben, damit die
 Ersteinrichtung die Kandidaten-CLI installieren kann. Ändere keinen der beiden Mindestwerte
 ausschließlich aufgrund der Kompatibilität mit dem Manifestschema.

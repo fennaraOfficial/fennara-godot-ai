@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=fr source=docs/release.md sha256=23e966649d82728c9ab9802dd2957bb64c1b13fd3e7ae44bd513835bc063ff77 -->
+<!-- fennara-i18n: locale=fr source=docs/release.md sha256=60b8cc51e0fcde9b4e18eadc230aaf1d8cc4fad2fe70cbf5190ab9123bac0073 -->
 <a id="release-process"></a>
 # Processus de publication
 
@@ -328,13 +328,13 @@ de la version et les octets des ressources téléchargées avant de terminer la
 publication ou d'avancer un canal. La publication des ressources utilise le
 `GITHUB_TOKEN` limité au job, avec un accès en écriture au contenu.
 
-La politique de publication exige actuellement la CLI `0.3.12` pour les
+La politique de publication exige actuellement la CLI `0.4.1` pour les
 manifestes stables et la CLI `0.3.8` pour les manifestes de prépublication.
 La découverte stable ne résout plus l'ancienne étiquette `latest`. La version
-stable `0.3.12` exige la validation corrigée de la mise à jour, la vérification
-préalable du changement de version et la gestion du journal d'opération sous
-Windows. Un candidat comme `0.3.12-pr.123.1` est inférieur à la version stable
-`0.3.12` selon SemVer. Sa version minimale doit donc rester inférieure à la
+stable `0.4.1` exige la validation corrigée de la mise à jour, la vérification
+préalable du changement de version, la gestion du journal d'opération sous
+Windows et la réparation du marqueur d'exécution CEF sous Linux. Un candidat comme `0.4.1-pr.123.1` est inférieur à la version stable
+`0.4.1` selon SemVer. Sa version minimale doit donc rester inférieure à la
 version du candidat afin que la première installation puisse installer la CLI
 candidate. Ne modifiez pas l'une de ces versions minimales en vous fondant
 uniquement sur la compatibilité du schéma de manifeste.
