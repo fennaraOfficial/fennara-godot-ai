@@ -5,6 +5,9 @@ mod doctor;
 mod existing_addon_install;
 mod mcp_setup;
 mod operation;
+mod prepare_export;
+#[cfg(test)]
+mod prepare_export_tests;
 mod project_addon;
 mod project_guidance;
 mod project_install;
@@ -118,6 +121,9 @@ fn run(args: Vec<String>) -> Result<(), String> {
         Some("diagnostics") => diagnostics::run(args.iter().skip(1).map(String::as_str).collect()),
         Some("install") => project_install::run(args.iter().skip(1).map(String::as_str).collect()),
         Some("mcp-setup") => mcp_setup::run(args.iter().skip(1).map(String::as_str).collect()),
+        Some("prepare-export") => {
+            prepare_export::run(args.iter().skip(1).map(String::as_str).collect())
+        }
         Some("update") => release_update::run(args.iter().skip(1).map(String::as_str).collect()),
         Some("recover") => update_apply::recover(args.iter().skip(1).map(String::as_str).collect()),
         Some(update_apply::COMPLETE_COMMAND) => {
@@ -144,6 +150,7 @@ Usage:
   fennara diagnostics [--operation <operation-id>] [--json]
   fennara install [--project <path>] [--version <version>] [--channel pr-<number>]
   fennara mcp-setup <target flags>
+  fennara prepare-export [--project <path>]
   fennara update [--version <version>] [--project <path>] [--no-self-update] [--prepare]
   fennara recover --project <path> [--operation <operation-id>]
   fennara self-update [--version <version>]
@@ -156,6 +163,8 @@ Commands:
              Show a sanitized install or update operation report
   install    Set up Fennara in a Godot project
   mcp-setup  Configure an MCP app to launch Fennara
+  prepare-export
+             Remove Fennara's persistent autoload before a CI export
   update     Update the CLI, local package, addon, and project guidance
   recover    Restore an interrupted native update after Godot is closed
   self-update

@@ -25,6 +25,7 @@
 #include "fennara/update/update_coordinator.hpp"
 
 #include "fennara/ui/dock.hpp"
+#include "fennara/ui/export_plugin.hpp"
 #include "fennara/ui/fennara_plugin.hpp"
 #include "fennara/ui/setup_panel.hpp"
 #include "fennara/ui/update_panel.hpp"
@@ -70,6 +71,7 @@ void initialize_fennara(godot::ModuleInitializationLevel p_level) {
     }
 
     if (p_level == godot::MODULE_INITIALIZATION_LEVEL_EDITOR) {
+        godot::ClassDB::register_class<fennara::FennaraExportPlugin>();
         godot::ClassDB::register_class<fennara::FennaraScriptContextMenuPlugin>();
         godot::ClassDB::register_class<fennara::FennaraPlugin>();
         godot::EditorPlugins::add_by_type<fennara::FennaraPlugin>();

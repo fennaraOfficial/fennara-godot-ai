@@ -66,6 +66,14 @@ appear after manually downloading and extracting the addon ZIP.
 
 Open the project, select the Fennara dock, and press **Set Up Fennara**.
 
+Fennara is an editor dependency, not a game runtime dependency. During export,
+the editor plugin removes its runtime autoload from the exported project and
+skips `res://addons/fennara/` and `res://.fennara/`. The editor project is
+restored after the export finishes. If a CI checkout excludes the addon with
+`.gitignore`, run `fennara prepare-export --project path/to/project` before
+starting Godot, or install the addon in that checkout. Godot validates autoload
+paths before export plugins can run, so this preparation must happen first.
+
 > **macOS:** The release addon contains a native library that is not currently
 > Apple-notarized. If you download the addon ZIP through a browser and extract
 > it manually, macOS may report that it cannot verify
