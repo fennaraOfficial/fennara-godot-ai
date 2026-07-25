@@ -1,5 +1,13 @@
 # Open RPG Demo Breakdown
 
+<!-- fennara-doc-nav:start -->
+[Documentation](README.md)
+
+🌐 **Languages**
+
+**English** · [简体中文](i18n/zh-CN/open-rpg-demo.md) · [Español](i18n/es/open-rpg-demo.md) · [Português do Brasil](i18n/pt-BR/open-rpg-demo.md) · [日本語](i18n/ja/open-rpg-demo.md) · [한국어](i18n/ko/open-rpg-demo.md) · [Русский](i18n/ru/open-rpg-demo.md) · [Français](i18n/fr/open-rpg-demo.md) · [Deutsch](i18n/de/open-rpg-demo.md) · [Türkçe](i18n/tr/open-rpg-demo.md)
+<!-- fennara-doc-nav:end -->
+
 Video:
 
 https://www.youtube.com/watch?v=0Egu3S-9MM0

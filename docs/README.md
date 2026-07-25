@@ -1,7 +1,21 @@
 # Fennara Documentation
 
+<!-- fennara-doc-nav:start -->
+[Documentation](README.md)
+
+🌐 **Languages**
+
+**English** · [简体中文](i18n/zh-CN/README.md) · [Español](i18n/es/README.md) · [Português do Brasil](i18n/pt-BR/README.md) · [日本語](i18n/ja/README.md) · [한국어](i18n/ko/README.md) · [Русский](i18n/ru/README.md) · [Français](i18n/fr/README.md) · [Deutsch](i18n/de/README.md) · [Türkçe](i18n/tr/README.md)
+<!-- fennara-doc-nav:end -->
+
 Start with the task you want to complete. Each page begins with the normal path
 and keeps advanced details lower on the page.
+
+## Languages
+
+Use the language menu above to stay on the same page in another language. See
+[Languages and translation status](languages.md) for coverage, review status,
+and the source-of-truth policy.
 
 ## Start Here
 
@@ -44,6 +58,13 @@ and keeps advanced details lower on the page.
 | [Release process](release.md) | Packaging, manifests, validation, and publishing |
 | [Project vocabulary](../CONTEXT.md) | Shared names used across code and documentation |
 | [Security](../SECURITY.md) | Reporting vulnerabilities |
+| [GitHub metadata](github-metadata.md) | Repository description and topics |
+| [Godot payload](../godot_demo/README.md) | Packaged addon source boundaries |
+| [Godot addons](../godot_demo/addons/README.md) | Addon directory shape and rules |
+| [Local tools](../local/README.md) | CLI, daemon, MCP server, and local runtime |
+| [Runtime helpers](../runtime/README.md) | Godot-side runtime helper source |
+| [Repository scripts](../scripts/README.md) | Build, sync, validation, and packaging automation |
+| [Chat UI](../ui/chat/README.md) | Optional in-editor chat source and design rules |
 
 ## Learn From Examples
 

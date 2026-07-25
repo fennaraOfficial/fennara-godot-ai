@@ -1,5 +1,13 @@
 # Repo Map
 
+<!-- fennara-doc-nav:start -->
+[Documentation](README.md)
+
+🌐 **Languages**
+
+**English** · [简体中文](i18n/zh-CN/repo-map.md) · [Español](i18n/es/repo-map.md) · [Português do Brasil](i18n/pt-BR/repo-map.md) · [日本語](i18n/ja/repo-map.md) · [한국어](i18n/ko/repo-map.md) · [Русский](i18n/ru/repo-map.md) · [Français](i18n/fr/repo-map.md) · [Deutsch](i18n/de/repo-map.md) · [Türkçe](i18n/tr/repo-map.md)
+<!-- fennara-doc-nav:end -->
+
 This is the quick map for contributors and coding agents working in this repository.
 
 ## Find The Right Area
@@ -21,6 +29,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | --- | --- |
 | `.github/` | Pull request template, issue templates, and GitHub Actions workflows. |
 | `docs/` | Project docs, setup guides, architecture notes, examples, demos, and release notes. |
+| `docs/i18n/` | Locale manifest and complete translated documentation trees. |
 | `fennara-cpp/` | C++ Godot GDExtension source and SCons build entrypoint. |
 | `godot_demo/addons/fennara/` | Installable Godot addon payload copied into user projects. |
 | `local/` | Rust CLI, MCP server, daemon, schemas, and local runtime code. |
@@ -147,6 +156,8 @@ This is the quick map for contributors and coding agents working in this reposit
 | `scripts/write-staging-candidate.mjs` / `scripts/write-staging-pointer.mjs` | Write the frozen candidate identity and its small channel pointer. |
 | `scripts/sync-chat-ui.mjs` | Copies the buildless chat UI source into the addon payload. |
 | `scripts/sync-runtime.mjs` | Copies repo-root runtime helper source into the addon payload. |
+| `scripts/sync-doc-navigation.mjs` | Adds documentation navigation, source hashes, and stable anchors without translating prose. |
+| `scripts/check-doc-i18n.mjs` / `scripts/doc-i18n-lib.mjs` | Validate translation coverage, freshness, Markdown structure, URLs, and links. |
 | `scripts/package-preview.mjs` | Assembles addon, CLI, and local runtime preview/release zips after platform builds. |
 | `scripts/prepare-linux-cef-runtime.mjs` | Stages the separate Linux x64 CEF runtime zip, strips staged ELF binaries, validates required files, and can write the generated release manifest. |
 | `scripts/prepare-linux-cef-sdk.mjs` | Downloads and extracts the pinned official CEF 139 Linux minimal SDK for CI builds that need `libcef_dll/` wrapper source. |
@@ -186,6 +197,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | Change release packages, minimum CLI policy, or CLI self-update | `local/crates/fennara-cli/src/release_manifest.rs`, `local/crates/fennara-cli/src/release_client.rs`, `local/crates/fennara-cli/src/release_package.rs`, `local/crates/fennara-cli/src/self_update.rs`, `scripts/package-preview.mjs`, `scripts/release-policy.mjs`, `scripts/write-release-manifest.mjs`, and `.github/workflows/release.yml` |
 | Bump version | `node scripts/set-version.mjs <version>` |
 | Update setup/docs for chat vs MCP, providers, or slash commands | `README.md`, `docs/mcp-setup.md`, `docs/chat-vs-mcp.md`, `docs/providers.md`, `docs/slash-commands.md`, `docs/setup.md`, `docs/faq.md`, `docs/manual-install.md`, `docs/tools.md`, `docs/examples.md`, and `llms.txt` |
+| Update documentation translations | Canonical English page, `docs/i18n/languages.json`, the matching locale pages, `scripts/sync-doc-navigation.mjs`, and `scripts/check-doc-i18n.mjs` |
 
 ## Notes
 

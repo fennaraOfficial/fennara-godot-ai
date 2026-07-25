@@ -1,5 +1,13 @@
 # Demos
 
+<!-- fennara-doc-nav:start -->
+[Documentation](README.md)
+
+🌐 **Languages**
+
+**English** · [简体中文](i18n/zh-CN/demos.md) · [Español](i18n/es/demos.md) · [Português do Brasil](i18n/pt-BR/demos.md) · [日本語](i18n/ja/demos.md) · [한국어](i18n/ko/demos.md) · [Русский](i18n/ru/demos.md) · [Français](i18n/fr/demos.md) · [Deutsch](i18n/de/demos.md) · [Türkçe](i18n/tr/demos.md)
+<!-- fennara-doc-nav:end -->
+
 These videos show Fennara used with Godot projects, external AI apps, and the Godot editor feedback loop.
 
 ## Featured Videos

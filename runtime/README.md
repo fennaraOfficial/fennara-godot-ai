@@ -1,5 +1,13 @@
 # Runtime Helpers
 
+<!-- fennara-doc-nav:start -->
+[Documentation](../docs/README.md)
+
+🌐 **Languages**
+
+**English** · [简体中文](../docs/i18n/zh-CN/contributors/runtime-helpers.md) · [Español](../docs/i18n/es/contributors/runtime-helpers.md) · [Português do Brasil](../docs/i18n/pt-BR/contributors/runtime-helpers.md) · [日本語](../docs/i18n/ja/contributors/runtime-helpers.md) · [한국어](../docs/i18n/ko/contributors/runtime-helpers.md) · [Русский](../docs/i18n/ru/contributors/runtime-helpers.md) · [Français](../docs/i18n/fr/contributors/runtime-helpers.md) · [Deutsch](../docs/i18n/de/contributors/runtime-helpers.md) · [Türkçe](../docs/i18n/tr/contributors/runtime-helpers.md)
+<!-- fennara-doc-nav:end -->
+
 This folder is the source for the Godot-side runtime helper scripts used by
 `runtime_session` and `runtime_script`.
 

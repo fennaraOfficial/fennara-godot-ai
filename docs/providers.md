@@ -1,5 +1,13 @@
 # Built-In Chat Providers
 
+<!-- fennara-doc-nav:start -->
+[Documentation](README.md)
+
+🌐 **Languages**
+
+**English** · [简体中文](i18n/zh-CN/providers.md) · [Español](i18n/es/providers.md) · [Português do Brasil](i18n/pt-BR/providers.md) · [日本語](i18n/ja/providers.md) · [한국어](i18n/ko/providers.md) · [Русский](i18n/ru/providers.md) · [Français](i18n/fr/providers.md) · [Deutsch](i18n/de/providers.md) · [Türkçe](i18n/tr/providers.md)
+<!-- fennara-doc-nav:end -->
+
 Connect a model provider to the Fennara chat dock inside Godot.
 
 > [!NOTE]
