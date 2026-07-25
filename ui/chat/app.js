@@ -16,6 +16,7 @@
   const CHAT_SURFACE_BROWSER = "browser";
   const APPROVAL_MODE_ASK = "ask";
   const APPROVAL_MODE_FULL_ACCESS = "full_access";
+  const DEFAULT_PROVIDER_TIMEOUT_SECONDS = 120;
   const RUNTIME_CHAT_SURFACE = /^https?:$/.test(window.location.protocol)
     ? CHAT_SURFACE_BROWSER
     : CHAT_SURFACE_EMBEDDED;
@@ -56,6 +57,7 @@
   const chatSurfaceBrowserInput = document.querySelector("[data-chat-surface-browser]");
   const chatSurfaceRestartStatus = document.querySelector("[data-chat-surface-restart]");
   const approvalModeControls = document.querySelectorAll("[data-approval-mode]");
+  const providerTimeoutInput = document.querySelector("[data-provider-timeout]");
   const telemetryEnabledInput = document.querySelector("[data-telemetry-enabled]");
   const telemetryEnvironmentStatus = document.querySelector("[data-telemetry-environment-status]");
   const settingsSavedToast = document.querySelector("[data-settings-saved-toast]");
@@ -161,6 +163,7 @@
   let currentReasoningEffort = "medium";
   let currentChatSurface = CHAT_SURFACE_EMBEDDED;
   let currentApprovalMode = APPROVAL_MODE_ASK;
+  let providerTimeoutSeconds = DEFAULT_PROVIDER_TIMEOUT_SECONDS;
   let telemetryEnabled = true;
   let telemetryControlledByEnvironment = false;
   let hasOpenRouterKey = false;
@@ -415,6 +418,7 @@
       chatSurfaceBrowserInput,
       chatSurfaceRestartStatus,
       approvalModeControls,
+      providerTimeoutInput,
       telemetryEnabledInput,
       telemetryEnvironmentStatus,
       settingsSavedToast,
@@ -431,8 +435,10 @@
       closeCommandPalette: () => commandPalette.close(),
       cleanChatSurface,
       cleanApprovalMode,
+      cleanProviderTimeoutSeconds,
       getCurrentChatSurface: () => currentChatSurface,
       getCurrentApprovalMode: () => currentApprovalMode,
+      getProviderTimeoutSeconds: () => providerTimeoutSeconds,
       getTelemetryEnabled: () => telemetryEnabled,
       getTelemetryControlledByEnvironment: () => telemetryControlledByEnvironment,
       openProviderPicker,
@@ -440,7 +446,12 @@
       connect,
       appendSystem,
       clearSystemStatus,
-      buildSavePayload: ({ chatSurface, approvalMode, telemetryEnabled: nextTelemetryEnabled }) => {
+      buildSavePayload: ({
+        chatSurface,
+        approvalMode,
+        providerTimeoutSeconds: nextProviderTimeoutSeconds,
+        telemetryEnabled: nextTelemetryEnabled,
+      }) => {
         const payload = {
           type: "save_settings",
           request_id: nextRequestId("save-settings"),
@@ -451,6 +462,7 @@
           local_model_context_lengths: localModelContextLengthPayload(),
           chat_surface: chatSurface,
           approval_mode: approvalMode,
+          provider_timeout_seconds: nextProviderTimeoutSeconds,
         };
         return window.FennaraSettingsPanel.includeTelemetryPreference(
           payload,
@@ -836,6 +848,7 @@
     currentReasoningEffort = cleanReasoningEffort(settings.reasoning_effort);
     currentChatSurface = cleanChatSurface(settings.chat_surface);
     currentApprovalMode = cleanApprovalMode(settings.approval_mode);
+    providerTimeoutSeconds = cleanProviderTimeoutSeconds(settings.provider_timeout_seconds);
     telemetryEnabled = settings.telemetry_enabled !== false;
     telemetryControlledByEnvironment = Boolean(settings.telemetry_controlled_by_environment);
     if (!currentProvider && hasOpenRouterKey) {
@@ -1244,6 +1257,14 @@
 
   function cleanChatSurface(surface) {
     return surface === CHAT_SURFACE_BROWSER ? CHAT_SURFACE_BROWSER : CHAT_SURFACE_EMBEDDED;
+  }
+
+  function cleanProviderTimeoutSeconds(seconds) {
+    const parsed = Math.round(Number(seconds));
+    if (!Number.isFinite(parsed)) {
+      return DEFAULT_PROVIDER_TIMEOUT_SECONDS;
+    }
+    return Math.min(3600, Math.max(30, parsed));
   }
 
   function cleanApprovalMode(mode) {

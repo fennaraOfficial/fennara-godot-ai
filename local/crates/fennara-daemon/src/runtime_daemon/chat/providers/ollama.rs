@@ -12,7 +12,6 @@ use crate::runtime_daemon::chat::settings::DEFAULT_OLLAMA_BASE_URL;
 
 pub(crate) const PROVIDER_ID: &str = ProviderId::OLLAMA;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 const LOCAL_MODELS_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) fn provider_definition(base_url: &str) -> ProviderDefinition {
@@ -186,7 +185,7 @@ pub(crate) async fn validate_request(request: &LlmRequest) -> Result<(), LlmErro
 
     let client = Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT)
+        .timeout(request.timeout)
         .build()
         .map_err(|error| LlmError::ProviderInit {
             provider: PROVIDER_ID.to_string(),

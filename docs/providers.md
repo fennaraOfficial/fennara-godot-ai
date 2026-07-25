@@ -91,10 +91,19 @@ Fennara stores built-in chat settings locally through the daemon, outside the Go
 - local provider base URLs
 - selected model
 - reasoning effort
+- provider response timeout
 - chat display mode, either embedded in Godot or opened in the system browser
 - chat history
 
 These settings are not written into `res://addons/fennara/` and are not shared with Claude, Codex, Cursor, Gemini, or other external MCP apps.
+
+## Provider Response Timeout
+
+The **Provider response timeout** setting controls how long the built-in chat
+allows each model request to run. It defaults to 120 seconds and accepts values
+from 30 to 3600 seconds. Increasing it can help slower local models or long
+tool-heavy turns complete. The daemon applies the selected timeout to the
+provider request and cancels the request if that limit is reached.
 
 ## Chat Display Setting
 

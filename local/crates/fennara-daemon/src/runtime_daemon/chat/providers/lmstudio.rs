@@ -13,7 +13,6 @@ pub(crate) const PROVIDER_ID: &str = ProviderId::LMSTUDIO;
 pub(crate) const DEFAULT_BASE_URL: &str = "http://127.0.0.1:1234/v1";
 pub(crate) const API_KEY_ENV: &str = "LMSTUDIO_API_KEY";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 const LOCAL_MODELS_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) fn provider_definition(base_url: &str, api_key: Option<&str>) -> ProviderDefinition {
@@ -249,7 +248,7 @@ fn value_as_u32(value: &Value) -> Option<u32> {
 pub(crate) async fn validate_request(request: &LlmRequest) -> Result<(), LlmError> {
     let client = Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT)
+        .timeout(request.timeout)
         .build()
         .map_err(|error| LlmError::ProviderInit {
             provider: PROVIDER_ID.to_string(),

@@ -1,4 +1,12 @@
 (function () {
+  function cleanProviderTimeoutSeconds(seconds) {
+    const parsed = Math.round(Number(seconds));
+    if (!Number.isFinite(parsed)) {
+      return 120;
+    }
+    return Math.min(3600, Math.max(30, parsed));
+  }
+
   function includeTelemetryPreference(payload, telemetryEnabled, controlledByEnvironment) {
     if (!controlledByEnvironment) {
       payload.telemetry_enabled = Boolean(telemetryEnabled);
@@ -14,6 +22,7 @@
     const chatSurfaceBrowserInput = elements.chatSurfaceBrowserInput || null;
     const chatSurfaceRestartStatus = elements.chatSurfaceRestartStatus || null;
     const approvalModeControls = Array.from(elements.approvalModeControls || []);
+    const providerTimeoutInput = elements.providerTimeoutInput || null;
     const telemetryEnabledInput = elements.telemetryEnabledInput || null;
     const telemetryEnvironmentStatus = elements.telemetryEnvironmentStatus || null;
     const settingsSavedToast = elements.settingsSavedToast || null;
@@ -36,6 +45,9 @@
     const cleanApprovalMode = callbacks.cleanApprovalMode || ((mode) => mode === approvalModeFullAccess ? approvalModeFullAccess : approvalModeAsk);
     const getCurrentChatSurface = callbacks.getCurrentChatSurface || (() => chatSurfaceEmbedded);
     const getCurrentApprovalMode = callbacks.getCurrentApprovalMode || (() => approvalModeAsk);
+    const getProviderTimeoutSeconds = callbacks.getProviderTimeoutSeconds || (() => 120);
+    const cleanProviderTimeout = callbacks.cleanProviderTimeoutSeconds
+      || cleanProviderTimeoutSeconds;
     const getTelemetryEnabled = callbacks.getTelemetryEnabled || (() => true);
     const getTelemetryControlledByEnvironment = callbacks.getTelemetryControlledByEnvironment || (() => false);
     const openProviderPicker = callbacks.openProviderPicker || function () {};
@@ -63,6 +75,7 @@
       const payload = buildSavePayload({
         chatSurface: selectedChatSurface(),
         approvalMode: selectedApprovalMode(),
+        providerTimeoutSeconds: selectedProviderTimeoutSeconds(),
         telemetryEnabled: selectedTelemetryEnabled(),
       });
       if (payload) {
@@ -79,6 +92,10 @@
       control.addEventListener("change", () => {
         setDirty(true);
       });
+    });
+
+    providerTimeoutInput?.addEventListener("input", () => {
+      setDirty(true);
     });
 
     telemetryEnabledInput?.addEventListener("change", () => {
@@ -105,6 +122,7 @@
         chatSurfaceBrowserInput.checked = getCurrentChatSurface() === chatSurfaceBrowser;
       }
       syncApprovalModeControls();
+      syncProviderTimeoutControl();
       syncTelemetryControl();
       updateChatSurfaceRestartNotice(getCurrentChatSurface());
       markClean();
@@ -124,6 +142,20 @@
 
     function selectedTelemetryEnabled() {
       return telemetryEnabledInput?.checked ?? getTelemetryEnabled();
+    }
+
+    function selectedProviderTimeoutSeconds() {
+      return cleanProviderTimeout(
+        providerTimeoutInput?.value || getProviderTimeoutSeconds(),
+      );
+    }
+
+    function syncProviderTimeoutControl() {
+      if (providerTimeoutInput) {
+        providerTimeoutInput.value = String(
+          cleanProviderTimeout(getProviderTimeoutSeconds()),
+        );
+      }
     }
 
     function syncApprovalModeControls() {
@@ -262,10 +294,12 @@
       queueSave,
       selectedApprovalMode,
       selectedChatSurface,
+      selectedProviderTimeoutSeconds,
       selectedTelemetryEnabled,
       setDirty,
       setSaving,
       syncApprovalModeControls,
+      syncProviderTimeoutControl,
       syncTelemetryControl,
       updateChatSurfaceRestartNotice,
       updateSaveButton,
@@ -274,6 +308,7 @@
 
   window.FennaraSettingsPanel = {
     createSettingsPanel,
+    cleanProviderTimeoutSeconds,
     includeTelemetryPreference,
   };
 })();

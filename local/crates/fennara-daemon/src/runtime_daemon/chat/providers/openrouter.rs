@@ -1,5 +1,6 @@
 use reqwest::Client;
 use serde_json::{Value, json};
+use std::time::Duration;
 
 use super::error::LlmError;
 use super::request::LlmRequest;
@@ -13,6 +14,7 @@ use crate::runtime_daemon::chat::settings::DEFAULT_OPENROUTER_MODEL_ID;
 pub(crate) const PROVIDER_ID: &str = ProviderId::OPENROUTER;
 pub(crate) const API_BASE: &str = "https://openrouter.ai/api/v1";
 const MODELS_URL: &str = "https://openrouter.ai/api/v1/models";
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) fn provider_definition(api_key: Option<&str>) -> ProviderDefinition {
     let mut request = RequestDefaults::default();
@@ -100,7 +102,7 @@ pub(crate) async fn validate_request(request: &LlmRequest) -> Result<(), LlmErro
         return Ok(());
     }
 
-    let client = Client::new();
+    let client = metadata_client(request.timeout)?;
     let response = client.get(MODELS_URL).send().await.map_err(|error| {
         LlmError::from_reqwest(
             PROVIDER_ID,
@@ -157,6 +159,17 @@ pub(crate) async fn validate_request(request: &LlmRequest) -> Result<(), LlmErro
     })
 }
 
+fn metadata_client(timeout: Duration) -> Result<Client, LlmError> {
+    Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(timeout)
+        .build()
+        .map_err(|error| LlmError::ProviderInit {
+            provider: PROVIDER_ID.to_string(),
+            message: format!("Failed to create OpenRouter metadata client: {error}"),
+        })
+}
+
 fn has_route_variant(model: &str) -> bool {
     model
         .rsplit_once('/')
@@ -189,4 +202,33 @@ fn fallback_display_name(id: &str) -> String {
         .unwrap_or(id)
         .replace('-', " ")
         .replace("latest", "Latest")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::{
+        net::TcpListener,
+        time::{Duration as TokioDuration, sleep},
+    };
+
+    #[tokio::test]
+    async fn metadata_client_honors_the_request_timeout() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let _connection = listener.accept().await.unwrap();
+            sleep(TokioDuration::from_millis(250)).await;
+        });
+
+        let error = metadata_client(Duration::from_millis(20))
+            .unwrap()
+            .get(format!("http://{address}"))
+            .send()
+            .await
+            .unwrap_err();
+
+        assert!(error.is_timeout());
+        server.abort();
+    }
 }

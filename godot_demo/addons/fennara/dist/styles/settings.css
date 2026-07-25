@@ -306,6 +306,17 @@
   color: var(--text);
 }
 
+.settings-panel .settings-field {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-panel .settings-field input {
+  width: 104px;
+}
+
 .settings-panel .settings-radio {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;

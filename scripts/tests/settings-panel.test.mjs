@@ -11,6 +11,8 @@ const context = { window: {} };
 vm.runInNewContext(source, context);
 const includeTelemetryPreference =
   context.window.FennaraSettingsPanel.includeTelemetryPreference;
+const cleanProviderTimeoutSeconds =
+  context.window.FennaraSettingsPanel.cleanProviderTimeoutSeconds;
 
 test("environment-controlled settings saves preserve the stored telemetry preference", () => {
   const payload = { type: "save_settings" };
@@ -26,4 +28,14 @@ test("user-controlled settings saves include the selected telemetry preference",
   includeTelemetryPreference(payload, false, false);
 
   assert.equal(payload.telemetry_enabled, false);
+});
+
+test("provider timeout defaults to 120 seconds for missing legacy settings", () => {
+  assert.equal(cleanProviderTimeoutSeconds(undefined), 120);
+});
+
+test("provider timeout is rounded and constrained to the supported range", () => {
+  assert.equal(cleanProviderTimeoutSeconds(29), 30);
+  assert.equal(cleanProviderTimeoutSeconds("600.4"), 600);
+  assert.equal(cleanProviderTimeoutSeconds(3601), 3600);
 });

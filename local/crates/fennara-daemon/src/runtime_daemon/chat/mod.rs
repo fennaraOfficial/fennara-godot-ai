@@ -70,6 +70,7 @@ struct ClientRequest {
     force: Option<bool>,
     refresh_local: Option<bool>,
     chat_surface: Option<String>,
+    provider_timeout_seconds: Option<u64>,
     mcp_target: Option<String>,
 }
 
@@ -446,6 +447,7 @@ where
                 reasoning_effort: request.reasoning_effort,
                 local_model_context_lengths: request.local_model_context_lengths,
                 chat_surface: request.chat_surface,
+                provider_timeout_seconds: request.provider_timeout_seconds,
                 approval_mode: request.approval_mode,
                 telemetry_enabled: request.telemetry_enabled,
             };

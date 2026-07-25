@@ -9,6 +9,7 @@ pub(crate) struct LlmRequest {
     pub(crate) model: ResolvedModel,
     pub(crate) messages: Vec<Value>,
     pub(crate) tools: Vec<Value>,
+    pub(crate) timeout: std::time::Duration,
 }
 
 impl LlmRequest {
@@ -29,6 +30,7 @@ impl LlmRequest {
             model,
             messages: request.messages.clone(),
             tools: request.tools.clone(),
+            timeout: settings.request_timeout,
         })
     }
 }

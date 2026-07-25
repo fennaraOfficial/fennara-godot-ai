@@ -114,6 +114,7 @@ pub(crate) fn settings_from_chat(settings: &ChatSettings) -> ProviderSettings {
         lmstudio_base_url: settings
             .provider_base_url(types::ProviderId::LMSTUDIO, lmstudio::DEFAULT_BASE_URL),
         local_model_limits: local_model_limits_from_settings(&settings.local_model_context_lengths),
+        request_timeout: std::time::Duration::from_secs(settings.provider_timeout_seconds),
     }
 }
 
@@ -879,6 +880,9 @@ pub(crate) fn parse_model_ref(model: &str) -> Result<String, LlmError> {
         ollama_base_url: super::settings::DEFAULT_OLLAMA_BASE_URL.to_string(),
         lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
         local_model_limits: BTreeMap::new(),
+        request_timeout: std::time::Duration::from_secs(
+            super::settings::DEFAULT_PROVIDER_TIMEOUT_SECONDS,
+        ),
     });
     catalog::model_ref_from_selection(model, &catalog).map(|model_ref| model_ref.canonical())
 }
@@ -900,6 +904,17 @@ mod tests {
             }],
             headers: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn provider_settings_carry_the_configured_request_timeout() {
+        let mut settings = ChatSettings::default();
+        settings.provider_timeout_seconds = 600;
+
+        assert_eq!(
+            settings_from_chat(&settings).request_timeout,
+            std::time::Duration::from_secs(600)
+        );
     }
 
     #[test]

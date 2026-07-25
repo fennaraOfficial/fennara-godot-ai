@@ -16,7 +16,6 @@ use super::super::types::{AdapterKind, ChatCompletion, MalformedToolCall, ToolCa
 
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_PRE_STREAM_RETRIES: usize = 2;
 const PRE_STREAM_RETRY_DELAY: Duration = Duration::from_millis(500);
 const DEFAULT_MAX_TOKENS: u32 = 4096;
@@ -53,7 +52,7 @@ where
         .to_string();
     let client = Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT)
+        .timeout(request.timeout)
         .build()
         .map_err(|error| LlmError::ProviderInit {
             provider: provider_id.clone(),
@@ -1662,6 +1661,7 @@ mod tests {
                 json!({ "role": "user", "content": "hello" }),
             ],
             tools: Vec::new(),
+            timeout: Duration::from_secs(120),
         }
     }
 }

@@ -494,6 +494,23 @@
               </p>
             </fieldset>
             <fieldset class="settings-group">
+              <legend>Provider response timeout</legend>
+              <label class="settings-field">
+                <span>Timeout in seconds</span>
+                <input
+                  type="number"
+                  min="30"
+                  max="3600"
+                  step="1"
+                  inputmode="numeric"
+                  data-provider-timeout
+                />
+              </label>
+              <p class="settings-note">
+                Allow 30 to 3600 seconds for each model request. Longer values help slower local models and tool-heavy turns.
+              </p>
+            </fieldset>
+            <fieldset class="settings-group">
               <legend>Anonymous telemetry</legend>
               <label class="settings-check">
                 <input type="checkbox" data-telemetry-enabled checked />
