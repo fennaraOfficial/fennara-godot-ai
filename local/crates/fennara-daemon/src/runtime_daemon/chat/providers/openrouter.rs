@@ -1,4 +1,4 @@
-use reqwest::Client;
+use reqwest::{Client, ClientBuilder};
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -160,14 +160,18 @@ pub(crate) async fn validate_request(request: &LlmRequest) -> Result<(), LlmErro
 }
 
 fn metadata_client(timeout: Duration) -> Result<Client, LlmError> {
-    Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(timeout)
+    metadata_client_builder(timeout)
         .build()
         .map_err(|error| LlmError::ProviderInit {
             provider: PROVIDER_ID.to_string(),
             message: format!("Failed to create OpenRouter metadata client: {error}"),
         })
+}
+
+fn metadata_client_builder(timeout: Duration) -> ClientBuilder {
+    Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(timeout)
 }
 
 fn has_route_variant(model: &str) -> bool {
@@ -221,7 +225,9 @@ mod tests {
             sleep(TokioDuration::from_millis(250)).await;
         });
 
-        let error = metadata_client(Duration::from_millis(20))
+        let error = metadata_client_builder(Duration::from_millis(20))
+            .no_proxy()
+            .build()
             .unwrap()
             .get(format!("http://{address}"))
             .send()
