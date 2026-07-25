@@ -1,10 +1,6 @@
 # Contributing
 
 <!-- fennara-doc-nav:start -->
-[Documentation](docs/README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](docs/i18n/zh-CN/CONTRIBUTING.md) · [Español](docs/i18n/es/CONTRIBUTING.md) · [Português do Brasil](docs/i18n/pt-BR/CONTRIBUTING.md) · [日本語](docs/i18n/ja/CONTRIBUTING.md) · [한국어](docs/i18n/ko/CONTRIBUTING.md) · [Русский](docs/i18n/ru/CONTRIBUTING.md) · [Français](docs/i18n/fr/CONTRIBUTING.md) · [Deutsch](docs/i18n/de/CONTRIBUTING.md) · [Türkçe](docs/i18n/tr/CONTRIBUTING.md)
 <!-- fennara-doc-nav:end -->
 

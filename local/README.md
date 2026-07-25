@@ -1,10 +1,6 @@
 # Fennara Local Tools
 
 <!-- fennara-doc-nav:start -->
-[Documentation](../docs/README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](../docs/i18n/zh-CN/contributors/local-tools.md) · [Español](../docs/i18n/es/contributors/local-tools.md) · [Português do Brasil](../docs/i18n/pt-BR/contributors/local-tools.md) · [日本語](../docs/i18n/ja/contributors/local-tools.md) · [한국어](../docs/i18n/ko/contributors/local-tools.md) · [Русский](../docs/i18n/ru/contributors/local-tools.md) · [Français](../docs/i18n/fr/contributors/local-tools.md) · [Deutsch](../docs/i18n/de/contributors/local-tools.md) · [Türkçe](../docs/i18n/tr/contributors/local-tools.md)
 <!-- fennara-doc-nav:end -->
 

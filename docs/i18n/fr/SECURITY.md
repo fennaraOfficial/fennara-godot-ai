@@ -3,10 +3,6 @@
 # Sécurité
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Langues**
-
 [English](../../../SECURITY.md) · [简体中文](../zh-CN/SECURITY.md) · [Español](../es/SECURITY.md) · [Português do Brasil](../pt-BR/SECURITY.md) · [日本語](../ja/SECURITY.md) · [한국어](../ko/SECURITY.md) · [Русский](../ru/SECURITY.md) · **Français** · [Deutsch](../de/SECURITY.md) · [Türkçe](../tr/SECURITY.md)
 
 > ℹ️ Traduction rédigée par une IA à partir de la source anglaise. La relecture par des locuteurs natifs est la bienvenue. [Source anglaise](../../../SECURITY.md)

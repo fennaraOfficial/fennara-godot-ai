@@ -1,10 +1,6 @@
 # MCP Setup
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/mcp-setup.md) · [Español](i18n/es/mcp-setup.md) · [Português do Brasil](i18n/pt-BR/mcp-setup.md) · [日本語](i18n/ja/mcp-setup.md) · [한국어](i18n/ko/mcp-setup.md) · [Русский](i18n/ru/mcp-setup.md) · [Français](i18n/fr/mcp-setup.md) · [Deutsch](i18n/de/mcp-setup.md) · [Türkçe](i18n/tr/mcp-setup.md)
 <!-- fennara-doc-nav:end -->
 

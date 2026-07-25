@@ -3,10 +3,6 @@
 # Безопасность
 
 <!-- fennara-doc-nav:start -->
-[Документация](README.md)
-
-🌐 **Языки**
-
 [English](../../../SECURITY.md) · [简体中文](../zh-CN/SECURITY.md) · [Español](../es/SECURITY.md) · [Português do Brasil](../pt-BR/SECURITY.md) · [日本語](../ja/SECURITY.md) · [한국어](../ko/SECURITY.md) · **Русский** · [Français](../fr/SECURITY.md) · [Deutsch](../de/SECURITY.md) · [Türkçe](../tr/SECURITY.md)
 
 > ℹ️ Перевод написан ИИ на основе английского оригинала. Приветствуется проверка носителями языка. [Источник на английском](../../../SECURITY.md)

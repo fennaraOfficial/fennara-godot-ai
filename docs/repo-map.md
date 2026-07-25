@@ -1,10 +1,6 @@
 # Repo Map
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/repo-map.md) · [Español](i18n/es/repo-map.md) · [Português do Brasil](i18n/pt-BR/repo-map.md) · [日本語](i18n/ja/repo-map.md) · [한국어](i18n/ko/repo-map.md) · [Русский](i18n/ru/repo-map.md) · [Français](i18n/fr/repo-map.md) · [Deutsch](i18n/de/repo-map.md) · [Türkçe](i18n/tr/repo-map.md)
 <!-- fennara-doc-nav:end -->
 

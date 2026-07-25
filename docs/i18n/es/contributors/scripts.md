@@ -3,10 +3,6 @@
 # Scripts
 
 <!-- fennara-doc-nav:start -->
-[Documentación](../README.md)
-
-🌐 **Idiomas**
-
 [English](../../../../scripts/README.md) · [简体中文](../../zh-CN/contributors/scripts.md) · **Español** · [Português do Brasil](../../pt-BR/contributors/scripts.md) · [日本語](../../ja/contributors/scripts.md) · [한국어](../../ko/contributors/scripts.md) · [Русский](../../ru/contributors/scripts.md) · [Français](../../fr/contributors/scripts.md) · [Deutsch](../../de/contributors/scripts.md) · [Türkçe](../../tr/contributors/scripts.md)
 
 > ℹ️ Traducción redactada por IA a partir del original en inglés. Se agradece la revisión de hablantes nativos. [Fuente en inglés](../../../../scripts/README.md)

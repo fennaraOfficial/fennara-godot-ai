@@ -3,10 +3,6 @@
 # GitHub Meta Verileri
 
 <!-- fennara-doc-nav:start -->
-[Belgeler](README.md)
-
-🌐 **Diller**
-
 [English](../../github-metadata.md) · [简体中文](../zh-CN/github-metadata.md) · [Español](../es/github-metadata.md) · [Português do Brasil](../pt-BR/github-metadata.md) · [日本語](../ja/github-metadata.md) · [한국어](../ko/github-metadata.md) · [Русский](../ru/github-metadata.md) · [Français](../fr/github-metadata.md) · [Deutsch](../de/github-metadata.md) · **Türkçe**
 
 > ℹ️ Bu çeviri İngilizce kaynak temel alınarak yapay zeka tarafından yazılmıştır. Ana dil konuşurlarının incelemesi memnuniyetle karşılanır. [İngilizce kaynak](../../github-metadata.md)

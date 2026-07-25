@@ -3,10 +3,6 @@
 # Lokale Fennara-Werkzeuge
 
 <!-- fennara-doc-nav:start -->
-[Dokumentation](../README.md)
-
-🌐 **Sprachen**
-
 [English](../../../../local/README.md) · [简体中文](../../zh-CN/contributors/local-tools.md) · [Español](../../es/contributors/local-tools.md) · [Português do Brasil](../../pt-BR/contributors/local-tools.md) · [日本語](../../ja/contributors/local-tools.md) · [한국어](../../ko/contributors/local-tools.md) · [Русский](../../ru/contributors/local-tools.md) · [Français](../../fr/contributors/local-tools.md) · **Deutsch** · [Türkçe](../../tr/contributors/local-tools.md)
 
 > ℹ️ Diese Übersetzung wurde von einer KI anhand der englischen Quelle verfasst. Eine Prüfung durch Muttersprachler ist willkommen. [Englische Quelle](../../../../local/README.md)

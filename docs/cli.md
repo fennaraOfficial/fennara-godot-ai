@@ -1,10 +1,6 @@
 # Fennara CLI
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/cli.md) · [Español](i18n/es/cli.md) · [Português do Brasil](i18n/pt-BR/cli.md) · [日本語](i18n/ja/cli.md) · [한국어](i18n/ko/cli.md) · [Русский](i18n/ru/cli.md) · [Français](i18n/fr/cli.md) · [Deutsch](i18n/de/cli.md) · [Türkçe](i18n/tr/cli.md)
 <!-- fennara-doc-nav:end -->
 

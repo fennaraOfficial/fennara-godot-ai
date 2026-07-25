@@ -1,10 +1,6 @@
 # MCP Apps Or Built-In Chat?
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/chat-vs-mcp.md) · [Español](i18n/es/chat-vs-mcp.md) · [Português do Brasil](i18n/pt-BR/chat-vs-mcp.md) · [日本語](i18n/ja/chat-vs-mcp.md) · [한국어](i18n/ko/chat-vs-mcp.md) · [Русский](i18n/ru/chat-vs-mcp.md) · [Français](i18n/fr/chat-vs-mcp.md) · [Deutsch](i18n/de/chat-vs-mcp.md) · [Türkçe](i18n/tr/chat-vs-mcp.md)
 <!-- fennara-doc-nav:end -->
 

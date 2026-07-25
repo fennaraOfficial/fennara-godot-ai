@@ -3,10 +3,6 @@
 # Godot-Payload
 
 <!-- fennara-doc-nav:start -->
-[Dokumentation](../README.md)
-
-🌐 **Sprachen**
-
 [English](../../../../godot_demo/README.md) · [简体中文](../../zh-CN/contributors/godot-payload.md) · [Español](../../es/contributors/godot-payload.md) · [Português do Brasil](../../pt-BR/contributors/godot-payload.md) · [日本語](../../ja/contributors/godot-payload.md) · [한국어](../../ko/contributors/godot-payload.md) · [Русский](../../ru/contributors/godot-payload.md) · [Français](../../fr/contributors/godot-payload.md) · **Deutsch** · [Türkçe](../../tr/contributors/godot-payload.md)
 
 > ℹ️ Diese Übersetzung wurde von einer KI anhand der englischen Quelle verfasst. Eine Prüfung durch Muttersprachler ist willkommen. [Englische Quelle](../../../../godot_demo/README.md)

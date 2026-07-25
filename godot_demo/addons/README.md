@@ -1,10 +1,6 @@
 # Godot Addons
 
 <!-- fennara-doc-nav:start -->
-[Documentation](../../docs/README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](../../docs/i18n/zh-CN/contributors/godot-addons.md) · [Español](../../docs/i18n/es/contributors/godot-addons.md) · [Português do Brasil](../../docs/i18n/pt-BR/contributors/godot-addons.md) · [日本語](../../docs/i18n/ja/contributors/godot-addons.md) · [한국어](../../docs/i18n/ko/contributors/godot-addons.md) · [Русский](../../docs/i18n/ru/contributors/godot-addons.md) · [Français](../../docs/i18n/fr/contributors/godot-addons.md) · [Deutsch](../../docs/i18n/de/contributors/godot-addons.md) · [Türkçe](../../docs/i18n/tr/contributors/godot-addons.md)
 <!-- fennara-doc-nav:end -->
 

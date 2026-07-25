@@ -3,10 +3,6 @@
 # 运行时辅助脚本
 
 <!-- fennara-doc-nav:start -->
-[文档](../README.md)
-
-🌐 **语言**
-
 [English](../../../../runtime/README.md) · **简体中文** · [Español](../../es/contributors/runtime-helpers.md) · [Português do Brasil](../../pt-BR/contributors/runtime-helpers.md) · [日本語](../../ja/contributors/runtime-helpers.md) · [한국어](../../ko/contributors/runtime-helpers.md) · [Русский](../../ru/contributors/runtime-helpers.md) · [Français](../../fr/contributors/runtime-helpers.md) · [Deutsch](../../de/contributors/runtime-helpers.md) · [Türkçe](../../tr/contributors/runtime-helpers.md)
 
 > ℹ️ 由 AI 根据英文原文撰写，欢迎母语者审阅。 [英文原文](../../../../runtime/README.md)

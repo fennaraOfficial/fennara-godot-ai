@@ -3,10 +3,6 @@
 # Fennara 聊天 UI
 
 <!-- fennara-doc-nav:start -->
-[文档](../README.md)
-
-🌐 **语言**
-
 [English](../../../../ui/chat/README.md) · **简体中文** · [Español](../../es/contributors/chat-ui.md) · [Português do Brasil](../../pt-BR/contributors/chat-ui.md) · [日本語](../../ja/contributors/chat-ui.md) · [한국어](../../ko/contributors/chat-ui.md) · [Русский](../../ru/contributors/chat-ui.md) · [Français](../../fr/contributors/chat-ui.md) · [Deutsch](../../de/contributors/chat-ui.md) · [Türkçe](../../tr/contributors/chat-ui.md)
 
 > ℹ️ 由 AI 根据英文原文撰写，欢迎母语者审阅。 [英文原文](../../../../ui/chat/README.md)

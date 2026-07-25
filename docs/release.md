@@ -1,10 +1,6 @@
 # Release Process
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/release.md) · [Español](i18n/es/release.md) · [Português do Brasil](i18n/pt-BR/release.md) · [日本語](i18n/ja/release.md) · [한국어](i18n/ko/release.md) · [Русский](i18n/ru/release.md) · [Français](i18n/fr/release.md) · [Deutsch](i18n/de/release.md) · [Türkçe](i18n/tr/release.md)
 <!-- fennara-doc-nav:end -->
 

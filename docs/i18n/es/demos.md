@@ -3,10 +3,6 @@
 # Demostraciones
 
 <!-- fennara-doc-nav:start -->
-[Documentación](README.md)
-
-🌐 **Idiomas**
-
 [English](../../demos.md) · [简体中文](../zh-CN/demos.md) · **Español** · [Português do Brasil](../pt-BR/demos.md) · [日本語](../ja/demos.md) · [한국어](../ko/demos.md) · [Русский](../ru/demos.md) · [Français](../fr/demos.md) · [Deutsch](../de/demos.md) · [Türkçe](../tr/demos.md)
 
 > ℹ️ Traducción redactada por IA a partir del original en inglés. Se agradece la revisión de hablantes nativos. [Fuente en inglés](../../demos.md)

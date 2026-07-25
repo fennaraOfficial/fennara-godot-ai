@@ -1,10 +1,6 @@
 # Built-In Chat Slash Commands
 
 <!-- fennara-doc-nav:start -->
-[Documentation](README.md)
-
-🌐 **Languages**
-
 **English** · [简体中文](i18n/zh-CN/slash-commands.md) · [Español](i18n/es/slash-commands.md) · [Português do Brasil](i18n/pt-BR/slash-commands.md) · [日本語](i18n/ja/slash-commands.md) · [한국어](i18n/ko/slash-commands.md) · [Русский](i18n/ru/slash-commands.md) · [Français](i18n/fr/slash-commands.md) · [Deutsch](i18n/de/slash-commands.md) · [Türkçe](i18n/tr/slash-commands.md)
 <!-- fennara-doc-nav:end -->
 

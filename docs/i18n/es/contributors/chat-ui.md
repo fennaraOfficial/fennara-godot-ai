@@ -3,10 +3,6 @@
 # Interfaz de chat de Fennara
 
 <!-- fennara-doc-nav:start -->
-[Documentación](../README.md)
-
-🌐 **Idiomas**
-
 [English](../../../../ui/chat/README.md) · [简体中文](../../zh-CN/contributors/chat-ui.md) · **Español** · [Português do Brasil](../../pt-BR/contributors/chat-ui.md) · [日本語](../../ja/contributors/chat-ui.md) · [한국어](../../ko/contributors/chat-ui.md) · [Русский](../../ru/contributors/chat-ui.md) · [Français](../../fr/contributors/chat-ui.md) · [Deutsch](../../de/contributors/chat-ui.md) · [Türkçe](../../tr/contributors/chat-ui.md)
 
 > ℹ️ Traducción redactada por IA a partir del original en inglés. Se agradece la revisión de hablantes nativos. [Fuente en inglés](../../../../ui/chat/README.md)
