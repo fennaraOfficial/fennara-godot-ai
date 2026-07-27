@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=es source=docs/cli.md sha256=561efbe26f75accb949050e7af9d06ae607040b86d061c04c4dcf8732ba61135 -->
+<!-- fennara-i18n: locale=es source=docs/cli.md sha256=16441a0d18c69d735854b2f54a905e9d7f5277a8eae9a9c89eced18cfcaca06a -->
 <a id="fennara-cli"></a>
 # CLI de Fennara
 
@@ -117,6 +117,12 @@ La instalación ofrece dos caminos seguros:
   de la plataforma actual e instala los componentes administrados por la CLI de
   esa versión exacta. No modifica el addon del proyecto. Un `--version`
   explícito debe coincidir con el addon existente.
+
+Para instalaciones desde una versión publicada, la CLI primero resuelve la
+solicitud a una versión exacta, actualiza la CLI de Fennara instalada si esa
+versión incluye una más reciente y luego continúa la instalación con la CLI
+de reemplazo. Las instalaciones locales con `--source` no contactan el
+servicio de versiones ni se actualizan automáticamente.
 
 <a id="prepare-an-addon-free-ci-export"></a>
 ## Preparar una exportación de CI sin el addon

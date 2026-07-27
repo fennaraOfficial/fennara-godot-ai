@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/cli.md sha256=561efbe26f75accb949050e7af9d06ae607040b86d061c04c4dcf8732ba61135 -->
+<!-- fennara-i18n: locale=zh-CN source=docs/cli.md sha256=16441a0d18c69d735854b2f54a905e9d7f5277a8eae9a9c89eced18cfcaca06a -->
 <a id="fennara-cli"></a>
 # Fennara CLI
 
@@ -98,6 +98,8 @@ fennara install --project path/to/project --version <version>
 
 - 如果不存在完整插件，CLI 会下载并验证所选发布版，安装 `addons/fennara` 和匹配的本地组件，再写入 Fennara 项目指南。
 - 如果已存在完整插件，CLI 会读取其 `VERSION`、验证当前平台库并安装该精确版本的 CLI 管理组件。项目插件保持不变，明确的 `--version` 必须与现有插件匹配。
+
+对于发布版安装，CLI 会先将请求解析为一个精确版本。如果该发布版提供更新的 CLI，程序会更新已安装的 Fennara CLI，然后使用替换后的 CLI 继续安装。本地 `--source` 安装不会连接发布服务，也不会自动更新。
 
 <a id="prepare-an-addon-free-ci-export"></a>
 ## 准备不含插件的 CI 导出

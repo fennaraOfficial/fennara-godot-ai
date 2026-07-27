@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/cli.md sha256=561efbe26f75accb949050e7af9d06ae607040b86d061c04c4dcf8732ba61135 -->
+<!-- fennara-i18n: locale=de source=docs/cli.md sha256=16441a0d18c69d735854b2f54a905e9d7f5277a8eae9a9c89eced18cfcaca06a -->
 <a id="fennara-cli"></a>
 # Fennara-CLI
 
@@ -98,6 +98,8 @@ Die Installation hat zwei sichere Abläufe:
 
 - Wenn kein vollständiges Addon vorhanden ist, lädt die CLI die ausgewählte Veröffentlichung herunter und überprüft sie, installiert `addons/fennara`, installiert die passenden lokalen Komponenten und schreibt die Fennara-Projektanweisungen.
 - Wenn bereits ein vollständiges Addon vorhanden ist, liest die CLI dessen `VERSION`, überprüft die Bibliothek für die aktuelle Plattform und installiert die von der CLI verwalteten Komponenten exakt dieser Version. Das Projekt-Addon bleibt unverändert. Eine ausdrücklich angegebene `--version` muss mit dem vorhandenen Addon übereinstimmen.
+
+Bei Installationen aus einer Veröffentlichung löst die CLI die Anfrage zuerst in eine exakte Version auf, aktualisiert die installierte Fennara-CLI, wenn diese Veröffentlichung eine neuere Version bereitstellt, und setzt die Installation anschließend mit der Ersatz-CLI fort. Lokale Installationen mit `--source` greifen weder auf den Veröffentlichungsdienst zu noch aktualisieren sie die CLI selbst.
 
 <a id="prepare-an-addon-free-ci-export"></a>
 ## Einen addonfreien CI-Export vorbereiten

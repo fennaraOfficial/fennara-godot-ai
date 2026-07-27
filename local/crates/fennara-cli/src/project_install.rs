@@ -6,6 +6,7 @@ use crate::project_addon;
 use crate::project_guidance;
 use crate::release_identity::{ReleaseIdentity, ReleaseTrack};
 use crate::release_package;
+use crate::self_update::{self, StartResult};
 use crate::webview_prereq;
 use std::env;
 use std::fs;
@@ -13,8 +14,8 @@ use std::path::{Path, PathBuf};
 
 pub fn run(args: Vec<&str>) -> Result<(), String> {
     operation::phase(Phase::Checking, "Validating project installation request")?;
-    let options = InstallOptions::parse(args)?;
-    let project_dir = resolve_project_dir(options.project_dir)
+    let mut options = InstallOptions::parse(args)?;
+    let project_dir = resolve_project_dir(options.project_dir.clone())
         .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
     ensure_godot_project(&project_dir)
         .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
@@ -22,9 +23,9 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     println!("project: {}", display_path(&project_dir));
 
     let addon_dir = project_addon_dir(&project_dir);
-    if let Some(existing) = project_addon::inspect(&project_dir)
-        .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?
-    {
+    let existing = project_addon::inspect(&project_dir)
+        .map_err(|error| operation::failure(FailureClass::ProjectInvalid, error))?;
+    if let Some(existing) = existing.as_ref() {
         if options.source_dir.is_some() {
             return Err(operation::failure(
                 FailureClass::ProjectInvalid,
@@ -36,6 +37,42 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             &existing.version,
             options.channel.as_deref(),
         )?;
+        if let Some(requested) = options.version.as_deref()
+            && requested != existing.version
+        {
+            return Err(operation::failure(
+                FailureClass::ProjectInvalid,
+                format!(
+                    "the existing project addon is version {}, but --version requested {requested}; remove --version to install the matching local components",
+                    existing.version
+                ),
+            ));
+        }
+        options.version = Some(existing.version.clone());
+    } else if options.source_dir.is_none() {
+        let requested_version = options.requested_version();
+        println!("requested version: {requested_version}");
+        options.version = Some(crate::release_update::resolve_exact_target(
+            &requested_version,
+        )?);
+    }
+
+    if options.source_dir.is_none() && !options.no_self_update {
+        let version = options
+            .version
+            .as_deref()
+            .ok_or_else(|| "install self-update requires an exact version".to_string())?;
+        println!("self-update: checking installed CLI");
+        match self_update::start(version, options.continuation_args(&project_dir))? {
+            StartResult::Started => return Ok(()),
+            StartResult::AlreadyCurrent => println!("self-update: CLI is current"),
+            StartResult::Skipped(reason) => println!("warning: {reason}"),
+        }
+    } else if options.no_self_update {
+        println!("self-update: skipped after CLI replacement");
+    }
+
+    if let Some(existing) = existing {
         let layout = crate::app_layout::AppLayout::detect()?;
         prepare_version_switch(&layout, &existing.version)?;
         return existing_addon_install::run(&project_dir, existing, options.version.as_deref());
@@ -58,13 +95,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             ("local".to_string(), path)
         }
         None => {
-            let requested_version = options.version.clone().unwrap_or_else(|| {
-                options
-                    .channel
-                    .as_ref()
-                    .map(|channel| format!("channel:{channel}"))
-                    .unwrap_or_else(|| "latest".to_string())
-            });
+            let requested_version = options.requested_version();
             println!("requested version: {requested_version}");
             let resolved = release_package::resolve_package(&requested_version)?;
             validate_resolved_channel(
@@ -209,6 +240,7 @@ struct InstallOptions {
     source_dir: Option<PathBuf>,
     version: Option<String>,
     channel: Option<String>,
+    no_self_update: bool,
 }
 
 impl InstallOptions {
@@ -217,6 +249,7 @@ impl InstallOptions {
         let mut source_dir = None;
         let mut version = None;
         let mut channel = None;
+        let mut no_self_update = false;
         let mut index = 0;
 
         while index < args.len() {
@@ -249,6 +282,9 @@ impl InstallOptions {
                 arg if arg.starts_with("--channel=") => {
                     channel = Some(arg.trim_start_matches("--channel=").to_string());
                 }
+                "--no-self-update" => {
+                    no_self_update = true;
+                }
                 "--operation-id" => {
                     index += 1;
                     value_arg(&args, index, "--operation-id")?;
@@ -272,7 +308,35 @@ impl InstallOptions {
             source_dir,
             version,
             channel,
+            no_self_update,
         })
+    }
+
+    fn requested_version(&self) -> String {
+        self.version.clone().unwrap_or_else(|| {
+            self.channel
+                .as_ref()
+                .map(|channel| format!("channel:{channel}"))
+                .unwrap_or_else(|| "latest".to_string())
+        })
+    }
+
+    fn continuation_args(&self, project_dir: &Path) -> Vec<String> {
+        let mut args = vec![
+            "install".to_string(),
+            "--no-self-update".to_string(),
+            "--project".to_string(),
+            project_dir.display().to_string(),
+        ];
+        if let Some(version) = &self.version {
+            args.push("--version".to_string());
+            args.push(version.clone());
+        }
+        if let Some(channel) = &self.channel {
+            args.push("--channel".to_string());
+            args.push(channel.clone());
+        }
+        args
     }
 }
 
@@ -445,6 +509,47 @@ mod tests {
         assert!(!addon.join("partial.txt").exists());
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn continuation_resumes_exact_install_without_repeating_self_update() {
+        let options = InstallOptions {
+            project_dir: None,
+            source_dir: None,
+            version: Some("1.2.3".to_string()),
+            channel: Some("pr-101".to_string()),
+            no_self_update: false,
+        };
+        let project = PathBuf::from("demo-project");
+
+        assert_eq!(
+            options.continuation_args(&project),
+            vec![
+                "install",
+                "--no-self-update",
+                "--project",
+                &project.display().to_string(),
+                "--version",
+                "1.2.3",
+                "--channel",
+                "pr-101",
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_accepts_internal_self_update_continuation_flag() {
+        let options = InstallOptions::parse(vec![
+            "--no-self-update",
+            "--version",
+            "1.2.3",
+            "--project",
+            "demo-project",
+        ])
+        .expect("parse install continuation");
+
+        assert!(options.no_self_update);
+        assert_eq!(options.version.as_deref(), Some("1.2.3"));
     }
 
     #[cfg(unix)]

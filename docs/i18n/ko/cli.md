@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/cli.md sha256=561efbe26f75accb949050e7af9d06ae607040b86d061c04c4dcf8732ba61135 -->
+<!-- fennara-i18n: locale=ko source=docs/cli.md sha256=16441a0d18c69d735854b2f54a905e9d7f5277a8eae9a9c89eced18cfcaca06a -->
 <a id="fennara-cli"></a>
 # Fennara CLI
 
@@ -98,6 +98,8 @@ fennara install --project path/to/project --version <version>
 
 - 완전한 애드온이 없으면 CLI가 선택한 릴리스를 내려받아 검증하고, `addons/fennara`와 일치하는 로컬 구성 요소를 설치하며, Fennara 프로젝트 지침을 작성합니다.
 - 완전한 애드온이 이미 있으면 CLI가 해당 `VERSION`을 읽고 현재 플랫폼 라이브러리를 검증한 뒤 정확히 같은 버전의 CLI 관리 구성 요소를 설치합니다. 프로젝트 애드온은 바꾸지 않습니다. 명시적인 `--version`은 기존 애드온과 일치해야 합니다.
+
+릴리스에서 설치할 때 CLI는 먼저 요청을 하나의 정확한 버전으로 확정하고, 해당 릴리스가 더 새로운 CLI를 제공하면 설치된 Fennara CLI를 업데이트한 다음 교체된 CLI로 설치를 계속합니다. 로컬 `--source` 설치는 릴리스 서비스에 연결하거나 자동 업데이트를 수행하지 않습니다.
 
 <a id="prepare-an-addon-free-ci-export"></a>
 ## 애드온 없는 CI 내보내기 준비
