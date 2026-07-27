@@ -144,6 +144,12 @@ For LM Studio, start the local server from LM Studio and choose a model id shape
 lmstudio/<loaded-model-id>
 ```
 
+Fennara reads the loaded context length from LM Studio automatically. The LM
+Studio provider setup also has a per-call maximum output setting, which defaults
+to 8,192 tokens. Fennara sends that value as `max_tokens` and reserves it when
+deciding when to compact chat history. For small loaded contexts, Fennara caps
+the effective output limit at half the context so requests retain input room.
+
 ## Model Catalog
 
 The daemon keeps a local model catalog for cloud providers and asks local servers for their currently available models. If a catalog or local server changes while Godot is open, refresh the model picker or reopen the provider/model picker.

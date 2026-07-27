@@ -31,6 +31,7 @@ pub(crate) const BROWSER_CHAT_SURFACE: &str = "browser";
 pub(crate) const DEFAULT_PROVIDER_TIMEOUT_SECONDS: u64 = 120;
 pub(crate) const MIN_PROVIDER_TIMEOUT_SECONDS: u64 = 30;
 pub(crate) const MAX_PROVIDER_TIMEOUT_SECONDS: u64 = 3_600;
+pub(crate) const DEFAULT_LMSTUDIO_MAX_OUTPUT_TOKENS: u32 = 8_192;
 
 static SETTINGS_WRITE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 static SETTINGS_LOCK: Mutex<()> = Mutex::new(());
@@ -43,6 +44,8 @@ pub(crate) struct ChatSettings {
     pub(crate) ollama_base_url: String,
     #[serde(default)]
     pub(crate) provider_base_urls: BTreeMap<String, String>,
+    #[serde(default = "default_lmstudio_max_output_tokens")]
+    pub(crate) lmstudio_max_output_tokens: u32,
     pub(crate) model: String,
     #[serde(default = "default_reasoning_effort")]
     pub(crate) reasoning_effort: String,
@@ -67,6 +70,7 @@ pub(crate) struct PublicChatSettings {
     pub(crate) providers: Vec<PublicProvider>,
     pub(crate) ollama_base_url: String,
     pub(crate) provider_base_urls: BTreeMap<String, String>,
+    pub(crate) lmstudio_max_output_tokens: u32,
     pub(crate) model: String,
     pub(crate) default_model: &'static str,
     pub(crate) reasoning_effort: String,
@@ -86,6 +90,7 @@ impl Default for ChatSettings {
             openrouter_api_key: None,
             ollama_base_url: DEFAULT_OLLAMA_BASE_URL.to_string(),
             provider_base_urls: default_provider_base_urls(),
+            lmstudio_max_output_tokens: DEFAULT_LMSTUDIO_MAX_OUTPUT_TOKENS,
             model: DEFAULT_MODEL.to_string(),
             reasoning_effort: DEFAULT_REASONING_EFFORT.to_string(),
             custom_providers: Vec::new(),
@@ -109,6 +114,9 @@ impl ChatSettings {
             providers,
             ollama_base_url: clean_ollama_base_url(&self.ollama_base_url),
             provider_base_urls: clean_provider_base_urls(&self.provider_base_urls),
+            lmstudio_max_output_tokens: clean_lmstudio_max_output_tokens(
+                self.lmstudio_max_output_tokens,
+            ),
             model: clean_model(&self.model).unwrap_or_else(|| DEFAULT_MODEL.to_string()),
             default_model: DEFAULT_MODEL,
             reasoning_effort: clean_reasoning_effort(&self.reasoning_effort).to_string(),
@@ -153,6 +161,7 @@ pub(crate) struct SaveSettingsRequest {
     pub(crate) provider_api_keys: Option<BTreeMap<String, String>>,
     pub(crate) ollama_base_url: Option<String>,
     pub(crate) provider_base_urls: Option<BTreeMap<String, String>>,
+    pub(crate) lmstudio_max_output_tokens: Option<u32>,
     pub(crate) custom_provider: Option<SaveCustomProviderRequest>,
     pub(crate) model: Option<String>,
     pub(crate) reasoning_effort: Option<String>,
@@ -312,6 +321,9 @@ pub(crate) fn save_settings(update: SaveSettingsRequest) -> Result<ChatSettings,
                 .provider_base_urls
                 .insert(provider.to_string(), clean_base_url(&clean));
         }
+    }
+    if let Some(max_output_tokens) = update.lmstudio_max_output_tokens {
+        settings.lmstudio_max_output_tokens = clean_lmstudio_max_output_tokens(max_output_tokens);
     }
     if let Some(custom_provider) = update.custom_provider {
         let update_existing = custom_provider.update_existing;
@@ -670,6 +682,14 @@ fn default_chat_surface() -> String {
 
 fn default_provider_timeout_seconds() -> u64 {
     DEFAULT_PROVIDER_TIMEOUT_SECONDS
+}
+
+fn default_lmstudio_max_output_tokens() -> u32 {
+    DEFAULT_LMSTUDIO_MAX_OUTPUT_TOKENS
+}
+
+fn clean_lmstudio_max_output_tokens(value: u32) -> u32 {
+    value.max(1)
 }
 
 fn default_true() -> bool {

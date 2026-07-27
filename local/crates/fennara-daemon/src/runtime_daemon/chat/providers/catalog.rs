@@ -125,6 +125,7 @@ impl Catalog {
         catalog.insert_provider(lmstudio::provider_definition(
             &settings.lmstudio_base_url,
             settings.lmstudio_api_key.as_deref(),
+            settings.lmstudio_max_output_tokens,
         ));
         catalog.insert_provider(deepseek::provider_definition(
             settings.deepseek_api_key.as_deref(),
@@ -327,7 +328,15 @@ fn resolve_model(
     model: ModelDefinition,
     reference: ModelRef,
 ) -> ResolvedModel {
-    let request = provider.request.merged(&model.request);
+    let mut request = provider.request.merged(&model.request);
+    if provider.id.as_str() == ProviderId::LMSTUDIO {
+        if let Some(configured) = request.generation.max_output_tokens {
+            request.generation.max_output_tokens = Some(lmstudio::effective_max_output_tokens(
+                configured,
+                model.limits.context_tokens,
+            ));
+        }
+    }
     ResolvedModel {
         reference,
         provider,
@@ -411,6 +420,7 @@ mod tests {
             custom_providers: Vec::new(),
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
+            lmstudio_max_output_tokens: 8_192,
             local_model_limits: BTreeMap::new(),
             request_timeout: std::time::Duration::from_secs(120),
         }
@@ -546,6 +556,7 @@ mod tests {
             custom_providers: Vec::new(),
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
+            lmstudio_max_output_tokens: 8_192,
             local_model_limits,
             request_timeout: std::time::Duration::from_secs(120),
         });
@@ -571,6 +582,15 @@ mod tests {
                 .limits
                 .context_tokens,
             Some(4096)
+        );
+        assert_eq!(
+            catalog
+                .resolve(&lmstudio_ref)
+                .unwrap()
+                .request
+                .generation
+                .max_output_tokens,
+            Some(2048)
         );
     }
 

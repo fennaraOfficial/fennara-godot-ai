@@ -12,6 +12,7 @@
     ollama: DEFAULT_OLLAMA_BASE_URL,
     lmstudio: "http://127.0.0.1:1234/v1",
   };
+  const DEFAULT_LMSTUDIO_MAX_OUTPUT_TOKENS = 8192;
   const CHAT_SURFACE_EMBEDDED = "embedded";
   const CHAT_SURFACE_BROWSER = "browser";
   const APPROVAL_MODE_ASK = "ask";
@@ -41,6 +42,8 @@
   const providerSearch = document.querySelector("[data-provider-search]");
   const ollamaForm = document.querySelector("[data-ollama-form]");
   const ollamaBaseUrlInput = document.querySelector("[data-ollama-base-url]");
+  const lmstudioMaxOutputField = document.querySelector("[data-lmstudio-max-output-field]");
+  const lmstudioMaxOutputInput = document.querySelector("[data-lmstudio-max-output-tokens]");
   const localSetupTitle = document.querySelector("[data-local-setup-title]");
   const localSetupHelp = document.querySelector("[data-local-setup-help]");
   const providerKeyForm = document.querySelector("[data-provider-key-form]");
@@ -173,6 +176,7 @@
   let keyPromptProvider = "";
   let defaultModel = "";
   let ollamaBaseUrl = DEFAULT_OLLAMA_BASE_URL;
+  let lmstudioMaxOutputTokens = DEFAULT_LMSTUDIO_MAX_OUTPUT_TOKENS;
   let providerBaseUrls = new Map(Object.entries(DEFAULT_LOCAL_BASE_URLS));
   let localModelContextLengths = new Map();
   let ollamaModels = [];
@@ -384,6 +388,8 @@
       providerKeyTitle,
       providerKeyInlineInput,
       ollamaBaseUrlInput,
+      lmstudioMaxOutputField,
+      lmstudioMaxOutputInput,
       localSetupTitle,
       localSetupHelp,
     },
@@ -402,6 +408,7 @@
       },
       requestModelList,
       providerBaseUrl,
+      getLmstudioMaxOutputTokens: () => lmstudioMaxOutputTokens,
       providerStatusLabel,
       providerUsesBaseUrlSetup,
       chooseProvider,
@@ -830,6 +837,10 @@
     applyProviderBaseUrls(settings);
     applyLocalModelContextLengths(settings);
     ollamaBaseUrl = providerBaseUrl("ollama");
+    lmstudioMaxOutputTokens = normalizePositiveInteger(
+      settings.lmstudio_max_output_tokens,
+      DEFAULT_LMSTUDIO_MAX_OUTPUT_TOKENS,
+    );
     applyProviderRegistry(settings);
     hasOpenRouterKey = providerConnected("openrouter") || Boolean(settings.has_openrouter_key);
     hasOllamaCloudKey = providerConnected("ollama-cloud") || Boolean(settings.has_ollama_cloud_key);
@@ -1347,6 +1358,11 @@
     return Math.floor(parsed);
   }
 
+  function normalizePositiveInteger(value, fallback) {
+    const parsed = Number(String(value ?? "").replace(/,/g, "").trim());
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
   function chooseProvider(provider) {
     if (!providerMetadata.has(provider)) {
       return;
@@ -1379,6 +1395,11 @@
     providerBaseUrls.set(provider, nextBaseUrl.replace(/\/+$/, ""));
     if (provider === "ollama") {
       ollamaBaseUrl = providerBaseUrl(provider);
+    } else if (provider === "lmstudio") {
+      lmstudioMaxOutputTokens = normalizePositiveInteger(
+        lmstudioMaxOutputInput?.value,
+        DEFAULT_LMSTUDIO_MAX_OUTPUT_TOKENS,
+      );
     }
     currentProvider = provider;
     closeOllamaSetupPrompt();
@@ -1388,6 +1409,7 @@
       reasoning_effort: currentReasoningEffort,
       ollama_base_url: ollamaBaseUrl,
       provider_base_urls: providerBaseUrlPayload(),
+      lmstudio_max_output_tokens: lmstudioMaxOutputTokens,
     });
     requestModelList({ refreshOllama: true });
     modelPicker?.open();
