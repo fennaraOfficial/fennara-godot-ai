@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/cli.md sha256=561efbe26f75accb949050e7af9d06ae607040b86d061c04c4dcf8732ba61135 -->
+<!-- fennara-i18n: locale=ja source=docs/cli.md sha256=16441a0d18c69d735854b2f54a905e9d7f5277a8eae9a9c89eced18cfcaca06a -->
 <a id="fennara-cli"></a>
 # Fennara CLI
 
@@ -98,6 +98,8 @@ fennara install --project path/to/project --version <version>
 
 - 完全なアドオンが存在しない場合、CLI は選択したリリースをダウンロードして検証し、`addons/fennara` をインストールし、一致するローカルコンポーネントをインストールし、Fennara のプロジェクトガイダンスを書き込みます。
 - 完全なアドオンがすでに存在する場合、CLI はその `VERSION` を読み取り、現在のプラットフォーム用ライブラリを検証し、その正確なバージョンの CLI 管理コンポーネントをインストールします。プロジェクトのアドオンは変更しません。`--version` を明示した場合は、既存アドオンと一致する必要があります。
+
+リリースからインストールする場合、CLI は最初に要求を 1 つの正確なバージョンへ解決し、そのリリースに新しい CLI が含まれていればインストール済みの Fennara CLI を更新してから、置き換えた CLI でインストールを続行します。ローカルの `--source` インストールはリリースサービスへ接続せず、自己更新も行いません。
 
 <a id="prepare-an-addon-free-ci-export"></a>
 ## アドオンを含まない CI エクスポートの準備

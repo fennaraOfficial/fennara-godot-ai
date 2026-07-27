@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/cli.md sha256=561efbe26f75accb949050e7af9d06ae607040b86d061c04c4dcf8732ba61135 -->
+<!-- fennara-i18n: locale=tr source=docs/cli.md sha256=16441a0d18c69d735854b2f54a905e9d7f5277a8eae9a9c89eced18cfcaca06a -->
 <a id="fennara-cli"></a>
 # Fennara CLI
 
@@ -98,6 +98,8 @@ Kurulumun iki güvenli yolu vardır:
 
 - Eksiksiz bir eklenti yoksa CLI seçili sürümü indirip doğrular, `addons/fennara` dizinini kurar, eşleşen yerel bileşenleri kurar ve Fennara proje yönergelerini yazar.
 - Eksiksiz bir eklenti zaten varsa CLI onun `VERSION` değerini okur, mevcut platform kitaplığını doğrular ve tam olarak o sürüme ait CLI tarafından yönetilen bileşenleri kurar. Proje eklentisini değiştirmeden tutar. Açıkça verilen `--version` mevcut eklentiyle eşleşmelidir.
+
+Sürüm tabanlı kurulumlarda CLI önce isteği tek bir tam sürüme çözümler, bu sürüm daha yeni bir CLI sağlıyorsa kurulu Fennara CLI'yi günceller ve ardından kuruluma yeni CLI ile devam eder. Yerel `--source` kurulumları sürüm hizmetine bağlanmaz ve kendi kendini güncellemez.
 
 <a id="prepare-an-addon-free-ci-export"></a>
 ## Eklentisiz Bir CI Dışa Aktarması Hazırlama
