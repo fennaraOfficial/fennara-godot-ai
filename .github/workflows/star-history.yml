@@ -1,0 +1,64 @@
+name: Star history chart
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/star-history-seed.json"
+      - ".github/workflows/star-history.yml"
+      - "scripts/generate-star-history.mjs"
+      - "scripts/star-history-*.mjs"
+  schedule:
+    - cron: "35 6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: star-history
+  cancel-in-progress: false
+
+jobs:
+  update-chart:
+    if: github.repository == 'fennaraOfficial/fennara-godot-ai'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore accumulated history
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin star-history >/dev/null; then
+            git fetch --depth 1 origin \
+              '+refs/heads/star-history:refs/remotes/origin/star-history'
+            git show origin/star-history:star-history.json > star-history.json
+          fi
+
+      - name: Generate chart
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STAR_HISTORY_TOKEN: ${{ secrets.STAR_HISTORY_TOKEN }}
+        run: |
+          node scripts/generate-star-history.mjs \
+            --repo "$GITHUB_REPOSITORY" \
+            --series star-history.json \
+            --seed .github/star-history-seed.json \
+            --out star-history.svg
+
+      - name: Publish chart branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          json_blob=$(git hash-object -w star-history.json)
+          svg_blob=$(git hash-object -w star-history.svg)
+          tree=$(printf '100644 blob %s\tstar-history.json\n100644 blob %s\tstar-history.svg\n' \
+            "$json_blob" "$svg_blob" | git mktree)
+          commit=$(git commit-tree "$tree" -m "Update star history chart")
+          git push --force origin "$commit:refs/heads/star-history"

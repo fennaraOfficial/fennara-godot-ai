@@ -55,3 +55,9 @@ jobs:
         run: |
           node scripts/sync-doc-navigation.mjs --check
           node scripts/check-doc-i18n.mjs
+
+      - name: Test star history automation
+        run: |
+          node --test \
+            scripts/tests/star-history.test.mjs \
+            scripts/tests/star-history-workflow.test.mjs
