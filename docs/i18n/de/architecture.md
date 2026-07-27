@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/architecture.md sha256=8e2ee9acd604c495443d0f17d8274274cc488361e3fcec9e63cad2ea4c2b979d -->
+<!-- fennara-i18n: locale=de source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
 <a id="architecture"></a>
 # Architektur
 
@@ -82,8 +82,8 @@ Host-Vertrag trennt drei Arten von Browseroberflächen:
 
 | Plattformpfad | Verhalten |
 | --- | --- |
-| Windows | Native WebView2-Unterkomponente/-Überlagerung, die an das Fenster des Godot-Editors angefügt ist. |
-| macOS | Native WKWebView, die an das Fenster des Godot-Editors angefügt ist. |
+| Windows | Native WebView2-Unterkomponente/-Überlagerung, die an das Fenster des Godot-Editors angefügt ist und ausgeblendet wird, solange überlappende Godot-Popups, eingebettete Fenster, Canvas-Ebenen oder Bedienelemente der obersten Ebene sichtbar sind. |
+| macOS | Native WKWebView, die an das Fenster des Godot-Editors angefügt ist und dieselbe Ausblendung bei überlappender Godot-Benutzeroberfläche wie Windows verwendet. |
 | Linux | CEF-Off-Screen-Rendering in ein internes Godot-`TextureRect` unter Verwendung einer gemeinsam genutzten CEF-Laufzeit aus den Fennara-Anwendungsdaten. |
 
 Benutzer können in Chat Settings außerdem festlegen, dass der integrierte Chat beim

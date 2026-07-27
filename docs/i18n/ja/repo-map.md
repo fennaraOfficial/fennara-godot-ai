@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/repo-map.md sha256=a6f2ff719d03e067423cd68229e6941f701a52bfc4ed84361327716d5d9e9c0d -->
+<!-- fennara-i18n: locale=ja source=docs/repo-map.md sha256=dd8616d3a3f73e8f05b95898cd34041186e47818eefe9f41f1f0a951f1c27fdb -->
 <a id="repo-map"></a>
 # リポジトリマップ
 
@@ -101,6 +101,7 @@
 | `fennara-cpp/src/ui/setup_panel.cpp` | webview に依存しない初回セットアップパネルです。進捗、再試行、ログ、サニタイズ済みレポートの操作を含みます。 |
 | `fennara-cpp/vendor/cef/` | Linux OSR ブリッジで使用する公式 CEF 139 ヘッダーのスナップショットです。ランタイムバイナリはアドオン外に置かれます。 |
 | `fennara-cpp/src/ui/webview_host*` | ネイティブのエディター内チャット webview ホストと、プラットフォーム別バックエンドです。 |
+| `fennara-cpp/src/ui/native_webview_occlusion.*` | 重なっている Godot のポップアップまたはトップレベルのエディター UI が表示されている間、ネイティブ webview オーバーレイを一時的に非表示にする Windows/macOS 共通の検出処理です。 |
 | `fennara-cpp/src/ui/linux_cef_runtime.*` | Linux 専用の共有 CEF ランタイム検出、マーカー検証、動的 `libcef.so` ローダーの基盤です。 |
 | `fennara-cpp/src/ui/linux_cef_osr.*` / `linux_cef_input.*` / `linux_cef_bridge_loader.*` / `linux_cef_bridge_api.hpp` | 内部チャット webview 向けの、Linux 専用 CEF オフスクリーン描画面、Godot 入力転送、ブリッジ ABI 読み込み、Godot テクスチャ更新です。 |
 | `fennara-cpp/src/ui/linux_cef_bridge/` | 固定された公式 CEF 139 `libcef_dll_wrapper` ソースと Fennara の CEF OSR アダプターからビルドされる、小さな Linux 専用ブリッジライブラリです。メイン GDExtension は外部の `libcef.so` ランタイムを読み込んだ後、これを dlopen します。 |

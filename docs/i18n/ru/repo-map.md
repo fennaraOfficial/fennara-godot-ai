@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ru source=docs/repo-map.md sha256=a6f2ff719d03e067423cd68229e6941f701a52bfc4ed84361327716d5d9e9c0d -->
+<!-- fennara-i18n: locale=ru source=docs/repo-map.md sha256=dd8616d3a3f73e8f05b95898cd34041186e47818eefe9f41f1f0a951f1c27fdb -->
 <a id="repo-map"></a>
 # Карта репозитория
 
@@ -102,6 +102,7 @@
 | `fennara-cpp/src/ui/setup_panel.cpp` | Независимая от веб-представления панель первоначальной настройки с ходом выполнения, повторной попыткой, журналами и действиями с очищенным отчетом. |
 | `fennara-cpp/vendor/cef/` | Снимок официальных заголовочных файлов CEF 139 для моста OSR в Linux. Двоичные файлы среды выполнения остаются вне дополнения. |
 | `fennara-cpp/src/ui/webview_host*` | Нативный узел веб-представления чата в редакторе и серверные части платформ. |
+| `fennara-cpp/src/ui/native_webview_occlusion.*` | Общая для Windows и macOS логика обнаружения, которая временно скрывает нативное наложение веб-представления, пока видны перекрывающие его всплывающие окна Godot или интерфейс редактора верхнего уровня. |
 | `fennara-cpp/src/ui/linux_cef_runtime.*` | Только для Linux: обнаружение общей среды выполнения CEF, проверка маркера и основа динамического загрузчика `libcef.so`. |
 | `fennara-cpp/src/ui/linux_cef_osr.*` / `linux_cef_input.*` / `linux_cef_bridge_loader.*` / `linux_cef_bridge_api.hpp` | Только для Linux: поверхность внеэкранного рендеринга CEF, передача ввода Godot, загрузка ABI моста и обновление текстуры Godot для внутреннего веб-представления чата. |
 | `fennara-cpp/src/ui/linux_cef_bridge/` | Небольшая библиотека моста только для Linux, собранная из закрепленного официального исходного кода `libcef_dll_wrapper` CEF 139 и адаптера CEF OSR Fennara. Основная GDExtension выполняет ее dlopen после загрузки внешней среды `libcef.so`. |

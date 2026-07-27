@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/architecture.md sha256=8e2ee9acd604c495443d0f17d8274274cc488361e3fcec9e63cad2ea4c2b979d -->
+<!-- fennara-i18n: locale=zh-CN source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
 <a id="architecture"></a>
 # 架构
 
@@ -80,8 +80,8 @@ CLI 会等待精确的 Godot PID 和启动时间消失。它会重新检查
 
 | 平台路径 | 行为 |
 | --- | --- |
-| Windows | 附加到 Godot 编辑器窗口的原生 WebView2 子窗口或覆盖层。 |
-| macOS | 附加到 Godot 编辑器窗口的原生 WKWebView。 |
+| Windows | 附加到 Godot 编辑器窗口的原生 WebView2 子窗口或覆盖层；当重叠的 Godot 弹出窗口、嵌入式窗口、画布层或顶层控件可见时，它会被隐藏。 |
+| macOS | 附加到 Godot 编辑器窗口的原生 WKWebView，使用与 Windows 相同的重叠 Godot UI 隐藏机制。 |
 | Linux | 使用 Fennara 应用数据中的共享 CEF 运行时，将 CEF 屏幕外渲染到内部 Godot `TextureRect`。 |
 
 用户还可以在 Chat Settings 中设置下次在系统

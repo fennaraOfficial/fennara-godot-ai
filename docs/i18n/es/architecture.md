@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=es source=docs/architecture.md sha256=8e2ee9acd604c495443d0f17d8274274cc488361e3fcec9e63cad2ea4c2b979d -->
+<!-- fennara-i18n: locale=es source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
 <a id="architecture"></a>
 # Arquitectura
 
@@ -81,8 +81,8 @@ contrato común del host separa dos estilos de superficie del navegador:
 
 | Plataforma | Comportamiento |
 | --- | --- |
-| Windows | WebView2 nativo como hijo o superposición de la ventana del editor. |
-| macOS | WKWebView nativo unido a la ventana del editor. |
+| Windows | WebView2 nativo como hijo o superposición de la ventana del editor, oculto mientras haya ventanas emergentes de Godot, ventanas incrustadas, capas de lienzo o controles de nivel superior superpuestos y visibles. |
+| macOS | WKWebView nativo unido a la ventana del editor, con la misma ocultación ante UI de Godot superpuesta que Windows. |
 | Linux | Renderizado CEF fuera de pantalla en un `TextureRect` interno de Godot, mediante un runtime CEF compartido en los datos de aplicación. |
 
 Los usuarios también pueden configurar Chat Settings para abrir el chat

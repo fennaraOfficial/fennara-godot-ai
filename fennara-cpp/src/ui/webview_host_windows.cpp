@@ -1,6 +1,7 @@
 #ifdef _WIN32
 
 #include "webview_backend.hpp"
+#include "native_webview_occlusion.hpp"
 
 #include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/window.hpp>
@@ -258,7 +259,12 @@ public:
                   " url=" + url);
         current_url = url;
         started = true;
+        requested_visible = true;
+        owner_geometry_visible = true;
+        actual_visible = true;
+        occlusion_tracker.set_owner(owner);
         resize_to(owner);
+        process(0.0);
         debug_log("Web chat native Windows webview started");
         return true;
     }
@@ -276,17 +282,23 @@ public:
         WebviewGeometry geometry = compute_webview_geometry(owner);
         HWND hwnd = reinterpret_cast<HWND>(widget);
         if (!geometry.visible) {
-            ShowWindow(hwnd, SW_HIDE);
+            owner_geometry_visible = false;
+            apply_visibility();
             return;
         }
+        owner_geometry_visible = true;
+        occlusion_tracker.set_owner(owner);
 
         int window_id = owner_window_id(owner);
         if (window_id != current_window_id) {
             debug_log("Web chat recreating native Windows webview for window id=" +
                        godot::String::num_int64(window_id));
             godot::String url = current_url;
+            const bool preserved_requested_visible = requested_visible;
             stop();
-            start(owner, url);
+            if (start(owner, url)) {
+                set_visible(preserved_requested_visible);
+            }
             return;
         }
 
@@ -301,7 +313,7 @@ public:
             geometry.width,
             geometry.height,
             SWP_NOACTIVATE | SWP_NOZORDER);
-        ShowWindow(hwnd, SW_SHOW);
+        apply_visibility();
 
         if (x != last_x || y != last_y || geometry.width != last_width ||
             geometry.height != last_height) {
@@ -322,16 +334,33 @@ public:
         if (!started || widget == nullptr) {
             return;
         }
+        requested_visible = visible;
         if (!visible) {
             set_focused(false);
         }
-        ShowWindow(reinterpret_cast<HWND>(widget), visible ? SW_SHOW : SW_HIDE);
-        debug_log("Web chat Windows set_visible visible=" + bool_string(visible) +
-                  " widget={" + window_state_string(reinterpret_cast<HWND>(widget)) + "}");
+        apply_visibility();
+    }
+
+    void process(double delta) override {
+        if (!started || widget == nullptr) {
+            return;
+        }
+
+        const bool next_occluded = occlusion_tracker.update(delta);
+        if (next_occluded == occluded) {
+            return;
+        }
+        occluded = next_occluded;
+        debug_log("Web chat Windows overlay occluded=" + bool_string(occluded));
+        apply_visibility();
     }
 
     void set_focused(bool next_focused) override {
         if (!started || widget == nullptr) {
+            focused = false;
+            return;
+        }
+        if (next_focused && !actual_visible) {
             focused = false;
             return;
         }
@@ -385,6 +414,11 @@ public:
         current_url = "";
         started = false;
         focused = false;
+        requested_visible = false;
+        owner_geometry_visible = false;
+        actual_visible = false;
+        occluded = false;
+        occlusion_tracker.reset();
         current_window_id = -1;
         last_x = -1;
         last_y = -1;
@@ -397,6 +431,32 @@ public:
     }
 
 private:
+    void apply_visibility() {
+        if (!started || widget == nullptr) {
+            return;
+        }
+
+        const bool next_visible =
+            requested_visible && owner_geometry_visible && !occluded;
+        if (actual_visible == next_visible) {
+            return;
+        }
+        if (!next_visible) {
+            set_focused(false);
+        }
+        actual_visible = next_visible;
+        ShowWindow(
+            reinterpret_cast<HWND>(widget),
+            actual_visible ? SW_SHOW : SW_HIDE);
+        debug_log("Web chat Windows effective visibility=" +
+                  bool_string(actual_visible) +
+                  " requested=" + bool_string(requested_visible) +
+                  " geometry=" + bool_string(owner_geometry_visible) +
+                  " occluded=" + bool_string(occluded) +
+                  " widget={" +
+                  window_state_string(reinterpret_cast<HWND>(widget)) + "}");
+    }
+
     static void debug_binding(const char *id, const char *req, void *arg) {
         auto *self = static_cast<WindowsWebviewBackend *>(arg);
         if (self == nullptr) {
@@ -423,6 +483,11 @@ private:
     godot::String current_url;
     bool started = false;
     bool focused = false;
+    bool requested_visible = false;
+    bool owner_geometry_visible = false;
+    bool actual_visible = false;
+    bool occluded = false;
+    NativeWebviewOcclusionTracker occlusion_tracker;
     int current_window_id = -1;
     int last_x = -1;
     int last_y = -1;

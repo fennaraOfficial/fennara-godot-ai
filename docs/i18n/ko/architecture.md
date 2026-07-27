@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/architecture.md sha256=8e2ee9acd604c495443d0f17d8274274cc488361e3fcec9e63cad2ea4c2b979d -->
+<!-- fennara-i18n: locale=ko source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
 <a id="architecture"></a>
 # 아키텍처
 
@@ -59,8 +59,8 @@ flowchart LR
 
 | 플랫폼 경로 | 동작 |
 | --- | --- |
-| Windows | Godot 에디터 창에 연결된 네이티브 WebView2 자식 또는 오버레이. |
-| macOS | Godot 에디터 창에 연결된 네이티브 WKWebView. |
+| Windows | Godot 에디터 창에 연결된 네이티브 WebView2 자식 또는 오버레이로, 겹치는 Godot 팝업, 임베디드 창, CanvasLayer 또는 최상위 컨트롤이 표시되는 동안 숨겨집니다. |
+| macOS | Godot 에디터 창에 연결된 네이티브 WKWebView로, Windows와 동일한 겹치는 Godot UI 숨김 처리를 사용합니다. |
 | Linux | Fennara 앱 데이터의 공유 CEF 런타임을 사용해 내부 Godot `TextureRect`에 CEF 오프스크린 렌더링. |
 
 사용자는 다음 실행부터 내장 채팅을 시스템 브라우저에서 열도록 Chat Settings를 설정할 수도 있습니다. 이 모드에서 Godot 독은 **Open chat** 대체 패널을 표시하고 소유 에디터의 `chat_token`을 사용하여 `127.0.0.1`의 로컬 데몬에서 같은 채팅 UI를 제공합니다. 표시 화면만 바뀌며 제공업체 설정, 채팅 기록, 프로젝트 범위, 스냅샷, 도구 실행, 외부 MCP 라우팅은 같은 데몬 경로를 유지합니다.

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/repo-map.md sha256=a6f2ff719d03e067423cd68229e6941f701a52bfc4ed84361327716d5d9e9c0d -->
+<!-- fennara-i18n: locale=tr source=docs/repo-map.md sha256=dd8616d3a3f73e8f05b95898cd34041186e47818eefe9f41f1f0a951f1c27fdb -->
 <a id="repo-map"></a>
 # Depo Haritası
 
@@ -101,6 +101,7 @@ Bu, bu depoda çalışan katkıda bulunanlar ve kodlama aracıları için hızl�
 | `fennara-cpp/src/ui/setup_panel.cpp` | İlerleme, yeniden deneme, günlükler ve temizlenmiş rapor eylemlerine sahip, webview'dan bağımsız ilk çalıştırma kurulum paneli. |
 | `fennara-cpp/vendor/cef/` | Linux OSR köprüsünün kullandığı resmi CEF 139 başlık anlık görüntüsü. Çalışma zamanı ikili dosyaları eklentinin dışında kalır. |
 | `fennara-cpp/src/ui/webview_host*` | Yerel düzenleyici içi sohbet webview ana bilgisayarı ve platform arka uçları. |
+| `fennara-cpp/src/ui/native_webview_occlusion.*` | Çakışan Godot açılır pencereleri veya üst düzey düzenleyici arayüzü görünürken yerel webview katmanını geçici olarak gizleyen ortak Windows ve macOS algılama mantığı. |
 | `fennara-cpp/src/ui/linux_cef_runtime.*` | Yalnızca Linux'a yönelik paylaşılan CEF çalışma zamanı keşfi, işaretçi doğrulaması ve dinamik `libcef.so` yükleyici temeli. |
 | `fennara-cpp/src/ui/linux_cef_osr.*` / `linux_cef_input.*` / `linux_cef_bridge_loader.*` / `linux_cef_bridge_api.hpp` | Dahili sohbet webview'ı için yalnızca Linux'a yönelik CEF ekran dışı işleme yüzeyi, Godot girdi iletimi, köprü ABI yüklemesi ve Godot doku güncellemeleri. |
 | `fennara-cpp/src/ui/linux_cef_bridge/` | Sabitlenmiş resmi CEF 139 `libcef_dll_wrapper` kaynağından ve Fennara'nın CEF OSR bağdaştırıcısından derlenen, yalnızca Linux'a yönelik küçük köprü kitaplığı. Ana GDExtension, harici `libcef.so` çalışma zamanı yüklendikten sonra bunu dlopen ile açar. |

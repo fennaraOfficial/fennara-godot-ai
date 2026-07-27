@@ -1,5 +1,6 @@
 #ifdef __APPLE__
 
+#include "native_webview_occlusion.hpp"
 #include "webview_backend.hpp"
 
 #include <godot_cpp/classes/control.hpp>
@@ -563,13 +564,17 @@ bool start(void **webview, void **parent_window, godot::Control *owner, const go
     return ok;
 }
 
-void resize_to(void *webview, void **parent_window, godot::Control *owner) {
+bool resize_to(void *webview,
+               void **parent_window,
+               godot::Control *owner,
+               bool visible) {
     if (webview == nullptr || parent_window == nullptr) {
-        return;
+        return false;
     }
 
     Geometry geometry = compute_geometry(owner);
     NSWindow *target_window = native_window_for_owner(owner);
+    __block bool surface_ready = false;
     run_on_main_sync(^{
         WKWebView *view = reinterpret_cast<WKWebView *>(webview);
         NSWindow *current_window = reinterpret_cast<NSWindow *>(*parent_window);
@@ -626,10 +631,13 @@ void resize_to(void *webview, void **parent_window, godot::Control *owner) {
         debug_log("macOS webview frame before set view={" + view_debug_string(view) + "}");
         [view setFrame:final_frame];
         debug_log("macOS webview final frame=(" + rect_string(final_frame) +
-                  ") view_after_set={" + view_debug_string(view) + "} hidden=false");
-        [view setHidden:NO];
-        debug_log("macOS webview visible after setHidden view={" + view_debug_string(view) + "}");
+                  ") view_after_set={" + view_debug_string(view) +
+                  "} visible=" + godot::String(visible ? "true" : "false"));
+        [view setHidden:visible ? NO : YES];
+        debug_log("macOS webview visibility applied view={" + view_debug_string(view) + "}");
+        surface_ready = true;
     });
+    return surface_ready;
 }
 
 void set_visible(void *webview, bool visible) {
@@ -727,7 +735,12 @@ public:
         if (mac_webview::start(&webview, &parent_window, owner, url)) {
             current_url = url;
             started = true;
+            requested_visible = true;
+            owner_geometry_visible = true;
+            actual_visible = false;
+            occlusion_tracker.set_owner(owner);
             resize_to(owner);
+            process(0.0);
             return true;
         }
         output_error("Web chat native macOS webview could not start");
@@ -738,18 +751,57 @@ public:
         if (!started || owner == nullptr) {
             return;
         }
-        mac_webview::resize_to(webview, &parent_window, owner);
+        const godot::Vector2 size = owner->get_size();
+        owner_geometry_visible =
+            owner->is_visible_in_tree() && size.x > 0.0 && size.y > 0.0;
+        occlusion_tracker.set_owner(owner);
+        const bool next_visible =
+            requested_visible && owner_geometry_visible && !occluded;
+        const bool surface_ready = mac_webview::resize_to(
+            webview,
+            &parent_window,
+            owner,
+            next_visible);
+        if (!surface_ready) {
+            owner_geometry_visible = false;
+            actual_visible = false;
+            return;
+        }
+        actual_visible = next_visible;
     }
 
     void set_visible(bool visible) override {
         if (!started) {
             return;
         }
-        mac_webview::set_visible(webview, visible);
+        requested_visible = visible;
+        if (!visible) {
+            set_focused(false);
+        }
+        apply_visibility();
+    }
+
+    void process(double delta) override {
+        if (!started) {
+            return;
+        }
+
+        const bool next_occluded = occlusion_tracker.update(delta);
+        if (next_occluded == occluded) {
+            return;
+        }
+        occluded = next_occluded;
+        mac_webview::debug_log(
+            "macOS webview overlay occluded=" +
+            godot::String(occluded ? "true" : "false"));
+        apply_visibility();
     }
 
     void set_focused(bool focused) override {
         if (!started) {
+            return;
+        }
+        if (focused && !actual_visible) {
             return;
         }
         mac_webview::set_focused(webview, focused);
@@ -762,6 +814,11 @@ public:
         mac_webview::stop(&webview, &parent_window);
         current_url = "";
         started = false;
+        requested_visible = false;
+        owner_geometry_visible = false;
+        actual_visible = false;
+        occluded = false;
+        occlusion_tracker.reset();
     }
 
     bool is_started() const override {
@@ -769,10 +826,32 @@ public:
     }
 
 private:
+    void apply_visibility() {
+        if (!started) {
+            return;
+        }
+
+        const bool next_visible =
+            requested_visible && owner_geometry_visible && !occluded;
+        if (actual_visible == next_visible) {
+            return;
+        }
+        if (!next_visible) {
+            mac_webview::set_focused(webview, false);
+        }
+        actual_visible = next_visible;
+        mac_webview::set_visible(webview, actual_visible);
+    }
+
     void *webview = nullptr;
     void *parent_window = nullptr;
     godot::String current_url;
     bool started = false;
+    bool requested_visible = false;
+    bool owner_geometry_visible = false;
+    bool actual_visible = false;
+    bool occluded = false;
+    NativeWebviewOcclusionTracker occlusion_tracker;
 };
 
 std::unique_ptr<NativeWebviewBackend> create_backend() {
