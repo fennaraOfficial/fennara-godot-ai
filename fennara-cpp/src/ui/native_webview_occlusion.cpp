@@ -8,9 +8,10 @@
 #include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/node.hpp>
-#include <godot_cpp/classes/object.hpp>
+#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
 #include <godot_cpp/classes/window.hpp>
+#include <godot_cpp/core/object.hpp>
 #include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/rect2i.hpp>
 #include <godot_cpp/variant/transform2d.hpp>
@@ -23,14 +24,10 @@ namespace fennara::webview_backend {
 namespace {
 
 constexpr double kCandidateRefreshSeconds = 0.5;
+constexpr double kStructureRefreshSeconds = 0.05;
 
 godot::Control *control_from_id(uint64_t id) {
     return godot::Object::cast_to<godot::Control>(
-        godot::ObjectDB::get_instance(id));
-}
-
-godot::CanvasLayer *canvas_layer_from_id(uint64_t id) {
-    return godot::Object::cast_to<godot::CanvasLayer>(
         godot::ObjectDB::get_instance(id));
 }
 
@@ -51,7 +48,8 @@ bool rect_has_area(const godot::Rect2 &rect) {
     return rect.size.x > 0.0 && rect.size.y > 0.0;
 }
 
-bool controls_overlap(godot::Control *candidate, godot::Control *owner) {
+bool rendered_control_overlaps(godot::Control *candidate,
+                               godot::Control *owner) {
     if (candidate == nullptr ||
         owner == nullptr ||
         !candidate->is_visible_in_tree() ||
@@ -59,34 +57,20 @@ bool controls_overlap(godot::Control *candidate, godot::Control *owner) {
         return false;
     }
 
-    const godot::Rect2 candidate_rect = transformed_control_rect(candidate);
+    godot::RenderingServer *rendering =
+        godot::RenderingServer::get_singleton();
+    if (rendering == nullptr) {
+        return false;
+    }
+
+    const godot::Rect2 local_draw_rect =
+        rendering->debug_canvas_item_get_rect(candidate->get_canvas_item());
+    const godot::Rect2 candidate_rect =
+        candidate->get_global_transform_with_canvas().xform(local_draw_rect);
     const godot::Rect2 owner_rect = transformed_control_rect(owner);
     return rect_has_area(candidate_rect) &&
            rect_has_area(owner_rect) &&
            candidate_rect.intersects(owner_rect);
-}
-
-bool visible_control_overlaps(godot::Node *node, godot::Control *owner) {
-    if (node == nullptr) {
-        return false;
-    }
-
-    if (auto *control = godot::Object::cast_to<godot::Control>(node)) {
-        if (controls_overlap(control, owner)) {
-            return true;
-        }
-        if (!control->is_visible_in_tree()) {
-            return false;
-        }
-    }
-
-    const int32_t child_count = node->get_child_count();
-    for (int32_t index = 0; index < child_count; index++) {
-        if (visible_control_overlaps(node->get_child(index), owner)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 bool embedded_window_overlaps(godot::Window *candidate, godot::Control *owner) {
@@ -111,12 +95,20 @@ bool embedded_window_overlaps(godot::Window *candidate, godot::Control *owner) {
 
 bool active_popup_overlaps(godot::Control *owner) {
     godot::DisplayServer *display = godot::DisplayServer::get_singleton();
-    if (display == nullptr || owner == nullptr || owner->get_window() == nullptr) {
+    godot::Window *owner_window =
+        owner != nullptr ? owner->get_window() : nullptr;
+    if (display == nullptr ||
+        owner_window == nullptr ||
+        owner_window->is_embedded()) {
+        return false;
+    }
+
+    const int32_t owner_window_id = owner_window->get_window_id();
+    if (owner_window_id == godot::DisplayServer::INVALID_WINDOW_ID) {
         return false;
     }
 
     const int32_t popup_id = display->window_get_active_popup();
-    const int32_t owner_window_id = owner->get_window()->get_window_id();
     if (popup_id == godot::DisplayServer::INVALID_WINDOW_ID ||
         popup_id == owner_window_id) {
         return false;
@@ -171,10 +163,15 @@ bool NativeWebviewOcclusionTracker::update(double delta) {
 
     godot::SceneTree *tree = owner->get_tree();
     const int32_t node_count = tree != nullptr ? tree->get_node_count() : -1;
-    refresh_remaining -= std::max(0.0, delta);
-    if (node_count != last_node_count || refresh_remaining <= 0.0) {
+    const double elapsed = std::max(0.0, delta);
+    refresh_remaining -= elapsed;
+    structure_refresh_remaining -= elapsed;
+    const bool structure_changed = node_count != last_node_count;
+    if (refresh_remaining <= 0.0 ||
+        (structure_changed && structure_refresh_remaining <= 0.0)) {
         refresh_candidates(owner);
         refresh_remaining = kCandidateRefreshSeconds;
+        structure_refresh_remaining = kStructureRefreshSeconds;
     }
 
     if (active_popup_overlaps(owner)) {
@@ -187,12 +184,14 @@ bool NativeWebviewOcclusionTracker::update(double delta) {
         }
     }
 
-    for (uint64_t id : canvas_layer_ids) {
-        godot::CanvasLayer *layer = canvas_layer_from_id(id);
+    for (uint64_t id : canvas_layer_control_ids) {
+        godot::Control *candidate = control_from_id(id);
+        godot::CanvasLayer *layer =
+            candidate != nullptr ? candidate->get_canvas_layer_node() : nullptr;
         if (layer != nullptr &&
             layer->is_visible() &&
             layer->get_layer() >= 0 &&
-            visible_control_overlaps(layer, owner)) {
+            rendered_control_overlaps(candidate, owner)) {
             return true;
         }
     }
@@ -202,7 +201,7 @@ bool NativeWebviewOcclusionTracker::update(double delta) {
         if (candidate != nullptr &&
             candidate->is_set_as_top_level() &&
             candidate->get_z_index() >= 0 &&
-            controls_overlap(candidate, owner)) {
+            rendered_control_overlaps(candidate, owner)) {
             return true;
         }
     }
@@ -214,14 +213,15 @@ void NativeWebviewOcclusionTracker::reset() {
     owner_id = 0;
     last_node_count = -1;
     refresh_remaining = 0.0;
+    structure_refresh_remaining = 0.0;
     top_level_control_ids.clear();
-    canvas_layer_ids.clear();
+    canvas_layer_control_ids.clear();
     window_ids.clear();
 }
 
 void NativeWebviewOcclusionTracker::refresh_candidates(godot::Control *owner) {
     top_level_control_ids.clear();
-    canvas_layer_ids.clear();
+    canvas_layer_control_ids.clear();
     window_ids.clear();
 
     godot::EditorInterface *editor = godot::EditorInterface::get_singleton();
@@ -259,7 +259,8 @@ void NativeWebviewOcclusionTracker::refresh_candidates(godot::Control *owner) {
 void NativeWebviewOcclusionTracker::collect_candidates(
         godot::Node *node,
         godot::Control *owner,
-        godot::Node *edited_scene_root) {
+        godot::Node *edited_scene_root,
+        bool inside_canvas_layer) {
     if (node == nullptr ||
         node == edited_scene_root ||
         node == owner ||
@@ -270,10 +271,13 @@ void NativeWebviewOcclusionTracker::collect_candidates(
     if (auto *window = godot::Object::cast_to<godot::Window>(node)) {
         append_unique(window_ids, window);
     }
-    if (auto *layer = godot::Object::cast_to<godot::CanvasLayer>(node)) {
-        append_unique(canvas_layer_ids, layer);
-    }
+    const bool next_inside_canvas_layer =
+        inside_canvas_layer ||
+        godot::Object::cast_to<godot::CanvasLayer>(node) != nullptr;
     if (auto *control = godot::Object::cast_to<godot::Control>(node)) {
+        if (next_inside_canvas_layer) {
+            append_unique(canvas_layer_control_ids, control);
+        }
         if (control->is_set_as_top_level()) {
             append_unique(top_level_control_ids, control);
         }
@@ -281,7 +285,10 @@ void NativeWebviewOcclusionTracker::collect_candidates(
 
     const int32_t child_count = node->get_child_count();
     for (int32_t index = 0; index < child_count; index++) {
-        collect_candidates(node->get_child(index), owner, edited_scene_root);
+        collect_candidates(node->get_child(index),
+                           owner,
+                           edited_scene_root,
+                           next_inside_canvas_layer);
     }
 }
 

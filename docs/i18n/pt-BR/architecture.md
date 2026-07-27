@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=pt-BR source=docs/architecture.md sha256=8e2ee9acd604c495443d0f17d8274274cc488361e3fcec9e63cad2ea4c2b979d -->
+<!-- fennara-i18n: locale=pt-BR source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
 <a id="architecture"></a>
 # Arquitetura
 
@@ -81,8 +81,8 @@ contrato compartilhado do host separa dois estilos de superfície de navegador:
 
 | Caminho da plataforma | Comportamento |
 | --- | --- |
-| Windows | Filho ou overlay nativo do WebView2 anexado à janela do editor Godot. |
-| macOS | WKWebView nativo anexado à janela do editor Godot. |
+| Windows | Filho ou overlay nativo do WebView2 anexado à janela do editor Godot, ocultado enquanto pop-ups do Godot, janelas incorporadas, camadas de tela ou controles de nível superior sobrepostos estiverem visíveis. |
+| macOS | WKWebView nativo anexado à janela do editor Godot, com a mesma ocultação de UI sobreposta do Godot usada no Windows. |
 | Linux | Renderização off-screen do CEF em um `TextureRect` interno do Godot, usando um runtime CEF compartilhado nos dados de aplicativo do Fennara. |
 
 Os usuários também podem definir em Chat Settings que o chat integrado seja

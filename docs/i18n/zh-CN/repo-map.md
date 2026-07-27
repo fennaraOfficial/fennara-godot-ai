@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/repo-map.md sha256=a6f2ff719d03e067423cd68229e6941f701a52bfc4ed84361327716d5d9e9c0d -->
+<!-- fennara-i18n: locale=zh-CN source=docs/repo-map.md sha256=dd8616d3a3f73e8f05b95898cd34041186e47818eefe9f41f1f0a951f1c27fdb -->
 <a id="repo-map"></a>
 # 仓库地图
 
@@ -101,6 +101,7 @@
 | `fennara-cpp/src/ui/setup_panel.cpp` | 不依赖 webview 的首次运行设置面板，带进度、重试、日志和净化报告操作。 |
 | `fennara-cpp/vendor/cef/` | Linux OSR 桥接使用的官方 CEF 139 头文件快照。运行时二进制文件保留在插件之外。 |
 | `fennara-cpp/src/ui/webview_host*` | 原生编辑器内聊天 webview 主机和平台后端。 |
+| `fennara-cpp/src/ui/native_webview_occlusion.*` | Windows 和 macOS 共用的检测逻辑，在重叠的 Godot 弹出窗口或顶层编辑器 UI 可见时临时隐藏原生 webview 覆盖层。 |
 | `fennara-cpp/src/ui/linux_cef_runtime.*` | 仅限 Linux 的共享 CEF 运行时发现、标记验证和动态 `libcef.so` 加载器基础。 |
 | `fennara-cpp/src/ui/linux_cef_osr.*` / `linux_cef_input.*` / `linux_cef_bridge_loader.*` / `linux_cef_bridge_api.hpp` | 仅限 Linux 的 CEF 屏幕外渲染表面、Godot 输入转发、桥接 ABI 加载和 Godot 纹理更新，供内部聊天 webview 使用。 |
 | `fennara-cpp/src/ui/linux_cef_bridge/` | 由固定版本的官方 CEF 139 `libcef_dll_wrapper` 源码和 Fennara CEF OSR 适配器构建的小型 Linux 专用桥接库。加载外部 `libcef.so` 运行时后，主 GDExtension 会对它调用 dlopen。 |

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=fr source=docs/architecture.md sha256=8e2ee9acd604c495443d0f17d8274274cc488361e3fcec9e63cad2ea4c2b979d -->
+<!-- fennara-i18n: locale=fr source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
 <a id="architecture"></a>
 # Architecture
 
@@ -82,8 +82,8 @@ Le contrat d'hôte partagé distingue trois types de surface de navigateur :
 
 | Parcours de plateforme | Comportement |
 | --- | --- |
-| Windows | Enfant ou superposition WebView2 natif attaché à la fenêtre de l'éditeur Godot. |
-| macOS | WKWebView native attachée à la fenêtre de l'éditeur Godot. |
+| Windows | Enfant ou superposition WebView2 natif attaché à la fenêtre de l'éditeur Godot, masqué lorsque des fenêtres contextuelles Godot, des fenêtres intégrées, des couches de canevas ou des contrôles de premier plan qui le recouvrent sont visibles. |
+| macOS | WKWebView native attachée à la fenêtre de l'éditeur Godot, avec le même masquage en cas de recouvrement par l'interface Godot que sous Windows. |
 | Linux | Rendu CEF hors écran dans un `TextureRect` interne de Godot, avec un environnement CEF partagé provenant des données d'application de Fennara. |
 
 Les utilisateurs peuvent aussi demander dans Chat Settings que le chat intégré

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=fr source=docs/repo-map.md sha256=a6f2ff719d03e067423cd68229e6941f701a52bfc4ed84361327716d5d9e9c0d -->
+<!-- fennara-i18n: locale=fr source=docs/repo-map.md sha256=dd8616d3a3f73e8f05b95898cd34041186e47818eefe9f41f1f0a951f1c27fdb -->
 <a id="repo-map"></a>
 # Plan du dépôt
 
@@ -101,6 +101,7 @@ Voici le plan rapide destiné aux contributeurs et aux agents de programmation q
 | `fennara-cpp/src/ui/setup_panel.cpp` | Panneau natif de première installation indépendant de la webview, avec progression, nouvelle tentative, journaux et actions sur le rapport nettoyé. |
 | `fennara-cpp/vendor/cef/` | Copie des en-têtes officiels CEF 139 utilisée par le pont OSR Linux. Les binaires d'exécution restent hors de l'addon. |
 | `fennara-cpp/src/ui/webview_host*` | Hôte natif de la webview de chat intégrée à l'éditeur et backends des plateformes. |
+| `fennara-cpp/src/ui/native_webview_occlusion.*` | Détection partagée entre Windows et macOS qui masque temporairement la superposition de webview native lorsqu'une fenêtre contextuelle Godot ou une interface d'éditeur de premier plan la recouvre. |
 | `fennara-cpp/src/ui/linux_cef_runtime.*` | Découverte Linux de l'environnement CEF partagé, validation du marqueur et base du chargeur dynamique de `libcef.so`. |
 | `fennara-cpp/src/ui/linux_cef_osr.*` / `linux_cef_input.*` / `linux_cef_bridge_loader.*` / `linux_cef_bridge_api.hpp` | Surface de rendu CEF hors écran propre à Linux, transmission des entrées Godot, chargement de l'ABI du pont et mises à jour de la texture Godot pour la webview de chat interne. |
 | `fennara-cpp/src/ui/linux_cef_bridge/` | Petite bibliothèque de pont réservée à Linux et compilée depuis les sources officielles épinglées de `libcef_dll_wrapper` pour CEF 139 et l'adaptateur CEF OSR de Fennara. La GDExtension principale la charge par dlopen après le chargement de l'environnement externe `libcef.so`. |

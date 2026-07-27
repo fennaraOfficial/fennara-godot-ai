@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/architecture.md sha256=8e2ee9acd604c495443d0f17d8274274cc488361e3fcec9e63cad2ea4c2b979d -->
+<!-- fennara-i18n: locale=tr source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
 <a id="architecture"></a>
 # Mimari
 
@@ -81,8 +81,8 @@ Paylaşılan ana bilgisayar sözleşmesi iki tarayıcı yüzeyi biçimini ayır�
 
 | Platform Yolu | Davranış |
 | --- | --- |
-| Windows | Godot düzenleyici penceresine bağlanan yerel WebView2 alt penceresi/katmanı. |
-| macOS | Godot düzenleyici penceresine bağlanan yerel WKWebView. |
+| Windows | Godot düzenleyici penceresine bağlanan ve çakışan Godot açılır pencereleri, gömülü pencereler, tuval katmanları veya üst düzey denetimler görünürken gizlenen yerel WebView2 alt penceresi/katmanı. |
+| macOS | Godot düzenleyici penceresine bağlanan ve Windows ile aynı çakışan Godot arayüzü gizleme davranışını kullanan yerel WKWebView. |
 | Linux | Fennara uygulama verilerindeki paylaşılan CEF çalışma zamanını kullanan, dahili bir Godot `TextureRect` içine CEF ekran dışı işleme. |
 
 Kullanıcılar ayrıca Chat Settings içinde yerleşik sohbetin bir sonraki sefer

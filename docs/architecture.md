@@ -73,7 +73,7 @@ contract separates two browser surface styles:
 
 | Platform Path | Behavior |
 | --- | --- |
-| Windows | Native WebView2 child/overlay attached to the Godot editor window, suppressed while overlapping Godot popup, modal, canvas-layer, or top-level UI is visible. |
+| Windows | Native WebView2 child/overlay attached to the Godot editor window, suppressed while overlapping Godot popups, embedded windows, canvas layers, or top-level controls are visible. |
 | macOS | Native WKWebView attached to the Godot editor window, using the same overlapping Godot UI suppression as Windows. |
 | Linux | CEF off-screen rendering into an internal Godot `TextureRect`, using a shared CEF runtime from Fennara app data. |
 

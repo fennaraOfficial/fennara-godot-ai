@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/repo-map.md sha256=a6f2ff719d03e067423cd68229e6941f701a52bfc4ed84361327716d5d9e9c0d -->
+<!-- fennara-i18n: locale=ko source=docs/repo-map.md sha256=dd8616d3a3f73e8f05b95898cd34041186e47818eefe9f41f1f0a951f1c27fdb -->
 <a id="repo-map"></a>
 # 저장소 지도
 
@@ -101,6 +101,7 @@
 | `fennara-cpp/src/ui/setup_panel.cpp` | 진행 상황, 재시도, 로그, 정제된 보고서 작업을 제공하는 웹뷰 비의존 최초 실행 설정 패널. |
 | `fennara-cpp/vendor/cef/` | Linux OSR 브리지에서 사용하는 공식 CEF 139 헤더 스냅샷. 런타임 바이너리는 애드온 외부에 둡니다. |
 | `fennara-cpp/src/ui/webview_host*` | 네이티브 편집기 내 채팅 웹뷰 호스트와 플랫폼 백엔드. |
+| `fennara-cpp/src/ui/native_webview_occlusion.*` | 겹치는 Godot 팝업 또는 최상위 편집기 UI가 표시되는 동안 네이티브 웹뷰 오버레이를 일시적으로 숨기는 Windows 및 macOS 공용 감지 로직. |
 | `fennara-cpp/src/ui/linux_cef_runtime.*` | Linux 전용 공유 CEF 런타임 검색, 마커 검증, 동적 `libcef.so` 로더 기반. |
 | `fennara-cpp/src/ui/linux_cef_osr.*` / `linux_cef_input.*` / `linux_cef_bridge_loader.*` / `linux_cef_bridge_api.hpp` | Linux 전용 CEF 오프스크린 렌더링 표면, Godot 입력 전달, 브리지 ABI 로딩, Godot 텍스처 업데이트. |
 | `fennara-cpp/src/ui/linux_cef_bridge/` | 고정된 공식 CEF 139 `libcef_dll_wrapper` 소스와 Fennara의 CEF OSR 어댑터로 빌드되는 작은 Linux 전용 브리지 라이브러리. 주 GDExtension은 외부 `libcef.so` 런타임이 로드된 뒤 이 라이브러리를 dlopen합니다. |

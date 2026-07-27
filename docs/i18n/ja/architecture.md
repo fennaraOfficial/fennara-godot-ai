@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/architecture.md sha256=8e2ee9acd604c495443d0f17d8274274cc488361e3fcec9e63cad2ea4c2b979d -->
+<!-- fennara-i18n: locale=ja source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
 <a id="architecture"></a>
 # アーキテクチャ
 
@@ -61,8 +61,8 @@ flowchart LR
 
 | プラットフォーム経路 | 動作 |
 | --- | --- |
-| Windows | Godot エディターウィンドウに接続されたネイティブ WebView2 の子ウィンドウまたはオーバーレイです。 |
-| macOS | Godot エディターウィンドウに接続されたネイティブ WKWebView です。 |
+| Windows | Godot エディターウィンドウに接続されたネイティブ WebView2 の子ウィンドウまたはオーバーレイです。重なっている Godot のポップアップ、埋め込みウィンドウ、CanvasLayer、またはトップレベルコントロールが表示されている間は非表示になります。 |
+| macOS | Godot エディターウィンドウに接続されたネイティブ WKWebView で、Windows と同じ重なった Godot UI の非表示処理を使用します。 |
 | Linux | Fennara のアプリデータにある共有 CEF ランタイムを使用し、Godot 内部の `TextureRect` へオフスクリーンレンダリングします。 |
 
 ユーザーはチャット設定で、次回から内蔵チャットをシステムブラウザーで開くようにも設定できます。このモードでは Godot ドックに **Open chat** フォールバックパネルが表示され、所有元エディターの `chat_token` を使って、`127.0.0.1` のローカルデーモンから同じチャット UI が配信されます。変わるのは表示面だけです。プロバイダー設定、チャット履歴、プロジェクトスコープ、スナップショット、ツール実行、外部 MCP のルーティングは、引き続き同じデーモン経路を使用します。

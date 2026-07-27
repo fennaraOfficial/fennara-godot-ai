@@ -294,8 +294,11 @@ public:
             debug_log("Web chat recreating native Windows webview for window id=" +
                        godot::String::num_int64(window_id));
             godot::String url = current_url;
+            const bool preserved_requested_visible = requested_visible;
             stop();
-            start(owner, url);
+            if (start(owner, url)) {
+                set_visible(preserved_requested_visible);
+            }
             return;
         }
 
