@@ -159,7 +159,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
     Ok(())
 }
 
-fn resolve_exact_target(request: &str) -> Result<String, String> {
+pub(crate) fn resolve_exact_target(request: &str) -> Result<String, String> {
     if matches!(
         ReleaseSelector::from_version_request(request)?,
         ReleaseSelector::ExactVersion(_)

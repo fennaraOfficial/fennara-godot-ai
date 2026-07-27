@@ -108,6 +108,11 @@ Installation has two safe paths:
   components. It keeps the project addon unchanged. An explicit `--version`
   must match the existing addon.
 
+For release installs, the CLI first resolves the request to one exact version,
+updates the installed Fennara CLI when that release provides a newer one, then
+continues the install with the replacement CLI. Local `--source` installs do
+not contact the release service or self-update.
+
 ## Prepare An Addon-Free CI Export
 
 If `addons/fennara/` is excluded from a CI checkout, remove Fennara's persistent
