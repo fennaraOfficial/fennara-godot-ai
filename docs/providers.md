@@ -89,6 +89,7 @@ Fennara stores built-in chat settings locally through the daemon, outside the Go
 - custom provider header values
 - custom OpenAI-compatible provider definitions
 - local provider base URLs
+- separate Ollama and LM Studio maximum output-token values
 - selected model
 - reasoning effort
 - provider response timeout
@@ -138,11 +139,22 @@ ollama/llama3.1:8b
 Older `local/<model>` selections are still accepted as Ollama compatibility
 aliases. Prefer the explicit `ollama/<model>` form for new settings.
 
+Fennara sends Ollama's per-call maximum as the OpenAI-compatible `max_tokens`
+field, which Ollama maps to its native `num_predict` option.
+
 For LM Studio, start the local server from LM Studio and choose a model id shaped like:
 
 ```text
 lmstudio/<loaded-model-id>
 ```
+
+The Ollama and LM Studio provider setup forms use the same default and
+context-capping policy for separate provider-specific per-call maximum output
+settings. Each setting defaults to 8,192 tokens. When a local server reports the
+loaded context length, Fennara caps that provider's setting at half the context
+so requests retain input room. Fennara sends this effective limit as
+`max_tokens` and reserves the same value when deciding when to compact chat
+history.
 
 ## Model Catalog
 

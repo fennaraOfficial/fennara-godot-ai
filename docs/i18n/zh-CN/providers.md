@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/providers.md sha256=cb9c3750ebffd837ab24519959fdac8f39ba41cc32b1a8e0c467c500b56f7cb5 -->
+<!-- fennara-i18n: locale=zh-CN source=docs/providers.md sha256=d5f056754b227e0b3fe57ed00c86e9d16b9dd39cef2250d43e4417912ae5e07c -->
 <a id="built-in-chat-providers"></a>
 # 内置聊天提供方
 
@@ -96,6 +96,7 @@ Fennara 通过守护进程在 Godot 项目之外本地存储内置聊天设置�
 - 自定义提供方标头值
 - 自定义 OpenAI 兼容提供方定义
 - 本地提供方基础 URL
+- 分别存储的 Ollama 和 LM Studio 最大输出令牌值
 - 选定模型
 - 推理强度
 - 提供方响应超时
@@ -145,11 +146,20 @@ ollama/llama3.1:8b
 较早的 `local/<model>` 选择仍会作为 Ollama 兼容
 别名被接受。对于新设置，请优先使用明确的 `ollama/<model>` 形式。
 
+Fennara 会通过 OpenAI 兼容的 `max_tokens` 字段发送 Ollama 的单次调用
+最大值，Ollama 会将该字段映射到原生的 `num_predict` 选项。
+
 对于 LM Studio，请从 LM Studio 启动本地服务器，并选择一个形式如下的模型 ID：
 
 ```text
 lmstudio/<loaded-model-id>
 ```
+
+Ollama 和 LM Studio 提供商设置表单对每个提供商分别存储的单次调用最大
+输出设置采用相同的默认值和上下文限制策略。每项设置的默认值均为 8,192
+个令牌。当本地服务器报告已加载的上下文长度时，Fennara 会将该提供商的
+设置限制为上下文的一半，以便为输入保留空间。Fennara 会将这个有效上限
+作为 `max_tokens` 发送，并在决定何时压缩聊天历史记录时预留相同的值。
 
 <a id="model-catalog"></a>
 ## 模型目录

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/providers.md sha256=cb9c3750ebffd837ab24519959fdac8f39ba41cc32b1a8e0c467c500b56f7cb5 -->
+<!-- fennara-i18n: locale=tr source=docs/providers.md sha256=d5f056754b227e0b3fe57ed00c86e9d16b9dd39cef2250d43e4417912ae5e07c -->
 <a id="built-in-chat-providers"></a>
 # Yerleşik Sohbet Sağlayıcıları
 
@@ -78,6 +78,7 @@ Fennara yerleşik sohbet ayarlarını daemon aracılığıyla, Godot projesinin 
 - özel sağlayıcı başlık değerleri
 - özel OpenAI uyumlu sağlayıcı tanımları
 - yerel sağlayıcı temel URL'leri
+- Ollama ve LM Studio için ayrı maksimum çıkış token değerleri
 - seçili model
 - akıl yürütme yoğunluğu
 - sağlayıcı yanıt zaman aşımı
@@ -125,11 +126,22 @@ ollama/llama3.1:8b
 
 Daha eski `local/<model>` seçimleri Ollama uyumluluk diğer adları olarak hâlâ kabul edilir. Yeni ayarlarda açık `ollama/<model>` biçimini tercih edin.
 
+Fennara, Ollama'nın çağrı başına üst sınırını OpenAI uyumlu `max_tokens`
+alanında gönderir. Ollama bu alanı yerel `num_predict` seçeneğiyle eşler.
+
 LM Studio için yerel sunucuyu LM Studio'dan başlatın ve şu biçimde bir model kimliği seçin:
 
 ```text
 lmstudio/<loaded-model-id>
 ```
+
+Ollama ve LM Studio sağlayıcı kurulum formları, her sağlayıcı için ayrı ayrı
+saklanan çağrı başına maksimum çıkış ayarlarına aynı varsayılan değeri ve bağlam
+sınırlama politikasını uygular. Her ayar varsayılan olarak 8.192 tokendir. Yerel
+bir sunucu yüklenen bağlam uzunluğunu bildirdiğinde Fennara, girdi için yer
+bırakmak amacıyla o sağlayıcının ayarını bağlamın yarısıyla sınırlar. Fennara bu
+etkili sınırı `max_tokens` olarak gönderir ve sohbet geçmişini ne zaman
+sıkıştıracağına karar verirken aynı değeri ayırır.
 
 <a id="model-catalog"></a>
 ## Model Kataloğu

@@ -14,9 +14,10 @@ pub(crate) const PROVIDER_ID: &str = ProviderId::OLLAMA;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_MODELS_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub(crate) fn provider_definition(base_url: &str) -> ProviderDefinition {
+pub(crate) fn provider_definition(base_url: &str, max_output_tokens: u32) -> ProviderDefinition {
     let mut request = RequestDefaults::default();
     request.generation.temperature = Some(0.7);
+    request.generation.max_output_tokens = Some(max_output_tokens);
 
     ProviderDefinition {
         id: ProviderId::unchecked(PROVIDER_ID),
@@ -279,4 +280,16 @@ fn value_includes_image(value: &Value) -> bool {
 
 fn fallback_display_name(id: &str) -> String {
     id.split('/').next_back().unwrap_or(id).replace('-', " ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_uses_configured_max_output_tokens_for_requests() {
+        let provider = provider_definition(DEFAULT_OLLAMA_BASE_URL, 8_192);
+
+        assert_eq!(provider.request.generation.max_output_tokens, Some(8_192));
+    }
 }

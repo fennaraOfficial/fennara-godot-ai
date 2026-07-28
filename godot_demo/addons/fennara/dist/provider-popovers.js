@@ -22,6 +22,8 @@
     const providerKeyTitle = elements.providerKeyTitle || null;
     const providerKeyInlineInput = elements.providerKeyInlineInput || null;
     const ollamaBaseUrlInput = elements.ollamaBaseUrlInput || null;
+    const localMaxOutputField = elements.localMaxOutputField || null;
+    const localMaxOutputInput = elements.localMaxOutputInput || null;
     const localSetupTitle = elements.localSetupTitle || null;
     const localSetupHelp = elements.localSetupHelp || null;
     const defaultOllamaBaseUrl = settings.defaultOllamaBaseUrl || "";
@@ -38,6 +40,8 @@
     const setKeyPromptProvider = callbacks.setKeyPromptProvider || noop;
     const requestModelList = callbacks.requestModelList || noop;
     const providerBaseUrl = callbacks.providerBaseUrl || (() => "");
+    const getLocalMaxOutputTokens =
+      callbacks.getLocalMaxOutputTokens || (() => 8192);
     const providerStatusLabel = callbacks.providerStatusLabel || (() => "");
     const providerUsesBaseUrlSetup = callbacks.providerUsesBaseUrlSetup || (() => false);
     const chooseProvider = callbacks.chooseProvider || noop;
@@ -290,6 +294,13 @@
       if (ollamaBaseUrlInput) {
         ollamaBaseUrlInput.placeholder = defaultBaseUrl;
         ollamaBaseUrlInput.value = baseUrl === defaultBaseUrl ? "" : baseUrl;
+      }
+      const isLocalGenerationProvider = ["ollama", "lmstudio"].includes(provider?.id);
+      if (localMaxOutputField) {
+        localMaxOutputField.hidden = !isLocalGenerationProvider;
+      }
+      if (localMaxOutputInput && isLocalGenerationProvider) {
+        localMaxOutputInput.value = String(getLocalMaxOutputTokens(provider.id));
       }
     }
 

@@ -15,11 +15,15 @@ pub(crate) const API_KEY_ENV: &str = "LMSTUDIO_API_KEY";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_MODELS_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub(crate) fn provider_definition(base_url: &str, api_key: Option<&str>) -> ProviderDefinition {
+pub(crate) fn provider_definition(
+    base_url: &str,
+    api_key: Option<&str>,
+    max_output_tokens: u32,
+) -> ProviderDefinition {
     let mut request = RequestDefaults::default();
     request.generation = GenerationDefaults {
         temperature: Some(0.7),
-        max_output_tokens: None,
+        max_output_tokens: Some(max_output_tokens),
         reasoning_effort: None,
     };
 
@@ -334,4 +338,16 @@ fn auth(api_key: Option<&str>) -> Auth {
 
 fn fallback_display_name(id: &str) -> String {
     id.split('/').next_back().unwrap_or(id).replace('-', " ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_uses_configured_max_output_tokens_for_requests() {
+        let provider = provider_definition(DEFAULT_BASE_URL, None, 8_192);
+
+        assert_eq!(provider.request.generation.max_output_tokens, Some(8_192));
+    }
 }

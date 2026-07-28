@@ -9,6 +9,7 @@ pub(crate) mod custom;
 mod deepseek;
 mod error;
 mod lmstudio;
+mod local_limits;
 pub(crate) mod models_dev;
 mod moonshot;
 mod nvidia;
@@ -113,6 +114,8 @@ pub(crate) fn settings_from_chat(settings: &ChatSettings) -> ProviderSettings {
         ollama_base_url: settings.ollama_base_url.clone(),
         lmstudio_base_url: settings
             .provider_base_url(types::ProviderId::LMSTUDIO, lmstudio::DEFAULT_BASE_URL),
+        ollama_max_output_tokens: settings.ollama_max_output_tokens,
+        lmstudio_max_output_tokens: settings.lmstudio_max_output_tokens,
         local_model_limits: local_model_limits_from_settings(&settings.local_model_context_lengths),
         request_timeout: std::time::Duration::from_secs(settings.provider_timeout_seconds),
     }
@@ -136,7 +139,10 @@ pub(crate) fn public_provider_registry(settings: &ChatSettings) -> Vec<PublicPro
             "OPENROUTER_API_KEY",
         ),
         local_provider(
-            ollama::provider_definition(&settings.ollama_base_url),
+            ollama::provider_definition(
+                &settings.ollama_base_url,
+                settings.ollama_max_output_tokens,
+            ),
             "local",
             super::settings::DEFAULT_OLLAMA_BASE_URL,
             settings.ollama_base_url.clone(),
@@ -146,6 +152,7 @@ pub(crate) fn public_provider_registry(settings: &ChatSettings) -> Vec<PublicPro
                 &settings
                     .provider_base_url(types::ProviderId::LMSTUDIO, lmstudio::DEFAULT_BASE_URL),
                 None,
+                settings.lmstudio_max_output_tokens,
             ),
             "local",
             lmstudio::DEFAULT_BASE_URL,
@@ -483,7 +490,12 @@ pub(crate) fn estimate_chat_context(
         estimated_input_tokens: context::estimate_request_tokens(&llm_request),
         usable_input_tokens: context::request_usable_input_tokens(&llm_request),
         raw_context_tokens: llm_request.model.model.limits.context_tokens,
-        max_output_tokens: llm_request.model.model.limits.output_tokens,
+        max_output_tokens: llm_request
+            .model
+            .request
+            .generation
+            .max_output_tokens
+            .or(llm_request.model.model.limits.output_tokens),
     })
 }
 
@@ -879,6 +891,8 @@ pub(crate) fn parse_model_ref(model: &str) -> Result<String, LlmError> {
         custom_providers: Vec::new(),
         ollama_base_url: super::settings::DEFAULT_OLLAMA_BASE_URL.to_string(),
         lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
+        ollama_max_output_tokens: super::settings::DEFAULT_LOCAL_MAX_OUTPUT_TOKENS,
+        lmstudio_max_output_tokens: super::settings::DEFAULT_LOCAL_MAX_OUTPUT_TOKENS,
         local_model_limits: BTreeMap::new(),
         request_timeout: std::time::Duration::from_secs(
             super::settings::DEFAULT_PROVIDER_TIMEOUT_SECONDS,
@@ -915,6 +929,53 @@ mod tests {
             settings_from_chat(&settings).request_timeout,
             std::time::Duration::from_secs(600)
         );
+    }
+
+    #[test]
+    fn lmstudio_context_estimate_uses_the_effective_per_call_limit() {
+        let mut settings = ChatSettings::default();
+        settings.lmstudio_max_output_tokens = 128;
+        settings
+            .local_model_context_lengths
+            .insert("lmstudio/qwen3.6-27b".to_string(), 65_536);
+        let provider_settings = settings_from_chat(&settings);
+
+        let estimate =
+            model_context_estimate(&provider_settings, "lmstudio/qwen3.6-27b", "medium").unwrap();
+
+        assert_eq!(estimate.raw_context_tokens, Some(65_536));
+        assert_eq!(estimate.max_output_tokens, Some(128));
+        assert_eq!(estimate.usable_input_tokens, Some(63_536));
+    }
+
+    #[test]
+    fn lmstudio_default_limit_keeps_small_models_usable() {
+        let mut settings = ChatSettings::default();
+        settings
+            .local_model_context_lengths
+            .insert("lmstudio/small".to_string(), 8_192);
+        let provider_settings = settings_from_chat(&settings);
+
+        let estimate =
+            model_context_estimate(&provider_settings, "lmstudio/small", "medium").unwrap();
+
+        assert_eq!(estimate.max_output_tokens, Some(4_096));
+        assert_eq!(estimate.usable_input_tokens, Some(4_096));
+    }
+
+    #[test]
+    fn ollama_default_limit_keeps_small_models_usable() {
+        let mut settings = ChatSettings::default();
+        settings
+            .local_model_context_lengths
+            .insert("ollama/qwen3:8b".to_string(), 8_192);
+        let provider_settings = settings_from_chat(&settings);
+
+        let estimate =
+            model_context_estimate(&provider_settings, "ollama/qwen3:8b", "medium").unwrap();
+
+        assert_eq!(estimate.max_output_tokens, Some(4_096));
+        assert_eq!(estimate.usable_input_tokens, Some(4_096));
     }
 
     #[test]

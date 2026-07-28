@@ -6,6 +6,7 @@ use super::catalog_cache;
 use super::custom;
 use super::deepseek;
 use super::lmstudio;
+use super::local_limits;
 use super::models_dev::OpenRouterCatalog;
 use super::moonshot;
 use super::nvidia;
@@ -125,6 +126,7 @@ impl Catalog {
         catalog.insert_provider(lmstudio::provider_definition(
             &settings.lmstudio_base_url,
             settings.lmstudio_api_key.as_deref(),
+            settings.lmstudio_max_output_tokens,
         ));
         catalog.insert_provider(deepseek::provider_definition(
             settings.deepseek_api_key.as_deref(),
@@ -156,8 +158,14 @@ impl Catalog {
         catalog.insert_provider(nvidia::provider_definition(
             settings.nvidia_api_key.as_deref(),
         ));
-        catalog.insert_provider(ollama::provider_definition(&settings.ollama_base_url));
-        catalog.insert_provider(local_provider_alias(&settings.ollama_base_url));
+        catalog.insert_provider(ollama::provider_definition(
+            &settings.ollama_base_url,
+            settings.ollama_max_output_tokens,
+        ));
+        catalog.insert_provider(local_provider_alias(
+            &settings.ollama_base_url,
+            settings.ollama_max_output_tokens,
+        ));
         for runtime in &settings.custom_providers {
             catalog.insert_provider(custom::provider_definition(runtime));
             for model in custom::model_definitions(&runtime.config) {
@@ -327,7 +335,15 @@ fn resolve_model(
     model: ModelDefinition,
     reference: ModelRef,
 ) -> ResolvedModel {
-    let request = provider.request.merged(&model.request);
+    let mut request = provider.request.merged(&model.request);
+    if local_limits::uses_configured_output_limit(&provider.id) {
+        if let Some(configured) = request.generation.max_output_tokens {
+            request.generation.max_output_tokens = Some(local_limits::effective_max_output_tokens(
+                configured,
+                model.limits.context_tokens,
+            ));
+        }
+    }
     ResolvedModel {
         reference,
         provider,
@@ -371,8 +387,8 @@ fn dynamic_model(provider_id: &ProviderId, model_id: &ModelId) -> ModelDefinitio
     }
 }
 
-fn local_provider_alias(base_url: &str) -> ProviderDefinition {
-    let mut provider = ollama::provider_definition(base_url);
+fn local_provider_alias(base_url: &str, max_output_tokens: u32) -> ProviderDefinition {
+    let mut provider = ollama::provider_definition(base_url, max_output_tokens);
     provider.id = ProviderId::unchecked(ProviderId::LOCAL);
     provider.name = "Local OpenAI-compatible".to_string();
     provider
@@ -411,6 +427,8 @@ mod tests {
             custom_providers: Vec::new(),
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
+            ollama_max_output_tokens: 8_192,
+            lmstudio_max_output_tokens: 8_192,
             local_model_limits: BTreeMap::new(),
             request_timeout: std::time::Duration::from_secs(120),
         }
@@ -520,6 +538,14 @@ mod tests {
             },
         );
         local_model_limits.insert(
+            "local/llama3.1:8b".to_string(),
+            Limits {
+                context_tokens: Some(8192),
+                input_tokens: None,
+                output_tokens: None,
+            },
+        );
+        local_model_limits.insert(
             "lmstudio/google/gemma-4-26b-a4b".to_string(),
             Limits {
                 context_tokens: Some(4096),
@@ -546,11 +572,14 @@ mod tests {
             custom_providers: Vec::new(),
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: lmstudio::DEFAULT_BASE_URL.to_string(),
+            ollama_max_output_tokens: 8_192,
+            lmstudio_max_output_tokens: 8_192,
             local_model_limits,
             request_timeout: std::time::Duration::from_secs(120),
         });
 
         let ollama_ref = model_ref_from_selection("ollama/llama3.1:8b", &catalog).unwrap();
+        let local_ref = model_ref_from_selection("local/llama3.1:8b", &catalog).unwrap();
         let lmstudio_ref =
             model_ref_from_selection("lmstudio/google/gemma-4-26b-a4b", &catalog).unwrap();
 
@@ -571,6 +600,33 @@ mod tests {
                 .limits
                 .context_tokens,
             Some(4096)
+        );
+        assert_eq!(
+            catalog
+                .resolve(&local_ref)
+                .unwrap()
+                .request
+                .generation
+                .max_output_tokens,
+            Some(4096)
+        );
+        assert_eq!(
+            catalog
+                .resolve(&ollama_ref)
+                .unwrap()
+                .request
+                .generation
+                .max_output_tokens,
+            Some(4096)
+        );
+        assert_eq!(
+            catalog
+                .resolve(&lmstudio_ref)
+                .unwrap()
+                .request
+                .generation
+                .max_output_tokens,
+            Some(2048)
         );
     }
 

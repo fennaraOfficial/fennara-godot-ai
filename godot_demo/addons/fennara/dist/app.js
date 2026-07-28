@@ -12,6 +12,7 @@
     ollama: DEFAULT_OLLAMA_BASE_URL,
     lmstudio: "http://127.0.0.1:1234/v1",
   };
+  const DEFAULT_LOCAL_MAX_OUTPUT_TOKENS = 8192;
   const CHAT_SURFACE_EMBEDDED = "embedded";
   const CHAT_SURFACE_BROWSER = "browser";
   const APPROVAL_MODE_ASK = "ask";
@@ -41,6 +42,8 @@
   const providerSearch = document.querySelector("[data-provider-search]");
   const ollamaForm = document.querySelector("[data-ollama-form]");
   const ollamaBaseUrlInput = document.querySelector("[data-ollama-base-url]");
+  const localMaxOutputField = document.querySelector("[data-local-max-output-field]");
+  const localMaxOutputInput = document.querySelector("[data-local-max-output-tokens]");
   const localSetupTitle = document.querySelector("[data-local-setup-title]");
   const localSetupHelp = document.querySelector("[data-local-setup-help]");
   const providerKeyForm = document.querySelector("[data-provider-key-form]");
@@ -173,6 +176,10 @@
   let keyPromptProvider = "";
   let defaultModel = "";
   let ollamaBaseUrl = DEFAULT_OLLAMA_BASE_URL;
+  const localMaxOutputTokens = new Map([
+    ["ollama", DEFAULT_LOCAL_MAX_OUTPUT_TOKENS],
+    ["lmstudio", DEFAULT_LOCAL_MAX_OUTPUT_TOKENS],
+  ]);
   let providerBaseUrls = new Map(Object.entries(DEFAULT_LOCAL_BASE_URLS));
   let localModelContextLengths = new Map();
   let ollamaModels = [];
@@ -182,6 +189,7 @@
   let openrouterCatalogStatus = null;
   let catalogRefreshInFlight = false;
   let pendingProviderKeySaves = new Map();
+  const pendingLocalProviderSaves = new Map();
   const pendingCustomProviderSaves = window.FennaraCustomProviderDialog.createPendingSaveRegistry();
   let chatStreaming = false;
   let sessionCost = 0;
@@ -267,6 +275,7 @@
       appShell?.setAttribute("data-connection", "offline");
       stopProjectStatusPolling();
       mcpAppsSettings?.handleDisconnect();
+      pendingLocalProviderSaves.clear();
       if (pendingCustomProviderSaves.size) {
         pendingCustomProviderSaves.clear();
         customProviderDialog?.handleError("Connection lost before the provider was saved. Try again.");
@@ -384,6 +393,8 @@
       providerKeyTitle,
       providerKeyInlineInput,
       ollamaBaseUrlInput,
+      localMaxOutputField,
+      localMaxOutputInput,
       localSetupTitle,
       localSetupHelp,
     },
@@ -402,6 +413,8 @@
       },
       requestModelList,
       providerBaseUrl,
+      getLocalMaxOutputTokens: (provider) =>
+        localMaxOutputTokens.get(provider) || DEFAULT_LOCAL_MAX_OUTPUT_TOKENS,
       providerStatusLabel,
       providerUsesBaseUrlSetup,
       chooseProvider,
@@ -830,6 +843,15 @@
     applyProviderBaseUrls(settings);
     applyLocalModelContextLengths(settings);
     ollamaBaseUrl = providerBaseUrl("ollama");
+    for (const provider of ["ollama", "lmstudio"]) {
+      localMaxOutputTokens.set(
+        provider,
+        normalizePositiveInteger(
+          settings[`${provider}_max_output_tokens`],
+          DEFAULT_LOCAL_MAX_OUTPUT_TOKENS,
+        ),
+      );
+    }
     applyProviderRegistry(settings);
     hasOpenRouterKey = providerConnected("openrouter") || Boolean(settings.has_openrouter_key);
     hasOllamaCloudKey = providerConnected("ollama-cloud") || Boolean(settings.has_ollama_cloud_key);
@@ -1347,6 +1369,11 @@
     return Math.floor(parsed);
   }
 
+  function normalizePositiveInteger(value, fallback) {
+    const parsed = Number(String(value ?? "").replace(/,/g, "").trim());
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
   function chooseProvider(provider) {
     if (!providerMetadata.has(provider)) {
       return;
@@ -1380,14 +1407,25 @@
     if (provider === "ollama") {
       ollamaBaseUrl = providerBaseUrl(provider);
     }
+    localMaxOutputTokens.set(
+      provider,
+      normalizePositiveInteger(
+        localMaxOutputInput?.value,
+        DEFAULT_LOCAL_MAX_OUTPUT_TOKENS,
+      ),
+    );
     currentProvider = provider;
     closeOllamaSetupPrompt();
+    const requestId = nextRequestId("save-local-provider");
+    pendingLocalProviderSaves.set(requestId, provider);
     send({
       type: "save_settings",
-      request_id: nextRequestId("save-local-provider"),
+      request_id: requestId,
       reasoning_effort: currentReasoningEffort,
       ollama_base_url: ollamaBaseUrl,
       provider_base_urls: providerBaseUrlPayload(),
+      ollama_max_output_tokens: localMaxOutputTokens.get("ollama"),
+      lmstudio_max_output_tokens: localMaxOutputTokens.get("lmstudio"),
     });
     requestModelList({ refreshOllama: true });
     modelPicker?.open();
@@ -1426,7 +1464,8 @@
         ? pendingProviderKeySaves.get(requestId) || keyPromptProvider || currentProvider
         : "";
       const isSettingsDialogSave = requestId.startsWith("save-settings-") && !isKeySave;
-      const isProviderSetupSave = requestId.startsWith("save-ollama-provider") || requestId.startsWith("save-local-provider");
+      const savedLocalProvider = pendingLocalProviderSaves.get(requestId) || "";
+      const isProviderSetupSave = Boolean(savedLocalProvider);
       const pendingCustomProviderSave = pendingCustomProviderSaves.peek(requestId);
       const isCustomProviderSave = Boolean(pendingCustomProviderSave);
       const customProviderId = pendingCustomProviderSave?.providerId || "";
@@ -1447,7 +1486,8 @@
         updateChatSize();
       }
       if (isProviderSetupSave) {
-        currentProvider = providerUsesBaseUrlSetup(currentProvider) ? currentProvider : "ollama";
+        pendingLocalProviderSaves.delete(requestId);
+        currentProvider = savedLocalProvider;
         if (currentModel && providerFromModel(currentModel) !== currentProvider) {
           currentModel = "";
         }
@@ -1735,6 +1775,7 @@
         pendingProviderKeySaves.delete(requestId);
         send({ type: "get_settings", request_id: nextRequestId("settings-after-key-save-error") });
       }
+      pendingLocalProviderSaves.delete(requestId);
       if (pendingCustomProviderSaves.peek(requestId)) {
         pendingCustomProviderSaves.take(requestId);
         customProviderDialog?.handleError(errorText, requestId);

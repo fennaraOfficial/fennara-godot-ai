@@ -417,6 +417,18 @@
                 data-ollama-base-url
               />
             </label>
+            <label data-local-max-output-field hidden>
+              <span>Max output tokens</span>
+              <input
+                type="number"
+                inputmode="numeric"
+                min="1"
+                step="1"
+                value="8192"
+                data-local-max-output-tokens
+              />
+              <small>Applied to each call. Small contexts are capped to preserve input room.</small>
+            </label>
           </div>
           <footer class="key-picker-footer">
             <strong>enter</strong>

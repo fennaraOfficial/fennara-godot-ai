@@ -22,6 +22,10 @@ fn legacy_settings_default_to_anonymous_telemetry_enabled() {
 
     assert!(settings.telemetry_enabled);
     assert_eq!(settings.provider_timeout_seconds, 120);
+    assert_eq!(settings.ollama_max_output_tokens, 8_192);
+    assert_eq!(settings.lmstudio_max_output_tokens, 8_192);
+    assert_eq!(settings.public().ollama_max_output_tokens, 8_192);
+    assert_eq!(settings.public().lmstudio_max_output_tokens, 8_192);
 }
 
 #[test]

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/providers.md sha256=cb9c3750ebffd837ab24519959fdac8f39ba41cc32b1a8e0c467c500b56f7cb5 -->
+<!-- fennara-i18n: locale=ja source=docs/providers.md sha256=d5f056754b227e0b3fe57ed00c86e9d16b9dd39cef2250d43e4417912ae5e07c -->
 <a id="built-in-chat-providers"></a>
 # 内蔵チャットプロバイダー
 
@@ -78,6 +78,7 @@ Fennara は内蔵チャットの設定を、Godot プロジェクトの外にあ
 - カスタムプロバイダーのヘッダー値
 - カスタム OpenAI 互換プロバイダーの定義
 - ローカルプロバイダーのベース URL
+- Ollama と LM Studio で個別に保存される最大出力トークン値
 - 選択したモデル
 - reasoning effort
 - プロバイダー応答タイムアウト
@@ -125,11 +126,22 @@ ollama/llama3.1:8b
 
 以前の `local/<model>` 形式の選択も、Ollama 互換エイリアスとして引き続き受け入れられます。新しい設定には、明示的な `ollama/<model>` 形式を使用してください。
 
+Fennara は Ollama の呼び出しごとの最大値を OpenAI 互換の `max_tokens`
+フィールドで送信します。Ollama はこの値をネイティブの `num_predict`
+オプションに対応付けます。
+
 LM Studio の場合は、LM Studio からローカルサーバーを起動し、次の形式のモデル ID を選択します。
 
 ```text
 lmstudio/<loaded-model-id>
 ```
+
+Ollama と LM Studio のプロバイダー設定フォームでは、プロバイダーごとに個別に保存される
+呼び出しごとの最大出力設定に、同じ既定値とコンテキスト制限ポリシーが適用されます。
+各設定の既定値は 8,192 トークンです。ローカルサーバーが読み込まれたコンテキスト長を
+報告する場合、入力用の余地を残すため、Fennara はそのプロバイダーの設定をコンテキストの
+半分に制限します。Fennara はこの有効な上限を `max_tokens` として送信し、チャット履歴を
+圧縮するタイミングを判断する際に同じ値を確保します。
 
 <a id="model-catalog"></a>
 ## モデルカタログ
