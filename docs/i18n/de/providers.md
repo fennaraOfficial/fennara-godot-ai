@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/providers.md sha256=47172d638ee7954d827f50c7e8803e4a5bb2552ceb9ff44a780d49b9bf96fac6 -->
+<!-- fennara-i18n: locale=de source=docs/providers.md sha256=d5f056754b227e0b3fe57ed00c86e9d16b9dd39cef2250d43e4417912ae5e07c -->
 <a id="built-in-chat-providers"></a>
 # Anbieter für den integrierten Chat
 
@@ -97,6 +97,7 @@ Fennara speichert die Einstellungen des integrierten Chats lokal über den Daemo
 - Werte benutzerdefinierter Anbieter-Header
 - Definitionen benutzerdefinierter OpenAI-kompatibler Anbieter
 - Basis-URLs lokaler Anbieter
+- separate maximale Ausgabetoken-Werte für Ollama und LM Studio
 - ausgewähltes Modell
 - Reasoning-Aufwand
 - Zeitlimit für Anbieterantworten
@@ -155,13 +156,14 @@ Starte für LM Studio den lokalen Server in LM Studio und wähle eine Modell-ID 
 lmstudio/<loaded-model-id>
 ```
 
-Die Einrichtungsformulare für Ollama und LM Studio verwenden gemeinsam ein
-konfiguriertes maximales Ausgabelimit pro Aufruf, das standardmäßig 8.192 Tokens
-beträgt. Wenn ein lokaler Server die geladene Kontextlänge meldet, begrenzt
-Fennara diese Einstellung auf die Hälfte des Kontexts, damit Platz für die
-Eingabe bleibt. Fennara sendet dieses wirksame Limit als `max_tokens` und
-reserviert denselben Wert bei der Entscheidung, wann der Chatverlauf
-komprimiert wird.
+Die Einrichtungsformulare für Ollama und LM Studio verwenden dieselbe Standard-
+und Kontextbegrenzungsrichtlinie für separate anbieterspezifische maximale
+Ausgabeeinstellungen pro Aufruf. Jede Einstellung beträgt standardmäßig 8.192
+Tokens. Wenn ein lokaler Server die geladene Kontextlänge meldet, begrenzt
+Fennara die Einstellung dieses Anbieters auf die Hälfte des Kontexts, damit
+Platz für die Eingabe bleibt. Fennara sendet dieses wirksame Limit als
+`max_tokens` und reserviert denselben Wert bei der Entscheidung, wann der
+Chatverlauf komprimiert wird.
 
 <a id="model-catalog"></a>
 ## Modellkatalog

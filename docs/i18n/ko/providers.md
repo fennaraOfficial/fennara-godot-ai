@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/providers.md sha256=47172d638ee7954d827f50c7e8803e4a5bb2552ceb9ff44a780d49b9bf96fac6 -->
+<!-- fennara-i18n: locale=ko source=docs/providers.md sha256=d5f056754b227e0b3fe57ed00c86e9d16b9dd39cef2250d43e4417912ae5e07c -->
 <a id="built-in-chat-providers"></a>
 # 내장 채팅 제공업체
 
@@ -78,6 +78,7 @@ Fennara는 내장 채팅 설정을 Godot 프로젝트 밖에서 데몬을 통해
 - 사용자 지정 제공업체 헤더 값
 - 사용자 지정 OpenAI 호환 제공업체 정의
 - 로컬 제공업체 기본 URL
+- Ollama와 LM Studio에 별도로 저장되는 최대 출력 토큰 값
 - 선택한 모델
 - 추론 강도
 - 제공업체 응답 제한 시간
@@ -134,11 +135,12 @@ LM Studio에서는 LM Studio에서 로컬 서버를 시작하고 다음 형식�
 lmstudio/<loaded-model-id>
 ```
 
-Ollama와 LM Studio 제공자 설정 양식은 구성된 호출당 최대 출력 설정을
-공유하며 기본값은 8,192토큰입니다. 로컬 서버가 로드된 컨텍스트 길이를
-보고하면 입력 공간을 유지할 수 있도록 Fennara가 이 설정을 컨텍스트의
-절반으로 제한합니다. Fennara는 이 유효 한도를 `max_tokens`로 전송하고
-채팅 기록을 압축할 시점을 결정할 때 같은 값을 예약합니다.
+Ollama와 LM Studio 제공자 설정 양식은 제공자별로 별도로 저장되는 호출당
+최대 출력 설정에 동일한 기본값과 컨텍스트 제한 정책을 적용합니다. 각
+설정의 기본값은 8,192토큰입니다. 로컬 서버가 로드된 컨텍스트 길이를
+보고하면 입력 공간을 유지할 수 있도록 Fennara가 해당 제공자의 설정을
+컨텍스트의 절반으로 제한합니다. Fennara는 이 유효 한도를 `max_tokens`로
+전송하고 채팅 기록을 압축할 시점을 결정할 때 같은 값을 예약합니다.
 
 <a id="model-catalog"></a>
 ## 모델 카탈로그

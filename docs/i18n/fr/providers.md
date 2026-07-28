@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=fr source=docs/providers.md sha256=47172d638ee7954d827f50c7e8803e4a5bb2552ceb9ff44a780d49b9bf96fac6 -->
+<!-- fennara-i18n: locale=fr source=docs/providers.md sha256=d5f056754b227e0b3fe57ed00c86e9d16b9dd39cef2250d43e4417912ae5e07c -->
 <a id="built-in-chat-providers"></a>
 # Fournisseurs du chat intégré
 
@@ -105,6 +105,7 @@ Fennara conserve localement les réglages du chat intégré par l'intermédiaire
 - les valeurs d'en-tête des fournisseurs personnalisés
 - les définitions de fournisseurs personnalisés compatibles OpenAI
 - les URL de base des fournisseurs locaux
+- les valeurs maximales distinctes de tokens de sortie pour Ollama et LM Studio
 - le modèle sélectionné
 - l'effort de raisonnement
 - le délai de réponse du fournisseur
@@ -165,12 +166,14 @@ Pour LM Studio, démarrez le serveur local depuis LM Studio et choisissez un ide
 lmstudio/<loaded-model-id>
 ```
 
-Les formulaires de configuration d’Ollama et de LM Studio partagent une limite
-maximale configurée de sortie par appel, fixée par défaut à 8 192 tokens.
-Lorsqu’un serveur local indique la longueur du contexte chargé, Fennara limite
-ce réglage à la moitié du contexte afin de conserver de la place pour l’entrée.
-Fennara envoie cette limite effective sous la forme `max_tokens` et réserve la
-même valeur lorsqu’il détermine quand compacter l’historique du chat.
+Les formulaires de configuration d’Ollama et de LM Studio utilisent la même
+valeur par défaut et la même politique de limitation du contexte pour des
+réglages maximaux de sortie par appel distincts pour chaque fournisseur. Chaque
+réglage vaut 8 192 tokens par défaut. Lorsqu’un serveur local indique la
+longueur du contexte chargé, Fennara limite le réglage de ce fournisseur à la
+moitié du contexte afin de conserver de la place pour l’entrée. Fennara envoie
+cette limite effective sous la forme `max_tokens` et réserve la même valeur
+lorsqu’il détermine quand compacter l’historique du chat.
 
 <a id="model-catalog"></a>
 ## Catalogue de modèles
