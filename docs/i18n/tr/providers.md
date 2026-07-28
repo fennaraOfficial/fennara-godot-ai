@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/providers.md sha256=93027562acc107ae99aff9afdcc200a001640ab9efc6fa7f2fedb84c14e92f2e -->
+<!-- fennara-i18n: locale=tr source=docs/providers.md sha256=47172d638ee7954d827f50c7e8803e4a5bb2552ceb9ff44a780d49b9bf96fac6 -->
 <a id="built-in-chat-providers"></a>
 # Yerleşik Sohbet Sağlayıcıları
 
@@ -134,12 +134,12 @@ LM Studio için yerel sunucuyu LM Studio'dan başlatın ve şu biçimde bir mode
 lmstudio/<loaded-model-id>
 ```
 
-Ollama ve LM Studio sağlayıcı kurulum formları, çağrı başına maksimum çıkış
-ayarını paylaşır ve bu ayar varsayılan olarak 8.192 tokendir. Fennara bu değeri
-`max_tokens` olarak gönderir ve sohbet geçmişini ne zaman sıkıştıracağına karar
-verirken bu miktarı ayırır. Yerel bir sunucu yüklenen bağlam uzunluğunu
-bildirdiğinde Fennara, girdi için yer bırakmak amacıyla etkili çıkış sınırını
-bağlamın yarısıyla sınırlar.
+Ollama ve LM Studio sağlayıcı kurulum formları, çağrı başına yapılandırılmış
+maksimum çıkış ayarını paylaşır ve bu ayar varsayılan olarak 8.192 tokendir.
+Yerel bir sunucu yüklenen bağlam uzunluğunu bildirdiğinde Fennara, girdi için
+yer bırakmak amacıyla bu ayarı bağlamın yarısıyla sınırlar. Fennara bu etkili
+sınırı `max_tokens` olarak gönderir ve sohbet geçmişini ne zaman
+sıkıştıracağına karar verirken aynı değeri ayırır.
 
 <a id="model-catalog"></a>
 ## Model Kataloğu

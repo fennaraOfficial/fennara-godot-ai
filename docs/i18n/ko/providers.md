@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/providers.md sha256=93027562acc107ae99aff9afdcc200a001640ab9efc6fa7f2fedb84c14e92f2e -->
+<!-- fennara-i18n: locale=ko source=docs/providers.md sha256=47172d638ee7954d827f50c7e8803e4a5bb2552ceb9ff44a780d49b9bf96fac6 -->
 <a id="built-in-chat-providers"></a>
 # 내장 채팅 제공업체
 
@@ -126,7 +126,7 @@ ollama/llama3.1:8b
 이전 `local/<model>` 선택도 Ollama 호환 별칭으로 계속 허용됩니다. 새 설정에는 명시적인 `ollama/<model>` 형식을 권장합니다.
 
 Fennara는 Ollama의 호출당 최댓값을 OpenAI 호환 `max_tokens` 필드로
-전송하며, Ollama는 이를 기본 `num_predict` 옵션에 매핑합니다.
+전송하며, Ollama는 이를 내장 `num_predict` 옵션에 매핑합니다.
 
 LM Studio에서는 LM Studio에서 로컬 서버를 시작하고 다음 형식의 모델 ID를 선택하세요.
 
@@ -134,11 +134,11 @@ LM Studio에서는 LM Studio에서 로컬 서버를 시작하고 다음 형식�
 lmstudio/<loaded-model-id>
 ```
 
-Ollama와 LM Studio 제공자 설정 양식은 호출당 최대 출력 설정을 공유하며
-기본값은 8,192토큰입니다. Fennara는 이 값을 `max_tokens`로 전송하고 채팅
-기록을 압축할 시점을 결정할 때 해당 공간을 예약합니다. 로컬 서버가 로드된
-컨텍스트 길이를 보고하면 입력 공간을 유지할 수 있도록 유효 출력 한도를
-컨텍스트의 절반으로 제한합니다.
+Ollama와 LM Studio 제공자 설정 양식은 구성된 호출당 최대 출력 설정을
+공유하며 기본값은 8,192토큰입니다. 로컬 서버가 로드된 컨텍스트 길이를
+보고하면 입력 공간을 유지할 수 있도록 Fennara가 이 설정을 컨텍스트의
+절반으로 제한합니다. Fennara는 이 유효 한도를 `max_tokens`로 전송하고
+채팅 기록을 압축할 시점을 결정할 때 같은 값을 예약합니다.
 
 <a id="model-catalog"></a>
 ## 모델 카탈로그

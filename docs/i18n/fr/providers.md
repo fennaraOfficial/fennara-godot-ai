@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=fr source=docs/providers.md sha256=93027562acc107ae99aff9afdcc200a001640ab9efc6fa7f2fedb84c14e92f2e -->
+<!-- fennara-i18n: locale=fr source=docs/providers.md sha256=47172d638ee7954d827f50c7e8803e4a5bb2552ceb9ff44a780d49b9bf96fac6 -->
 <a id="built-in-chat-providers"></a>
 # Fournisseurs du chat intégré
 
@@ -156,8 +156,8 @@ Les anciennes sélections `local/<model>` sont encore acceptées comme alias de
 compatibilité Ollama. Préférez la forme explicite `ollama/<model>` pour les
 nouveaux réglages.
 
-Fennara envoie le maximum par appel d'Ollama dans le champ compatible OpenAI
-`max_tokens`, qu'Ollama associe à son option native `num_predict`.
+Fennara envoie le maximum par appel d’Ollama dans le champ compatible OpenAI
+`max_tokens`, qu’Ollama associe à son option native `num_predict`.
 
 Pour LM Studio, démarrez le serveur local depuis LM Studio et choisissez un identifiant de modèle de la forme :
 
@@ -165,12 +165,12 @@ Pour LM Studio, démarrez le serveur local depuis LM Studio et choisissez un ide
 lmstudio/<loaded-model-id>
 ```
 
-Les formulaires de configuration d'Ollama et de LM Studio partagent une limite
-maximale de sortie par appel, fixée par défaut à 8 192 tokens. Fennara envoie
-cette valeur sous la forme `max_tokens` et la réserve lorsqu'il détermine quand
-compacter l'historique du chat. Lorsqu'un serveur local indique la longueur du
-contexte chargé, Fennara limite la sortie effective à la moitié du contexte
-afin de conserver de la place pour l'entrée.
+Les formulaires de configuration d’Ollama et de LM Studio partagent une limite
+maximale configurée de sortie par appel, fixée par défaut à 8 192 tokens.
+Lorsqu’un serveur local indique la longueur du contexte chargé, Fennara limite
+ce réglage à la moitié du contexte afin de conserver de la place pour l’entrée.
+Fennara envoie cette limite effective sous la forme `max_tokens` et réserve la
+même valeur lorsqu’il détermine quand compacter l’historique du chat.
 
 <a id="model-catalog"></a>
 ## Catalogue de modèles

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/providers.md sha256=93027562acc107ae99aff9afdcc200a001640ab9efc6fa7f2fedb84c14e92f2e -->
+<!-- fennara-i18n: locale=ja source=docs/providers.md sha256=47172d638ee7954d827f50c7e8803e4a5bb2552ceb9ff44a780d49b9bf96fac6 -->
 <a id="built-in-chat-providers"></a>
 # 内蔵チャットプロバイダー
 
@@ -135,11 +135,11 @@ LM Studio の場合は、LM Studio からローカルサーバーを起動し、
 lmstudio/<loaded-model-id>
 ```
 
-Ollama と LM Studio のプロバイダー設定フォームでは、呼び出しごとの最大出力設定が
-共有され、既定値は 8,192 トークンです。Fennara はこの値を `max_tokens` として
-送信し、チャット履歴を圧縮するタイミングを判断する際にその分を確保します。
-ローカルサーバーが読み込まれたコンテキスト長を報告する場合、入力用の余地を残すため、
-Fennara は有効な出力上限をコンテキストの半分に制限します。
+Ollama と LM Studio のプロバイダー設定フォームでは、呼び出しごとに構成可能な
+最大出力設定が共有され、既定値は 8,192 トークンです。ローカルサーバーが読み込まれた
+コンテキスト長を報告する場合、入力用の余地を残すため、Fennara はこの設定を
+コンテキストの半分に制限します。Fennara はこの有効な上限を `max_tokens` として
+送信し、チャット履歴を圧縮するタイミングを判断する際に同じ値を確保します。
 
 <a id="model-catalog"></a>
 ## モデルカタログ

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=pt-BR source=docs/providers.md sha256=93027562acc107ae99aff9afdcc200a001640ab9efc6fa7f2fedb84c14e92f2e -->
+<!-- fennara-i18n: locale=pt-BR source=docs/providers.md sha256=47172d638ee7954d827f50c7e8803e4a5bb2552ceb9ff44a780d49b9bf96fac6 -->
 <a id="built-in-chat-providers"></a>
 # Provedores do chat integrado
 
@@ -168,11 +168,11 @@ lmstudio/<loaded-model-id>
 ```
 
 Os formulários de configuração do Ollama e do LM Studio compartilham um limite
-máximo de saída por chamada, cujo padrão é 8.192 tokens. O Fennara envia esse
-valor como `max_tokens` e o reserva ao decidir quando compactar o histórico do
-chat. Quando um servidor local informa o tamanho do contexto carregado, o
-Fennara limita a saída efetiva à metade do contexto para preservar espaço para
-a entrada.
+máximo configurado de saída por chamada, cujo padrão é 8.192 tokens. Quando um
+servidor local informa o tamanho do contexto carregado, o Fennara limita essa
+configuração à metade do contexto para preservar espaço para a entrada. O
+Fennara envia esse limite efetivo como `max_tokens` e reserva o mesmo valor ao
+decidir quando compactar o histórico do chat.
 
 <a id="model-catalog"></a>
 ## Catálogo de modelos

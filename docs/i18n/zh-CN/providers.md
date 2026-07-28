@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/providers.md sha256=93027562acc107ae99aff9afdcc200a001640ab9efc6fa7f2fedb84c14e92f2e -->
+<!-- fennara-i18n: locale=zh-CN source=docs/providers.md sha256=47172d638ee7954d827f50c7e8803e4a5bb2552ceb9ff44a780d49b9bf96fac6 -->
 <a id="built-in-chat-providers"></a>
 # 内置聊天提供方
 
@@ -154,10 +154,11 @@ Fennara 会通过 OpenAI 兼容的 `max_tokens` 字段发送 Ollama 的单次调
 lmstudio/<loaded-model-id>
 ```
 
-Ollama 和 LM Studio 提供商设置表单共用一个单次调用最大输出设置，默认值为
-8,192 个令牌。Fennara 会将该值作为 `max_tokens` 发送，并在决定何时压缩
-聊天历史记录时预留相应空间。当本地服务器报告已加载的上下文长度时，
-Fennara 会将有效输出上限限制为上下文的一半，以便为输入保留空间。
+Ollama 和 LM Studio 提供商设置表单共用一个可配置的单次调用最大输出设置，
+默认值为 8,192 个令牌。当本地服务器报告已加载的上下文长度时，Fennara
+会将该设置限制为上下文的一半，以便为输入保留空间。Fennara 会将这个
+有效上限作为 `max_tokens` 发送，并在决定何时压缩聊天历史记录时预留
+相同的值。
 
 <a id="model-catalog"></a>
 ## 模型目录

@@ -147,11 +147,12 @@ For LM Studio, start the local server from LM Studio and choose a model id shape
 lmstudio/<loaded-model-id>
 ```
 
-The Ollama and LM Studio provider setup forms share a per-call maximum output
-setting, which defaults to 8,192 tokens. Fennara sends that value as
-`max_tokens` and reserves it when deciding when to compact chat history. When a
-local server reports the loaded context length, Fennara caps the effective
-output limit at half the context so requests retain input room.
+The Ollama and LM Studio provider setup forms share a configured per-call
+maximum output setting, which defaults to 8,192 tokens. When a local server
+reports the loaded context length, Fennara caps that setting at half the context
+so requests retain input room. Fennara sends this effective limit as
+`max_tokens` and reserves the same value when deciding when to compact chat
+history.
 
 ## Model Catalog
 
