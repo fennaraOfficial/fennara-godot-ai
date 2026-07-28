@@ -138,17 +138,20 @@ ollama/llama3.1:8b
 Older `local/<model>` selections are still accepted as Ollama compatibility
 aliases. Prefer the explicit `ollama/<model>` form for new settings.
 
+Fennara sends Ollama's per-call maximum as the OpenAI-compatible `max_tokens`
+field, which Ollama maps to its native `num_predict` option.
+
 For LM Studio, start the local server from LM Studio and choose a model id shaped like:
 
 ```text
 lmstudio/<loaded-model-id>
 ```
 
-Fennara reads the loaded context length from LM Studio automatically. The LM
-Studio provider setup also has a per-call maximum output setting, which defaults
-to 8,192 tokens. Fennara sends that value as `max_tokens` and reserves it when
-deciding when to compact chat history. For small loaded contexts, Fennara caps
-the effective output limit at half the context so requests retain input room.
+The Ollama and LM Studio provider setup forms share a per-call maximum output
+setting, which defaults to 8,192 tokens. Fennara sends that value as
+`max_tokens` and reserves it when deciding when to compact chat history. When a
+local server reports the loaded context length, Fennara caps the effective
+output limit at half the context so requests retain input room.
 
 ## Model Catalog
 

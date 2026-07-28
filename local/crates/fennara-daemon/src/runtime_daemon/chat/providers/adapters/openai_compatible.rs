@@ -1305,4 +1305,12 @@ mod tests {
             timeout: Duration::from_secs(120),
         }
     }
+
+    #[test]
+    fn request_body_includes_the_resolved_output_limit() {
+        let mut request = test_request("http://127.0.0.1:11434/v1".to_string());
+        request.model.request.generation.max_output_tokens = Some(8_192);
+
+        assert_eq!(body(&request).get("max_tokens"), Some(&json!(8_192)));
+    }
 }

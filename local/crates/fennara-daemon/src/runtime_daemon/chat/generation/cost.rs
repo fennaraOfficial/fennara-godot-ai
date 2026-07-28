@@ -88,6 +88,7 @@ mod tests {
             custom_providers: Vec::new(),
             ollama_base_url: "http://127.0.0.1:11434".to_string(),
             lmstudio_base_url: "http://127.0.0.1:1234/v1".to_string(),
+            ollama_max_output_tokens: 8_192,
             lmstudio_max_output_tokens: 8_192,
             local_model_limits: std::collections::BTreeMap::new(),
             request_timeout: std::time::Duration::from_secs(120),

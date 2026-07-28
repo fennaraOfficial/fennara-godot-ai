@@ -58,12 +58,6 @@ pub(crate) fn model_id(model: &str) -> Option<&str> {
         .filter(|id| !id.trim().is_empty())
 }
 
-pub(crate) fn effective_max_output_tokens(configured: u32, context_tokens: Option<u32>) -> u32 {
-    context_tokens
-        .map(|context| configured.min((context / 2).max(1)))
-        .unwrap_or(configured)
-}
-
 pub(crate) async fn fetch_models(
     base_url: &str,
     api_key: Option<&str>,
@@ -355,12 +349,5 @@ mod tests {
         let provider = provider_definition(DEFAULT_BASE_URL, None, 8_192);
 
         assert_eq!(provider.request.generation.max_output_tokens, Some(8_192));
-    }
-
-    #[test]
-    fn small_contexts_keep_half_the_window_available_for_input() {
-        assert_eq!(effective_max_output_tokens(8_192, Some(4_096)), 2_048);
-        assert_eq!(effective_max_output_tokens(8_192, Some(8_192)), 4_096);
-        assert_eq!(effective_max_output_tokens(8_192, Some(65_536)), 8_192);
     }
 }
