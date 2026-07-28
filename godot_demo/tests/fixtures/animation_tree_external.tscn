@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="AnimationNodeStateMachine" path="res://tests/fixtures/animation_tree_external.tres" id="1"]
+
+[node name="Root" type="Node3D"]
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+tree_root = ExtResource("1")
+anim_player = NodePath("../AnimationPlayer")

@@ -1,0 +1,17 @@
+[gd_resource type="AnimationNodeStateMachine" load_steps=4 format=3]
+
+[sub_resource type="AnimationNodeAnimation" id="idle"]
+animation = &"idle"
+
+[sub_resource type="AnimationNodeAnimation" id="walk"]
+animation = &"walk"
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="transition"]
+advance_mode = 2
+advance_condition = &"go"
+switch_mode = 1
+
+[resource]
+states/idle/node = SubResource("idle")
+states/walk/node = SubResource("walk")
+transitions = ["idle", "walk", SubResource("transition")]
