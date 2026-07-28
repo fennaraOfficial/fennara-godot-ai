@@ -208,6 +208,7 @@ jobs:
             "res://tests/screenshot_session_viewport_test.gd",
             "res://tests/image_sheet_test.gd",
             "res://tests/runtime_image_context_test.gd",
+            "res://tests/get_node_properties_animation_tree_test.gd",
             "res://tests/ai_guidance_read_test.gd"
           )
           foreach ($testScript in $testScripts) {

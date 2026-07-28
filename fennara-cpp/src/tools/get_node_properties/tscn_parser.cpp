@@ -136,6 +136,36 @@ bool can_expand_external_resource(const ExtResourceEntry &entry,
     return true;
 }
 
+godot::String format_external_animation_tree_graph(
+    const godot::String &property_name, const ExtResourceEntry &entry,
+    const TextResourceData &resource_data, const godot::String &resource_type,
+    int indent_depth) {
+    godot::String indent = indent_str(indent_depth);
+    godot::String out =
+        indent + property_name + " = <AnimationTreeGraph>\n";
+    out += indent_str(indent_depth + 1) +
+           "<!-- external resource: " + entry.path + " [declared " +
+           entry.type + "] -->\n";
+
+    TscnData graph_data;
+    graph_data.ext_resources = resource_data.ext_resources;
+    graph_data.sub_resources = resource_data.sub_resources;
+
+    godot::String root_id = "__fennara_external_tree_root";
+    while (graph_data.sub_resources.has(root_id)) {
+        root_id += "_";
+    }
+
+    SubResourceBlock root;
+    root.type = resource_type;
+    root.lines = resource_data.root_lines;
+    graph_data.sub_resources[root_id] = root;
+
+    out += format_animation_tree_graph(graph_data, root_id, indent_depth + 1);
+    out += indent + "</AnimationTreeGraph>\n";
+    return out;
+}
+
 godot::String format_external_resource(
     const godot::String &property_name, const ExtResourceEntry &entry,
     int indent_depth, godot::Node *scene_root, godot::Node *target,
@@ -157,6 +187,14 @@ godot::String format_external_resource(
 
     godot::String resource_type =
         resource_data.root_type.is_empty() ? entry.type : resource_data.root_type;
+
+    if (property_name == "tree_root" &&
+        resource_type.begins_with("AnimationNode") &&
+        godot::Object::cast_to<godot::AnimationTree>(target) != nullptr) {
+        return format_external_animation_tree_graph(
+            property_name, entry, resource_data, resource_type, indent_depth);
+    }
+
     godot::String out = indent + property_name + " = <" + resource_type + ">\n";
 
     godot::String comment = indent_str(indent_depth + 1) +
