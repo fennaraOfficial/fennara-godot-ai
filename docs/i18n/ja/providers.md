@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/providers.md sha256=cb9c3750ebffd837ab24519959fdac8f39ba41cc32b1a8e0c467c500b56f7cb5 -->
+<!-- fennara-i18n: locale=ja source=docs/providers.md sha256=93027562acc107ae99aff9afdcc200a001640ab9efc6fa7f2fedb84c14e92f2e -->
 <a id="built-in-chat-providers"></a>
 # 内蔵チャットプロバイダー
 
@@ -125,11 +125,21 @@ ollama/llama3.1:8b
 
 以前の `local/<model>` 形式の選択も、Ollama 互換エイリアスとして引き続き受け入れられます。新しい設定には、明示的な `ollama/<model>` 形式を使用してください。
 
+Fennara は Ollama の呼び出しごとの最大値を OpenAI 互換の `max_tokens`
+フィールドで送信します。Ollama はこの値をネイティブの `num_predict`
+オプションに対応付けます。
+
 LM Studio の場合は、LM Studio からローカルサーバーを起動し、次の形式のモデル ID を選択します。
 
 ```text
 lmstudio/<loaded-model-id>
 ```
+
+Ollama と LM Studio のプロバイダー設定フォームでは、呼び出しごとの最大出力設定が
+共有され、既定値は 8,192 トークンです。Fennara はこの値を `max_tokens` として
+送信し、チャット履歴を圧縮するタイミングを判断する際にその分を確保します。
+ローカルサーバーが読み込まれたコンテキスト長を報告する場合、入力用の余地を残すため、
+Fennara は有効な出力上限をコンテキストの半分に制限します。
 
 <a id="model-catalog"></a>
 ## モデルカタログ

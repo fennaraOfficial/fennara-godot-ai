@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=es source=docs/providers.md sha256=cb9c3750ebffd837ab24519959fdac8f39ba41cc32b1a8e0c467c500b56f7cb5 -->
+<!-- fennara-i18n: locale=es source=docs/providers.md sha256=93027562acc107ae99aff9afdcc200a001640ab9efc6fa7f2fedb84c14e92f2e -->
 <a id="built-in-chat-providers"></a>
 # Proveedores del chat integrado
 
@@ -167,11 +167,21 @@ Las selecciones antiguas `local/<model>` se siguen aceptando como alias de
 compatibilidad con Ollama. Para configuraciones nuevas, utiliza el formato
 explícito `ollama/<model>`.
 
+Fennara envía el máximo por llamada de Ollama mediante el campo compatible con
+OpenAI `max_tokens`, que Ollama asigna a su opción nativa `num_predict`.
+
 Para LM Studio, inicia el servidor local desde LM Studio y elige un identificador de modelo con este formato:
 
 ```text
 lmstudio/<loaded-model-id>
 ```
+
+Los formularios de configuración de Ollama y LM Studio comparten un límite
+máximo de salida por llamada, cuyo valor predeterminado es de 8.192 tokens.
+Fennara envía ese valor como `max_tokens` y lo reserva al decidir cuándo
+compactar el historial del chat. Cuando un servidor local informa la longitud
+del contexto cargado, Fennara limita la salida efectiva a la mitad del contexto
+para conservar espacio para la entrada.
 
 <a id="model-catalog"></a>
 ## Catálogo de modelos

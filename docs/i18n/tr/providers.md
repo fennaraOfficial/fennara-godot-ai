@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/providers.md sha256=cb9c3750ebffd837ab24519959fdac8f39ba41cc32b1a8e0c467c500b56f7cb5 -->
+<!-- fennara-i18n: locale=tr source=docs/providers.md sha256=93027562acc107ae99aff9afdcc200a001640ab9efc6fa7f2fedb84c14e92f2e -->
 <a id="built-in-chat-providers"></a>
 # Yerleşik Sohbet Sağlayıcıları
 
@@ -125,11 +125,21 @@ ollama/llama3.1:8b
 
 Daha eski `local/<model>` seçimleri Ollama uyumluluk diğer adları olarak hâlâ kabul edilir. Yeni ayarlarda açık `ollama/<model>` biçimini tercih edin.
 
+Fennara, Ollama'nın çağrı başına üst sınırını OpenAI uyumlu `max_tokens`
+alanında gönderir. Ollama bu alanı yerel `num_predict` seçeneğiyle eşler.
+
 LM Studio için yerel sunucuyu LM Studio'dan başlatın ve şu biçimde bir model kimliği seçin:
 
 ```text
 lmstudio/<loaded-model-id>
 ```
+
+Ollama ve LM Studio sağlayıcı kurulum formları, çağrı başına maksimum çıkış
+ayarını paylaşır ve bu ayar varsayılan olarak 8.192 tokendir. Fennara bu değeri
+`max_tokens` olarak gönderir ve sohbet geçmişini ne zaman sıkıştıracağına karar
+verirken bu miktarı ayırır. Yerel bir sunucu yüklenen bağlam uzunluğunu
+bildirdiğinde Fennara, girdi için yer bırakmak amacıyla etkili çıkış sınırını
+bağlamın yarısıyla sınırlar.
 
 <a id="model-catalog"></a>
 ## Model Kataloğu
