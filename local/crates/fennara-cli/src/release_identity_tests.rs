@@ -72,6 +72,24 @@ fn maps_selectors_to_isolated_github_tags() {
     );
 }
 
+#[test]
+fn version_requests_normalize_an_optional_leading_v() {
+    assert_eq!(
+        ReleaseSelector::from_version_request("0.4.0").unwrap(),
+        ReleaseSelector::exact("0.4.0").unwrap()
+    );
+    assert_eq!(
+        ReleaseSelector::from_version_request("v0.4.0").unwrap(),
+        ReleaseSelector::exact("0.4.0").unwrap()
+    );
+    assert_eq!(
+        ReleaseSelector::from_version_request("v0.4.0")
+            .unwrap()
+            .github_tag(),
+        "v0.4.0"
+    );
+}
+
 fn identity(
     track: &str,
     version: &str,
