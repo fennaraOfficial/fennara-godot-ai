@@ -1,6 +1,11 @@
 use crate::release_channel::ChannelPointer;
 use crate::release_client::Release;
-use crate::release_update::resolved_release_track;
+use crate::release_update::{resolve_exact_target, resolved_release_track};
+
+#[test]
+fn exact_target_uses_the_normalized_version() {
+    assert_eq!(resolve_exact_target("v0.4.0").unwrap(), "0.4.0");
+}
 
 #[test]
 fn identifies_stable_and_staging_release_targets_before_handoff() {
