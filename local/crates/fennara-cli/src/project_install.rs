@@ -38,7 +38,7 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
             options.channel.as_deref(),
         )?;
         if let Some(requested) = options.version.as_deref()
-            && requested != existing.version
+            && requested.strip_prefix('v').unwrap_or(requested) != existing.version
         {
             return Err(operation::failure(
                 FailureClass::ProjectInvalid,

@@ -283,8 +283,16 @@ fn parse_success_response(response: &str) -> Result<Value, String> {
 }
 
 fn read_control_token(path: &Path) -> Result<String, String> {
-    let raw = std::fs::read_to_string(path)
-        .map_err(|error| format!("failed to read {}: {error}", display_path(path)))?;
+    let raw = std::fs::read_to_string(path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            format!(
+                "no local daemon control token at {} ({error}). A Fennara daemon started before control-channel authentication was added has no token file but may still be running and answering health checks. Stop that older daemon process manually (for example, end the fennara-daemon process in your OS process manager or restart your machine), then retry; the next install or update starts a daemon that writes this token on launch.",
+                display_path(path)
+            )
+        } else {
+            format!("failed to read {}: {error}", display_path(path))
+        }
+    })?;
     let token = raw.trim();
     let valid = URL_SAFE_NO_PAD
         .decode(token)
@@ -452,5 +460,17 @@ mod tests {
         let error = read_control_token(&path).unwrap_err();
         assert!(error.contains("control token is invalid"));
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn missing_control_token_explains_legacy_daemon_recovery() {
+        let path = std::env::temp_dir().join(format!(
+            "fennara-missing-control-token-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let error = read_control_token(&path).unwrap_err();
+        assert!(error.contains("started before control-channel authentication"));
+        assert!(error.contains("Stop that older daemon process manually"));
     }
 }

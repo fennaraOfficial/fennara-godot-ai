@@ -156,7 +156,7 @@ impl ReleaseSelector {
         } else if let Some(channel) = value.strip_prefix("channel:") {
             Self::staging(channel)
         } else {
-            Self::exact(value)
+            Self::exact(value.strip_prefix('v').unwrap_or(value))
         }
     }
 

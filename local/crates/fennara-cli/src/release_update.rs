@@ -160,11 +160,9 @@ pub fn run(args: Vec<&str>) -> Result<(), String> {
 }
 
 pub(crate) fn resolve_exact_target(request: &str) -> Result<String, String> {
-    if matches!(
-        ReleaseSelector::from_version_request(request)?,
-        ReleaseSelector::ExactVersion(_)
-    ) {
-        return Ok(request.to_string());
+    if let ReleaseSelector::ExactVersion(version) = ReleaseSelector::from_version_request(request)?
+    {
+        return Ok(version);
     }
     let release = release_client::fetch_release(request)?;
     operation::set_component("release_track", resolved_release_track(&release))?;
