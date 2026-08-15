@@ -141,6 +141,11 @@ fennara mcp-setup --help
 If your app is not listed, see [MCP Setup](mcp-setup.md) for every supported
 target and manual configuration formats.
 
+The setup entry is global and project-neutral. If several agents use separate
+repositories or worktrees, configure one project-bound MCP connection per
+Project Root after setup. See
+[Multiple Agents And Worktrees](multi-agent-worktrees.md).
+
 External MCP apps use their own model accounts. The built-in chat uses the
 provider selected in Fennara Chat Settings. See
 [MCP Apps And Built-In Chat](chat-vs-mcp.md) for the distinction.
@@ -153,8 +158,15 @@ Open the Godot project, then ask your MCP app:
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-If it reports the wrong project, select the correct MCP target from the Fennara
-dock.
+For isolated work, confirm that it reports routing mode `bound`, the expected
+canonical Project Root, bound-editor state `connected`, and that editor's
+filesystem readiness. A bound connection with no matching open editor remains
+alive and reports retryable `bound_project_not_connected` until the editor
+reconnects.
+
+If status reports `legacy_unbound`, the dock's MCP target is the compatibility
+route. Select the intended target for single-client use, or configure an
+explicit Project Binding before working concurrently.
 
 ## Update Fennara
 
@@ -238,8 +250,14 @@ addons/fennara/fennara.gdextension
 
 ### `fennara_status` Shows The Wrong Project
 
-Open the intended project and select it with the MCP target control in the
-Fennara dock.
+First read the reported routing mode. For `bound`, restart the MCP process with
+the intended `--project-path`, `FENNARA_PROJECT_PATH`, or project startup
+directory. For `legacy_unbound`, open the intended project and select it with
+the MCP target control in the Fennara dock.
+
+If a bound root is `not_connected`, open that project and wait for its addon to
+connect. If it is `ambiguous`, close the duplicate editor or launch it from a
+distinct worktree.
 
 ### C# Diagnostics Are Missing
 

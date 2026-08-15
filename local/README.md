@@ -18,8 +18,19 @@ Endpoints:
 
 - `GET /health`: daemon health.
 - `GET /status`: daemon status plus connected Godot plugin metadata.
+- privileged bound status: resolves one MCP process's canonical Project Root
+  against connected Godot editor sessions.
 - `POST /tools/call`: forwards a tool call to the connected Godot plugin and waits for a tool result.
 - `WS /godot/ws`: local Godot plugin bridge. The plugin sends a `hello` message after connecting.
+
+One daemon is shared by every Fennara-enabled editor and external MCP process
+for the current user. Bound external requests route by canonical Project Root;
+internal built-in-chat requests remain bound to their Godot Editor Session, and
+legacy-unbound MCP requests use the dock-selected compatibility target.
+
+The daemon also owns one machine-wide Runtime Slot. Runtime Session ownership
+and renewable lease state are associated with a Project Root so an editor can
+reconnect without transferring control.
 
 Development binary:
 
@@ -30,6 +41,16 @@ local/target/debug/fennara-daemon.exe
 ## MCP Server
 
 `crates/fennara-mcp` is the local MCP server. It speaks JSON-RPC over stdio so MCP clients can launch it as a local process.
+
+Each MCP process freezes one optional Project Binding at startup. Selection is
+`--project-path`, then `FENNARA_PROJECT_PATH`, then nearest `project.godot`
+ancestor of the startup directory. Finding no project automatically enters
+legacy-unbound compatibility mode; an invalid explicit path fails startup. Use
+one MCP process and connection per project for cross-project isolation.
+
+`crates/fennara-project-identity` is shared by the MCP runtime and daemon. It
+owns Project Root discovery, validation, canonicalization, lossless protocol
+conversion, and live filesystem equality.
 
 `fennara-mcp` embeds its selected MCP-facing schemas from `local/schemas/tools/`
 at build time and forwards those tool calls to the local daemon. It does not
@@ -72,7 +93,9 @@ local/target/debug/fennara-mcp.exe
 
 Current tools:
 
-- `fennara_status`: verifies that the MCP server is installed and reachable, then reports daemon and Godot bridge status when the daemon is running.
+- `fennara_status`: verifies that the MCP server is installed and reachable,
+  then reports routing mode, binding source/root, selected editor state, and
+  Godot bridge readiness when the daemon is running.
 - Godot project tools such as `write_or_update_file`, `run_scene_edit_script`,
   `get_scene_tree`, `script_diagnostics`, and `screenshot_scene` are forwarded
   to the daemon, which forwards them to the connected Godot plugin.

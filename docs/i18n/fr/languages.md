@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=fr source=docs/languages.md sha256=29ca1071b436e0ff29fa5d18d9e2b09cbe64749513ea7f4e1e6471569fcb6456 -->
+<!-- fennara-i18n: locale=fr source=docs/languages.md sha256=476e4afb5a17f76474a25864d08280c73ba0e4fdd1ebcfbbfd814d010dfac932 -->
 <a id="languages-and-translation-status"></a>
 # Langues et état des traductions
 
@@ -15,16 +15,16 @@ traduite renvoie à sa source anglaise actuelle et invite les locuteurs natifs
 
 | Langue | Documentation | Couverture | État de la relecture |
 | --- | --- | --- | --- |
-| English | [Documentation en anglais](../../README.md) | 30/30 | Canonique |
-| 简体中文 | [Documentation en chinois simplifié](../zh-CN/README.md) | 30/30 | Relecture native demandée |
-| Español | [Documentation en espagnol](../es/README.md) | 30/30 | Relecture native demandée |
-| Português do Brasil | [Documentation en portugais](../pt-BR/README.md) | 30/30 | Relecture native demandée |
-| 日本語 | [Documentation en japonais](../ja/README.md) | 30/30 | Relecture native demandée |
-| 한국어 | [Documentation en coréen](../ko/README.md) | 30/30 | Relecture native demandée |
-| Русский | [Documentation en russe](../ru/README.md) | 30/30 | Relecture native demandée |
-| Français | [Documentation en français](README.md) | 30/30 | Relecture native demandée |
-| Deutsch | [Documentation en allemand](../de/README.md) | 30/30 | Relecture native demandée |
-| Türkçe | [Documentation en turc](../tr/README.md) | 30/30 | Relecture native demandée |
+| English | [Documentation en anglais](../../README.md) | 31/31 | Canonique |
+| 简体中文 | [Documentation en chinois simplifié](../zh-CN/README.md) | 31/31 | Relecture native demandée |
+| Español | [Documentation en espagnol](../es/README.md) | 31/31 | Relecture native demandée |
+| Português do Brasil | [Documentation en portugais](../pt-BR/README.md) | 31/31 | Relecture native demandée |
+| 日本語 | [Documentation en japonais](../ja/README.md) | 31/31 | Relecture native demandée |
+| 한국어 | [Documentation en coréen](../ko/README.md) | 31/31 | Relecture native demandée |
+| Русский | [Documentation en russe](../ru/README.md) | 31/31 | Relecture native demandée |
+| Français | [Documentation en français](README.md) | 31/31 | Relecture native demandée |
+| Deutsch | [Documentation en allemand](../de/README.md) | 31/31 | Relecture native demandée |
+| Türkçe | [Documentation en turc](../tr/README.md) | 31/31 | Relecture native demandée |
 
 <a id="what-is-translated"></a>
 ## Ce qui est traduit

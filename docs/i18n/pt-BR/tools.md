@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=pt-BR source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
+<!-- fennara-i18n: locale=pt-BR source=docs/tools.md sha256=ed8da3ac5003a9dafd4a90594f6f1b1e03c5987f73328fd0458a9ee6f18f3d7d -->
 <a id="tools"></a>
 # Ferramentas
 
@@ -33,6 +33,11 @@ ao servidor MCP.
 `fennara_status` está disponível para clientes MCP externos. O chat integrado já
 recebe do daemon o estado da conexão e do projeto ativo.
 
+Cada processo MCP externo escolhe um modo de roteamento quando é iniciado. Um
+processo `bound` encaminha pela Raiz do projeto canônica. Um processo
+`legacy_unbound` usa o destino de compatibilidade selecionado no dock e não é
+adequado para trabalho concorrente isolado.
+
 <a id="typical-workflow"></a>
 ## Fluxo de trabalho típico
 
@@ -51,13 +56,18 @@ ou importando. Use ferramentas de recursos depois que ele informar que está pro
 <a id="fennarastatus"></a>
 ### `fennara_status`
 
-Relata servidor MCP, daemon, projeto Godot ativo, sessões de editor conectadas,
-versões dos componentes, contexto de renderização, ferramentas anunciadas e
-prontidão do sistema de arquivos do editor.
+Relata servidor MCP, daemon, modo de roteamento, editor Godot selecionado,
+sessões de editor conectadas, versões dos componentes, contexto de renderização,
+ferramentas anunciadas e prontidão do sistema de arquivos do editor.
 
 Comportamento funcional:
 
 - Retorna um bloco de status em texto simples.
+- Para um processo vinculado, informa a fonte da vinculação (`cli`,
+  `environment` ou `cwd`), a Raiz do projeto canônica e o estado do editor
+  (`connected`, `not_connected` ou `ambiguous`).
+- Informa separadamente o Destino MCP legado selecionado no dock e uma
+  Vinculação de projeto.
 - Distingue um sistema de arquivos pronto de outro que está verificando ou importando.
 - Informa se ferramentas voltadas a recursos estão prontas.
 - Mostra diferenças de versão para diagnosticar instalações incompatíveis.
@@ -65,7 +75,16 @@ Comportamento funcional:
 Limites e falhas importantes:
 
 - Relata prontidão no nível do projeto, não de um caminho específico.
-- Um daemon desconectado, projeto ativo ausente ou plugin Godot desconectado é relatado diretamente, em vez de tratado como pronto.
+- Uma raiz vinculada sem editor correspondente informa
+  `bound_project_not_connected`, permitindo nova tentativa, e nunca recorre ao
+  destino do dock.
+- Editores duplicados para uma raiz vinculada informam
+  `ambiguous_project_binding`; nenhum editor é selecionado.
+- Um daemon desconectado, destino de compatibilidade ausente ou plugin Godot
+  desconectado é relatado diretamente, em vez de tratado como pronto.
+- Uma correspondência vinculada que falhou nunca exibe prontidão do sistema de
+  arquivos nem sucesso aparente de um editor não relacionado.
+- O modo não vinculado legado informa um aviso de concorrência.
 - A prontidão pode mudar brevemente enquanto o Godot reimporta arquivos.
 
 <a id="inspection"></a>
@@ -262,6 +281,8 @@ Comportamento funcional:
 - Verifica scripts e recursos ausentes, caminhos inválidos, nomes irmãos duplicados, dependências cíclicas e referências exportadas relevantes.
 - Referências opcionais ou atribuídas em runtime são observações, não falhas incondicionais.
 - Cenas criadas com estrutura limpa recebem uma inicialização headless de três segundos, com logs e artefatos preservados.
+- Esses workers de validação limitada não ocupam o Slot de execução interativo;
+  a validação pode continuar enquanto outro projeto possui uma Sessão de execução.
 - Descobertas repetidas são agrupadas para não inundar o resultado.
 
 Limites e falhas importantes:
@@ -310,6 +331,10 @@ Comportamento funcional:
 
 - Barreiras de inicialização são executadas antes do processo da cena.
 - Um início bem-sucedido retorna ID da sessão, estado do processo, caminhos de logs, descobertas iniciais e informações de captura.
+- Um Slot de execução ocupado em toda a máquina retorna um resultado de
+  domínio `busy` bem-sucedido com `availability: "busy"`,
+  `slot_acquired: false` e um `retry_after_ms` sugerido. Ele não revela o
+  projeto nem a sessão proprietária.
 - Status retorna nova saída sem descartar o log completo.
 - Stop retorna informações finais do processo e log.
 - Projetos C# recebem compilação real no Debug normal do Godot antes da inicialização, usando assemblies atuais.
@@ -318,10 +343,31 @@ Comportamento funcional:
 
 Limites e falhas importantes:
 
-- Apenas uma sessão de runtime gerenciada fica ativa globalmente.
+- Apenas uma Sessão de execução gerenciada pelo daemon pode estar iniciando ou
+  em execução globalmente. Consulte um resultado `busy` com jitter e trate cada
+  novo início como a reivindicação atômica final; um status livre anterior é
+  apenas informativo.
+- Uma Sessão de execução pertence à sua Raiz do projeto canônica. Somente esse
+  proprietário pode inspecionar o status detalhado, renovar, executar scripts ou
+  interrompê-la. Outros projetos veem um estado ocupado anônimo.
+- O status do proprietário renova um prazo de inatividade de 120 segundos. Uma
+  operação limitada de runtime do proprietário suspende a expiração por
+  inatividade enquanto está ativa e renova o prazo somente depois de retornar um
+  resultado terminal do script; tempo limite, erro de preparação ou cancelamento
+  não o renovam. Consulte o status do proprietário aproximadamente a cada 30
+  segundos, com jitter, enquanto uma execução continua.
+- `max_run_seconds` é um inteiro positivo, com padrão de 900 segundos e máximo
+  de 86.400 segundos. Uma regressão de uma hora pode solicitar 4.500 segundos
+  para ter margem. O prazo absoluto nunca é suspenso.
+- Saída natural, interrupção explícita, falha de inicialização, expiração por
+  inatividade ou expiração absoluta libera o Slot de execução.
 - Falhas nas barreiras impedem a abertura.
 - Uma compilação C# pode acionar a recarga normal de assemblies no editor aberto.
-- Marcadores de prontidão podem chegar após a resposta inicial e aparecer em um status posterior.
+- Tanto `FENNARA_RUNTIME_SESSION_READY` quanto
+  `FENNARA_RUNTIME_ORIENTATION_NOTE` precisam aparecer antes do prazo de
+  inicialização de cinco segundos. Se qualquer um dos marcadores estiver
+  ausente, o daemon encerra e coleta o processo antes de retornar
+  `startup_timeout`; nenhum sucesso inicial é retornado.
 - Sessões gerenciadas são processos separados do Godot, não a cena executada manualmente no editor.
 
 <a id="runtimescript"></a>
@@ -339,6 +385,13 @@ Comportamento funcional:
 Limites e falhas importantes:
 
 - Exige um ID válido de `runtime_session` ativa.
+- Somente a Raiz do projeto proprietária da sessão pode executar uma sondagem.
+  Um não proprietário recebe `runtime_session_not_owned_or_found`, o que não
+  revela se existe um identificador pertencente a outro projeto.
+- Uma sondagem limitada do proprietário suspende a expiração por inatividade
+  enquanto é executada. Um resultado terminal do script retornado renova o prazo
+  de inatividade; tempo limite, erro de preparação ou cancelamento não o renovam.
+  Nenhuma sondagem estende o Lease de execução absoluto.
 - Scripts de runtime não são scripts `@tool` e não servem como workers de edição.
 - Diagnósticos inválidos, tempos limite, erros, sessões fechadas e nós indisponíveis são relatados.
 - Sondagens devem permanecer limitadas. Não substituem uma estrutura permanente de automação da jogabilidade.

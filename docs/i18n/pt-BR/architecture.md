@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=pt-BR source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
+<!-- fennara-i18n: locale=pt-BR source=docs/architecture.md sha256=1bc08d075d4b48d0c781f954d4da4752d6c7223ff1636f01f06524b06dce256a -->
 <a id="architecture"></a>
 # Arquitetura
 
@@ -19,19 +19,22 @@ estrutura da instalação e o comportamento de transferência durante atualizaç
 | Entender os artefatos de lançamento | [Processo de lançamento](release.md) |
 | Inspecionar as ferramentas disponíveis ao modelo | [Ferramentas](tools.md) |
 
-Não há um serviço de nuvem do Fennara no fluxo OSS normal. Um aplicativo MCP
-externo inicia o processo MCP local, que se comunica com o daemon. O chat
-integrado se comunica diretamente com esse daemon. O daemon alcança o addon
-Fennara no editor Godot aberto.
+Não há um serviço de nuvem do Fennara no fluxo OSS normal. Cada conexão MCP
+externa inicia um processo MCP local, que se comunica com um único daemon
+compartilhado por usuário. O chat integrado se comunica diretamente com esse
+daemon. O daemon alcança os addons Fennara nos editores Godot abertos.
 
 ```mermaid
 flowchart LR
-    A["External MCP app"] --> B["fennara-mcp launcher"]
-    B --> C["Versioned MCP runtime"]
-    C --> D["Local daemon"]
-    E["Built-in Fennara chat"] --> D
-    D --> F["Godot editor addon"]
-    F --> G["Open Godot project"]
+    A["External MCP app A"] --> B["MCP runtime A\nProject Binding A"]
+    C["External MCP app B"] --> E["MCP runtime B\nProject Binding B"]
+    B --> D["Shared local daemon"]
+    E --> D
+    J["Built-in Fennara chat"] --> D
+    D --> F["Godot editor addon A"]
+    D --> G["Godot editor addon B"]
+    F --> H["Godot Project Root A"]
+    G --> I["Godot Project Root B"]
 ```
 
 <a id="main-pieces"></a>
@@ -41,9 +44,10 @@ flowchart LR
 | --- | --- | --- |
 | CLI | `local/crates/fennara-cli/` | Instala o addon em um projeto Godot, atualiza pacotes locais, grava orientações do projeto e configura aplicativos MCP por meio de `fennara mcp-setup`. |
 | Inicializador MCP | `local/crates/fennara-mcp/` | Executável estável chamado pelos aplicativos MCP. Ele encontra a versão ativa e inicia o runtime. |
-| Runtime MCP | `local/crates/fennara-mcp/` | Fala MCP via stdio e encaminha chamadas de ferramentas à ponte local. |
+| Runtime MCP | `local/crates/fennara-mcp/` | Fala MCP via stdio, congela uma Vinculação de projeto opcional na inicialização e encaminha chamadas de ferramentas à ponte local. |
 | Inicializador do daemon | `local/crates/fennara-daemon/` | Executável estável usado para iniciar o runtime ativo do daemon. |
-| Runtime do daemon | `local/crates/fennara-daemon/` | Mantém o estado local, coordena com o Godot, atende o runtime MCP e hospeda as rotas do chat integrado. |
+| Runtime do daemon | `local/crates/fennara-daemon/` | Mantém o estado local compartilhado, encaminha conexões MCP aos editores correspondentes, é proprietário do Slot de execução de toda a máquina, coordena com o Godot e hospeda as rotas do chat integrado. |
+| Identidade do projeto | `local/crates/fennara-project-identity/` | Resolve, valida, transforma em forma canônica e compara Raízes de projeto para o runtime MCP e o daemon. |
 | Código-fonte da interface de chat | `ui/chat/` | HTML, CSS e JavaScript do chat integrado, configurações, configuração de provedores, configuração de aplicativos MCP e interface de atualização. Ele é sincronizado com o addon empacotado em `godot_demo/addons/fennara/dist/`. |
 | Addon Godot | `godot_demo/addons/fennara/` | O payload do addon copiado para os projetos dos usuários. |
 | Código-fonte dos auxiliares de runtime | `runtime/` | Scripts auxiliares de runtime do lado do Godot sincronizados com o payload do addon para sessões e scripts de runtime. |
@@ -119,8 +123,10 @@ CEF gerenciado pelo lançamento uma vez por usuário.
 Vários editores Godot podem estar abertos ao mesmo tempo. Cada websocket de chat
 incorporado é aceito com o `chat_token` do editor proprietário e permanece
 vinculado àquela sessão do Godot para escopo de armazenamento do chat,
-snapshots, execução de ferramentas, cancelamento e reversão. Clientes MCP
-externos continuam sendo roteados pelo destino ativo do daemon. As configurações
+snapshots, execução de ferramentas, cancelamento e reversão. Um processo MCP
+externo vinculado a um projeto é encaminhado ao editor correspondente à sua
+Raiz do projeto canônica. Somente um processo não vinculado usa o destino de
+compatibilidade selecionado no dock e pertencente ao daemon. As configurações
 de provedores de chat são globais por enquanto, enquanto os chats permanecem
 limitados ao projeto. Provedores de chat na nuvem usam chaves de API armazenadas
 localmente. Provedores locais usam URLs-base armazenadas pelo daemon. O conjunto
@@ -326,7 +332,9 @@ compilação do Godot anterior ao Play, e grava a assembly real em
 ## Configuração de MCP
 
 `fennara mcp-setup` edita a configuração de um aplicativo MCP para que ele
-possa iniciar o inicializador local.
+possa iniciar o inicializador local. A entrada gerada é global e neutra em
+relação ao projeto; executar a configuração a partir de um projeto Godot não
+vincula todos os processos MCP futuros a esse projeto.
 
 Exemplos:
 
@@ -343,6 +351,25 @@ versionado correspondente.
 
 Isso mantém as configurações dos aplicativos MCP estáveis entre atualizações.
 
+Para repositórios ou worktrees isolados, o host MCP inicia um processo e uma
+conexão por projeto. O runtime captura seu diretório de inicialização e congela
+uma Vinculação de projeto MCP durante toda a vida útil do processo. A descoberta
+da vinculação segue `--project-path` explícito, depois
+`FENNARA_PROJECT_PATH`, e depois o ancestral mais próximo do diretório de
+inicialização que contenha `project.godot`. Se a descoberta automática não
+encontrar um projeto, o runtime entra no modo de compatibilidade não vinculado
+legado. Vinculações explícitas inválidas causam falha na inicialização, em vez
+de recorrer a uma alternativa.
+
+O crate compartilhado `fennara-project-identity` transforma as raízes em forma
+canônica e as valida tanto para o MCP quanto para o daemon. O MCP envia sua raiz
+canônica como metadados de transporte, fora dos argumentos de ferramentas
+voltados ao modelo. O daemon resolve novamente esse localizador e as raízes
+informadas pelos editores e, então, exige exatamente uma correspondência ativa
+no sistema de arquivos. Um editor ausente permite nova tentativa, uma
+correspondência duplicada é ambígua e nenhum desses casos recorre ao destino do
+dock. Consulte [Vários agentes e worktrees](multi-agent-worktrees.md).
+
 Esse caminho de configuração é separado do caminho de provedores do chat
 integrado. Aplicativos MCP usam sua própria conta de modelo. O dock do Fennara
 usa o provedor configurado nas configurações de chat.
@@ -355,15 +382,21 @@ MCP client
   calls a Fennara tool
 MCP runtime
   validates the request against local schemas
+  attaches its process-scoped Project Binding as transport metadata
   forwards the call to the local daemon
 Daemon runtime
-  routes the request to the connected Godot project
+  resolves the binding and routes to exactly one matching Godot editor
 Godot addon
   runs the Godot-aware tool through GDExtension
   returns a concise markdown result
 MCP runtime
   sends the result back to the MCP client
 ```
+
+Chamadas internas do chat integrado já carregam uma Sessão do editor Godot
+explícita. Um MCP externo sem Vinculação de projeto usa, em vez disso, o Destino
+MCP legado: primeiro o destino válido selecionado no dock e depois o único editor
+conectado. A seleção vinculada nunca lê nem altera esse destino global do daemon.
 
 O cliente MCP consegue ler e gravar arquivos normais por conta própria. As
 ferramentas do Fennara se concentram em feedback específico do Godot: estrutura
@@ -421,10 +454,26 @@ permanecer conectado, o que impede a troca de versão sob outro editor. Pacotes
 de versão exata, o `current.json` anterior, snapshots dos inicializadores e o
 addon anterior do projeto são mantidos até que o editor reaberto valide a nova GDExtension.
 
-Atualmente, o daemon permite uma cena gerenciada `runtime_session` por vez,
-globalmente entre todos os editores Godot conectados. Uma solicitação de início
-é executada no projeto Godot selecionado ou vinculado ao chat, mas outra cena
-gerenciada em execução precisa ser interrompida antes que uma nova seja iniciada.
+O daemon é proprietário de um único Slot de execução para toda a máquina entre
+todos os editores conectados. Uma solicitação de início reivindica `Starting`
+de forma atômica antes da criação do processo e confirma essa reivindicação
+como `Running`; uma chamada concorrente recebe um resultado `busy` anônimo e
+sem erro, e nunca inicia um segundo jogo. Não há fila FIFO.
+
+Cada Sessão de execução pertence à sua Raiz do projeto canônica, e não a um
+processo transitório do editor. Somente esse proprietário pode inspecionar o
+status detalhado, renovar, executar scripts ou interromper a sessão. Outros
+projetos veem um estado ocupado anônimo e não podem confirmar o identificador de
+outra sessão. Portanto, a propriedade sobrevive à reconexão de um editor.
+
+O Lease de execução absoluto padrão é de 900 segundos, e as chamadas podem
+solicitar um `max_run_seconds` positivo de até 86.400 segundos. O status do
+proprietário e suas operações limitadas renovam um prazo de inatividade de 120
+segundos; normalmente, os agentes consultam o status aproximadamente a cada 30
+segundos, com jitter. O prazo absoluto nunca é pausado. Um supervisor interrompe
+ou recolhe o processo e libera o Slot de execução após saída natural,
+interrupção explícita, falha de inicialização, expiração por inatividade ou
+expiração absoluta.
 
 <a id="export-boundary"></a>
 ## Limite de exportação

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/repo-map.md sha256=dd8616d3a3f73e8f05b95898cd34041186e47818eefe9f41f1f0a951f1c27fdb -->
+<!-- fennara-i18n: locale=ja source=docs/repo-map.md sha256=48c47152f755d34f1f6526d58c15c3d16205d5389a00442e4f1409efa514e73c -->
 <a id="repo-map"></a>
 # リポジトリマップ
 
@@ -17,6 +17,7 @@
 | --- | --- |
 | ユーザー向けセットアップまたは CLI の動作 | `local/crates/fennara-cli/` |
 | 外部 MCP プロトコルまたはスキーマ | `local/crates/fennara-mcp/`, `local/schemas/tools/` |
+| Project Root の検出または同一性判定 | `local/crates/fennara-project-identity/` |
 | 内蔵チャットまたはデーモンの動作 | `local/crates/fennara-daemon/` |
 | Godot エディター統合 | `fennara-cpp/` |
 | チャット UI | `ui/chat/` |
@@ -46,6 +47,7 @@
 | `README.md` | 人間向けの短い概要とクイックスタートです。 |
 | `docs/README.md` | タスク指向のドキュメント索引です。 |
 | `docs/setup.md` | ユーザー向けのアドオン優先セットアップ、チャットの前提条件、MCP 接続、更新手順、トラブルシューティングです。 |
+| `docs/multi-agent-worktrees.md` | プロジェクトごとに 1 つの MCP 接続を使うルーティング、対応ホストの制約、確認方法、直列化された Runtime Slot の利用方法です。 |
 | `docs/cli.md` | ターミナルコマンドのリファレンス、CLI が所有するインストールおよび更新動作、復旧、診断、アプリデータ構成、自動処理のガイダンスです。 |
 | `docs/telemetry.md` | 匿名アクティビティのペイロード、アプリデータ状態、配信動作、月間アクティブの定義、オプトアウト操作です。 |
 | `CONTRIBUTING.md` | コントリビューションの規則です。 |
@@ -70,8 +72,12 @@
 | `local/crates/fennara-cli/src/daemon_setup.rs` | インストールと doctor が使用する、共有デーモンの正常性確認、正確なバージョンの準備状態、起動処理です。 |
 | `local/crates/fennara-cli/tests/operation_failures.rs` | プロセス単位の失敗、永続化された診断、秘匿、安全側に失敗する操作ログのテストです。 |
 | `local/crates/fennara-cli/src/diagnostics.rs` | 最新または名前付きのサニタイズ済み操作レポートをユーザーへ提示します。 |
-| `local/crates/fennara-mcp/` | ローカル stdio MCP サーバーとツールスキーマ転送です。 |
-| `local/crates/fennara-daemon/` | ランタイムセッションと Godot ブリッジ処理に使用するローカルデーモンです。 |
+| `local/crates/fennara-project-identity/` | Project Root の検出、検証、正規化、損失のないプロトコル変換、稼働中のファイルシステム上の同一性判定を共有します。 |
+| `local/crates/fennara-mcp/` | ローカル stdio MCP サーバー、プロセス単位の Project Binding 検出、ステータス表示、ツールスキーマ転送です。 |
+| `local/crates/fennara-daemon/` | Project Root ルーティング、Runtime Slot の所有権とリース、ランタイムセッション、Godot ブリッジ処理に使用する共有ローカルデーモンです。 |
+| `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs` | 相互排他的なエディターセッション、バインド済みプロジェクト、従来の MCP ターゲットの選択と、Godot の要求と応答の対応付けです。 |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs` | マシン全体でアトミックに行う Runtime Slot の受け入れ、所有者の識別、リース状態です。 |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs` | 管理対象ゲームプロセスのライフサイクル、所有者の認可、ログ、期限切れのクリーンアップ、セッションレシートです。 |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry.rs` | 匿名の日次アクティブスケジューラー、上限付きキュー、HTTP 配信、デーモンのライフサイクル統合です。 |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry/state.rs` | ランダムなインストール識別情報の検証、アプリデータへのアトミックな永続化、日次レシート状態、オプトアウト時の削除です。 |
 | `local/crates/fennara-daemon/src/runtime_daemon/permissions.rs` | 内蔵チャットの承認モード、ツールリスクの分類、許可判断、保留中承認要求の型です。 |
@@ -196,7 +202,10 @@
 | 生成されるプロジェクトガイダンスを変更する | `local/templates/` および `local/crates/fennara-cli/src/project_guidance.rs` |
 | 生成済みデモアドオンのガイダンスを同期する | `local/templates/fennara-guidelines.md`、`local/templates/fennara-ai/`、`scripts/sync-guidance.mjs`、`godot_demo/addons/fennara/ai/` |
 | MCP アプリ設定を変更する | `local/crates/fennara-cli/src/mcp_setup.rs` および `docs/mcp-setup.md` |
+| MCP Project Binding の検出または Project Root の同一性判定を変更する | `local/crates/fennara-project-identity/`、`local/crates/fennara-mcp/src/runtime/`、`local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs`、`docs/multi-agent-worktrees.md` |
+| デーモンのターゲットルーティングまたはバインド済みステータスを変更する | `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs`、`local/crates/fennara-mcp/src/runtime/`、`docs/multi-agent-worktrees.md` |
 | ランタイムセッションのプロセスまたはログ動作を変更する | `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`、`local/crates/fennara-daemon/src/runtime_daemon/runtime_log.rs`、`fennara-cpp/src/tools/runtime_session/`、`fennara-cpp/src/tool_results/` |
+| Runtime Slot の所有権、受け入れ、リースを変更する | `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs`、`local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`、`fennara-cpp/src/tools/runtime_session/`、`fennara-cpp/src/tools/runtime_script.cpp`、`local/schemas/tools/runtime_session.json` |
 | `runtime_script` の ctx ヘルパー、入力、スナップショット、待機、レイキャスト、キャプチャ、クリーンアップを変更する | `runtime/`、`scripts/sync-runtime.mjs`、`godot_demo/addons/fennara/runtime/`、`local/schemas/tools/runtime_script.json`、`docs/tools.md` |
 | エディター内チャット UI、スラッシュコマンド、モデルまたはプロバイダー選択を変更する | `ui/chat/`、`godot_demo/addons/fennara/dist/`、`fennara-cpp/src/ui/dock.cpp`、`fennara-cpp/src/ui/webview_host*` |
 | 内蔵チャットのプロバイダーを変更する | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/`、`local/crates/fennara-daemon/src/runtime_daemon/chat/models.rs`、`local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs`、`ui/chat/` |

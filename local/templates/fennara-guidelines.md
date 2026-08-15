@@ -4,11 +4,13 @@ Read this file before Godot-specific work. The live Fennara tool schemas are the
 
 ## Connection
 
-Fennara requires Godot 4 with this project open, the addon installed, and the intended project selected in the Fennara dock. Call `fennara_status` when the connection, active project, available tools, renderer, or asset-import readiness is uncertain.
+Fennara requires Godot 4 with this project open, the addon installed, and MCP calls routed to the intended project. Call `fennara_status` when the connection, selected project, available tools, renderer, or asset-import readiness is uncertain.
 
 If Godot is scanning or importing, wait for a meaningful interval without making Fennara calls, then check `fennara_status` once. Do not poll rapidly.
 
-When several Godot projects are open, calls go to the project selected as the active MCP target in the Fennara dock.
+For isolated concurrent work, run one MCP process per project. At startup, Fennara freezes that process's canonical Project Root from `--project-path`, `FENNARA_PROJECT_PATH`, or the nearest `project.godot` ancestor of its startup directory. Calls never select or override a project individually. A bound process remains bound while its editor disconnects and resumes routing when the same Project Root reconnects.
+
+Before concurrent work, call `fennara_status` and verify `routing_mode`, `binding_source`, and the canonical bound Project Root. A `legacy_unbound` process uses the Fennara dock MCP Target or sole-editor fallback and reports a concurrency warning; give that MCP process an explicit binding before relying on multi-project isolation.
 
 ## Tool Choice
 
@@ -46,13 +48,15 @@ Treat diagnostics and validation returned by an editing tool as part of that edi
 - Run additional diagnostics or validation only for affected work not already covered.
 - Check screenshots for changes whose correctness is visual.
 
+Bounded scene validation and standalone screenshots do not occupy the interactive Runtime Slot. They may proceed while another project owns a Runtime Session.
+
 Validation should be proportional to the change. Do not repeat checks whose successful result already covers the final state.
 
 ## Visual And Runtime Work
 
 For visual work, inspect the actual rendered result rather than relying only on scene text or properties. Read `res://addons/fennara/ai/visual-observation.md` for framing, multiple captures, large worlds, comparisons, and animation storyboards.
 
-For runtime work, discover the project's real controls and success signals. Do not infer gameplay semantics from action names or common genre conventions. Verify outcomes from observed project state, not attempted inputs or elapsed time. Read `res://addons/fennara/ai/runtime-observation.md` for the full reasoning workflow.
+For runtime work, discover the project's real controls and success signals. Do not infer gameplay semantics from action names or common genre conventions. Verify outcomes from observed project state, not attempted inputs or elapsed time. Runtime sessions share one machine-wide Runtime Slot; read `res://addons/fennara/ai/runtime-observation.md` for its polling and lease workflow as well as the full observation workflow.
 
 ## Reusable Project Scripts
 

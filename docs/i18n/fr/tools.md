@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=fr source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
+<!-- fennara-i18n: locale=fr source=docs/tools.md sha256=ed8da3ac5003a9dafd4a90594f6f1b1e03c5987f73328fd0458a9ee6f18f3d7d -->
 <a id="tools"></a>
 # Outils
 
@@ -35,6 +35,11 @@ appartient au chat intégré, pas au serveur MCP.
 `fennara_status` est accessible aux clients MCP externes. Le chat intégré reçoit
 déjà l'état de la connexion et du projet actif depuis le daemon.
 
+Chaque processus MCP externe choisit un mode de routage au démarrage. Un
+processus `bound` est dirigé selon sa racine de projet canonique. Un processus
+`legacy_unbound` utilise la cible de compatibilité sélectionnée dans le dock et
+ne convient pas à un travail concurrent isolé.
+
 <a id="typical-workflow"></a>
 ## Processus courant
 
@@ -53,13 +58,19 @@ ou importer. Utilisez les outils de ressources après qu'il a signalé être pr�
 <a id="fennarastatus"></a>
 ### `fennara_status`
 
-Indique l'état du serveur MCP, du daemon, du projet Godot actif, des sessions
-d'éditeur connectées, des versions des composants, du contexte de rendu, des
-outils annoncés et de la disponibilité du système de fichiers de l'éditeur.
+Indique l'état du serveur MCP, du daemon, le mode de routage, l'éditeur Godot
+sélectionné, les sessions d'éditeur connectées, les versions des composants, le
+contexte de rendu, les outils annoncés et la disponibilité du système de
+fichiers de l'éditeur.
 
 Comportement normal :
 
 - Renvoie un seul bloc d'état en texte brut.
+- Pour un processus lié, indique la source de la liaison (`cli`, `environment`
+  ou `cwd`), la racine de projet canonique et l'état de l'éditeur (`connected`,
+  `not_connected` ou `ambiguous`).
+- Indique séparément la cible MCP héritée sélectionnée dans le dock et une
+  liaison de projet.
 - Distingue un système de fichiers d'éditeur prêt d'un système en cours d'analyse ou d'importation.
 - Indique si les outils tournés vers les ressources sont actuellement prêts.
 - Affiche les différences de version afin de diagnostiquer les installations incompatibles.
@@ -67,8 +78,16 @@ Comportement normal :
 Limites et échecs importants :
 
 - Il indique la disponibilité au niveau du projet, pas celle d'un chemin de ressource précis.
-- Un daemon déconnecté, l'absence de projet actif ou un plugin Godot déconnecté
-  est signalé directement au lieu d'être considéré comme un projet prêt.
+- Une racine liée sans éditeur correspondant signale l'erreur
+  `bound_project_not_connected`, qui autorise une nouvelle tentative, et ne se
+  replie jamais sur la cible du dock.
+- Des éditeurs en double pour une même racine liée signalent
+  `ambiguous_project_binding` ; aucun éditeur n'est sélectionné.
+- Un daemon déconnecté, l'absence de cible de compatibilité ou un plugin Godot
+  déconnecté est signalé directement au lieu d'être considéré comme un projet prêt.
+- Une correspondance liée qui échoue n'affiche jamais la disponibilité du
+  système de fichiers ni une réussite apparente provenant d'un éditeur sans lien.
+- Le mode non lié hérité signale un avertissement relatif au travail concurrent.
 - La disponibilité peut changer brièvement pendant que Godot réimporte des fichiers.
 
 <a id="inspection"></a>
@@ -324,6 +343,9 @@ Comportement normal :
 - Les scènes créées dont les résultats structurels sont propres reçoivent un
   passage de démarrage sans interface de trois secondes, dont les journaux et
   artefacts sont conservés.
+- Ces workers de validation bornée n'occupent pas l'emplacement d'exécution
+  interactif ; la validation peut se poursuivre pendant qu'un autre projet
+  possède une session d'exécution.
 - Les constats répétés sont regroupés afin que les grandes scènes ne saturent pas le résultat.
 
 Limites et échecs importants :
@@ -408,6 +430,10 @@ Comportement normal :
 - Des barrières de démarrage sont exécutées avant le lancement du processus de la scène.
 - Un démarrage réussi renvoie un identifiant de session, l'état du processus,
   les chemins des journaux, les constats de démarrage et les informations de capture disponibles.
+- Un emplacement d'exécution occupé à l'échelle de la machine renvoie un
+  résultat de domaine `busy` réussi avec `availability: "busy"`,
+  `slot_acquired: false` et une valeur `retry_after_ms` suggérée. Il ne révèle
+  ni le projet ni la session propriétaire.
 - L'état renvoie les nouvelles sorties d'exécution sans supprimer le journal complet de la session.
 - L'arrêt renvoie les informations finales du processus et du journal.
 - Les projets C# reçoivent une véritable compilation d'exécution dans la sortie
@@ -418,11 +444,33 @@ Comportement normal :
 
 Limites et échecs importants :
 
-- Une seule session d'exécution gérée par le daemon est active globalement à la fois.
+- Une seule session d'exécution gérée par le daemon peut démarrer ou s'exécuter
+  globalement. Interrogez un résultat `busy` avec une gigue et considérez chaque
+  nouveau démarrage comme la revendication atomique définitive ; un état libre
+  précédent n'est qu'indicatif.
+- Une session d'exécution appartient à sa racine de projet canonique. Seul ce
+  propriétaire peut consulter l'état détaillé, renouveler la session, exécuter
+  des scripts ou l'arrêter. Les autres projets voient un état d'occupation anonyme.
+- L'état demandé par le propriétaire renouvelle un délai d'inactivité de
+  120 secondes. Une opération d'exécution bornée du propriétaire suspend
+  l'expiration pour inactivité tant qu'elle est active et ne renouvelle le délai
+  qu'après avoir renvoyé un résultat terminal du script ; un dépassement de
+  délai, une erreur de préparation ou une annulation ne le renouvelle pas.
+  Interrogez l'état du propriétaire environ toutes les 30 secondes, avec une
+  gigue, pendant l'exécution.
+- `max_run_seconds` est un entier positif dont la valeur par défaut est de
+  900 secondes et la valeur maximale de 86 400 secondes. Une régression d'une
+  heure peut demander 4 500 secondes pour conserver une marge. L'échéance
+  absolue n'est jamais suspendue.
+- Une fin naturelle, un arrêt explicite, un échec du démarrage, l'expiration
+  pour inactivité ou l'expiration absolue libère l'emplacement d'exécution.
 - L'échec des barrières de démarrage empêche l'ouverture de la scène.
 - Une compilation d'exécution C# peut provoquer le rechargement normal des assemblages dans l'éditeur ouvert.
-- Les marqueurs de disponibilité du démarrage peuvent arriver après la réponse
-  initiale et apparaître lors d'un appel d'état ultérieur.
+- Les marqueurs `FENNARA_RUNTIME_SESSION_READY` et
+  `FENNARA_RUNTIME_ORIENTATION_NOTE` doivent tous deux apparaître avant le
+  délai de démarrage de cinq secondes. Si l'un des deux manque, le daemon
+  arrête de force le processus et attend sa terminaison avant de renvoyer
+  `startup_timeout` ; aucun succès initial n'est renvoyé.
 - Les sessions gérées sont des processus Godot distincts, pas la scène exécutée manuellement dans l'éditeur.
 
 <a id="runtimescript"></a>
@@ -447,6 +495,14 @@ Comportement normal :
 Limites et échecs importants :
 
 - Il exige un identifiant `runtime_session` actif valide.
+- Seule la racine de projet propriétaire de la session peut exécuter une sonde.
+  Un non-propriétaire reçoit `runtime_session_not_owned_or_found`, qui ne révèle
+  pas si l'identifiant d'un autre projet existe.
+- Une sonde bornée du propriétaire suspend l'expiration pour inactivité pendant
+  son exécution. Un résultat terminal du script renvoyé renouvelle le délai
+  d'inactivité ; un dépassement de délai, une erreur de préparation ou une
+  annulation ne le renouvelle pas. Aucune sonde ne prolonge le bail d'exécution
+  absolu.
 - Les scripts d'exécution ne sont pas des scripts `@tool` de l'éditeur et ne
   peuvent pas servir de workers de modification des scènes.
 - Les diagnostics non valides, les délais dépassés, les erreurs d'exécution, les

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=CONTEXT.md sha256=ee0d279d8a4916d5cf894616b1c72658669a36bf0ec958efef5a09ee196c704e -->
+<!-- fennara-i18n: locale=tr source=CONTEXT.md sha256=7d76acbada75ade69b43dc52fcd543f90d678c04b3e9b50fc11601b8b1853fd4 -->
 <a id="fennara-context"></a>
 # Fennara Bağlamı
 
@@ -46,7 +46,27 @@ Claude Code, Cursor, Cline, Gemini CLI veya başka bir MCP istemcisi gibi bir ya
 
 **MCP Hedefi**
 
-Fennara MCP çağrılarını almak üzere şu anda seçili olan Godot projesi.
+MCP Proje Bağlaması olmayan harici bir MCP bağlantısının kullandığı, panelden
+seçilen ve daemon genelinde geçerli uyumluluk hedefi. Bağlı MCP bağlantıları bu
+hedefi ne okur ne de değiştirir.
+
+**MCP Proje Bağlaması**
+
+Bir Fennara MCP işlemi başlatıldığında bir kez seçilen kararlı Proje Kökü. Bu
+işlemin çağrılarını daemon genelindeki MCP Hedefini kullanmadan eşleşen Godot
+Editör Oturumuna yönlendirir.
+
+**Proje Kökü**
+
+Bir Godot projesinin `project.godot` dosyasını içeren kanonik dosya sistemi
+dizini. Fennara, depoları ve worktree'leri ayırt etmek için proje adı yerine
+dosya sistemi kimliğini kullanır.
+
+**Godot Editör Oturumu**
+
+O anda bağlı olan tek bir Fennara eklentisi ve Godot editörü örneği. Bir proje
+yoluna ve Godot işlem kimliğine sahiptir; bir MCP işleminin Proje Bağlamasını
+değiştirmeden bağlantısı kesilip yeniden bağlanabilir.
 
 **Araç Şeması**
 
@@ -92,7 +112,23 @@ MCP çağrılarını ve yerleşik sohbet isteklerini Godot eklentisine bağlayan
 
 **Çalışma Zamanı Oturumu**
 
-Çalışma zamanı incelemesi, günlükler, doğrulama, ekran görüntüleri ve gelecekteki çalışan sahne iş akışları için kullanılan, daemon tarafından yönetilen Godot çalışma zamanı oturumu.
+Çalışan sahne incelemesi, günlükler ve çalışma zamanı yakalamaları için
+kullanılan, daemon tarafından yönetilen etkileşimli bir Godot oyun işlemi.
+Sahibi olan kanonik Proje Kökü, o projenin editörü yeniden bağlansa bile
+denetimi elinde tutar. Sınırlı sahne doğrulaması ve bağımsız ekran görüntüsü
+çağrıları ayrı yollar kullanır ve Çalışma Zamanı Yuvasını işgal etmez.
+
+**Çalışma Zamanı Yuvası**
+
+Bağlı tüm projeler genelinde daemon tarafından yönetilen en fazla bir Çalışma
+Zamanı Oturumunun başlamasına veya çalışmasına izin veren, makine genelindeki
+kabul durumu.
+
+**Çalışma Zamanı Kirası**
+
+Sahip Proje Kökünün Çalışma Zamanı Yuvasını kullanmak için sahip olduğu,
+yenilenebilir ve süreyle sınırlı hak. Sahip etkinliği hareketsizlik son tarihini
+yenilerken mutlak son tarih her zaman uygulanmaya devam eder.
 
 **Godot Anlık Görüntüsü**
 

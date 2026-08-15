@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/setup.md sha256=ab1b11ff7dd3472ab14185e920004b6504fa14eb1c29e7c7b1d7a322780af1dd -->
+<!-- fennara-i18n: locale=de source=docs/setup.md sha256=d470da8cda3e69aacb89ee5f06f1d7831df5ab7f50c94a599bfab5bfe22157e3 -->
 <a id="setup"></a>
 # Einrichtung
 
@@ -115,6 +115,11 @@ fennara mcp-setup --help
 
 Falls deine App nicht aufgeführt ist, findest du unter [MCP-Einrichtung](mcp-setup.md) alle unterstützten Ziele und Formate für die manuelle Konfiguration.
 
+Der Einrichtungseintrag ist global und projektneutral. Wenn mehrere Agenten
+getrennte Repositorys oder Worktrees verwenden, konfiguriere nach der Einrichtung
+je eine projektgebundene MCP-Verbindung pro Projektstamm. Siehe
+[Mehrere Agenten und Worktrees](multi-agent-worktrees.md).
+
 Externe MCP-Apps verwenden ihre eigenen Modellkonten. Der integrierte Chat verwendet den in den Fennara Chat Settings ausgewählten Anbieter. Unter [MCP-Apps und integrierter Chat](chat-vs-mcp.md) wird der Unterschied erläutert.
 
 <a id="verify-the-connection"></a>
@@ -126,7 +131,16 @@ Externe MCP-Apps verwenden ihre eigenen Modellkonten. Der integrierte Chat verwe
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-Wenn das falsche Projekt gemeldet wird, wähle im Fennara-Dock das richtige MCP-Ziel aus.
+Bestätige für isolierte Arbeit, dass der Routingmodus `bound`, der erwartete
+kanonische Projektstamm, der Zustand des gebundenen Editors `connected` und die
+Dateisystembereitschaft dieses Editors gemeldet werden. Eine gebundene Verbindung
+ohne passenden geöffneten Editor bleibt aktiv und meldet den wiederholbaren Fehler
+`bound_project_not_connected`, bis der Editor erneut verbunden wird.
+
+Wenn der Status `legacy_unbound` meldet, ist das MCP-Ziel im Dock der
+Kompatibilitätsweg. Wähle das vorgesehene Ziel für die Verwendung mit einem
+einzelnen Client aus oder konfiguriere vor gleichzeitiger Arbeit eine
+ausdrückliche Projektbindung.
 
 <a id="update-fennara"></a>
 ## Fennara aktualisieren
@@ -201,7 +215,14 @@ addons/fennara/fennara.gdextension
 <a id="fennarastatus-shows-the-wrong-project"></a>
 ### `fennara_status` zeigt das falsche Projekt
 
-Öffne das vorgesehene Projekt und wähle es mit dem Steuerelement für das MCP-Ziel im Fennara-Dock aus.
+Lies zuerst den gemeldeten Routingmodus. Starte bei `bound` den MCP-Prozess mit
+dem vorgesehenen `--project-path`, `FENNARA_PROJECT_PATH` oder Projekt-Startverzeichnis
+neu. Öffne bei `legacy_unbound` das vorgesehene Projekt und wähle es mit der
+MCP-Zielsteuerung im Fennara-Dock aus.
+
+Wenn ein gebundener Stamm `not_connected` ist, öffne dieses Projekt und warte,
+bis sich sein Addon verbindet. Wenn er `ambiguous` ist, schließe den doppelten
+Editor oder starte ihn aus einem eigenen Worktree.
 
 <a id="c-diagnostics-are-missing"></a>
 ### C#-Diagnosen fehlen

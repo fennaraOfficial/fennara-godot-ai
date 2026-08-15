@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/chat-vs-mcp.md sha256=03cb522aed8f8e305feaca0c2ed51f7ba29b2657a721df4196b15bc6ccf12c9c -->
+<!-- fennara-i18n: locale=ja source=docs/chat-vs-mcp.md sha256=b6f27b2c7e905515aba56b75bf6736644a9c36c885f4cab61555c82cd6c47fda -->
 <a id="mcp-apps-or-built-in-chat"></a>
 # MCP アプリと内蔵チャットのどちらを使うべきですか？
 
@@ -48,11 +48,16 @@ Fennara のチャットプロバイダーキーは必要ありません。セッ
 
 どちらの経路も、Godot のフィードバックを得るためにローカルの Fennara デーモンを使用します。
 
-- 外部 MCP の呼び出しは、ドックの **MCP target** コントロールで選択されたプロジェクトへ送られます。
+- 外部 MCP プロセスは起動時に一度だけ、正規 Godot Project Root へバインドできます。そのプロセスからの呼び出しは、ドックの **MCP target** を参照も変更もせず、一致するエディターへルーティングされます。
+- バインドされていない外部 MCP プロセスは、互換動作を維持します。有効なターゲットが選択されていればドックで選んだ MCP Target を使い、そうでなければ接続中のエディターが 1 つだけの場合にそのエディターを使います。
 - 内蔵チャットは、そのチャットを開いた Godot エディターに結び付けられたままです。
+
+別々のリポジトリや worktree で作業するエージェントを分離するには、プロジェクトごとに 1 つの MCP プロセスと接続を使います。セットアップ方法と Runtime Slot の動作については、[複数エージェントと worktree](multi-agent-worktrees.md) を参照してください。
 
 外部 MCP の接続を確認するには、次のように依頼します。
 
 ```text
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
+
+並行作業を始める前に、ステータスがルーティングモード `bound` と想定どおりの正規 Project Root を報告していることを確認してください。legacy-unbound モードでは、並行利用に関する警告が表示されます。

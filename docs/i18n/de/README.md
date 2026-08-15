@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/README.md sha256=2f8fb6a711c8bb56af570d1657f802c63cbdf2ced6b2c620339c588c9c9211cb -->
+<!-- fennara-i18n: locale=de source=docs/README.md sha256=ab01a3fd8024bccc8ad878eb0ec4cb15defa770ed3feccd0eef4c56270c7e763 -->
 <a id="fennara-documentation"></a>
 # Fennara-Dokumentation
 
@@ -35,6 +35,7 @@ und die Richtlinie zur maßgeblichen Quelle.
 | Leitfaden | Inhalt |
 | --- | --- |
 | [MCP-Apps und integrierter Chat](chat-vs-mcp.md) | Welches Modellkonto der jeweilige Weg verwendet |
+| [Mehrere Agenten und Worktrees](multi-agent-worktrees.md) | Jede MCP-Verbindung an ihr eigenes Godot-Projekt binden und dabei einen gemeinsamen Daemon verwenden |
 | [Werkzeuge](tools.md) | Godot-spezifische Werkzeuge und ihre Einsatzgebiete |
 | [Beispiele](examples.md) | Prompts für häufige Godot-Arbeitsabläufe |
 | [Slash-Befehle](slash-commands.md) | `/provider` und `/model` im Chat-Dock |

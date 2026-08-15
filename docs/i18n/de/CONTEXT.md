@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=CONTEXT.md sha256=ee0d279d8a4916d5cf894616b1c72658669a36bf0ec958efef5a09ee196c704e -->
+<!-- fennara-i18n: locale=de source=CONTEXT.md sha256=7d76acbada75ade69b43dc52fcd543f90d678c04b3e9b50fc11601b8b1853fd4 -->
 <a id="fennara-context"></a>
 # Fennara-Kontext
 
@@ -46,7 +46,27 @@ Eine externe KI-App, die durch `fennara mcp-setup` konfiguriert wird. Die Einric
 
 **MCP-Ziel**
 
-Das aktuell ausgewählte Godot-Projekt, das Fennara-MCP-Aufrufe empfangen soll.
+Das im Dock ausgewählte, daemonweit geltende Kompatibilitätsziel für eine externe
+MCP-Verbindung ohne MCP-Projektbindung. Gebundene MCP-Verbindungen lesen oder
+ändern dieses Ziel nicht.
+
+**MCP-Projektbindung**
+
+Der stabile Projektstamm, der einmal beim Start eines Fennara-MCP-Prozesses
+ausgewählt wird. Sie leitet die Aufrufe dieses Prozesses an die passende
+Godot-Editor-Sitzung weiter, ohne das daemonweite MCP-Ziel zu verwenden.
+
+**Projektstamm**
+
+Das kanonische Dateisystemverzeichnis, das die Datei `project.godot` eines
+Godot-Projekts enthält. Fennara unterscheidet Repositorys und Worktrees anhand
+ihrer Dateisystemidentität statt anhand eines Projektnamens.
+
+**Godot-Editor-Sitzung**
+
+Eine derzeit verbundene Instanz des Fennara-Addons und Godot-Editors. Sie besitzt
+einen Projektpfad und eine Godot-Prozess-ID und kann getrennt und erneut verbunden
+werden, ohne die Projektbindung eines MCP-Prozesses zu ändern.
 
 **Werkzeugschema**
 
@@ -94,7 +114,23 @@ Der lokale Dienst, der MCP-Aufrufe und Anfragen des integrierten Chats mit dem G
 
 **Laufzeitsitzung**
 
-Eine vom Daemon verwaltete Godot-Laufzeitsitzung, die für Laufzeitinspektion, Protokolle, Validierung, Screenshots und künftige Arbeitsabläufe mit laufenden Szenen verwendet wird.
+Ein vom Daemon verwalteter interaktiver Godot-Spielprozess für die Inspektion
+laufender Szenen, Protokolle und Laufzeitaufnahmen. Der zugehörige kanonische
+Projektstamm behält die Kontrolle, selbst wenn der Editor dieses Projekts erneut
+verbunden wird. Begrenzte Szenenvalidierungen und eigenständige Screenshot-Aufrufe
+verwenden getrennte Pfade und belegen den Laufzeit-Slot nicht.
+
+**Laufzeit-Slot**
+
+Der rechnerweite Zulassungsstatus, der über alle verbundenen Projekte hinweg den
+Start oder die Ausführung höchstens einer vom Daemon verwalteten Laufzeitsitzung
+zulässt.
+
+**Laufzeit-Lease**
+
+Das erneuerbare, zeitlich begrenzte Recht des zugehörigen Projektstamms, den
+Laufzeit-Slot zu belegen. Aktivität des Eigentümers erneuert die
+Inaktivitätsfrist, während die absolute Frist stets durchgesetzt wird.
 
 **Godot-Snapshot**
 

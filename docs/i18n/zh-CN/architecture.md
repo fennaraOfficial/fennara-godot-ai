@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
+<!-- fennara-i18n: locale=zh-CN source=docs/architecture.md sha256=1bc08d075d4b48d0c781f954d4da4752d6c7223ff1636f01f06524b06dce256a -->
 <a id="architecture"></a>
 # 架构
 
@@ -19,19 +19,21 @@ Fennara 是 AI 客户端与已打开的 Godot 编辑器项目之间的本地桥�
 | 了解发布工件 | [发布流程](release.md) |
 | 检查可用的模型工具 | [工具](tools.md) |
 
-在正常 OSS 路径中不存在 Fennara 云服务。外部 MCP 应用
-会启动本地 MCP 进程，该进程与守护进程通信。内置聊天直接与
-该守护进程通信。守护进程连接到已打开 Godot 编辑器中的 Fennara
-插件。
+在正常 OSS 路径中不存在 Fennara 云服务。每个外部 MCP 连接都会启动一个本地 MCP
+进程，各进程与每用户共享的单个守护进程通信。内置聊天直接与该守护进程通信。守护进程连接到
+已打开 Godot 编辑器中的 Fennara 插件。
 
 ```mermaid
 flowchart LR
-    A["External MCP app"] --> B["fennara-mcp launcher"]
-    B --> C["Versioned MCP runtime"]
-    C --> D["Local daemon"]
-    E["Built-in Fennara chat"] --> D
-    D --> F["Godot editor addon"]
-    F --> G["Open Godot project"]
+    A["External MCP app A"] --> B["MCP runtime A\nProject Binding A"]
+    C["External MCP app B"] --> E["MCP runtime B\nProject Binding B"]
+    B --> D["Shared local daemon"]
+    E --> D
+    J["Built-in Fennara chat"] --> D
+    D --> F["Godot editor addon A"]
+    D --> G["Godot editor addon B"]
+    F --> H["Godot Project Root A"]
+    G --> I["Godot Project Root B"]
 ```
 
 <a id="main-pieces"></a>
@@ -41,9 +43,10 @@ flowchart LR
 | --- | --- | --- |
 | CLI | `local/crates/fennara-cli/` | 将插件安装到 Godot 项目、更新本地软件包、写入项目指导，并通过 `fennara mcp-setup` 配置 MCP 应用。 |
 | MCP 启动器 | `local/crates/fennara-mcp/` | MCP 应用调用的稳定可执行文件。它查找活动版本并启动运行时。 |
-| MCP 运行时 | `local/crates/fennara-mcp/` | 通过 stdio 使用 MCP 协议，并将工具调用转发给本地桥接。 |
+| MCP 运行时 | `local/crates/fennara-mcp/` | 通过 stdio 使用 MCP 协议，启动时固定一个可选的项目绑定，并将工具调用转发给本地桥接。 |
 | 守护进程启动器 | `local/crates/fennara-daemon/` | 用于启动活动守护进程运行时的稳定可执行文件。 |
-| 守护进程运行时 | `local/crates/fennara-daemon/` | 保留本地状态、与 Godot 协调、为 MCP 运行时提供服务，并托管内置聊天路由。 |
+| 守护进程运行时 | `local/crates/fennara-daemon/` | 保留共享本地状态、将 MCP 连接路由到匹配的编辑器、拥有整台机器的运行时槽位、与 Godot 协调，并托管内置聊天路由。 |
+| 项目身份 | `local/crates/fennara-project-identity/` | 为 MCP 运行时和守护进程解析、验证、规范化并比较 Godot 项目根目录。 |
 | 聊天 UI 源码 | `ui/chat/` | 内置聊天、设置、提供方设置、MCP 应用设置和更新 UI 的 HTML、CSS 和 JavaScript。它会同步到 `godot_demo/addons/fennara/dist/` 下的打包插件中。 |
 | Godot 插件 | `godot_demo/addons/fennara/` | 复制到用户项目中的插件载荷。 |
 | 运行时辅助源码 | `runtime/` | 同步到插件载荷中的 Godot 端运行时辅助脚本，用于运行时会话和运行时脚本。 |
@@ -115,7 +118,8 @@ CLI 每位用户只在那里安装一次由发布管理的 CEF 资产。
 可以同时打开多个 Godot 编辑器。每个嵌入式聊天
 websocket 都使用所属编辑器的 `chat_token` 接受，并继续绑定到
 该 Godot 会话，用于聊天存储范围、快照、工具执行、取消
-和还原。外部 MCP 客户端仍通过守护进程的活动目标路由。
+和还原。已绑定项目的外部 MCP 进程会路由到规范项目根目录与之匹配的编辑器。只有未绑定的进程
+会使用守护进程中由停靠面板选定的兼容性目标。
 聊天提供方设置目前是全局的，而聊天仍限定在项目范围内。
 云端聊天提供方使用本地存储的 API 密钥，本地提供方使用
 守护进程存储的基础 URL。当前内置聊天提供方集合包括 OpenAI、
@@ -302,8 +306,8 @@ Godot 的编辑器文件系统扫描完成后，插件会立即启动一个由�
 <a id="mcp-setup"></a>
 ## MCP 设置
 
-`fennara mcp-setup` 会编辑 MCP 应用配置，使应用能够启动本地
-启动器。
+`fennara mcp-setup` 会编辑 MCP 应用配置，使应用能够启动本地启动器。生成的条目是全局且与项目无关的；
+在 Godot 项目内运行设置不会将今后每个 MCP 进程都绑定到该项目。
 
 示例：
 
@@ -320,6 +324,16 @@ fennara mcp-setup --gemini
 
 这使 MCP 应用配置在更新后保持稳定。
 
+对于相互隔离的仓库或工作树，MCP 主机会为每个项目启动一个进程和连接。运行时会捕获启动目录，
+并在该进程的整个生命周期中固定一个 MCP 项目绑定。绑定发现的优先级依次为：显式
+`--project-path`、`FENNARA_PROJECT_PATH`、启动目录中包含 `project.godot` 的最近祖先目录。如果自动发现
+未找到项目，运行时会进入旧式未绑定兼容模式。无效的显式绑定会导致启动失败，而不是回退。
+
+共享的 `fennara-project-identity` crate 会为 MCP 和守护进程规范化并验证根目录。MCP 会将其规范根目录作为传输元数据发送，
+位于面向模型的工具参数之外。守护进程会重新解析该定位器和编辑器报告的根目录，然后要求有且仅有一个实时文件系统匹配。
+缺少编辑器时可重试，多个匹配则存在歧义，且两种情况都不会回退到停靠面板目标。请参阅
+[多智能体与工作树](multi-agent-worktrees.md)。
+
 此设置路径与内置聊天提供方路径分离。MCP 应用使用
 自己的模型账户，Fennara 停靠面板使用聊天
 设置中配置的提供方。
@@ -328,19 +342,23 @@ fennara mcp-setup --gemini
 ## 工具调用流程
 
 ```text
-MCP 客户端
-  调用 Fennara 工具
-MCP 运行时
-  根据本地模式验证请求
-  将调用转发给本地守护进程
-守护进程运行时
-  将请求路由到已连接的 Godot 项目
-Godot 插件
-  通过 GDExtension 运行理解 Godot 的工具
-  返回精简的 Markdown 结果
-MCP 运行时
-  将结果发回 MCP 客户端
+MCP client
+  calls a Fennara tool
+MCP runtime
+  validates the request against local schemas
+  attaches its process-scoped Project Binding as transport metadata
+  forwards the call to the local daemon
+Daemon runtime
+  resolves the binding and routes to exactly one matching Godot editor
+Godot addon
+  runs the Godot-aware tool through GDExtension
+  returns a concise markdown result
+MCP runtime
+  sends the result back to the MCP client
 ```
+
+内部的内置聊天调用已携带显式的 Godot 编辑器会话。没有项目绑定的外部 MCP 则使用旧式 MCP 目标：
+首先使用有效的停靠面板选定目标，其次使用唯一已连接的编辑器。已绑定的选择绝不会读取或更改该守护进程全局目标。
 
 MCP 客户端本身可以读写普通文件。Fennara 工具专注于
 Godot 特有的反馈：场景结构、节点属性、诊断、
@@ -392,10 +410,16 @@ Godot 工具内部的硬性安全检查，例如阻止内部插件路径，
 精确版本软件包、之前的 `current.json`、启动器快照和之前的项目插件
 会一直保留，直到重新打开的编辑器验证新的 GDExtension。
 
-守护进程目前在所有已连接 Godot 编辑器之间，全局只允许一个托管的 `runtime_session` 场景。
-启动请求会在选定或
-聊天绑定的 Godot 项目中运行，但在启动新场景之前，必须停止另一个正在运行的托管
-场景。
+守护进程在所有已连接编辑器之间拥有一个整台机器共享的运行时槽位。启动请求会在创建进程前以原子方式申领 `Starting`，
+并将该申领提交为 `Running`；竞争失败的调用方会收到非错误、匿名的 `busy` 结果，且绝不会生成第二个游戏进程。
+没有 FIFO 队列。
+
+每个运行时会话归属于其规范项目根目录，而非短暂存在的编辑器进程。只有该所有者才能查看详细状态、续期、运行脚本或停止会话。
+其他项目只会看到匿名的忙碌状态，且无法确认其他会话标识符。因此，编辑器重新连接后所有权仍会保留。
+
+默认的运行时租约绝对时限为 900 秒，调用方可请求不超过 86,400 秒的正数 `max_run_seconds`。所有者状态查询和有界的所有者操作会对
+120 秒的非活动截止时间续期；智能体通常每约 30 秒带抖动地轮询一次状态。绝对截止时间绝不暂停。在进程自然退出、显式停止、启动失败、
+非活动过期或绝对过期后，监督器会停止或回收进程并释放运行时槽位。
 
 <a id="export-boundary"></a>
 ## 导出边界

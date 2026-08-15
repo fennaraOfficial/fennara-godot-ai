@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=fr source=CONTEXT.md sha256=ee0d279d8a4916d5cf894616b1c72658669a36bf0ec958efef5a09ee196c704e -->
+<!-- fennara-i18n: locale=fr source=CONTEXT.md sha256=7d76acbada75ade69b43dc52fcd543f90d678c04b3e9b50fc11601b8b1853fd4 -->
 <a id="fennara-context"></a>
 # Contexte de Fennara
 
@@ -46,7 +46,29 @@ Une application IA externe configurée par `fennara mcp-setup`. La configuration
 
 **Cible MCP**
 
-Le projet Godot actuellement sélectionné pour recevoir les appels MCP de Fennara.
+La cible de compatibilité, sélectionnée dans le dock et globale au daemon,
+qu'utilise une connexion MCP externe dépourvue de liaison de projet MCP. Les
+connexions MCP liées ne lisent ni ne modifient cette cible.
+
+**Liaison de projet MCP**
+
+La racine de projet stable sélectionnée une seule fois au démarrage d'un
+processus MCP Fennara. Elle dirige les appels de ce processus vers la session
+d'éditeur Godot correspondante sans utiliser la cible MCP globale au daemon.
+
+**Racine de projet**
+
+Le répertoire canonique du système de fichiers qui contient le fichier
+`project.godot` d'un projet Godot. Fennara utilise l'identité du système de
+fichiers, et non le nom du projet, pour distinguer les dépôts et les arbres de
+travail.
+
+**Session d'éditeur Godot**
+
+Une instance de l'addon Fennara et de l'éditeur Godot actuellement connectée.
+Elle possède un chemin de projet et un identifiant de processus Godot, et peut
+se déconnecter puis se reconnecter sans modifier la liaison de projet d'un
+processus MCP.
 
 **Schéma d'outil**
 
@@ -94,7 +116,25 @@ Le service local qui connecte les appels MCP et les requêtes du chat intégré 
 
 **Session d'exécution**
 
-Une session d'exécution Godot gérée par le daemon et utilisée pour l'inspection à l'exécution, les journaux, la validation, les captures d'écran et les futurs processus portant sur une scène active.
+Un processus de jeu Godot interactif géré par le daemon et utilisé pour
+l'inspection des scènes en cours d'exécution, les journaux et les captures à
+l'exécution. Sa racine de projet canonique propriétaire en conserve le contrôle
+même si l'éditeur de ce projet se reconnecte. La validation bornée des scènes et
+les appels autonomes de capture d'écran empruntent des chemins distincts et
+n'occupent pas l'emplacement d'exécution.
+
+**Emplacement d'exécution**
+
+L'état d'admission à l'échelle de la machine qui autorise le démarrage ou
+l'exécution d'au plus une session d'exécution gérée par le daemon parmi tous
+les projets connectés.
+
+**Bail d'exécution**
+
+Le droit renouvelable et limité dans le temps de la racine de projet
+propriétaire à occuper l'emplacement d'exécution. L'activité du propriétaire
+renouvelle son délai d'inactivité, tandis que son échéance absolue reste
+toujours appliquée.
 
 **Instantané Godot**
 

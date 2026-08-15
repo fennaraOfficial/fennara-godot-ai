@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/languages.md sha256=29ca1071b436e0ff29fa5d18d9e2b09cbe64749513ea7f4e1e6471569fcb6456 -->
+<!-- fennara-i18n: locale=zh-CN source=docs/languages.md sha256=476e4afb5a17f76474a25864d08280c73ba0e4fdd1ebcfbbfd814d010dfac932 -->
 <a id="languages-and-translation-status"></a>
 # 语言与翻译状态
 
@@ -12,16 +12,16 @@
 
 | 语言 | 文档 | 覆盖率 | 审阅状态 |
 | --- | --- | --- | --- |
-| English | [English documentation](../../README.md) | 29/29 | 规范源 |
-| 简体中文 | [简体中文文档](README.md) | 29/29 | 征求母语审阅 |
-| Español | [Documentación en español](../es/README.md) | 29/29 | 征求母语审阅 |
-| Português do Brasil | [Documentação em português](../pt-BR/README.md) | 29/29 | 征求母语审阅 |
-| 日本語 | [日本語ドキュメント](../ja/README.md) | 29/29 | 征求母语审阅 |
-| 한국어 | [한국어 문서](../ko/README.md) | 29/29 | 征求母语审阅 |
-| Русский | [Документация на русском](../ru/README.md) | 29/29 | 征求母语审阅 |
-| Français | [Documentation en français](../fr/README.md) | 29/29 | 征求母语审阅 |
-| Deutsch | [Deutsche Dokumentation](../de/README.md) | 29/29 | 征求母语审阅 |
-| Türkçe | [Türkçe belgeler](../tr/README.md) | 29/29 | 征求母语审阅 |
+| English | [English documentation](../../README.md) | 31/31 | 规范源 |
+| 简体中文 | [简体中文文档](README.md) | 31/31 | 征求母语审阅 |
+| Español | [Documentación en español](../es/README.md) | 31/31 | 征求母语审阅 |
+| Português do Brasil | [Documentação em português](../pt-BR/README.md) | 31/31 | 征求母语审阅 |
+| 日本語 | [日本語ドキュメント](../ja/README.md) | 31/31 | 征求母语审阅 |
+| 한국어 | [한국어 문서](../ko/README.md) | 31/31 | 征求母语审阅 |
+| Русский | [Документация на русском](../ru/README.md) | 31/31 | 征求母语审阅 |
+| Français | [Documentation en français](../fr/README.md) | 31/31 | 征求母语审阅 |
+| Deutsch | [Deutsche Dokumentation](../de/README.md) | 31/31 | 征求母语审阅 |
+| Türkçe | [Türkçe belgeler](../tr/README.md) | 31/31 | 征求母语审阅 |
 
 <a id="what-is-translated"></a>
 ## 翻译范围

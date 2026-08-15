@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ru source=docs/repo-map.md sha256=dd8616d3a3f73e8f05b95898cd34041186e47818eefe9f41f1f0a951f1c27fdb -->
+<!-- fennara-i18n: locale=ru source=docs/repo-map.md sha256=48c47152f755d34f1f6526d58c15c3d16205d5389a00442e4f1409efa514e73c -->
 <a id="repo-map"></a>
 # Карта репозитория
 
@@ -18,6 +18,7 @@
 | --- | --- |
 | Настройка пользователя или поведение CLI | `local/crates/fennara-cli/` |
 | Внешний протокол MCP или схемы | `local/crates/fennara-mcp/`, `local/schemas/tools/` |
+| Поиск или равенство Project Root | `local/crates/fennara-project-identity/` |
 | Встроенный чат или поведение фоновой службы | `local/crates/fennara-daemon/` |
 | Интеграция с редактором Godot | `fennara-cpp/` |
 | Интерфейс чата | `ui/chat/` |
@@ -47,6 +48,7 @@
 | `README.md` | Краткий обзор для пользователей и быстрый старт. |
 | `docs/README.md` | Указатель документации по задачам. |
 | `docs/setup.md` | Пользовательская настройка с дополнения, предварительные условия чата, подключение MCP, процесс обновления и устранение неполадок. |
+| `docs/multi-agent-worktrees.md` | Отдельное MCP-подключение для каждого проекта, границы поддержки хостов, проверка и сериализованное использование Runtime Slot. |
 | `docs/cli.md` | Справочник команд терминала, принадлежащее CLI поведение установки и обновления, восстановление, диагностика, структура данных приложения и рекомендации по автоматизации. |
 | `docs/telemetry.md` | Данные анонимной активности, состояние в данных приложения, поведение доставки, определение месячной активности и средства отказа. |
 | `CONTRIBUTING.md` | Правила участия. |
@@ -71,8 +73,12 @@
 | `local/crates/fennara-cli/src/daemon_setup.rs` | Проверка состояния общей фоновой службы, готовности точной версии и запуск, используемые установкой и doctor. |
 | `local/crates/fennara-cli/tests/operation_failures.rs` | Тесты сбоев на уровне процесса, долговечной диагностики, очистки данных и закрытого поведения при отказе журнала операций. |
 | `local/crates/fennara-cli/src/diagnostics.rs` | Пользовательский доступ к последнему или указанному очищенному отчету об операции. |
-| `local/crates/fennara-mcp/` | Локальный сервер MCP stdio и перенаправление схем инструментов. |
-| `local/crates/fennara-daemon/` | Локальная фоновая служба для сеансов среды выполнения и работы моста Godot. |
+| `local/crates/fennara-project-identity/` | Общие поиск, проверка, канонизация, преобразование без потерь для протокола и сравнение активной файловой системы для Project Root. |
+| `local/crates/fennara-mcp/` | Локальный MCP-сервер stdio, поиск Project Binding на весь процесс, представление состояния и перенаправление схем инструментов. |
+| `local/crates/fennara-daemon/` | Общий локальный демон для маршрутизации по Project Root, владения Runtime Slot и арендами, Runtime Session и работы моста Godot. |
+| `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs` | Взаимоисключающий выбор сеанса редактора, привязанного проекта и устаревшей цели MCP, а также сопоставление запросов и ответов Godot. |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs` | Атомарный допуск к общему для компьютера Runtime Slot, идентичность владельца и состояние аренды. |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs` | Жизненный цикл игрового процесса, авторизация владельца, журналы, очистка по истечению срока и квитанции сеансов. |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry.rs` | Планировщик анонимной ежедневной активности, ограниченная очередь, доставка HTTP и интеграция с жизненным циклом фоновой службы. |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry/state.rs` | Проверка случайного идентификатора установки, атомарное сохранение в данных приложения, состояние ежедневной квитанции и очистка при отказе. |
 | `local/crates/fennara-daemon/src/runtime_daemon/permissions.rs` | Режимы подтверждения встроенного чата, классификация риска инструментов, решения о разрешениях и типы ожидающих запросов подтверждения. |
@@ -197,7 +203,10 @@
 | Изменить сгенерированные инструкции проекта | `local/templates/` и `local/crates/fennara-cli/src/project_guidance.rs` |
 | Синхронизировать сгенерированные инструкции демонстрационного дополнения | `local/templates/fennara-guidelines.md`, `local/templates/fennara-ai/`, `scripts/sync-guidance.mjs` и `godot_demo/addons/fennara/ai/` |
 | Изменить настройку приложения MCP | `local/crates/fennara-cli/src/mcp_setup.rs` и `docs/mcp-setup.md` |
+| Изменить поиск MCP Project Binding или равенство Project Root | `local/crates/fennara-project-identity/`, `local/crates/fennara-mcp/src/runtime/`, `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs` и `docs/multi-agent-worktrees.md` |
+| Изменить маршрутизацию целей демона или состояние привязки | `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs`, `local/crates/fennara-mcp/src/runtime/` и `docs/multi-agent-worktrees.md` |
 | Изменить поведение процесса или журнала сеанса среды выполнения | `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`, `local/crates/fennara-daemon/src/runtime_daemon/runtime_log.rs`, `fennara-cpp/src/tools/runtime_session/` и `fennara-cpp/src/tool_results/` |
+| Изменить владение Runtime Slot, допуск или аренды | `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs`, `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`, `fennara-cpp/src/tools/runtime_session/`, `fennara-cpp/src/tools/runtime_script.cpp` и `local/schemas/tools/runtime_session.json` |
 | Изменить помощники ctx для `runtime_script`, ввод, снимки, ожидания, трассировку лучей, захваты или очистку | `runtime/`, `scripts/sync-runtime.mjs`, `godot_demo/addons/fennara/runtime/`, `local/schemas/tools/runtime_script.json` и `docs/tools.md` |
 | Изменить интерфейс чата в редакторе, команды с косой чертой или выбор модели и поставщика | `ui/chat/`, `godot_demo/addons/fennara/dist/`, `fennara-cpp/src/ui/dock.cpp` и `fennara-cpp/src/ui/webview_host*` |
 | Изменить поставщиков встроенного чата | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/`, `local/crates/fennara-daemon/src/runtime_daemon/chat/models.rs`, `local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs` и `ui/chat/` |

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/faq.md sha256=dc4d4d61e292532de7c87813b66925ae4ead2b2fbc0417b2366d8b53b42f7c4f -->
+<!-- fennara-i18n: locale=tr source=docs/faq.md sha256=3a644ba5c7ce06e847a4d6eb49ab232f9fa54eaecf1a97952ce69918dba4d677 -->
 <a id="faq"></a>
 # SSS
 
@@ -15,7 +15,7 @@ Kurulum ve güncellemeler için [Kurulum](setup.md) ile başlayın. Kısa yanıt
 | Sağlayıcı anahtarına ihtiyacım var mı? | Yalnızca yerleşik sohbetteki bir bulut sağlayıcısı için |
 | Bunun yerine harici bir MCP uygulaması kullanabilir miyim? | Evet, kendi model hesabını kullanır |
 | Fennara projemi bir Fennara sunucusuna yükler mi? | Hayır |
-| Birden fazla Godot editörü açık olabilir mi? | Evet, harici MCP hedefini panelden seçin |
+| Birden fazla Godot editörü açık olabilir mi? | Evet; eşzamanlı her MCP bağlantısını kendi projesine bağlayın |
 
 <a id="is-fennara-only-a-code-generator"></a>
 ## Fennara Yalnızca Bir Kod Oluşturucu mu?
@@ -71,7 +71,27 @@ Hayır. Normal OSS yolunda MCP istemcisi, daemon ve Godot eklentisi yerel olarak
 <a id="which-project-receives-mcp-tool-calls-if-multiple-godot-editors-are-open"></a>
 ## Birden Fazla Godot Editörü Açıksa MCP Araç Çağrılarını Hangi Proje Alır?
 
-Daemon harici MCP çağrılarını etkin MCP hedefine yönlendirir. Projeyi seçmek için Godot'daki Fennara panelinin MCP hedefi denetimini kullanın. Yerleşik sohbet oturumları, sohbeti açan Godot editörüne bağlı kalır.
+Projeye bağlı bir MCP işlemi, her çağrıyı kendi kanonik Proje Kökünün bağlı
+editörüne yönlendirir. Farklı depolarda veya worktree'lerde eşzamanlı çalışan
+ajanlar için proje başına bir MCP işlemi ve bağlantısı kullanın.
+
+Bağlı olmayan bir MCP işlemi uyumluluk davranışını korur: daemon panelden
+seçilen MCP Hedefini veya bağlı tek editörü kullanır. Eşzamanlı çalışmadan önce
+`fennara_status` komutunu çalıştırın ve beklenen kökle birlikte `bound`
+yönlendirme modunu şart koşun. Yerleşik sohbet oturumları, sohbeti açan editöre
+bağlı kalır. Bkz. [Birden Fazla Ajan ve Worktree](multi-agent-worktrees.md).
+
+<a id="can-several-agents-run-their-games-at-the-same-time"></a>
+## Birden Fazla Ajan Oyunlarını Aynı Anda Çalıştırabilir mi?
+
+Daemon tarafından yönetilen Çalışma Zamanı Oturumları üzerinden çalıştıramaz.
+Düzenleme, inceleme, sınırlı sahne doğrulaması ve bağımsız ekran görüntüleri
+eşzamanlı yapılabilir; ancak tüm projeler etkileşimli, yönetilen oyun
+çalıştırmaları için tek bir Çalışma Zamanı Yuvasını paylaşır. Kaybeden başlatma
+isteği normal ve anonim bir `busy` sonucu döndürür; böylece ajan geçerli
+çalışmayı bozmadan jitter ile sorgulama yapıp yeniden deneyebilir. Sahip proje,
+çalışma sürerken durumu sorgulayarak hareketsizlik zaman aşımı için son tarihi
+yeniler; kiranın mutlak bitiş tarihi hiçbir zaman değişmez.
 
 <a id="why-does-linux-install-a-separate-cef-runtime"></a>
 ## Linux Neden Ayrı Bir CEF Çalışma Zamanı Kurar?

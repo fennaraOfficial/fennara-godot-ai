@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/faq.md sha256=dc4d4d61e292532de7c87813b66925ae4ead2b2fbc0417b2366d8b53b42f7c4f -->
+<!-- fennara-i18n: locale=de source=docs/faq.md sha256=3a644ba5c7ce06e847a4d6eb49ab232f9fa54eaecf1a97952ce69918dba4d677 -->
 <a id="faq"></a>
 # FAQ
 
@@ -16,7 +16,7 @@ kurze Antworten und Links zur ausführlichen Referenz.
 | Benötige ich einen Anbieterschlüssel? | Nur für einen Cloud-Anbieter im integrierten Chat |
 | Kann ich stattdessen eine externe MCP-App verwenden? | Ja, sie verwendet ihr eigenes Modellkonto |
 | Lädt Fennara mein Projekt auf einen Fennara-Server hoch? | Nein |
-| Können mehrere Godot-Editoren geöffnet sein? | Ja, wähle das externe MCP-Ziel im Dock aus |
+| Können mehrere Godot-Editoren geöffnet sein? | Ja; binde jede gleichzeitig verwendete MCP-Verbindung an ihr eigenes Projekt |
 
 <a id="is-fennara-only-a-code-generator"></a>
 ## Ist Fennara nur ein Codegenerator?
@@ -85,9 +85,29 @@ etwa OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, K
 <a id="which-project-receives-mcp-tool-calls-if-multiple-godot-editors-are-open"></a>
 ## Welches Projekt erhält MCP-Werkzeugaufrufe, wenn mehrere Godot-Editoren geöffnet sind?
 
-Der Daemon leitet externe MCP-Aufrufe an das aktive MCP-Ziel weiter. Verwende die
-MCP-Zielsteuerung des Fennara-Docks in Godot, um das Projekt auszuwählen. Sitzungen des integrierten Chats
-bleiben an den Godot-Editor gebunden, der diesen Chat geöffnet hat.
+Ein projektgebundener MCP-Prozess leitet jeden Aufruf an den verbundenen Editor
+seines kanonischen Projektstamms weiter. Verwende je einen MCP-Prozess und eine
+Verbindung pro Projekt, wenn Agenten gleichzeitig in verschiedenen Repositorys
+oder Worktrees arbeiten.
+
+Ein ungebundener MCP-Prozess bewahrt das Kompatibilitätsverhalten: Der Daemon
+verwendet das im Dock ausgewählte MCP-Ziel oder den einzigen verbundenen Editor.
+Führe vor gleichzeitiger Arbeit `fennara_status` aus und verlange den Routingmodus
+`bound` mit dem erwarteten Stamm. Sitzungen des integrierten Chats bleiben an den
+Editor gebunden, der den Chat geöffnet hat. Siehe
+[Mehrere Agenten und Worktrees](multi-agent-worktrees.md).
+
+<a id="can-several-agents-run-their-games-at-the-same-time"></a>
+## Können mehrere Agenten ihre Spiele gleichzeitig ausführen?
+
+Nicht über vom Daemon verwaltete Laufzeitsitzungen. Bearbeitung, Inspektion,
+begrenzte Szenenvalidierung und eigenständige Screenshots können gleichzeitig
+stattfinden, aber alle Projekte teilen sich einen Laufzeit-Slot für interaktive,
+verwaltete Spielausführungen. Eine unterlegene Startanfrage gibt das normale
+anonyme Ergebnis `busy` zurück, sodass der Agent mit Jitter abfragen und erneut
+versuchen kann, ohne den laufenden Test zu stören. Das besitzende Projekt erneuert
+durch Statusabfragen seine Inaktivitätsfrist, solange die Ausführung andauert;
+die absolute Lease-Frist bleibt dabei unverändert.
 
 <a id="why-does-linux-install-a-separate-cef-runtime"></a>
 ## Warum installiert Linux eine separate CEF-Laufzeit?

@@ -78,6 +78,7 @@
     { "source": "docs/github-metadata.md", "target": "docs/i18n/{locale}/github-metadata.md" },
     { "source": "docs/manual-install.md", "target": "docs/i18n/{locale}/manual-install.md" },
     { "source": "docs/mcp-setup.md", "target": "docs/i18n/{locale}/mcp-setup.md" },
+    { "source": "docs/multi-agent-worktrees.md", "target": "docs/i18n/{locale}/multi-agent-worktrees.md" },
     { "source": "docs/open-rpg-demo.md", "target": "docs/i18n/{locale}/open-rpg-demo.md" },
     { "source": "docs/providers.md", "target": "docs/i18n/{locale}/providers.md" },
     { "source": "docs/release.md", "target": "docs/i18n/{locale}/release.md" },

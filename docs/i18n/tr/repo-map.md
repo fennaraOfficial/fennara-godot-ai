@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/repo-map.md sha256=dd8616d3a3f73e8f05b95898cd34041186e47818eefe9f41f1f0a951f1c27fdb -->
+<!-- fennara-i18n: locale=tr source=docs/repo-map.md sha256=48c47152f755d34f1f6526d58c15c3d16205d5389a00442e4f1409efa514e73c -->
 <a id="repo-map"></a>
 # Depo Haritası
 
@@ -17,6 +17,7 @@ Bu, bu depoda çalışan katkıda bulunanlar ve kodlama aracıları için hızl�
 | --- | --- |
 | Kullanıcı kurulumu veya CLI davranışı | `local/crates/fennara-cli/` |
 | Harici MCP protokolü veya şemaları | `local/crates/fennara-mcp/`, `local/schemas/tools/` |
+| Proje Kökü keşfi veya eşitliği | `local/crates/fennara-project-identity/` |
 | Yerleşik sohbet veya daemon davranışı | `local/crates/fennara-daemon/` |
 | Godot düzenleyici entegrasyonu | `fennara-cpp/` |
 | Sohbet arayüzü | `ui/chat/` |
@@ -46,6 +47,7 @@ Bu, bu depoda çalışan katkıda bulunanlar ve kodlama aracıları için hızl�
 | `README.md` | İnsanlara dönük kısa genel bakış ve hızlı başlangıç. |
 | `docs/README.md` | Görev odaklı belge dizini. |
 | `docs/setup.md` | Kullanıcıya dönük, önce eklenti kurulumu; sohbet ön koşulları; MCP bağlantısı; güncelleme akışı ve sorun giderme. |
+| `docs/multi-agent-worktrees.md` | Proje başına bir MCP bağlantısı yönlendirmesi, desteklenen ana bilgisayar sınırları, doğrulama ve sıralı Çalışma Zamanı Yuvası kullanımı. |
 | `docs/cli.md` | Terminal komutu başvurusu, CLI'a ait kurulum/güncelleme davranışı, kurtarma, tanılama, uygulama verisi yerleşimi ve otomasyon rehberi. |
 | `docs/telemetry.md` | Anonim etkinlik yükü, uygulama verisi durumu, teslim davranışı, aylık etkin tanımı ve vazgeçme denetimleri. |
 | `CONTRIBUTING.md` | Katkı kuralları. |
@@ -70,8 +72,12 @@ Bu, bu depoda çalışan katkıda bulunanlar ve kodlama aracıları için hızl�
 | `local/crates/fennara-cli/src/daemon_setup.rs` | Kurulum ve doctor tarafından kullanılan paylaşılan daemon sağlık denetimi, tam sürüm hazırlığı ve başlatma. |
 | `local/crates/fennara-cli/tests/operation_failures.rs` | Süreç düzeyi hata, kalıcı tanılamalar, sansürleme ve kapalı biçimde başarısız olan işlem günlüğü testleri. |
 | `local/crates/fennara-cli/src/diagnostics.rs` | En son veya adlandırılmış, temizlenmiş işlem raporuna kullanıcıya dönük erişim. |
-| `local/crates/fennara-mcp/` | Yerel stdio MCP sunucusu ve araç şeması iletimi. |
-| `local/crates/fennara-daemon/` | Çalışma zamanı oturumları ve Godot köprü çalışması için kullanılan yerel daemon. |
+| `local/crates/fennara-project-identity/` | Paylaşılan Proje Kökü keşfi, doğrulaması, kanonikleştirmesi, kayıpsız protokol dönüşümü ve canlı dosya sistemi eşitliği. |
+| `local/crates/fennara-mcp/` | Yerel stdio MCP sunucusu, işlem kapsamlı Proje Bağlaması keşfi, durum sunumu ve araç şeması iletimi. |
+| `local/crates/fennara-daemon/` | Proje Kökü yönlendirmesi, Çalışma Zamanı Yuvası sahipliği ve kiraları, çalışma zamanı oturumları ve Godot köprü çalışması için kullanılan paylaşılan yerel daemon. |
+| `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs` | Birbirini dışlayan editör oturumu, bağlı proje ve eski MCP hedefi seçimi ile Godot istek/yanıt ilişkilendirmesi. |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs` | Makine genelinde atomik Çalışma Zamanı Yuvası kabulü, sahip kimliği ve kira durumu. |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs` | Yönetilen oyun işlemi yaşam döngüsü, sahip yetkilendirmesi, günlükler, süre dolumu temizliği ve oturum makbuzları. |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry.rs` | Anonim günlük etkin zamanlayıcı, sınırlı kuyruk, HTTP teslimi ve daemon yaşam döngüsü entegrasyonu. |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry/state.rs` | Rastgele kurulum kimliği doğrulaması, atomik uygulama verisi kalıcılığı, günlük makbuz durumu ve vazgeçme temizliği. |
 | `local/crates/fennara-daemon/src/runtime_daemon/permissions.rs` | Yerleşik sohbet onay modları, araç riski sınıflandırması, izin kararları ve bekleyen onay isteği türleri. |
@@ -196,7 +202,10 @@ Bu, bu depoda çalışan katkıda bulunanlar ve kodlama aracıları için hızl�
 | Oluşturulan proje rehberini değiştirmek | `local/templates/` ve `local/crates/fennara-cli/src/project_guidance.rs` |
 | Oluşturulan demo eklentisi rehberini eşitlemek | `local/templates/fennara-guidelines.md`, `local/templates/fennara-ai/`, `scripts/sync-guidance.mjs` ve `godot_demo/addons/fennara/ai/` |
 | MCP uygulaması kurulumunu değiştirmek | `local/crates/fennara-cli/src/mcp_setup.rs` ve `docs/mcp-setup.md` |
+| MCP Proje Bağlaması keşfini veya Proje Kökü eşitliğini değiştirmek | `local/crates/fennara-project-identity/`, `local/crates/fennara-mcp/src/runtime/`, `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs` ve `docs/multi-agent-worktrees.md` |
+| Daemon hedef yönlendirmesini veya bağlı durumu değiştirmek | `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs`, `local/crates/fennara-mcp/src/runtime/` ve `docs/multi-agent-worktrees.md` |
 | Çalışma zamanı oturumu süreç/günlük davranışını değiştirmek | `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`, `local/crates/fennara-daemon/src/runtime_daemon/runtime_log.rs`, `fennara-cpp/src/tools/runtime_session/` ve `fennara-cpp/src/tool_results/` |
+| Çalışma Zamanı Yuvası sahipliğini, kabulünü veya kiralarını değiştirmek | `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs`, `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`, `fennara-cpp/src/tools/runtime_session/`, `fennara-cpp/src/tools/runtime_script.cpp` ve `local/schemas/tools/runtime_session.json` |
 | `runtime_script` ctx yardımcılarını, girdiyi, anlık görüntüleri, beklemeleri, ışın izlemeleri, yakalamaları veya temizliği değiştirmek | `runtime/`, `scripts/sync-runtime.mjs`, `godot_demo/addons/fennara/runtime/`, `local/schemas/tools/runtime_script.json` ve `docs/tools.md` |
 | Düzenleyici içi sohbet arayüzünü, eğik çizgi komutlarını veya model/sağlayıcı seçiciyi değiştirmek | `ui/chat/`, `godot_demo/addons/fennara/dist/`, `fennara-cpp/src/ui/dock.cpp` ve `fennara-cpp/src/ui/webview_host*` |
 | Yerleşik sohbet sağlayıcılarını değiştirmek | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/`, `local/crates/fennara-daemon/src/runtime_daemon/chat/models.rs`, `local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs` ve `ui/chat/` |

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/README.md sha256=2f8fb6a711c8bb56af570d1657f802c63cbdf2ced6b2c620339c588c9c9211cb -->
+<!-- fennara-i18n: locale=ja source=docs/README.md sha256=ab01a3fd8024bccc8ad878eb0ec4cb15defa770ed3feccd0eef4c56270c7e763 -->
 <a id="fennara-documentation"></a>
 # Fennara ドキュメント
 
@@ -13,7 +13,7 @@
 <a id="languages"></a>
 ## 言語
 
-別の言語で同じページを読むには、ページ上部に追加される language menu を使います。coverage、review status、source-of-truth policy は [言語と翻訳状況](languages.md) を参照してください。
+別の言語で同じページを読むには、上の言語メニューを使います。対応範囲、レビュー状況、正本に関する方針は [言語と翻訳状況](languages.md) を参照してください。
 
 <a id="start-here"></a>
 ## はじめに
@@ -32,6 +32,7 @@
 | ガイド | 内容 |
 | --- | --- |
 | [MCP アプリと内蔵チャット](chat-vs-mcp.md) | 各経路が使うモデルアカウント |
+| [複数エージェントと worktree](multi-agent-worktrees.md) | 1 つのデーモンを共有しながら、MCP 接続ごとに専用の Godot プロジェクトへバインドする方法 |
 | [ツール](tools.md) | Godot 対応ツールと使いどころ |
 | [例](examples.md) | よくある Godot 作業向けプロンプト |
 | [スラッシュコマンド](slash-commands.md) | チャットドックの `/provider` と `/model` |

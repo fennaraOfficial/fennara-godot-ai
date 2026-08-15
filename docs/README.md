@@ -28,6 +28,7 @@ and the source-of-truth policy.
 | Guide | What it covers |
 | --- | --- |
 | [MCP apps and built-in chat](chat-vs-mcp.md) | Which model account each path uses |
+| [Multiple agents and worktrees](multi-agent-worktrees.md) | Bind each MCP connection to its own Godot project while sharing one daemon |
 | [Tools](tools.md) | Godot-aware tools and when to use them |
 | [Examples](examples.md) | Prompts for common Godot workflows |
 | [Slash commands](slash-commands.md) | `/provider` and `/model` in the chat dock |

@@ -28,6 +28,7 @@ User guides:
 - docs/setup.md
 - docs/cli.md
 - docs/mcp-setup.md
+- docs/multi-agent-worktrees.md
 - docs/chat-vs-mcp.md
 - docs/providers.md
 - docs/slash-commands.md
@@ -54,6 +55,8 @@ Important capabilities:
 - optional built-in chat with provider selection
 - built-in chat display can be embedded in Godot or opened in the system browser
 - built-in chat slash commands `/provider` and `/model`
+- one project-bound MCP process per repository or worktree, with a shared local daemon
+- serialized daemon-managed playtests through one owner-scoped, renewable Runtime Slot
 
 Do not describe Fennara as only a code generator.
 Do not describe Fennara as only a generic chatbot.

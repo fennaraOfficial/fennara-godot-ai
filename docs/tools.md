@@ -28,6 +28,11 @@ the MCP server.
 `fennara_status` is available to external MCP clients. The built-in chat already
 receives connection and active-project state from the daemon.
 
+Each external MCP process chooses one routing mode when it starts. A `bound`
+process routes by canonical Project Root. A `legacy_unbound` process uses the
+dock-selected compatibility target and is unsuitable for isolated concurrent
+work.
+
 ## Typical Workflow
 
 1. Confirm the connected project when using an external MCP client.
@@ -43,13 +48,17 @@ tools should be used after it reports ready.
 
 ### `fennara_status`
 
-Reports the MCP server, daemon, active Godot project, connected editor sessions,
-component versions, rendering context, advertised tools, and editor filesystem
-readiness.
+Reports the MCP server, daemon, routing mode, selected Godot editor, connected
+editor sessions, component versions, rendering context, advertised tools, and
+editor filesystem readiness.
 
 Working behavior:
 
 - Returns one plain-text status block.
+- For a bound process, reports binding source (`cli`, `environment`, or `cwd`),
+  canonical Project Root, and editor state (`connected`, `not_connected`, or
+  `ambiguous`).
+- Reports the dock-selected legacy MCP Target separately from a Project Binding.
 - Distinguishes a ready editor filesystem from one that is scanning or importing.
 - Reports whether asset-facing tools are currently ready.
 - Shows version differences so mismatched installations can be diagnosed.
@@ -57,8 +66,15 @@ Working behavior:
 Important limits and failures:
 
 - It reports project-level readiness, not readiness for one specific asset path.
-- A disconnected daemon, missing active project, or disconnected Godot plugin is
-  reported directly instead of being treated as a ready project.
+- A bound root with no matching editor reports retryable
+  `bound_project_not_connected` and never falls through to the dock target.
+- Duplicate editors for one bound root report `ambiguous_project_binding`; no
+  editor is selected.
+- A disconnected daemon, missing compatibility target, or disconnected Godot
+  plugin is reported directly instead of being treated as a ready project.
+- A failed bound match never displays filesystem readiness or apparent success
+  from an unrelated editor.
+- Legacy-unbound mode reports a concurrency warning.
 - Readiness can change briefly while Godot reimports files.
 
 ## Inspection
@@ -297,6 +313,8 @@ Working behavior:
   than unconditional failures.
 - Authored scenes with clean structural results receive a three-second headless
   startup pass with logs and artifacts retained.
+- These bounded validation workers do not occupy the interactive Runtime Slot;
+  validation may proceed while another project owns a Runtime Session.
 - Repeated findings are grouped so large scenes do not flood the result.
 
 Important limits and failures:
@@ -374,6 +392,9 @@ Working behavior:
 - Startup gates run before a scene process is launched.
 - A successful start returns a session identifier, process state, log paths,
   startup findings, and available capture information.
+- A busy machine-wide Runtime Slot returns a successful `busy` domain result
+  with `availability: "busy"`, `slot_acquired: false`, and a suggested
+  `retry_after_ms`. It does not reveal the owning project or session.
 - Status returns new runtime output without discarding the full session log.
 - Stop returns final process and log information.
 - C# projects receive a real runtime build into Godot's normal Debug output before
@@ -386,11 +407,28 @@ Working behavior:
 
 Important limits and failures:
 
-- Only one daemon-managed runtime session is active globally at a time.
+- Only one daemon-managed Runtime Session may be starting or running globally.
+  Poll a `busy` result with jitter and treat each new start as the final atomic
+  claim; a preceding free status is only advisory.
+- A Runtime Session belongs to its canonical Project Root. Only that owner may
+  inspect detailed status, renew it, run scripts, or stop it. Other projects see
+  anonymous busy state.
+- Owner status renews a 120-second inactivity deadline. A bounded owner runtime
+  operation suspends inactivity expiry while active and renews the deadline only
+  after returning a terminal script result; timeout, setup error, or cancellation
+  does not renew it. Poll owner status about every 30 seconds with jitter while a
+  run proceeds.
+- `max_run_seconds` is a positive integer with a 900-second default and an
+  86,400-second maximum. A one-hour regression can request 4,500 seconds for
+  margin. The absolute deadline is never suspended.
+- Natural exit, explicit stop, startup failure, inactivity expiry, or absolute
+  expiry releases the Runtime Slot.
 - Failed startup gates prevent the scene from opening.
 - A C# runtime build can trigger the open editor's normal assembly reload.
-- Startup readiness markers may arrive after the initial response and appear in
-  a later status call.
+- Both `FENNARA_RUNTIME_SESSION_READY` and
+  `FENNARA_RUNTIME_ORIENTATION_NOTE` are required before the five-second
+  startup deadline. If either marker is missing, the daemon kills and reaps the
+  process before returning `startup_timeout`; it does not report initial success.
 - Managed sessions are separate Godot processes, not the scene manually running
   inside the editor.
 
@@ -414,6 +452,12 @@ Working behavior:
 Important limits and failures:
 
 - It requires a valid active `runtime_session` identifier.
+- Only the session's owning Project Root may run a probe. A non-owner receives
+  `runtime_session_not_owned_or_found`, which does not disclose whether another
+  project's identifier exists.
+- A bounded owner probe suspends inactivity expiry while it executes. A returned
+  terminal script result renews inactivity; timeout, setup error, or cancellation
+  does not. No probe extends the absolute Runtime Lease.
 - Runtime scripts are not editor `@tool` scripts and cannot be used as scene edit
   workers.
 - Invalid diagnostics, timeouts, runtime errors, closed sessions, or unavailable

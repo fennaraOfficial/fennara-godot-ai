@@ -10,16 +10,16 @@ current English source and invites review from native speakers.
 
 | Language | Documentation | Coverage | Review status |
 | --- | --- | --- | --- |
-| English | [English documentation](README.md) | 30/30 | Canonical |
-| 简体中文 | [简体中文文档](i18n/zh-CN/README.md) | 30/30 | Native review requested |
-| Español | [Documentación en español](i18n/es/README.md) | 30/30 | Native review requested |
-| Português do Brasil | [Documentação em português](i18n/pt-BR/README.md) | 30/30 | Native review requested |
-| 日本語 | [日本語ドキュメント](i18n/ja/README.md) | 30/30 | Native review requested |
-| 한국어 | [한국어 문서](i18n/ko/README.md) | 30/30 | Native review requested |
-| Русский | [Документация на русском](i18n/ru/README.md) | 30/30 | Native review requested |
-| Français | [Documentation en français](i18n/fr/README.md) | 30/30 | Native review requested |
-| Deutsch | [Deutsche Dokumentation](i18n/de/README.md) | 30/30 | Native review requested |
-| Türkçe | [Türkçe belgeler](i18n/tr/README.md) | 30/30 | Native review requested |
+| English | [English documentation](README.md) | 31/31 | Canonical |
+| 简体中文 | [简体中文文档](i18n/zh-CN/README.md) | 31/31 | Native review requested |
+| Español | [Documentación en español](i18n/es/README.md) | 31/31 | Native review requested |
+| Português do Brasil | [Documentação em português](i18n/pt-BR/README.md) | 31/31 | Native review requested |
+| 日本語 | [日本語ドキュメント](i18n/ja/README.md) | 31/31 | Native review requested |
+| 한국어 | [한국어 문서](i18n/ko/README.md) | 31/31 | Native review requested |
+| Русский | [Документация на русском](i18n/ru/README.md) | 31/31 | Native review requested |
+| Français | [Documentation en français](i18n/fr/README.md) | 31/31 | Native review requested |
+| Deutsch | [Deutsche Dokumentation](i18n/de/README.md) | 31/31 | Native review requested |
+| Türkçe | [Türkçe belgeler](i18n/tr/README.md) | 31/31 | Native review requested |
 
 ## What Is Translated
 

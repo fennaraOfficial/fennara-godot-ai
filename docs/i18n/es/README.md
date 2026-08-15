@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=es source=docs/README.md sha256=2f8fb6a711c8bb56af570d1657f802c63cbdf2ced6b2c620339c588c9c9211cb -->
+<!-- fennara-i18n: locale=es source=docs/README.md sha256=ab01a3fd8024bccc8ad878eb0ec4cb15defa770ed3feccd0eef4c56270c7e763 -->
 <a id="fennara-documentation"></a>
 # Documentación de Fennara
 
@@ -35,6 +35,7 @@ para conocer la cobertura, el estado de revisión y la política de fuente canó
 | Guía | Contenido |
 | --- | --- |
 | [Aplicaciones MCP y chat integrado](chat-vs-mcp.md) | Qué cuenta de modelo utiliza cada opción |
+| [Varios agentes y árboles de trabajo](multi-agent-worktrees.md) | Vincular cada conexión MCP con su propio proyecto de Godot mientras comparten un daemon |
 | [Herramientas](tools.md) | Herramientas que entienden Godot y cuándo utilizarlas |
 | [Ejemplos](examples.md) | Prompts para flujos de trabajo habituales en Godot |
 | [Comandos con barra](slash-commands.md) | `/provider` y `/model` en el panel de chat |

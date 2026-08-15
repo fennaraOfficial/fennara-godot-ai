@@ -40,7 +40,27 @@ An external AI app configured by `fennara mcp-setup`. MCP app setup controls whi
 
 **MCP Target**
 
-The Godot project currently selected to receive Fennara MCP calls.
+The dock-selected, daemon-global compatibility target used by an external MCP
+connection that has no MCP Project Binding. Bound MCP connections do not read
+or change this target.
+
+**MCP Project Binding**
+
+The stable Project Root selected once when a Fennara MCP process starts. It
+routes that process's calls to the matching Godot Editor Session without using
+the daemon-global MCP Target.
+
+**Project Root**
+
+The canonical filesystem directory containing one Godot project's
+`project.godot`. Fennara uses filesystem identity rather than a project name to
+distinguish repositories and worktrees.
+
+**Godot Editor Session**
+
+One currently connected Fennara addon and Godot editor instance. It has a
+project path and Godot process ID, and may disconnect and reconnect without
+changing an MCP process's Project Binding.
 
 **Tool Schema**
 
@@ -86,7 +106,22 @@ The local service that connects MCP calls and built-in chat requests to the Godo
 
 **Runtime Session**
 
-A daemon-managed Godot runtime session used for runtime inspection, logs, validation, screenshots, and future running-scene workflows.
+A daemon-managed interactive Godot game process used for running-scene
+inspection, logs, and runtime captures. Its owning canonical Project Root
+retains control even if that project's editor reconnects. Bounded scene
+validation and standalone screenshot calls use separate paths and do not occupy
+the Runtime Slot.
+
+**Runtime Slot**
+
+The machine-wide admission state that allows at most one daemon-managed Runtime
+Session to start or run across all connected projects.
+
+**Runtime Lease**
+
+The owning Project Root's renewable, time-bounded right to occupy the Runtime
+Slot. Owner activity renews its inactivity deadline, while its absolute
+deadline always remains enforced.
 
 **Godot Snapshot**
 

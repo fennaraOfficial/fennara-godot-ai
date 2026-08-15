@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/repo-map.md sha256=dd8616d3a3f73e8f05b95898cd34041186e47818eefe9f41f1f0a951f1c27fdb -->
+<!-- fennara-i18n: locale=zh-CN source=docs/repo-map.md sha256=48c47152f755d34f1f6526d58c15c3d16205d5389a00442e4f1409efa514e73c -->
 <a id="repo-map"></a>
 # 仓库地图
 
@@ -17,6 +17,7 @@
 | --- | --- |
 | 用户设置或 CLI 行为 | `local/crates/fennara-cli/` |
 | 外部 MCP 协议或模式 | `local/crates/fennara-mcp/`、`local/schemas/tools/` |
+| 项目根目录发现或相等性 | `local/crates/fennara-project-identity/` |
 | 内置聊天或守护进程行为 | `local/crates/fennara-daemon/` |
 | Godot 编辑器集成 | `fennara-cpp/` |
 | 聊天 UI | `ui/chat/` |
@@ -46,6 +47,7 @@
 | `README.md` | 简短的面向用户概述和快速入门。 |
 | `docs/README.md` | 面向任务的文档索引。 |
 | `docs/setup.md` | 面向用户的插件优先设置、聊天先决条件、MCP 连接、更新流程和故障排除。 |
+| `docs/multi-agent-worktrees.md` | 每项目一个 MCP 连接的路由、受支持主机的边界、验证和串行化运行时槽位使用。 |
 | `docs/cli.md` | 终端命令参考、CLI 负责的安装或更新行为、恢复、诊断、应用数据布局和自动化指南。 |
 | `docs/telemetry.md` | 匿名活动载荷、应用数据状态、传递行为、月活定义和退出控制。 |
 | `CONTRIBUTING.md` | 贡献规则。 |
@@ -70,8 +72,12 @@
 | `local/crates/fennara-cli/src/daemon_setup.rs` | 安装和 doctor 共用的守护进程健康检查、精确版本就绪检查和启动。 |
 | `local/crates/fennara-cli/tests/operation_failures.rs` | 进程级故障、持久诊断、脱敏和故障关闭操作日志测试。 |
 | `local/crates/fennara-cli/src/diagnostics.rs` | 面向用户访问最新或指定名称的净化操作报告。 |
-| `local/crates/fennara-mcp/` | 本地 stdio MCP 服务器和工具模式转发。 |
-| `local/crates/fennara-daemon/` | 用于运行时会话和 Godot 桥接工作的本地守护进程。 |
+| `local/crates/fennara-project-identity/` | 共享的项目根目录发现、验证、规范化、无损协议转换和实时文件系统相等性。 |
+| `local/crates/fennara-mcp/` | 本地 stdio MCP 服务器、进程范围的项目绑定发现、状态呈现和工具模式转发。 |
+| `local/crates/fennara-daemon/` | 用于项目根目录路由、运行时槽位所有权与租约、运行时会话和 Godot 桥接工作的共享本地守护进程。 |
+| `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs` | 相互排斥的编辑器会话、已绑定项目与旧式 MCP 目标选择，以及 Godot 请求或响应关联。 |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs` | 整台机器范围的原子运行时槽位准入、所有者身份和租约状态。 |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs` | 受管理游戏进程的生命周期、所有者授权、日志、过期清理和会话回执。 |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry.rs` | 匿名每日活跃调度器、有界队列、HTTP 传递和守护进程生命周期集成。 |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry/state.rs` | 随机安装身份验证、原子应用数据持久化、每日回执状态和退出后清理。 |
 | `local/crates/fennara-daemon/src/runtime_daemon/permissions.rs` | 内置聊天批准模式、工具风险分类、权限决定和待处理批准请求类型。 |
@@ -196,7 +202,10 @@
 | 更改生成的项目指导 | `local/templates/` 和 `local/crates/fennara-cli/src/project_guidance.rs` |
 | 同步生成的演示插件指导 | `local/templates/fennara-guidelines.md`、`local/templates/fennara-ai/`、`scripts/sync-guidance.mjs` 和 `godot_demo/addons/fennara/ai/` |
 | 更改 MCP 应用设置 | `local/crates/fennara-cli/src/mcp_setup.rs` 和 `docs/mcp-setup.md` |
+| 更改 MCP 项目绑定发现或项目根目录相等性 | `local/crates/fennara-project-identity/`、`local/crates/fennara-mcp/src/runtime/`、`local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs` 和 `docs/multi-agent-worktrees.md` |
+| 更改守护进程目标路由或绑定状态 | `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs`、`local/crates/fennara-mcp/src/runtime/` 和 `docs/multi-agent-worktrees.md` |
 | 更改运行时会话进程或日志行为 | `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`、`local/crates/fennara-daemon/src/runtime_daemon/runtime_log.rs`、`fennara-cpp/src/tools/runtime_session/` 和 `fennara-cpp/src/tool_results/` |
+| 更改运行时槽位所有权、准入或租约 | `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs`、`local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`、`fennara-cpp/src/tools/runtime_session/`、`fennara-cpp/src/tools/runtime_script.cpp` 和 `local/schemas/tools/runtime_session.json` |
 | 更改 `runtime_script` ctx 辅助功能、输入、快照、等待、射线检测、捕获或清理 | `runtime/`、`scripts/sync-runtime.mjs`、`godot_demo/addons/fennara/runtime/`、`local/schemas/tools/runtime_script.json` 和 `docs/tools.md` |
 | 更改编辑器内聊天 UI、斜杠命令或模型或提供方选择器 | `ui/chat/`、`godot_demo/addons/fennara/dist/`、`fennara-cpp/src/ui/dock.cpp` 和 `fennara-cpp/src/ui/webview_host*` |
 | 更改内置聊天提供方 | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/`、`local/crates/fennara-daemon/src/runtime_daemon/chat/models.rs`、`local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs` 和 `ui/chat/` |

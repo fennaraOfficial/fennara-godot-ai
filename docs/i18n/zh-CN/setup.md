@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/setup.md sha256=ab1b11ff7dd3472ab14185e920004b6504fa14eb1c29e7c7b1d7a322780af1dd -->
+<!-- fennara-i18n: locale=zh-CN source=docs/setup.md sha256=d470da8cda3e69aacb89ee5f06f1d7831df5ab7f50c94a599bfab5bfe22157e3 -->
 <a id="setup"></a>
 # 设置
 
@@ -149,6 +149,9 @@ fennara mcp-setup --help
 如果你的应用未列出，请参阅 [MCP 设置](mcp-setup.md)，了解所有受支持的
 目标和手动配置格式。
 
+设置条目是全局且与项目无关的。如果多个智能体使用不同的仓库或工作树，请在设置后为每个项目根目录配置一个已绑定项目的 MCP 连接。请参阅
+[多智能体与工作树](multi-agent-worktrees.md)。
+
 外部 MCP 应用使用它们自己的模型账户。内置聊天使用
 Fennara Chat Settings 中选择的提供方。关于两者的区别，请参阅
 [MCP 应用与内置聊天](chat-vs-mcp.md)。
@@ -159,11 +162,13 @@ Fennara Chat Settings 中选择的提供方。关于两者的区别，请参阅
 打开 Godot 项目，然后向你的 MCP 应用询问：
 
 ```text
-使用 Fennara MCP 运行 fennara_status，并告诉我连接的是哪个 Godot 项目。
+Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-如果它报告了错误的项目，请从 Fennara
-停靠面板中选择正确的 MCP 目标。
+对于隔离工作，请确认它报告的路由模式为 `bound`、规范项目根目录符合预期、绑定编辑器状态为 `connected`，并且该编辑器的文件系统就绪。已绑定的连接即使没有匹配的已打开编辑器也会保持运行，
+并报告可重试的 `bound_project_not_connected`，直到编辑器重新连接。
+
+如果状态报告 `legacy_unbound`，停靠面板的 MCP 目标就是兼容路由。单客户端使用时请选择预期目标；并发工作前则应配置显式项目绑定。
 
 <a id="update-fennara"></a>
 ## 更新 Fennara
@@ -254,8 +259,10 @@ addons/fennara/fennara.gdextension
 <a id="fennarastatus-shows-the-wrong-project"></a>
 ### `fennara_status` 显示了错误的项目
 
-打开预期项目，并使用 Fennara
-停靠面板中的 MCP 目标控件选择它。
+首先查看报告的路由模式。对于 `bound`，请使用预期的 `--project-path`、`FENNARA_PROJECT_PATH` 或项目启动目录重启 MCP 进程。对于 `legacy_unbound`，请打开预期项目，
+并使用 Fennara 停靠面板中的 MCP 目标控件选择它。
+
+如果已绑定根目录为 `not_connected`，请打开该项目并等待其插件连接。如果为 `ambiguous`，请关闭重复编辑器，或从不同工作树启动它。
 
 <a id="c-diagnostics-are-missing"></a>
 ### 缺少 C# 诊断

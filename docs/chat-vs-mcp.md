@@ -48,12 +48,25 @@ and model setup.
 
 Both paths use the local Fennara daemon for Godot feedback.
 
-- External MCP calls go to the project selected by the dock's **MCP target**
-  control.
+- An external MCP process may bind once at startup to a canonical Godot Project
+  Root. Its calls route to the matching editor without reading or changing the
+  dock's **MCP target**.
+- An unbound external MCP process keeps the compatibility behavior: it uses the
+  dock-selected MCP Target, or the sole connected editor when no valid target is
+  selected.
 - Built-in chat stays bound to the Godot editor that opened the chat.
+
+Use one MCP process and connection per project for isolated agents working in
+separate repositories or worktrees. See
+[Multiple Agents And Worktrees](multi-agent-worktrees.md) for setup and Runtime
+Slot behavior.
 
 To verify an external MCP connection, ask:
 
 ```text
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
+
+Before concurrent work, verify that status reports routing mode `bound` and the
+expected canonical Project Root. Legacy-unbound mode includes a concurrency
+warning.

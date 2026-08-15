@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/setup.md sha256=ab1b11ff7dd3472ab14185e920004b6504fa14eb1c29e7c7b1d7a322780af1dd -->
+<!-- fennara-i18n: locale=ja source=docs/setup.md sha256=d470da8cda3e69aacb89ee5f06f1d7831df5ab7f50c94a599bfab5bfe22157e3 -->
 <a id="setup"></a>
 # セットアップ
 
@@ -115,6 +115,8 @@ fennara mcp-setup --help
 
 使用するアプリが一覧にない場合は、対応するすべての対象と手動構成形式について [MCP セットアップ](mcp-setup.md)を参照してください。
 
+セットアップで作成されるエントリはグローバルで、プロジェクトには依存しません。複数のエージェントが別々のリポジトリや worktree を使用する場合は、セットアップ後に Project Root ごとのプロジェクトバインド済み MCP 接続を 1 つずつ構成してください。詳しくは [複数エージェントと worktree](multi-agent-worktrees.md) を参照してください。
+
 外部 MCP アプリは独自のモデルアカウントを使用します。内蔵チャットは Fennara の Chat Settings で選択したプロバイダーを使用します。違いについては、[MCP アプリと内蔵チャット](chat-vs-mcp.md)を参照してください。
 
 <a id="verify-the-connection"></a>
@@ -126,7 +128,9 @@ Godot プロジェクトを開き、MCP アプリへ次のように依頼しま�
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-誤ったプロジェクトが報告された場合は、Fennara ドックから正しい MCP target を選択します。
+分離した作業では、ルーティングモード `bound`、想定する正規 Project Root、バインド先エディターの状態 `connected`、そのエディターのファイルシステム準備状況が報告されることを確認してください。一致するエディターが開いていないバインド済み接続は存続し、エディターが再接続するまで再試行可能な `bound_project_not_connected` を報告します。
+
+ステータスが `legacy_unbound` を報告する場合、ドックの MCP target が互換ルートです。単一クライアントで使う場合は想定するターゲットを選択し、並行作業を始める場合は明示的な Project Binding を構成してください。
 
 <a id="update-fennara"></a>
 ## Fennara を更新
@@ -201,7 +205,9 @@ addons/fennara/fennara.gdextension
 <a id="fennarastatus-shows-the-wrong-project"></a>
 ### `fennara_status` が誤ったプロジェクトを表示する
 
-目的のプロジェクトを開き、Fennara ドックの MCP target コントロールで選択します。
+最初に、報告されたルーティングモードを確認します。`bound` の場合は、想定する `--project-path`、`FENNARA_PROJECT_PATH`、またはプロジェクト起動ディレクトリを指定して MCP プロセスを再起動します。`legacy_unbound` の場合は、想定するプロジェクトを開き、Fennara ドックの MCP target コントロールで選択します。
+
+バインドされたルートが `not_connected` の場合は、そのプロジェクトを開いてアドオンが接続するまで待ちます。`ambiguous` の場合は、重複しているエディターを閉じるか、別の worktree から起動してください。
 
 <a id="c-diagnostics-are-missing"></a>
 ### C# 診断が表示されない

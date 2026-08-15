@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=CONTEXT.md sha256=ee0d279d8a4916d5cf894616b1c72658669a36bf0ec958efef5a09ee196c704e -->
+<!-- fennara-i18n: locale=ja source=CONTEXT.md sha256=7d76acbada75ade69b43dc52fcd543f90d678c04b3e9b50fc11601b8b1853fd4 -->
 <a id="fennara-context"></a>
 # Fennara 用語集
 
@@ -46,7 +46,19 @@ Claude Code、Cursor、Cline、Gemini CLI、または別の MCP クライアン�
 
 **MCP Target**
 
-現在 Fennara MCP 呼び出しを受け取るよう選択されている Godot プロジェクトです。
+MCP Project Binding を持たない外部 MCP 接続に使われる、ドックで選択するデーモン全体の互換ターゲットです。バインド済みの MCP 接続は、このターゲットを参照も変更もしません。
+
+**MCP Project Binding**
+
+Fennara MCP プロセスの起動時に一度だけ選択される、安定した Project Root です。デーモン全体の MCP Target を使わず、そのプロセスからの呼び出しを一致する Godot Editor Session へルーティングします。
+
+**Project Root**
+
+1 つの Godot プロジェクトの `project.godot` を含む、ファイルシステム上の正規ディレクトリです。Fennara はプロジェクト名ではなくファイルシステム上の識別情報を使って、リポジトリや worktree を区別します。
+
+**Godot Editor Session**
+
+現在接続中の Fennara アドオンと Godot エディターの 1 インスタンスです。プロジェクトパスと Godot のプロセス ID を持ち、MCP プロセスの Project Binding を変えずに切断、再接続できます。
 
 **Tool Schema**
 
@@ -92,7 +104,15 @@ MCP 呼び出しと内蔵チャット要求を Godot アドオンへ接続し、
 
 **Runtime Session**
 
-実行時検査、ログ、検証、スクリーンショット、および将来の実行中シーンのワークフローに使う、デーモン管理の Godot ランタイムセッションです。
+実行中シーンの検査、ログ、ランタイムキャプチャに使う、デーモン管理の対話型 Godot ゲームプロセスです。所有する正規 Project Root は、そのプロジェクトのエディターが再接続しても制御権を保持します。範囲を限定したシーン検証と単独のスクリーンショット呼び出しは別の経路を使い、Runtime Slot を占有しません。
+
+**Runtime Slot**
+
+接続中の全プロジェクトを通じて、デーモン管理の Runtime Session の開始または実行を最大 1 つに制限する、マシン全体の受け入れ状態です。
+
+**Runtime Lease**
+
+Runtime Slot を占有するために、所有する Project Root へ与えられる、更新可能で期限付きの権利です。所有者の操作によって無操作期限は延長されますが、絶対期限は常に適用されます。
 
 **Godot Snapshot**
 

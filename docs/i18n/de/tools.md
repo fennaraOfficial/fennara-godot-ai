@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
+<!-- fennara-i18n: locale=de source=docs/tools.md sha256=ed8da3ac5003a9dafd4a90594f6f1b1e03c5987f73328fd0458a9ee6f18f3d7d -->
 <a id="tools"></a>
 # Werkzeuge
 
@@ -33,6 +33,11 @@ zum integrierten Chat, nicht zum MCP-Server.
 `fennara_status` steht externen MCP-Clients zur Verfügung. Der integrierte Chat erhält
 Verbindungs- und aktiven Projektstatus bereits vom Daemon.
 
+Jeder externe MCP-Prozess wählt beim Start genau einen Routingmodus. Ein Prozess
+im Modus `bound` leitet anhand des kanonischen Projektstamms weiter. Ein Prozess
+im Modus `legacy_unbound` verwendet das im Dock ausgewählte Kompatibilitätsziel
+und eignet sich nicht für isolierte gleichzeitige Arbeit.
+
 <a id="typical-workflow"></a>
 ## Typischer Arbeitsablauf
 
@@ -51,13 +56,17 @@ Asset-Werkzeuge sollten erst verwendet werden, nachdem es Bereitschaft meldet.
 <a id="fennarastatus"></a>
 ### `fennara_status`
 
-Meldet MCP-Server, Daemon, aktives Godot-Projekt, verbundene Editor-Sitzungen,
-Komponentenversionen, Rendering-Kontext, angekündigte Werkzeuge und Bereitschaft des
-Editor-Dateisystems.
+Meldet MCP-Server, Daemon, Routingmodus, ausgewählten Godot-Editor, verbundene
+Editor-Sitzungen, Komponentenversionen, Rendering-Kontext, angekündigte Werkzeuge
+und Bereitschaft des Editor-Dateisystems.
 
 Funktionsweise:
 
 - Gibt einen einzelnen Klartext-Statusblock zurück.
+- Meldet bei einem gebundenen Prozess die Bindungsquelle (`cli`, `environment` oder
+  `cwd`), den kanonischen Projektstamm und den Editorzustand (`connected`,
+  `not_connected` oder `ambiguous`).
+- Meldet das im Dock ausgewählte Legacy-MCP-Ziel getrennt von einer Projektbindung.
 - Unterscheidet ein bereites Editor-Dateisystem von einem, das gerade prüft oder importiert.
 - Meldet, ob Asset-bezogene Werkzeuge derzeit bereit sind.
 - Zeigt Versionsunterschiede, damit nicht übereinstimmende Installationen diagnostiziert werden können.
@@ -65,7 +74,15 @@ Funktionsweise:
 Wichtige Einschränkungen und Fehler:
 
 - Es meldet Bereitschaft auf Projektebene, nicht die Bereitschaft eines bestimmten Asset-Pfads.
-- Ein getrennter Daemon, ein fehlendes aktives Projekt oder ein getrenntes Godot-Plugin wird direkt gemeldet, statt als bereites Projekt behandelt zu werden.
+- Ein gebundener Stamm ohne passenden Editor meldet den wiederholbaren Fehler
+  `bound_project_not_connected` und fällt niemals auf das Dock-Ziel zurück.
+- Doppelte Editoren für denselben gebundenen Stamm melden
+  `ambiguous_project_binding`; es wird kein Editor ausgewählt.
+- Ein getrennter Daemon, ein fehlendes Kompatibilitätsziel oder ein getrenntes
+  Godot-Plugin wird direkt gemeldet, statt als bereites Projekt behandelt zu werden.
+- Eine fehlgeschlagene gebundene Zuordnung zeigt niemals die
+  Dateisystembereitschaft oder einen scheinbaren Erfolg eines fremden Editors an.
+- Der Legacy-unbound-Modus meldet eine Warnung zur gleichzeitigen Nutzung.
 - Während Godot Dateien erneut importiert, kann sich die Bereitschaft kurzzeitig ändern.
 
 <a id="inspection"></a>
@@ -293,6 +310,8 @@ Funktionsweise:
   exportierte Referenzen ab.
 - Optionale oder zur Laufzeit zugewiesene exportierte Referenzen werden als Hinweise und nicht als bedingungslose Fehler gemeldet.
 - Erstellte Szenen mit fehlerfreien Strukturergebnissen erhalten einen dreisekündigen Headless-Startdurchlauf, dessen Protokolle und Artefakte aufbewahrt werden.
+- Diese begrenzten Validierungs-Worker belegen den interaktiven Laufzeit-Slot nicht;
+  die Validierung kann fortfahren, während ein anderes Projekt eine Laufzeitsitzung besitzt.
 - Wiederholte Befunde werden gruppiert, damit große Szenen das Ergebnis nicht überfluten.
 
 Wichtige Einschränkungen und Fehler:
@@ -364,6 +383,10 @@ Funktionsweise:
 
 - Start-Gates werden ausgeführt, bevor ein Szenenprozess gestartet wird.
 - Ein erfolgreicher Start gibt Sitzungskennung, Prozessstatus, Protokollpfade, Startbefunde und verfügbare Erfassungsinformationen zurück.
+- Ein belegter rechnerweiter Laufzeit-Slot gibt das erfolgreiche Domänenergebnis
+  `busy` mit `availability: "busy"`, `slot_acquired: false` und einem
+  vorgeschlagenen `retry_after_ms` zurück. Der Eigentümer oder seine Sitzung wird
+  nicht offengelegt.
 - Der Status gibt neue Laufzeitausgabe zurück, ohne das vollständige Sitzungsprotokoll zu verwerfen.
 - Stop gibt abschließende Prozess- und Protokollinformationen zurück.
 - C#-Projekte erhalten vor dem Start einen echten Laufzeit-Build in Godots normale Debug-Ausgabe, damit der Prozess aktuelle Assemblies verwendet.
@@ -372,10 +395,34 @@ Funktionsweise:
 
 Wichtige Einschränkungen und Fehler:
 
-- Global ist gleichzeitig nur eine vom Daemon verwaltete Laufzeitsitzung aktiv.
+- Global darf nur eine vom Daemon verwaltete Laufzeitsitzung gestartet werden oder
+  laufen. Frage ein `busy`-Ergebnis mit Jitter ab und behandle jede neue
+  Startanfrage als den endgültigen atomaren Anspruch; ein vorheriger freier Status
+  ist nur ein Hinweis.
+- Eine Laufzeitsitzung gehört zu ihrem kanonischen Projektstamm. Nur dieser
+  Eigentümer darf detaillierten Status abrufen, die Lease erneuern, Skripte
+  ausführen oder die Sitzung beenden. Andere Projekte sehen nur einen anonymen
+  Belegungsstatus.
+- Statusabfragen des Eigentümers erneuern eine Inaktivitätsfrist von 120
+  Sekunden. Eine begrenzte Laufzeitoperation des Eigentümers setzt den
+  Inaktivitätsablauf während ihrer Ausführung aus und erneuert die Frist erst,
+  nachdem sie ein abschließendes Skriptergebnis zurückgegeben hat; bei
+  Zeitüberschreitung, Einrichtungsfehler oder Abbruch wird sie nicht erneuert.
+  Frage den Eigentümerstatus während einer Ausführung etwa alle 30 Sekunden mit
+  Jitter ab.
+- `max_run_seconds` ist eine positive Ganzzahl mit einem Standardwert von 900
+  Sekunden und einem Höchstwert von 86.400 Sekunden. Für eine einstündige
+  Regression können 4.500 Sekunden als Puffer angefordert werden. Die absolute
+  Frist wird niemals angehalten.
+- Natürliches Prozessende, ausdrücklicher Stopp, Startfehler, Inaktivitätsablauf
+  oder absoluter Ablauf geben den Laufzeit-Slot frei.
 - Fehlgeschlagene Start-Gates verhindern das Öffnen der Szene.
 - Ein C#-Laufzeit-Build kann das normale Neuladen der Assembly im geöffneten Editor auslösen.
-- Markierungen für die Startbereitschaft können nach der ersten Antwort eintreffen und in einem späteren Statusaufruf erscheinen.
+- Sowohl `FENNARA_RUNTIME_SESSION_READY` als auch
+  `FENNARA_RUNTIME_ORIENTATION_NOTE` müssen vor Ablauf der fünfsekündigen
+  Startfrist erscheinen. Fehlt eine der Markierungen, beendet der Daemon den
+  Prozess und wartet auf dessen Ende, bevor er `startup_timeout` zurückgibt;
+  ein anfänglicher Erfolg wird nicht gemeldet.
 - Verwaltete Sitzungen sind getrennte Godot-Prozesse, nicht die manuell im Editor laufende Szene.
 
 <a id="runtimescript"></a>
@@ -398,6 +445,13 @@ Funktionsweise:
 Wichtige Einschränkungen und Fehler:
 
 - Es erfordert eine gültige aktive `runtime_session`-Kennung.
+- Nur der Projektstamm, dem die Sitzung gehört, darf eine Sonde ausführen. Ein
+  anderer Eigentümer erhält `runtime_session_not_owned_or_found`; dadurch wird
+  nicht offengelegt, ob die Kennung eines anderen Projekts existiert.
+- Eine begrenzte Sonde des Eigentümers setzt den Inaktivitätsablauf während
+  ihrer Ausführung aus. Ein zurückgegebenes abschließendes Skriptergebnis
+  erneuert die Inaktivitätsfrist; Zeitüberschreitung, Einrichtungsfehler oder
+  Abbruch tun dies nicht. Keine Sonde verlängert die absolute Laufzeit-Lease.
 - Laufzeitskripte sind keine Editor-`@tool`-Skripte und können nicht als Worker für Szenenbearbeitung verwendet werden.
 - Ungültige Diagnosen, Zeitüberschreitungen, Laufzeitfehler, geschlossene Sitzungen oder nicht verfügbare Knoten werden gemeldet.
 - Sonden müssen begrenzt bleiben. Sie sind kein Ersatz für ein dauerhaftes Framework zur Gameplay-Automatisierung.

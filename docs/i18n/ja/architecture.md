@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
+<!-- fennara-i18n: locale=ja source=docs/architecture.md sha256=1bc08d075d4b48d0c781f954d4da4752d6c7223ff1636f01f06524b06dce256a -->
 <a id="architecture"></a>
 # アーキテクチャ
 
@@ -18,16 +18,19 @@ Fennara は、AI クライアントと、開かれている Godot エディタ�
 | リリース成果物を理解する | [リリース手順](release.md) |
 | 利用可能なモデル用ツールを確認する | [ツール](tools.md) |
 
-通常の OSS 経路には Fennara のクラウドサービスはありません。外部 MCP アプリがローカル MCP プロセスを起動し、そのプロセスがデーモンと通信します。内蔵チャットはデーモンと直接通信します。デーモンは、開いている Godot エディター内の Fennara アドオンに接続します。
+通常の OSS 経路には Fennara のクラウドサービスはありません。外部 MCP 接続はそれぞれローカル MCP プロセスを起動し、そのプロセスがユーザー単位で共有される 1 つのデーモンと通信します。内蔵チャットは、そのデーモンと直接通信します。デーモンは、開いている Godot エディター内の Fennara アドオンに接続します。
 
 ```mermaid
 flowchart LR
-    A["External MCP app"] --> B["fennara-mcp launcher"]
-    B --> C["Versioned MCP runtime"]
-    C --> D["Local daemon"]
-    E["Built-in Fennara chat"] --> D
-    D --> F["Godot editor addon"]
-    F --> G["Open Godot project"]
+    A["External MCP app A"] --> B["MCP runtime A\nProject Binding A"]
+    C["External MCP app B"] --> E["MCP runtime B\nProject Binding B"]
+    B --> D["Shared local daemon"]
+    E --> D
+    J["Built-in Fennara chat"] --> D
+    D --> F["Godot editor addon A"]
+    D --> G["Godot editor addon B"]
+    F --> H["Godot Project Root A"]
+    G --> I["Godot Project Root B"]
 ```
 
 <a id="main-pieces"></a>
@@ -37,9 +40,10 @@ flowchart LR
 | --- | --- | --- |
 | CLI | `local/crates/fennara-cli/` | アドオンを Godot プロジェクトへインストールし、ローカルパッケージを更新し、プロジェクトガイダンスを書き込み、`fennara mcp-setup` を通して MCP アプリを設定します。 |
 | MCP ランチャー | `local/crates/fennara-mcp/` | MCP アプリが呼び出す安定した実行ファイルです。有効なバージョンを探してランタイムを起動します。 |
-| MCP ランタイム | `local/crates/fennara-mcp/` | stdio 経由で MCP を使用し、ツール呼び出しをローカルブリッジへ転送します。 |
+| MCP ランタイム | `local/crates/fennara-mcp/` | stdio 経由で MCP を使用し、起動時に任意の Project Binding を 1 つ固定して、ツール呼び出しをローカルブリッジへ転送します。 |
 | デーモンランチャー | `local/crates/fennara-daemon/` | 有効なデーモンランタイムを起動するための安定した実行ファイルです。 |
-| デーモンランタイム | `local/crates/fennara-daemon/` | ローカル状態を保持し、Godot と連携し、MCP ランタイムにサービスを提供し、内蔵チャット用ルートをホストします。 |
+| デーモンランタイム | `local/crates/fennara-daemon/` | 共有ローカル状態を保持し、MCP 接続を一致するエディターへルーティングし、マシン全体の Runtime Slot を所有し、Godot と連携して、内蔵チャット用ルートをホストします。 |
+| プロジェクト識別 | `local/crates/fennara-project-identity/` | MCP ランタイムとデーモンのために、Godot Project Root を解決、検証、正規化、比較します。 |
 | チャット UI ソース | `ui/chat/` | 内蔵チャット、設定、プロバイダー設定、MCP アプリ設定、更新 UI のための HTML、CSS、JavaScript です。パッケージ済みアドオン内の `godot_demo/addons/fennara/dist/` へ同期されます。 |
 | Godot アドオン | `godot_demo/addons/fennara/` | ユーザーのプロジェクトへコピーされるアドオンのペイロードです。 |
 | ランタイムヘルパーソース | `runtime/` | ランタイムセッションおよびランタイムスクリプト向けにアドオンのペイロードへ同期される、Godot 側のランタイムヘルパースクリプトです。 |
@@ -71,9 +75,7 @@ flowchart LR
 
 Linux 経路はブラウザーのピクセルを Godot の `Control` 内に描画し、CEF メッセージループをドックのプロセスフックを通して実行します。GDExtension は共有 CEF ランタイムを検出し、その `fennara-cef-runtime.json` マーカーと必須ファイルを検証し、`libcef.so` を動的に開きます。その後、小さな `libfennara_linux_cef_bridge.so` アドオンライブラリを、限定された責務を持つブリッジローダーを通して dlopen します。このブリッジは、固定された公式 CEF 139 の `libcef_dll_wrapper` ソースからビルドされ、ウィンドウレスモードで CEF を初期化し、パッケージ済みチャット URL 用のブラウザーを作成し、描画バッファーを Godot テクスチャへコピーするための C++ CEF オブジェクト（`CefClient`、`CefRenderHandler`、`CefRefPtr`）を所有します。完全な IME、クリップボード、カーソル処理は、別の後続作業です。CEF ランタイムは意図的に Godot アドオン ZIP から分離されています。Linux のインストールでは共有アプリデータ内のランタイム位置を使用し、CLI がリリース管理された CEF アセットをユーザーごとに一度だけそこへインストールします。
 
-複数の Godot エディターを同時に開くことができます。埋め込みチャットの各 websocket は、所有元エディターの `chat_token` を使用して受け入れられ、チャット保存のスコープ、スナップショット、ツール実行、キャンセル、復元について、その Godot セッションに紐付けられたままになります。外部 MCP クライアントは、引き続きデーモンのアクティブターゲットへルーティングされます。現在、チャットのプロバイダー設定はグローバルですが、チャットはプロジェクト単位です。クラウドチャットプロバイダーはローカルに保存した API キーを使用し、ローカルプロバイダーはデーモンに保存されたベース URL を使用します。現在の内蔵チャットで利用できるプロバイダーは、OpenAI、Anthropic、OpenRouter、Ollama Cloud、DeepSeek、Z.AI、Moonshot AI、Kimi For Coding、MiniMax、ローカル Ollama、LM Studio です。Ollama の既定値は `http://127.0.0.1:11434`、LM Studio の既定値は `http://127.0.0.1:1234/v1` です。
-デーモンのチャットランタイムは、リクエストを行う前に小さなプロバイダーカタログを通して選択されたモデルを解決します。正規のモデル参照は `provider/model` を使用します。
-ユーザーが主に気づく例外は OpenRouter です。OpenRouter のモデルスラッグは、すでにプロバイダー部分を含むことが多いためです。Fennara では `openrouter/google/example` を推奨します。ユーザーが `google/example` のような生の OpenRouter スラッグを貼り付けた場合も、互換性のためデーモンは引き続き OpenRouter へルーティングします。ネイティブの `openai/...` と `anthropic/...` 参照は公式プロバイダーを使用します。それらのベンダーを OpenRouter 経由で使用する場合は、`openrouter/openai/...` または `openrouter/anthropic/...` を使用してください。可能な場合、プロバイダーは OpenAI 互換または Anthropic 互換のチャットアダプターを共有します。プロバイダー固有の挙動はプロバイダーモジュール内に隔離され、ストリームとエラーのイベントはアダプター境界より上で正規化されます。
+複数の Godot エディターを同時に開くことができます。埋め込みチャットの各 websocket は、所有元エディターの `chat_token` を使用して受け入れられ、チャット保存のスコープ、スナップショット、ツール実行、キャンセル、復元について、その Godot セッションに紐付けられたままになります。プロジェクトへバインドされた外部 MCP プロセスは、正規 Project Root が一致するエディターへルーティングされます。バインドされていないプロセスだけが、デーモンでドックから選択した互換ターゲットを使用します。現在、チャットのプロバイダー設定はグローバルですが、チャットはプロジェクト単位です。クラウドチャットプロバイダーはローカルに保存した API キーを使用し、ローカルプロバイダーはデーモンに保存されたベース URL を使用します。現在の内蔵チャットで利用できるプロバイダーは、OpenAI、Anthropic、OpenRouter、Ollama Cloud、DeepSeek、Z.AI、Moonshot AI、Kimi For Coding、MiniMax、ローカル Ollama、LM Studio です。Ollama の既定値は `http://127.0.0.1:11434`、LM Studio の既定値は `http://127.0.0.1:1234/v1` です。デーモンのチャットランタイムは、リクエストを行う前に小さなプロバイダーカタログを通して選択されたモデルを解決します。正規のモデル参照は `provider/model` を使用します。ユーザーが主に気づく例外は OpenRouter です。OpenRouter のモデルスラッグは、すでにプロバイダー部分を含むことが多いためです。Fennara では `openrouter/google/example` を推奨します。ユーザーが `google/example` のような生の OpenRouter スラッグを貼り付けた場合も、互換性のためデーモンは引き続き OpenRouter へルーティングします。ネイティブの `openai/...` と `anthropic/...` 参照は公式プロバイダーを使用します。それらのベンダーを OpenRouter 経由で使用する場合は、`openrouter/openai/...` または `openrouter/anthropic/...` を使用してください。可能な場合、プロバイダーは OpenAI 互換または Anthropic 互換のチャットアダプターを共有します。プロバイダー固有の挙動はプロバイダーモジュール内に隔離され、ストリームとエラーのイベントはアダプター境界より上で正規化されます。
 
 内蔵チャットのターンは、同じアプリデータ内の `chat.sqlite` データベースにある `chat_trace_events` へ、トランスクリプト用テーブルとは別に、ローカル限定の診断トレースも書き込みます。トレース行には、安定したターン、生成、ツール、ブリッジの各 ID に加え、タイミング、ステータス、件数、上限付きの要約が含まれます。生のプロンプトと完全なツール結果は既定では取得されません。デーモンは小さなローカルデバッグ用読み取りエンドポイントを `/chat/traces` で公開し、`chat_id`、`trace_id`、`turn_id`、`generation_id` による絞り込みを提供します。
 
@@ -173,7 +175,7 @@ Godot のエディターファイルシステムスキャンが完了すると�
 <a id="mcp-setup"></a>
 ## MCP のセットアップ
 
-`fennara mcp-setup` は、MCP アプリがローカルランチャーを起動できるように MCP アプリの設定を編集します。
+`fennara mcp-setup` は、MCP アプリがローカルランチャーを起動できるように MCP アプリの設定を編集します。生成されるエントリはグローバルで、プロジェクトには依存しません。Godot プロジェクトからセットアップを実行しても、以後のすべての MCP プロセスがそのプロジェクトへバインドされるわけではありません。
 
 例:
 
@@ -188,6 +190,10 @@ fennara mcp-setup --gemini
 
 これにより、更新をまたいでも MCP アプリの設定は安定したままです。
 
+分離されたリポジトリや worktree では、MCP ホストがプロジェクトごとに 1 つのプロセスと接続を起動します。ランタイムは起動ディレクトリを記録し、プロセスの存続期間中に使う MCP Project Binding を 1 つ固定します。バインドの検出順は、明示的な `--project-path`、`FENNARA_PROJECT_PATH`、起動ディレクトリから最も近い `project.godot` を含む祖先ディレクトリです。自動検出でプロジェクトが見つからない場合、ランタイムは legacy-unbound 互換モードへ入ります。無効な明示的バインドは、フォールバックせずに起動を失敗させます。
+
+共有の `fennara-project-identity` crate は、MCP とデーモンの両方でルートを正規化して検証します。MCP は正規ルートを、モデル向けツール引数の外にあるトランスポートメタデータとして送信します。デーモンはそのロケーターとエディターが報告したルートを再解決し、ライブファイルシステム上で一致するものがちょうど 1 つであることを要求します。エディターが不在の場合は再試行可能となり、一致が重複した場合は曖昧となります。どちらの場合もドックのターゲットへフォールスルーしません。詳しくは [複数エージェントと worktree](multi-agent-worktrees.md) を参照してください。
+
 このセットアップ経路は、内蔵チャットのプロバイダー経路とは別です。MCP アプリはそれぞれ自身のモデルアカウントを使用します。Fennara ドックはチャット設定で設定されたプロバイダーを使用します。
 
 <a id="tool-call-flow"></a>
@@ -198,15 +204,18 @@ MCP client
   calls a Fennara tool
 MCP runtime
   validates the request against local schemas
+  attaches its process-scoped Project Binding as transport metadata
   forwards the call to the local daemon
 Daemon runtime
-  routes the request to the connected Godot project
+  resolves the binding and routes to exactly one matching Godot editor
 Godot addon
   runs the Godot-aware tool through GDExtension
   returns a concise markdown result
 MCP runtime
   sends the result back to the MCP client
 ```
+
+内蔵チャットからの内部呼び出しには、すでに明示的な Godot Editor Session が含まれています。Project Binding を持たない外部 MCP は代わりに従来の MCP Target を使います。まずドックで選択された有効なターゲットを使い、次に接続中のエディターが 1 つだけならそのエディターを使います。バインド済みの選択では、デーモン全体のそのターゲットを参照も変更もしません。
 
 MCP クライアントは通常のファイルを自身で読み書きできます。Fennara のツールは Godot 固有のフィードバックに集中します。具体的には、シーン構造、ノードプロパティ、診断、検証、ランタイム状態、スクリーンショット、エディターを認識した編集です。
 
@@ -234,7 +243,11 @@ MCP アプリが現在ランチャーを実行中でも、更新時にそのラ�
 
 共有アクティベーションでは、同時に 1 つの Fennara バージョンだけを有効にできます。デーモンは、ほかの Godot プロジェクトが 1 つでも接続中の場合、更新のためのシャットダウンを拒否します。これにより、別のエディターの下でバージョンが切り替わることを防ぎます。正確なバージョンのパッケージ、以前の `current.json`、ランチャーのスナップショット、以前のプロジェクトアドオンは、再度開かれたエディターが新しい GDExtension を検証するまで保持されます。
 
-現在、デーモンは接続中のすべての Godot エディターを通して、管理対象の `runtime_session` シーンをグローバルに 1 つだけ許可します。開始要求は選択中またはチャットに紐付けられた Godot プロジェクト内で実行されますが、別の管理対象シーンが実行中の場合、新しいシーンを開始する前に停止する必要があります。
+デーモンは、接続中のすべてのエディターに対して、マシン全体で 1 つの Runtime Slot を所有します。開始要求はプロセス作成前に `Starting` をアトミックに要求し、その要求を `Running` へ確定します。競合に負けた呼び出し元には、非エラーで匿名の `busy` 結果が返り、2 つ目のゲームプロセスは起動されません。FIFO キューはありません。
+
+各 Runtime Session は、一時的なエディタープロセスではなく、正規 Project Root に属します。詳細なステータスの確認、更新、スクリプトの実行、セッションの停止を行えるのは所有者だけです。ほかのプロジェクトには匿名のビジー状態が表示され、別のセッション識別子の存在を確認することもできません。そのため、エディターが再接続しても所有権は維持されます。
+
+Runtime Lease の既定の絶対期限は 900 秒で、呼び出し元は 86,400 秒以下の正の `max_run_seconds` を要求できます。所有者によるステータス確認と上限付きの所有者操作によって、120 秒の無操作期限が延長されます。エージェントは通常、およそ 30 秒間隔でジッターを加えてステータスをポーリングします。絶対期限が一時停止されることはありません。自然終了、明示的な停止、起動失敗、無操作期限、絶対期限のいずれかに達すると、スーパーバイザーがプロセスを停止または回収し、Runtime Slot を解放します。
 
 <a id="export-boundary"></a>
 ## エクスポートの境界

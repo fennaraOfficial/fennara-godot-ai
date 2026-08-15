@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/chat-vs-mcp.md sha256=03cb522aed8f8e305feaca0c2ed51f7ba29b2657a721df4196b15bc6ccf12c9c -->
+<!-- fennara-i18n: locale=tr source=docs/chat-vs-mcp.md sha256=b6f27b2c7e905515aba56b75bf6736644a9c36c885f4cab61555c82cd6c47fda -->
 <a id="mcp-apps-or-built-in-chat"></a>
 # MCP Uygulamaları mı, Yerleşik Sohbet mi?
 
@@ -48,11 +48,26 @@ Kod eklemek için Godot'nun betik editöründe kodu seçin, bağlam menüsünü 
 
 Her iki yol da Godot geri bildirimi için yerel Fennara daemon'unu kullanır.
 
-- Harici MCP çağrıları, paneldeki **MCP target** denetimiyle seçilen projeye gider.
+- Harici bir MCP işlemi, başlangıçta bir kez kanonik bir Godot Proje Köküne
+  bağlanabilir. Çağrıları paneldeki **MCP target** değerini okumadan veya
+  değiştirmeden eşleşen editöre yönlendirilir.
+- Bağlı olmayan harici bir MCP işlemi uyumluluk davranışını korur: önce panelde
+  seçili geçerli MCP Hedefini kullanır; geçerli bir panel hedefi yoksa yalnızca
+  bağlı tek editöre geri döner. Bir hedef olmadan birden fazla editör bağlıysa
+  belirsizlik hatasıyla başarısız olur.
 - Yerleşik sohbet, sohbeti açan Godot editörüne bağlı kalır.
+
+Ayrı depolarda veya worktree'lerde çalışan yalıtılmış ajanlar için proje başına
+bir MCP işlemi ve bağlantısı kullanın. Kurulum ve Çalışma Zamanı Yuvası
+davranışı için [Birden Fazla Ajan ve Worktree](multi-agent-worktrees.md)
+sayfasına bakın.
 
 Harici bir MCP bağlantısını doğrulamak için şunu sorun:
 
 ```text
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
+
+Eşzamanlı çalışmaya başlamadan önce durumun `bound` yönlendirme modunu ve
+beklenen kanonik Proje Kökünü bildirdiğini doğrulayın. Eski bağlı olmayan mod
+bir eşzamanlılık uyarısı içerir.

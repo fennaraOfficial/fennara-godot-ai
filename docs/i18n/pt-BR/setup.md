@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=pt-BR source=docs/setup.md sha256=ab1b11ff7dd3472ab14185e920004b6504fa14eb1c29e7c7b1d7a322780af1dd -->
+<!-- fennara-i18n: locale=pt-BR source=docs/setup.md sha256=d470da8cda3e69aacb89ee5f06f1d7831df5ab7f50c94a599bfab5bfe22157e3 -->
 <a id="setup"></a>
 # Configuração
 
@@ -146,6 +146,11 @@ fennara mcp-setup --help
 Se o aplicativo não estiver listado, consulte [Configuração de MCP](mcp-setup.md)
 para ver todos os destinos e formatos de configuração manual.
 
+A entrada de configuração é global e neutra em relação ao projeto. Se vários
+agentes usarem repositórios ou worktrees separados, configure uma conexão MCP
+vinculada ao projeto por Raiz do projeto após a configuração. Consulte
+[Vários agentes e worktrees](multi-agent-worktrees.md).
+
 Aplicativos MCP externos usam suas próprias contas de modelo. O chat integrado
 usa o provedor selecionado em Fennara Chat Settings. Consulte
 [Aplicativos MCP e chat integrado](chat-vs-mcp.md) para entender a diferença.
@@ -159,7 +164,17 @@ Abra o projeto Godot e pergunte ao aplicativo MCP:
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-Se ele relatar o projeto errado, selecione o destino MCP correto no dock do Fennara.
+Para trabalho isolado, confirme se ele informa o modo de roteamento `bound`, a
+Raiz do projeto canônica esperada, o estado do editor vinculado como
+`connected` e a prontidão do sistema de arquivos desse editor. Uma conexão
+vinculada sem um editor aberto correspondente permanece ativa e informa
+`bound_project_not_connected`, permitindo nova tentativa, até o editor se
+reconectar.
+
+Se o status informar `legacy_unbound`, o destino MCP do dock é a rota de
+compatibilidade. Selecione o destino desejado para uso por um único cliente ou
+configure uma Vinculação de projeto explícita antes de trabalhar
+simultaneamente.
 
 <a id="update-fennara"></a>
 ## Atualizar o Fennara
@@ -249,7 +264,14 @@ addons/fennara/fennara.gdextension
 <a id="fennarastatus-shows-the-wrong-project"></a>
 ### `fennara_status` mostra o projeto errado
 
-Abra o projeto desejado e selecione-o com o controle de destino MCP no dock do Fennara.
+Primeiro, leia o modo de roteamento informado. Para `bound`, reinicie o processo
+MCP com o `--project-path`, `FENNARA_PROJECT_PATH` ou diretório de inicialização
+do projeto desejado. Para `legacy_unbound`, abra o projeto desejado e selecione-o
+com o controle de destino MCP no dock do Fennara.
+
+Se uma raiz vinculada estiver `not_connected`, abra esse projeto e aguarde a
+conexão de seu addon. Se estiver `ambiguous`, feche o editor duplicado ou
+inicie-o a partir de uma worktree diferente.
 
 <a id="c-diagnostics-are-missing"></a>
 ### Os diagnósticos C# estão ausentes

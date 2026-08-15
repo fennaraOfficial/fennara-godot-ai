@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/repo-map.md sha256=dd8616d3a3f73e8f05b95898cd34041186e47818eefe9f41f1f0a951f1c27fdb -->
+<!-- fennara-i18n: locale=ko source=docs/repo-map.md sha256=48c47152f755d34f1f6526d58c15c3d16205d5389a00442e4f1409efa514e73c -->
 <a id="repo-map"></a>
 # 저장소 지도
 
@@ -17,6 +17,7 @@
 | --- | --- |
 | 사용자 설정 또는 CLI 동작 | `local/crates/fennara-cli/` |
 | 외부 MCP 프로토콜 또는 스키마 | `local/crates/fennara-mcp/`, `local/schemas/tools/` |
+| Project Root 검색 또는 동일성 판단 | `local/crates/fennara-project-identity/` |
 | 내장 채팅 또는 데몬 동작 | `local/crates/fennara-daemon/` |
 | Godot 편집기 통합 | `fennara-cpp/` |
 | 채팅 UI | `ui/chat/` |
@@ -46,6 +47,7 @@
 | `README.md` | 짧은 사용자용 개요와 빠른 시작. |
 | `docs/README.md` | 작업 중심 문서 색인. |
 | `docs/setup.md` | 애드온 우선 사용자 설정, 채팅 필수 조건, MCP 연결, 업데이트 흐름, 문제 해결. |
+| `docs/multi-agent-worktrees.md` | 프로젝트별 MCP 연결 하나 라우팅, 지원 호스트 경계, 검증, 직렬화된 Runtime Slot 사용법. |
 | `docs/cli.md` | 터미널 명령 참조, CLI가 담당하는 설치 및 업데이트 동작, 복구, 진단, 앱 데이터 배치, 자동화 지침. |
 | `docs/telemetry.md` | 익명 활동 페이로드, 앱 데이터 상태, 전송 동작, 월간 활성 사용자 정의, 옵트아웃 제어. |
 | `CONTRIBUTING.md` | 기여 규칙. |
@@ -70,8 +72,12 @@
 | `local/crates/fennara-cli/src/daemon_setup.rs` | 설치와 doctor에서 사용하는 공유 데몬 상태 검사, 정확한 버전 준비 상태, 시작. |
 | `local/crates/fennara-cli/tests/operation_failures.rs` | 프로세스 수준 실패, 영구 진단, 정보 교정, 실패 시 폐쇄되는 작업 로그 테스트. |
 | `local/crates/fennara-cli/src/diagnostics.rs` | 최신 또는 지정된 정제 작업 보고서에 대한 사용자용 접근. |
-| `local/crates/fennara-mcp/` | 로컬 stdio MCP 서버와 도구 스키마 전달. |
-| `local/crates/fennara-daemon/` | 런타임 세션과 Godot 브리지 작업에 사용하는 로컬 데몬. |
+| `local/crates/fennara-project-identity/` | 공유 Project Root 검색, 검증, 정규화, 손실 없는 프로토콜 변환, 실행 중인 파일 시스템 동일성 판단. |
+| `local/crates/fennara-mcp/` | 로컬 stdio MCP 서버, 프로세스 범위 Project Binding 검색, 상태 표시, 도구 스키마 전달. |
+| `local/crates/fennara-daemon/` | Project Root 라우팅, Runtime Slot 소유권과 리스, 런타임 세션, Godot 브리지 작업에 사용하는 공유 로컬 데몬. |
+| `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs` | 상호 배타적인 에디터 세션, 바인딩된 프로젝트, 레거시 MCP 대상 선택 및 Godot 요청/응답 상관관계. |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs` | 시스템 전역 원자적 Runtime Slot 허가, 소유자 식별, 리스 상태. |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs` | 관리되는 게임 프로세스 수명 주기, 소유자 권한 부여, 로그, 만료 정리, 세션 영수증. |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry.rs` | 익명 일간 활성 사용자 스케줄러, 제한된 큐, HTTP 전송, 데몬 수명 주기 통합. |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry/state.rs` | 무작위 설치 신원 검증, 원자적 앱 데이터 영구 저장, 일간 수신 상태, 옵트아웃 정리. |
 | `local/crates/fennara-daemon/src/runtime_daemon/permissions.rs` | 내장 채팅 승인 모드, 도구 위험 분류, 권한 결정, 대기 중인 승인 요청 유형. |
@@ -196,7 +202,10 @@
 | 생성된 프로젝트 지침 변경 | `local/templates/` 및 `local/crates/fennara-cli/src/project_guidance.rs` |
 | 생성된 데모 애드온 지침 동기화 | `local/templates/fennara-guidelines.md`, `local/templates/fennara-ai/`, `scripts/sync-guidance.mjs`, `godot_demo/addons/fennara/ai/` |
 | MCP 앱 설정 변경 | `local/crates/fennara-cli/src/mcp_setup.rs` 및 `docs/mcp-setup.md` |
+| MCP Project Binding 검색 또는 Project Root 동일성 판단 변경 | `local/crates/fennara-project-identity/`, `local/crates/fennara-mcp/src/runtime/`, `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs`, `docs/multi-agent-worktrees.md` |
+| 데몬 대상 라우팅 또는 바인딩 상태 변경 | `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs`, `local/crates/fennara-mcp/src/runtime/`, `docs/multi-agent-worktrees.md` |
 | 런타임 세션 프로세스 및 로그 동작 변경 | `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`, `local/crates/fennara-daemon/src/runtime_daemon/runtime_log.rs`, `fennara-cpp/src/tools/runtime_session/`, `fennara-cpp/src/tool_results/` |
+| Runtime Slot 소유권, 허가 또는 리스 변경 | `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs`, `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`, `fennara-cpp/src/tools/runtime_session/`, `fennara-cpp/src/tools/runtime_script.cpp`, `local/schemas/tools/runtime_session.json` |
 | `runtime_script` ctx 도우미, 입력, 스냅샷, 대기, 레이캐스트, 캡처 또는 정리 변경 | `runtime/`, `scripts/sync-runtime.mjs`, `godot_demo/addons/fennara/runtime/`, `local/schemas/tools/runtime_script.json`, `docs/tools.md` |
 | 편집기 내 채팅 UI, 슬래시 명령 또는 모델 및 제공자 선택기 변경 | `ui/chat/`, `godot_demo/addons/fennara/dist/`, `fennara-cpp/src/ui/dock.cpp`, `fennara-cpp/src/ui/webview_host*` |
 | 내장 채팅 제공자 변경 | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/`, `local/crates/fennara-daemon/src/runtime_daemon/chat/models.rs`, `local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs`, `ui/chat/` |

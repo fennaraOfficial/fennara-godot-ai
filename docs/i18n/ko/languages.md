@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/languages.md sha256=29ca1071b436e0ff29fa5d18d9e2b09cbe64749513ea7f4e1e6471569fcb6456 -->
+<!-- fennara-i18n: locale=ko source=docs/languages.md sha256=476e4afb5a17f76474a25864d08280c73ba0e4fdd1ebcfbbfd814d010dfac932 -->
 <a id="languages-and-translation-status"></a>
 # 언어 및 번역 상태
 
@@ -12,16 +12,16 @@
 
 | 언어 | 문서 | 범위 | 검토 상태 |
 | --- | --- | --- | --- |
-| English | [English documentation](../../README.md) | 30/30 | 정본 |
-| 简体中文 | [简体中文文档](../zh-CN/README.md) | 30/30 | 원어민 검토 요청 |
-| Español | [Documentación en español](../es/README.md) | 30/30 | 원어민 검토 요청 |
-| Português do Brasil | [Documentação em português](../pt-BR/README.md) | 30/30 | 원어민 검토 요청 |
-| 日本語 | [日本語ドキュメント](../ja/README.md) | 30/30 | 원어민 검토 요청 |
-| 한국어 | [한국어 문서](README.md) | 30/30 | 원어민 검토 요청 |
-| Русский | [Документация на русском](../ru/README.md) | 30/30 | 원어민 검토 요청 |
-| Français | [Documentation en français](../fr/README.md) | 30/30 | 원어민 검토 요청 |
-| Deutsch | [Deutsche Dokumentation](../de/README.md) | 30/30 | 원어민 검토 요청 |
-| Türkçe | [Türkçe belgeler](../tr/README.md) | 30/30 | 원어민 검토 요청 |
+| English | [English documentation](../../README.md) | 31/31 | 정본 |
+| 简体中文 | [简体中文文档](../zh-CN/README.md) | 31/31 | 원어민 검토 요청 |
+| Español | [Documentación en español](../es/README.md) | 31/31 | 원어민 검토 요청 |
+| Português do Brasil | [Documentação em português](../pt-BR/README.md) | 31/31 | 원어민 검토 요청 |
+| 日本語 | [日本語ドキュメント](../ja/README.md) | 31/31 | 원어민 검토 요청 |
+| 한국어 | [한국어 문서](README.md) | 31/31 | 원어민 검토 요청 |
+| Русский | [Документация на русском](../ru/README.md) | 31/31 | 원어민 검토 요청 |
+| Français | [Documentation en français](../fr/README.md) | 31/31 | 원어민 검토 요청 |
+| Deutsch | [Deutsche Dokumentation](../de/README.md) | 31/31 | 원어민 검토 요청 |
+| Türkçe | [Türkçe belgeler](../tr/README.md) | 31/31 | 원어민 검토 요청 |
 
 <a id="what-is-translated"></a>
 ## 번역 대상

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/languages.md sha256=29ca1071b436e0ff29fa5d18d9e2b09cbe64749513ea7f4e1e6471569fcb6456 -->
+<!-- fennara-i18n: locale=de source=docs/languages.md sha256=476e4afb5a17f76474a25864d08280c73ba0e4fdd1ebcfbbfd814d010dfac932 -->
 <a id="languages-and-translation-status"></a>
 # Sprachen und Übersetzungsstatus
 
@@ -14,16 +14,16 @@ aktuelle englische Quelle und bittet Muttersprachler um Prüfung.
 
 | Sprache | Dokumentation | Abdeckung | Prüfstatus |
 | --- | --- | --- | --- |
-| English | [Englische Dokumentation](../../README.md) | 30/30 | Kanonisch |
-| 简体中文 | [Chinesische Dokumentation](../zh-CN/README.md) | 30/30 | Prüfung durch Muttersprachler erbeten |
-| Español | [Spanische Dokumentation](../es/README.md) | 30/30 | Prüfung durch Muttersprachler erbeten |
-| Português do Brasil | [Portugiesische Dokumentation](../pt-BR/README.md) | 30/30 | Prüfung durch Muttersprachler erbeten |
-| 日本語 | [Japanische Dokumentation](../ja/README.md) | 30/30 | Prüfung durch Muttersprachler erbeten |
-| 한국어 | [Koreanische Dokumentation](../ko/README.md) | 30/30 | Prüfung durch Muttersprachler erbeten |
-| Русский | [Russische Dokumentation](../ru/README.md) | 30/30 | Prüfung durch Muttersprachler erbeten |
-| Français | [Französische Dokumentation](../fr/README.md) | 30/30 | Prüfung durch Muttersprachler erbeten |
-| Deutsch | [Deutsche Dokumentation](README.md) | 30/30 | Prüfung durch Muttersprachler erbeten |
-| Türkçe | [Türkische Dokumentation](../tr/README.md) | 30/30 | Prüfung durch Muttersprachler erbeten |
+| English | [Englische Dokumentation](../../README.md) | 31/31 | Kanonisch |
+| 简体中文 | [Chinesische Dokumentation](../zh-CN/README.md) | 31/31 | Prüfung durch Muttersprachler erbeten |
+| Español | [Spanische Dokumentation](../es/README.md) | 31/31 | Prüfung durch Muttersprachler erbeten |
+| Português do Brasil | [Portugiesische Dokumentation](../pt-BR/README.md) | 31/31 | Prüfung durch Muttersprachler erbeten |
+| 日本語 | [Japanische Dokumentation](../ja/README.md) | 31/31 | Prüfung durch Muttersprachler erbeten |
+| 한국어 | [Koreanische Dokumentation](../ko/README.md) | 31/31 | Prüfung durch Muttersprachler erbeten |
+| Русский | [Russische Dokumentation](../ru/README.md) | 31/31 | Prüfung durch Muttersprachler erbeten |
+| Français | [Französische Dokumentation](../fr/README.md) | 31/31 | Prüfung durch Muttersprachler erbeten |
+| Deutsch | [Deutsche Dokumentation](README.md) | 31/31 | Prüfung durch Muttersprachler erbeten |
+| Türkçe | [Türkische Dokumentation](../tr/README.md) | 31/31 | Prüfung durch Muttersprachler erbeten |
 
 <a id="what-is-translated"></a>
 ## Was übersetzt wird

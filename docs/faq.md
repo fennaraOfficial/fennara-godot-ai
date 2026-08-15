@@ -12,7 +12,7 @@ short answers and links to the detailed reference.
 | Do I need a provider key? | Only for a cloud provider in the built-in chat |
 | Can I use an external MCP app instead? | Yes, it uses its own model account |
 | Does Fennara upload my project to a Fennara server? | No |
-| Can multiple Godot editors be open? | Yes, choose the external MCP target in the dock |
+| Can multiple Godot editors be open? | Yes; bind each concurrent MCP connection to its own project |
 
 ## Is Fennara only a code generator?
 
@@ -71,9 +71,25 @@ as OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kim
 
 ## Which project receives MCP tool calls if multiple Godot editors are open?
 
-The daemon routes external MCP calls to the active MCP target. Use the Fennara
-dock's MCP target control in Godot to choose the project. Built-in chat sessions
-stay bound to the Godot editor that opened that chat.
+A project-bound MCP process routes every call to the connected editor for its
+canonical Project Root. Use one MCP process and connection per project for
+agents working concurrently in different repositories or worktrees.
+
+An unbound MCP process preserves the compatibility behavior: the daemon uses
+the dock-selected MCP Target, or the sole connected editor. Run
+`fennara_status` before concurrent work and require routing mode `bound` with the
+expected root. Built-in chat sessions stay bound to the editor that opened the
+chat. See [Multiple Agents And Worktrees](multi-agent-worktrees.md).
+
+## Can several agents run their games at the same time?
+
+Not through daemon-managed Runtime Sessions. Editing, inspection, bounded scene
+validation, and standalone screenshots may happen concurrently, but all
+projects share one Runtime Slot for interactive managed game runs. A losing
+start returns a normal anonymous `busy` result, so the agent can poll with
+jitter and retry without disrupting the current run. The owning project keeps
+its inactivity deadline renewed by polling status while the run proceeds; the
+absolute lease deadline never moves.
 
 ## Why does Linux install a separate CEF runtime?
 
