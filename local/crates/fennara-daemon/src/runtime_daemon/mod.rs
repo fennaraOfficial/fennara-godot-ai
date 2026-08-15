@@ -37,6 +37,7 @@ pub async fn run() {
 
     let privileged = Router::new()
         .route("/status", get(godot_bridge::status))
+        .route("/status/bound", post(godot_bridge::bound_status))
         .route("/shutdown", post(shutdown))
         .route("/chat/traces", get(chat::chat_traces))
         .route("/tools/call", post(godot_bridge::call_tool))
