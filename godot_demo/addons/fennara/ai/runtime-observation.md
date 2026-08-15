@@ -4,6 +4,23 @@ Use this page when the answer requires a running scene. The `runtime_session` an
 
 When runtime work needs camera choice, animation-state selection, visual comparisons, or sheet design, also read `res://addons/fennara/ai/visual-observation.md`.
 
+## Runtime Slot And Lease
+
+All projects on this machine share one Runtime Slot. Use this admission loop:
+
+1. Call `runtime_session` with action `status` and no session id.
+2. If `availability` is `busy`, treat the successful result as anonymous contention. Wait at least `retry_after_ms` plus a small random jitter, then poll again. There is no FIFO queue or fairness guarantee.
+3. If `availability` is `free`, call `start` with the intended scene and an appropriate `max_run_seconds`. Free status is advisory; `start` is the atomic claim and can still return busy if another caller wins the race.
+4. Continue only when start returns `status: "started"`, `availability: "busy"`, and `slot_acquired: true`. Keep the returned session id for owner calls.
+
+The selected editor's canonical Project Root owns the resulting session. Another project can observe only anonymous busy and cannot inspect, renew, script, or stop it. A named non-owner request returns `runtime_session_not_owned_or_found` without confirming that the session exists.
+
+`max_run_seconds` is an enforced absolute lease: it defaults to 900 seconds and accepts integers from 1 through 86,400. Include cleanup margin when choosing it; 4,500 seconds safely budgets an expected one-hour regression. The absolute deadline never pauses.
+
+While the session should remain alive, call owner status about every 30 seconds with jitter. Owner status renews a 120-second inactivity deadline. A bounded owner runtime operation suspends inactivity expiry while active and renews the deadline only after returning a terminal script result; timeout, setup error, or cancellation does not renew it. A long runtime script therefore needs no heartbeat while active, but it remains subject to the absolute deadline. Owner status reports the absolute and inactivity deadlines and remaining seconds, with inactivity fields null during a bounded active owner operation.
+
+Natural exit, startup failure, inactivity expiry, absolute expiry, or owner stop releases the slot. A lease-expiry owner receipt uses `runtime_lease_expired` and includes the exact end reason; treat it as terminal rather than retrying that session. Stop promptly after gathering the required evidence so another project can proceed.
+
 ## Discover Before Driving
 
 Treat gameplay meaning as project-local. Inspect the InputMap, controller scripts, input handlers, state properties, scene tree, UI, signals, animations, camera logic, coordinate spaces, and likely success signals before controlling the game.

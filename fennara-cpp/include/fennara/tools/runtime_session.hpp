@@ -14,6 +14,7 @@ protected:
     static void _bind_methods();
 
 public:
+    static godot::Dictionary query_slot_status();
     static godot::Dictionary execute(const godot::Dictionary &args);
     static godot::Dictionary execute_start_after_preflight(
         const godot::Dictionary &args,

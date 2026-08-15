@@ -6,6 +6,7 @@
 #include <godot_cpp/variant/string.hpp>
 
 #include <atomic>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -166,6 +167,14 @@ private:
         int tool_index;
         godot::Dictionary args;
     };
+    enum class RuntimeSessionPhase {
+        Idle,
+        SlotStatus,
+        Build,
+        ScriptPreflight,
+        StartDaemon,
+        Execute,
+    };
     std::vector<PendingRuntimeSession> _pending_runtime_sessions;
     bool _runtime_session_running = false;
     int _runtime_session_tool_index = -1;
@@ -175,10 +184,16 @@ private:
     std::atomic_bool _runtime_session_cancelled{false};
     bool _runtime_session_thread_done = false;
     godot::Dictionary _runtime_session_thread_result;
-    godot::String _runtime_session_phase;
+    RuntimeSessionPhase _runtime_session_phase = RuntimeSessionPhase::Idle;
     godot::Dictionary _runtime_session_build_result;
     godot::Dictionary _runtime_session_preflight_result;
-    godot::Dictionary _runtime_session_script_context;
+    bool _schedule_runtime_session_poll(uint64_t batch_generation);
+    void _begin_runtime_session_phase(
+        RuntimeSessionPhase phase,
+        std::function<godot::Dictionary()> task,
+        uint64_t batch_generation);
+    void _complete_runtime_session(const godot::Dictionary &result,
+                                   uint64_t batch_generation);
     void _start_next_runtime_session();
     void _on_runtime_session_complete(uint64_t batch_generation);
 

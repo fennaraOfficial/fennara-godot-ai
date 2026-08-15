@@ -3,6 +3,8 @@
   "description_lines": [
     "Run one small GDScript inspector or input-driver probe inside an active daemon-managed runtime_session.",
     "Call runtime_session.start or runtime_session.status first and pass the returned session_id.",
+    "Only the Project Root that owns the Runtime Slot may run a script in that session. Another project receives `runtime_session_not_owned_or_found`, which does not reveal whether the supplied id exists.",
+    "A bounded owner runtime_script suspends inactivity expiry while active and renews the 120-second inactivity deadline only after returning a terminal script result. Timeout, setup error, or cancellation does not renew it. The session's absolute max_run_seconds deadline never pauses.",
     "The script is saved, diagnosed, sent to the running scene through Fennara runtime helper, and the tool waits for that script to complete, fail, or time out.",
     "",
     "Script contract:",
@@ -102,15 +104,18 @@
       },
       "session_id": {
         "type": "string",
-        "description": "Required. The active managed runtime session id returned by `runtime_session.start` or `runtime_session.status`."
+        "description": "Required. The active managed runtime session id returned to this Project Root by `runtime_session.start` or owner `runtime_session.status`. Runtime sessions are owner-only; another project receives `runtime_session_not_owned_or_found` without confirmation that the id exists."
       },
       "script_path": {
         "type": "string",
         "description": "Existing `res://...gd` runtime script to diagnose and run. Use this to rerun or patch a previously returned script path. Omit `ctx.close_scene()` for incremental probes; call it only when this script should close the runtime session. Pass either `code` or `script_path`, not both."
       },
       "timeout_ms": {
-        "type": "number",
-        "description": "Optional wait budget for this script result. The scene can stay running after the script completes; use runtime_session.stop or a final script with `ctx.close_scene()` when done."
+        "type": "integer",
+        "minimum": 500,
+        "maximum": 120000,
+        "default": 30000,
+        "description": "Optional daemon operation budget in milliseconds covering command preparation, publication, and waiting for this script result. Values are clamped to 500 through 120,000 milliseconds and default to 30,000. The scene can stay running after the script completes; use runtime_session.stop or a final script with `ctx.close_scene()` when done."
       }
     },
     "required": [

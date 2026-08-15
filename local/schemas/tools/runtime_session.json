@@ -6,7 +6,16 @@
     "Unlike the isolated compile-only build used by script_diagnostics scan_project:true, this runtime build updates .godot/mono/temp/bin/Debug so the launched scene uses the latest C# code. An already-open Godot editor may detect that assembly change and attempt its normal hot reload; Fennara does not close the editor.",
     "For C# projects, start waits for any plugin-owned background C# preparation before running its authoritative runtime build. The wait occurs on a tool worker and does not block the Godot editor main thread.",
     "If those gates fail, the scene is not opened.",
-    "Fennara currently allows one managed runtime session globally across all connected Godot editors; if another runtime session is already running, start is blocked and you must call status or stop first.",
+    "Fennara exposes one machine-wide Runtime Slot, so at most one daemon-managed runtime session may be starting or running across all connected projects.",
+    "`status` without a remembered owner session is the cheap availability check. A free slot returns `{\"ok\":true,\"status\":\"idle\",\"availability\":\"free\",\"slot_acquired\":false}`. A slot claimed by another Project Root returns a successful anonymous result with `status:\"busy\"`, `availability:\"busy\"`, `slot_acquired:false`, and `retry_after_ms`; busy is a retryable domain result, not a tool error.",
+    "A busy result never reveals the owner, session id, process id, scene, artifacts, queue position, or expected duration. Wait at least retry_after_ms plus a small random jitter before polling again. Runtime Slot polling is best effort and has no FIFO guarantee.",
+    "`start` checks availability before expensive C# and scene/script preflight. A free check is advisory: after preflight, the daemon performs the final atomic claim, so a race loser can still receive anonymous busy without launching a process.",
+    "A successful start returns `status:\"started\"`, `availability:\"busy\"`, and `slot_acquired:true`. Keep its session_id for owner status, runtime_script, and stop calls.",
+    "The selected editor's canonical Project Root owns the Runtime Slot. Only that owner can inspect detailed status, renew the lease, run runtime_script, or stop the session. Another project receives anonymous busy without a session id, or `runtime_session_not_owned_or_found` when it names a session id.",
+    "Every start has an enforced absolute lease. max_run_seconds defaults to 900, must be a positive integer, and may not exceed 86400; for an expected one-hour regression, request 4500 seconds to leave a safety margin.",
+    "While a session should keep running, the owner should call status about every 30 seconds with jitter. Owner status renews a 120-second inactivity deadline. A bounded owner runtime operation suspends inactivity expiry while active and renews the deadline only after returning a terminal script result; timeout, setup error, or cancellation does not renew it. The absolute deadline never pauses.",
+    "Owner status reports absolute_deadline_ms, absolute_remaining_seconds, inactivity_deadline_ms, inactivity_remaining_seconds, and heartbeat_interval_ms. The inactivity fields are null while a bounded owner operation has suspended that deadline.",
+    "Natural exit, explicit stop, startup failure, inactivity expiry, or absolute expiry stops/reaps the process and releases the Runtime Slot. An owner receipt for either lease deadline includes code `runtime_lease_expired` and an exact end_reason. Stop promptly when runtime work is complete.",
     "If gates pass, Fennara launches one scene from the selected/bound Godot project in a separate windowed Godot process with the runtime helper enabled.",
     "Runtime sessions enable Godot's local debugger with error breaks ignored or auto-continued so debugger-aware addons can send debugger messages without requiring an attached editor session; normal errors and warnings are still captured in runtime_session.log.",
     "The returned session_id can be reused for multiple runtime_script probes against the same running scene.",
@@ -14,13 +23,11 @@
     "End the session with runtime_session.stop or with a final runtime_script that calls ctx.close_scene().",
     "`status` and `stop` are operational receipts; a stopped process or non-zero exit code after an intentional stop is not by itself proof of a scene failure.",
     "The returned runtime_session.log path is the full source of truth for scene startup output, runtime errors, runtime_script ctx.log output, capture events, and completion markers.",
-    "`start` waits up to 5 seconds after a successful spawn for FENNARA_RUNTIME_SESSION_READY and the FENNARA_RUNTIME_ORIENTATION_NOTE startup orientation tail marker before reading the startup log excerpt, so early Godot output and orientation lines usually appear in the start receipt.",
-    "If the ready marker or orientation tail marker is not seen during that window, the receipt says so; call status or read runtime_session.log to see whether the scene became ready and printed orientation afterward.",
+    "`start` requires both FENNARA_RUNTIME_SESSION_READY and the FENNARA_RUNTIME_ORIENTATION_NOTE startup orientation tail marker before its 5-second startup deadline. If either marker is missing at the deadline, the daemon kills and reaps the process before returning `status:\"startup_timeout\"`; it does not leave a runtime session running for a later status call.",
     "Runtime receipts include a capped excerpt of new runtime log lines when available.",
     "Fennara tracks a per-session log cursor: runtime_session, runtime_script, status, and stop results show log lines after the last remembered line, report omitted/truncated counts when capped, then advance the cursor to the current end of the log.",
     "Read the full raw log when older history or omitted text matters.",
-    "Runtime sessions remain live between tool calls; after any planning delay, call status or run a fresh observation probe before acting.",
-    "Stop the session as soon as runtime work is complete.",
+    "Runtime sessions remain live between tool calls; after any planning delay, call owner status to renew the inactivity deadline and re-establish current state before acting.",
     "Artifacts and raw stdout/stderr logs are saved under the current tool log directory."
   ],
   "parameters": {
@@ -33,7 +40,7 @@
           "status",
           "stop"
         ],
-        "description": "The runtime session operation. `status` is safe anytime and returns known log/artifact paths and whether the managed process is still running. `start` runs preflight gates and then creates a managed logged runtime session only if they pass and no other runtime session is currently running anywhere in the daemon. `stop` closes a running session when you are done or when cleanup is needed. Treat status/stop results as process receipts; for scene behavior and failure evidence, use the returned runtime log update and read the full runtime_session.log when older history or omitted text matters."
+        "description": "The runtime session operation. `status` is safe anytime: without an owned session it reports anonymous machine-wide availability, while an owner receives detailed state and renews inactivity. `start` first short-circuits on busy, runs preflight when free, and then atomically claims the Runtime Slot; it can still return successful anonymous busy if another caller wins that race. After spawn, `start` succeeds only if both runtime-ready and orientation markers arrive before the 5-second startup deadline; otherwise the daemon kills and reaps the process before returning `startup_timeout`. `stop` closes the owning project's running session and releases the slot. Treat owner status/stop results as process receipts; for scene behavior and failure evidence, use the returned runtime log update and read the full runtime_session.log when older history or omitted text matters."
       },
       "scene_path": {
         "type": "string",
@@ -47,12 +54,15 @@
         "description": "Optional for action `start`. Project-specific arguments passed unchanged after Godot's `--` separator. The running project receives them through `OS.get_cmdline_user_args()`."
       },
       "max_run_seconds": {
-        "type": "number",
-        "description": "Optional for action `start`; reserved for future auto-stop behavior. Stop the session explicitly when done."
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 86400,
+        "default": 900,
+        "description": "Optional for action `start`. Enforced absolute lease in whole seconds; defaults to 900 (15 minutes), must be positive, and may not exceed 86400 (24 hours). Choose a value that covers the expected run plus cleanup margin; an expected one-hour regression may use 4500. The absolute deadline never pauses, so still stop promptly when done."
       },
       "session_id": {
         "type": "string",
-        "description": "Optional for action `status` or `stop`. The managed runtime session id returned by `runtime_session.start`. If omitted, Fennara uses the active daemon session id known to the connected editor. Pass this explicitly when recovering, stopping, or checking a session after target/project focus may have changed."
+        "description": "Optional for action `status` or `stop`. The managed runtime session id returned to this Project Root by `runtime_session.start`. With no remembered owner session, omitted status queries anonymous Runtime Slot availability instead of fabricating local idle. Pass the id for recovery or explicit owner control. A different Project Root cannot inspect or control the session and receives `runtime_session_not_owned_or_found` rather than evidence that the id exists."
       }
     },
     "required": [

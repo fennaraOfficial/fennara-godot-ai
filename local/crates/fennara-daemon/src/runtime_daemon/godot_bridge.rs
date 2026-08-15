@@ -1138,13 +1138,30 @@ async fn schedule_idle_shutdown_if_empty(state: AppState) {
     }
 
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(8)).await;
-        if !state.projects.read().await.is_empty() {
-            return;
-        }
+        loop {
+            tokio::time::sleep(Duration::from_secs(8)).await;
+            if !state.projects.read().await.is_empty() {
+                return;
+            }
+            if state.runtime_slot.is_occupied().await {
+                continue;
+            }
 
-        if let Some(sender) = state.shutdown_sender.lock().await.take() {
-            let _ = sender.send(());
+            let Some(sender) = state.shutdown_sender.lock().await.take() else {
+                return;
+            };
+            let shutdown_sealed = {
+                let projects = state.projects.read().await;
+                projects.is_empty() && state.runtime_slot.begin_shutdown()
+            };
+            if shutdown_sealed {
+                let _ = sender.send(());
+                return;
+            }
+            let mut shutdown_sender = state.shutdown_sender.lock().await;
+            if shutdown_sender.is_none() {
+                *shutdown_sender = Some(sender);
+            }
         }
     });
 }

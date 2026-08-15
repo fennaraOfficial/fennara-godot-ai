@@ -3,6 +3,7 @@
 #include "fennara/control_auth.hpp"
 #include "fennara/logger.hpp"
 #include "fennara/runtime/runtime_script_diagnostics.hpp"
+#include "fennara/tools/project_root.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
@@ -222,7 +223,12 @@ godot::Dictionary FennaraRuntimeScriptTool::submit(const godot::Dictionary &args
         args.get("timeout_ms", kDefaultScriptTimeoutMs));
     requested_timeout_ms = std::clamp(
         requested_timeout_ms, kMinScriptTimeoutMs, kMaxScriptTimeoutMs);
+    const project_root::Resolution root = project_root::resolve();
+    if (!root.is_resolved()) {
+        return make_error(root.error_message());
+    }
     godot::Dictionary payload;
+    payload["project_path"] = root.path();
     payload["session_id"] = requested_session_id;
     payload["script_run_id"] = script_run_id;
     payload["script_path"] = script_path;
@@ -235,7 +241,6 @@ godot::Dictionary FennaraRuntimeScriptTool::submit(const godot::Dictionary &args
         post_daemon("/runtime/session/script", payload, http_timeout_ms);
     result["tool_name"] = "runtime_script";
     result["format_version"] = kResultVersion;
-    result["session_id"] = requested_session_id;
     result["script_run_id"] = script_run_id;
     result["script_path"] = script_path;
     if (result.has("artifact_dir")) {
