@@ -39,6 +39,13 @@
         "type": "string",
         "description": "Required for action `start`. The exact `res://` path to a `.tscn` scene to play."
       },
+      "user_args": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Optional for action `start`. Project-specific arguments passed unchanged after Godot's `--` separator. The running project receives them through `OS.get_cmdline_user_args()`."
+      },
       "max_run_seconds": {
         "type": "number",
         "description": "Optional for action `start`; reserved for future auto-stop behavior. Stop the session explicitly when done."

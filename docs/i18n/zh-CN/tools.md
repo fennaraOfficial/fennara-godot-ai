@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/tools.md sha256=4cf72381fada4fec347f29da5995d9768b39235f71b437dd698088ac0acb3518 -->
+<!-- fennara-i18n: locale=zh-CN source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
 <a id="tools"></a>
 # 工具
 
@@ -291,6 +291,7 @@ Codex、Claude Code、Cursor 和 Gemini 等外部 MCP 客户端通过本地 `fen
 - 停止调用返回最终进程和日志信息。
 - C# 项目启动前会真实构建到 Godot 普通 Debug 输出，使进程使用当前程序集。
 - 运行时日志是 Godot 输出、运行时错误、辅助标记、捕获和停止事件的规范源。
+- `start` 接受可选的 `user_args`。Fennara 会在 Godot 的 `--` 分隔符之后原样传递每个字符串，因此运行中的项目可以使用 `OS.get_cmdline_user_args()` 读取它们。
 
 重要限制和故障：
 

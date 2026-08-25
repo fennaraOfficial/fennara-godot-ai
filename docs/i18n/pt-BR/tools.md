@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=pt-BR source=docs/tools.md sha256=4cf72381fada4fec347f29da5995d9768b39235f71b437dd698088ac0acb3518 -->
+<!-- fennara-i18n: locale=pt-BR source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
 <a id="tools"></a>
 # Ferramentas
 
@@ -314,6 +314,7 @@ Comportamento funcional:
 - Stop retorna informações finais do processo e log.
 - Projetos C# recebem compilação real no Debug normal do Godot antes da inicialização, usando assemblies atuais.
 - O log de runtime é a fonte oficial para saída do Godot, erros, marcadores auxiliares, capturas e eventos de parada.
+- `start` aceita `user_args` opcional. O Fennara passa cada string sem alterações após o separador `--` do Godot, para que o projeto em execução possa lê-las com `OS.get_cmdline_user_args()`.
 
 Limites e falhas importantes:
 

@@ -380,6 +380,9 @@ Working behavior:
   launch so the process uses current assemblies.
 - The runtime log is the source of truth for Godot output, runtime errors, helper
   markers, captures, and stop events.
+- `start` accepts optional `user_args`. Fennara passes each string unchanged after
+  Godot's `--` separator, so the running project can read them with
+  `OS.get_cmdline_user_args()`.
 
 Important limits and failures:
 

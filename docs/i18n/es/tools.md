@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=es source=docs/tools.md sha256=4cf72381fada4fec347f29da5995d9768b39235f71b437dd698088ac0acb3518 -->
+<!-- fennara-i18n: locale=es source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
 <a id="tools"></a>
 # Herramientas
 
@@ -321,6 +321,7 @@ Comportamiento correcto:
 - La detención devuelve la información final del proceso y del registro.
 - Los proyectos de C# reciben una compilación real del runtime en el resultado Debug normal de Godot antes de iniciarse, para que el proceso use ensamblados actuales.
 - El registro del runtime es la fuente canónica de los resultados de Godot, los errores del runtime, los marcadores de los auxiliares, las capturas y los eventos de detención.
+- `start` acepta `user_args` opcional. Fennara pasa cada cadena sin cambios después del separador `--` de Godot, para que el proyecto en ejecución pueda leerlas con `OS.get_cmdline_user_args()`.
 
 Limitaciones y fallos importantes:
 

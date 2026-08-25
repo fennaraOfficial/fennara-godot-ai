@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/tools.md sha256=4cf72381fada4fec347f29da5995d9768b39235f71b437dd698088ac0acb3518 -->
+<!-- fennara-i18n: locale=ja source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
 <a id="tools"></a>
 # ツール
 
@@ -291,6 +291,7 @@ Godot を通してシーンを読み込み、そのノード階層、ノード�
 - 停止は、最終的なプロセスおよびログ情報を返します。
 - C# プロジェクトでは起動前に、Godot の通常の Debug 出力へ実際のランタイムビルドを行い、プロセスが現在のアセンブリを使用できるようにします。
 - ランタイムログが、Godot 出力、ランタイムエラー、ヘルパーマーカー、キャプチャ、停止イベントについての信頼できる唯一の情報源です。
+- `start` は省略可能な `user_args` を受け取ります。Fennara は各文字列を Godot の `--` 区切りの後に変更せず渡すため、実行中のプロジェクトは `OS.get_cmdline_user_args()` でそれらを読み取れます。
 
 重要な制約と失敗:
 

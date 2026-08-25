@@ -197,6 +197,21 @@ godot::Dictionary FennaraRuntimeSessionTool::execute_start_after_preflight(
     payload["working_directory"] = settings->globalize_path("res://");
     payload["scene_path"] = scene_path;
     payload["artifact_dir"] = settings->globalize_path(artifact_res_dir);
+    if (args.has("user_args")) {
+        godot::Variant user_args = args["user_args"];
+        if (user_args.get_type() != godot::Variant::ARRAY) {
+            return make_runtime_session_error(
+                "blocked", "`user_args` must be an array of strings.");
+        }
+        godot::Array values = user_args;
+        for (int i = 0; i < values.size(); i++) {
+            if (values[i].get_type() != godot::Variant::STRING) {
+                return make_runtime_session_error(
+                    "blocked", "`user_args` must contain only strings.");
+            }
+        }
+        payload["user_args"] = values;
+    }
     godot::Dictionary result = post_daemon("/runtime/session/start", payload);
     result["tool_name"] = "runtime_session";
     result["artifact_dir_res_path"] = artifact_res_dir;

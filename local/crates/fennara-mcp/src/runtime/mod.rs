@@ -1,5 +1,7 @@
 mod daemon_client;
 mod protocol;
+#[cfg(test)]
+mod schema_tests;
 mod schemas;
 mod tools;
 

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=fr source=docs/tools.md sha256=4cf72381fada4fec347f29da5995d9768b39235f71b437dd698088ac0acb3518 -->
+<!-- fennara-i18n: locale=fr source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
 <a id="tools"></a>
 # Outils
 
@@ -414,6 +414,7 @@ Comportement normal :
   Debug normale de Godot avant le lancement, afin que le processus utilise les assemblages actuels.
 - Le journal d'exécution constitue la source de référence pour la sortie de Godot,
   les erreurs d'exécution, les marqueurs auxiliaires, les captures et les événements d'arrêt.
+- `start` accepte le paramètre facultatif `user_args`. Fennara transmet chaque chaîne sans modification après le séparateur `--` de Godot, afin que le projet en cours d'exécution puisse les lire avec `OS.get_cmdline_user_args()`.
 
 Limites et échecs importants :
 
