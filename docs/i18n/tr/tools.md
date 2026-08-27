@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/tools.md sha256=4cf72381fada4fec347f29da5995d9768b39235f71b437dd698088ac0acb3518 -->
+<!-- fennara-i18n: locale=tr source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
 <a id="tools"></a>
 # Araçlar
 
@@ -317,6 +317,7 @@ Daemon tarafından yönetilen pencereli bir Godot sahnesini başlatır, denetler
 - Durdurma, son süreç ve günlük bilgilerini döndürür.
 - C# projeleri başlatmadan önce Godot'un normal Debug çıktısına gerçek bir çalışma zamanı derlemesi alır, böylece süreç güncel derlemeleri kullanır.
 - Çalışma zamanı günlüğü Godot çıktısı, çalışma zamanı hataları, yardımcı işaretçileri, yakalamalar ve durdurma olayları için doğruluk kaynağıdır.
+- `start` isteğe bağlı `user_args` kabul eder. Fennara her dizeyi Godot'nun `--` ayırıcısından sonra değiştirmeden geçirir, böylece çalışan proje bunları `OS.get_cmdline_user_args()` ile okuyabilir.
 
 Önemli sınırlar ve hatalar:
 

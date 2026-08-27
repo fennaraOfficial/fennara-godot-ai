@@ -11,6 +11,10 @@ use super::{
     util::{sanitize_path_component, unix_millis},
 };
 
+mod launch_command;
+#[cfg(test)]
+mod launch_command_tests;
+
 #[cfg(target_os = "windows")]
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
 const STARTUP_READY_TIMEOUT_MS: u64 = 5_000;
@@ -24,6 +28,8 @@ pub(crate) struct RuntimeSessionStartRequest {
     working_directory: String,
     scene_path: String,
     artifact_dir: String,
+    #[serde(default)]
+    user_args: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -165,13 +171,11 @@ async fn runtime_session_start_inner(
 
     let mut command = Command::new(&executable);
     command
-        .arg("--windowed")
-        .arg("--debug")
-        .arg("--ignore-error-breaks")
-        .arg("--path")
-        .arg(&working_directory)
-        .arg("--scene")
-        .arg(&request.scene_path)
+        .args(launch_command::godot_runtime_arguments(
+            &working_directory,
+            &request.scene_path,
+            &request.user_args,
+        ))
         .current_dir(&working_directory)
         .env("FENNARA_RT_SPEC", &spec_path)
         .stdin(std::process::Stdio::piped())

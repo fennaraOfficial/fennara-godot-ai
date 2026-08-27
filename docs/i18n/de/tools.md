@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/tools.md sha256=4cf72381fada4fec347f29da5995d9768b39235f71b437dd698088ac0acb3518 -->
+<!-- fennara-i18n: locale=de source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
 <a id="tools"></a>
 # Werkzeuge
 
@@ -368,6 +368,7 @@ Funktionsweise:
 - Stop gibt abschließende Prozess- und Protokollinformationen zurück.
 - C#-Projekte erhalten vor dem Start einen echten Laufzeit-Build in Godots normale Debug-Ausgabe, damit der Prozess aktuelle Assemblies verwendet.
 - Das Laufzeitprotokoll ist die maßgebliche Quelle für Godot-Ausgabe, Laufzeitfehler, Hilfsmarkierungen, Erfassungen und Stop-Ereignisse.
+- `start` akzeptiert optionale `user_args`. Fennara übergibt jede Zeichenfolge unverändert nach Godots `--`-Trennzeichen, sodass das laufende Projekt sie mit `OS.get_cmdline_user_args()` lesen kann.
 
 Wichtige Einschränkungen und Fehler:
 

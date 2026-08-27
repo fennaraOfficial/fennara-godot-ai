@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/tools.md sha256=4cf72381fada4fec347f29da5995d9768b39235f71b437dd698088ac0acb3518 -->
+<!-- fennara-i18n: locale=ko source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
 <a id="tools"></a>
 # 도구
 
@@ -291,6 +291,7 @@ Godot을 통해 씬을 불러오고 노드 계층, 노드 클래스, 연결된 �
 - 중지는 최종 프로세스 및 로그 정보를 반환합니다.
 - C# 프로젝트는 시작 전에 Godot의 일반 Debug 출력으로 실제 런타임 빌드를 수행하여 프로세스가 현재 어셈블리를 사용하게 합니다.
 - 런타임 로그가 Godot 출력, 런타임 오류, 헬퍼 마커, 캡처, 중지 이벤트의 정본입니다.
+- `start`는 선택적 `user_args`를 받습니다. Fennara는 각 문자열을 Godot의 `--` 구분자 뒤에 변경 없이 전달하므로 실행 중인 프로젝트에서 `OS.get_cmdline_user_args()`로 읽을 수 있습니다.
 
 중요한 제한 및 실패:
 
