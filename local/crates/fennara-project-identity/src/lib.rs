@@ -400,11 +400,21 @@ mod tests {
     #[test]
     fn whitespace_is_path_data_not_an_empty_value() {
         let fixture = Fixture::new();
-        let root = fixture.godot_project("   ");
+        let error = ProjectRoot::resolve_from(OsStr::new("   "), &fixture.path)
+            .expect_err("no whitespace-named project exists yet");
+        assert!(
+            !matches!(error, ProjectRootError::EmptyPath),
+            "whitespace-only paths must not collapse to EmptyPath, got {error:?}"
+        );
 
-        let resolved = ProjectRoot::resolve_from(OsStr::new("   "), &fixture.path).unwrap();
-
-        assert_eq!(resolved.canonical_path(), fs::canonicalize(root).unwrap());
+        // Win32 strips trailing spaces from directory names, so the round-trip
+        // fixture is Unix-only.
+        #[cfg(unix)]
+        {
+            let root = fixture.godot_project("   ");
+            let resolved = ProjectRoot::resolve_from(OsStr::new("   "), &fixture.path).unwrap();
+            assert_eq!(resolved.canonical_path(), fs::canonicalize(root).unwrap());
+        }
     }
 
     #[cfg(unix)]
