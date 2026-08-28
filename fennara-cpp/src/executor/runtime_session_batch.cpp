@@ -144,8 +144,16 @@ void FennaraExecutor::_on_runtime_session_complete(uint64_t batch_generation) {
     }
 
     if (!done) {
-        _schedule_runtime_session_poll(batch_generation);
-        return;
+        if (_schedule_runtime_session_poll(batch_generation)) {
+            return;
+        }
+        if (_runtime_session_thread.joinable()) {
+            _runtime_session_thread.join();
+        }
+        {
+            std::lock_guard<std::mutex> lock(_runtime_session_mutex);
+            result = _runtime_session_thread_result;
+        }
     }
 
     if (_runtime_session_thread.joinable()) {

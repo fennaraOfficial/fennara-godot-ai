@@ -18,8 +18,8 @@ Endpoints:
 
 - `GET /health`: daemon health.
 - `GET /status`: daemon status plus connected Godot plugin metadata.
-- privileged bound status: resolves one MCP process's canonical Project Root
-  against connected Godot editor sessions.
+- `POST /status/bound`: privileged bound status. Resolves one MCP process's
+  canonical Project Root against connected Godot editor sessions.
 - `POST /tools/call`: forwards a tool call to the connected Godot plugin and waits for a tool result.
 - `WS /godot/ws`: local Godot plugin bridge. The plugin sends a `hello` message after connecting.
 

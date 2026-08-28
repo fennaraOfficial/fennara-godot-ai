@@ -286,7 +286,8 @@ godot::Dictionary FennaraRuntimeSessionTool::execute(
         godot::Dictionary result = daemon_status(root.path(), session_id);
         attach_runtime_result_fields(result);
         remember_owned_session(result);
-        if (!(bool)result.get("slot_acquired", false)) {
+        if ((bool)result.get("success", false) &&
+            !(bool)result.get("slot_acquired", false)) {
             clear_active_daemon_session_id_if_matches(session_id);
         }
         return result;

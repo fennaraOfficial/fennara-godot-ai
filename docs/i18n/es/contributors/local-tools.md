@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=es source=local/README.md sha256=b63443a8ff7310d53044b20261e7f206a949bad07299656235ba39fe69f92d9d -->
+<!-- fennara-i18n: locale=es source=local/README.md sha256=29a4563cb548ac4612f1881d66af9e72f4de9b1c118920e0d14ba00d0279edec -->
 <a id="fennara-local-tools"></a>
 # Herramientas locales de Fennara
 
@@ -23,8 +23,9 @@ Puntos de acceso:
 
 - `GET /health`: estado del daemon.
 - `GET /status`: estado y metadatos del plugin conectado.
-- estado vinculado privilegiado: resuelve la Raíz del proyecto canónica de un
-  proceso MCP entre las sesiones conectadas del editor de Godot.
+- `POST /status/bound`: estado vinculado privilegiado. Resuelve la Raíz del
+  proyecto canónica de un proceso MCP entre las sesiones conectadas del editor
+  de Godot.
 - `POST /tools/call`: reenvía una llamada y espera el resultado.
 - `WS /godot/ws`: puente local. El plugin envía `hello` al conectarse.
 

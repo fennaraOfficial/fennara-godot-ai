@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=fr source=local/README.md sha256=b63443a8ff7310d53044b20261e7f206a949bad07299656235ba39fe69f92d9d -->
+<!-- fennara-i18n: locale=fr source=local/README.md sha256=29a4563cb548ac4612f1881d66af9e72f4de9b1c118920e0d14ba00d0279edec -->
 <a id="fennara-local-tools"></a>
 # Outils locaux de Fennara
 
@@ -23,8 +23,9 @@ Points d'accès :
 
 - `GET /health` : état du daemon.
 - `GET /status` : état du daemon et métadonnées du plugin Godot connecté.
-- état lié privilégié : résout la racine de projet canonique d'un processus MCP
-  par rapport aux sessions d'éditeur Godot connectées.
+- `POST /status/bound` : état lié privilégié. Résout la racine de projet
+  canonique d'un processus MCP par rapport aux sessions d'éditeur Godot
+  connectées.
 - `POST /tools/call` : transmet un appel d'outil au plugin Godot connecté et attend son résultat.
 - `WS /godot/ws` : pont du plugin Godot local. Le plugin envoie un message `hello` après la connexion.
 

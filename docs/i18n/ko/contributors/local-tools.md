@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=local/README.md sha256=b63443a8ff7310d53044b20261e7f206a949bad07299656235ba39fe69f92d9d -->
+<!-- fennara-i18n: locale=ko source=local/README.md sha256=29a4563cb548ac4612f1881d66af9e72f4de9b1c118920e0d14ba00d0279edec -->
 <a id="fennara-local-tools"></a>
 # Fennara 로컬 도구
 
@@ -23,7 +23,7 @@ http://127.0.0.1:41287
 
 - `GET /health`: 데몬 상태.
 - `GET /status`: 데몬 상태 및 연결된 Godot 플러그인 메타데이터.
-- 권한이 필요한 바인딩 상태: 하나의 MCP 프로세스의 정규 Project Root를 연결된 Godot 에디터 세션과 매칭.
+- `POST /status/bound`: 권한이 필요한 바인딩 상태. 하나의 MCP 프로세스의 정규 Project Root를 연결된 Godot 에디터 세션과 매칭.
 - `POST /tools/call`: 연결된 Godot 플러그인으로 도구 호출을 전달하고 결과를 기다림.
 - `WS /godot/ws`: 로컬 Godot 플러그인 브리지. 플러그인은 연결 뒤 `hello` 메시지를 보냄.
 

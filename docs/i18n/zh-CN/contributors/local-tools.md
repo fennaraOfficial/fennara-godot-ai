@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=local/README.md sha256=b63443a8ff7310d53044b20261e7f206a949bad07299656235ba39fe69f92d9d -->
+<!-- fennara-i18n: locale=zh-CN source=local/README.md sha256=29a4563cb548ac4612f1881d66af9e72f4de9b1c118920e0d14ba00d0279edec -->
 <a id="fennara-local-tools"></a>
 # Fennara 本地工具
 
@@ -23,7 +23,7 @@ http://127.0.0.1:41287
 
 - `GET /health`：守护进程健康状态。
 - `GET /status`：守护进程状态和已连接 Godot 插件的元数据。
-- 特权绑定状态：将一个 MCP 进程的规范项目根目录与已连接 Godot 编辑器会话进行解析匹配。
+- `POST /status/bound`：特权绑定状态。将一个 MCP 进程的规范项目根目录与已连接 Godot 编辑器会话进行解析匹配。
 - `POST /tools/call`：把工具调用转发给已连接的 Godot 插件并等待结果。
 - `WS /godot/ws`：本地 Godot 插件桥接。插件连接后会发送 `hello` 消息。
 

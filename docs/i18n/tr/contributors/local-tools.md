@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=local/README.md sha256=b63443a8ff7310d53044b20261e7f206a949bad07299656235ba39fe69f92d9d -->
+<!-- fennara-i18n: locale=tr source=local/README.md sha256=29a4563cb548ac4612f1881d66af9e72f4de9b1c118920e0d14ba00d0279edec -->
 <a id="fennara-local-tools"></a>
 # Fennara Yerel Araçları
 
@@ -23,8 +23,8 @@ Uç noktalar:
 
 - `GET /health`: daemon durumu.
 - `GET /status`: daemon durumu ve bağlı Godot eklentisi meta verileri.
-- ayrıcalıklı bağlı durum: tek bir MCP işleminin kanonik Proje Kökünü bağlı
-  Godot editör oturumlarıyla çözümler.
+- `POST /status/bound`: ayrıcalıklı bağlı durum. Tek bir MCP işleminin kanonik
+  Proje Kökünü bağlı Godot editör oturumlarıyla çözümler.
 - `POST /tools/call`: bir araç çağrısını bağlı Godot eklentisine iletir ve araç sonucunu bekler.
 - `WS /godot/ws`: yerel Godot eklentisi köprüsü. Eklenti bağlandıktan sonra bir `hello` mesajı gönderir.
 

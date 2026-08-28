@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=local/README.md sha256=b63443a8ff7310d53044b20261e7f206a949bad07299656235ba39fe69f92d9d -->
+<!-- fennara-i18n: locale=ja source=local/README.md sha256=29a4563cb548ac4612f1881d66af9e72f4de9b1c118920e0d14ba00d0279edec -->
 <a id="fennara-local-tools"></a>
 # Fennara ローカルツール
 
@@ -23,7 +23,7 @@ http://127.0.0.1:41287
 
 - `GET /health`: デーモンのヘルスチェック。
 - `GET /status`: デーモンの状態と接続済み Godot プラグインのメタデータ。
-- 特権付きのバインド済みステータス: 1 つの MCP プロセスの正規 Project Root を、接続中の Godot エディターセッションと照合します。
+- `POST /status/bound`: 特権付きのバインド済みステータス。1 つの MCP プロセスの正規 Project Root を、接続中の Godot エディターセッションと照合します。
 - `POST /tools/call`: ツール呼び出しを接続済み Godot プラグインへ転送し、ツール結果を待ちます。
 - `WS /godot/ws`: ローカル Godot プラグインブリッジ。プラグインは接続後に `hello` メッセージを送ります。
 
