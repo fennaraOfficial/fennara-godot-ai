@@ -12,6 +12,8 @@ For isolated concurrent work, run one MCP process per project. At startup, Fenna
 
 Before concurrent work, call `fennara_status` and verify `routing_mode`, `binding_source`, and the canonical bound Project Root. A `legacy_unbound` process uses the Fennara dock MCP Target or sole-editor fallback and reports a concurrency warning; give that MCP process an explicit binding before relying on multi-project isolation.
 
+Do not spawn worktree-isolated subagents on an inherited Fennara MCP connection. Give the child its own bound MCP process, or keep it in the parent project.
+
 ## Tool Choice
 
 Use ordinary repository tools for source reading, text search, file discovery, and diffs. Use Fennara for Godot-aware state and operations:

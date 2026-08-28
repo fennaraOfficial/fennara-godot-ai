@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/multi-agent-worktrees.md sha256=037571da5f2479b968f6b74e8994d0272042d4a26616c50af5f62f3d2a9bbcf9 -->
+<!-- fennara-i18n: locale=zh-CN source=docs/multi-agent-worktrees.md sha256=7b266e260017a37b18e3d8e36a6bed75e76c3bcc4ead88c49bec146302495014 -->
 <a id="multiple-agents-and-godot-worktrees"></a>
 # 多智能体与 Godot 工作树
 
@@ -96,6 +96,15 @@ tool_timeout_sec = 300
 - VS Code 单文件夹工作区可以依赖主机文档中说明的子进程工作目录，但显式项目绑定仍然是最清晰的配置。
 - Claude Code、Gemini CLI、Antigravity、Cline、Cursor、OpenCode、Kiro 和 Codex 可以使用项目或工作区配置。必须保证隔离时，请使用显式绑定或有文档说明的项目启动目录。
 - Claude Desktop 和旧版 Windsurf/Cascade 使用全局配置。它们默认的 Fennara 条目仍处于旧式未绑定模式，无法提供自动项目本地隔离。高级用户可以创建名称各异、显式路径各不相同的全局条目，但必须选择正确的条目。
+
+<a id="worktree-isolated-subagents"></a>
+### 工作树隔离的子智能体
+
+有些主机会在单独的 Git 工作树中启动子智能体，同时继承父级的 MCP 连接。Claude Code 的 `isolation: worktree` 和 Grok Build 的 `spawn_subagent` 工作树隔离会这样做。
+
+此时原生文件和 shell 工具在子工作树中运行。Fennara 仍绑定到父项目，因此子智能体可能编辑一棵树，同时检查或修改另一棵树。
+
+请为该子智能体提供绑定到子工作树的独立 Fennara MCP 连接，或不要使用工作树隔离、让它留在父项目中。Codex 和 OpenCode 的默认子智能体并未被记录为会以这种方式继承 Fennara。
 
 自动生成项目本地配置以及新的 Windsurf/Devin Local 支持不在此工作流范围内。
 

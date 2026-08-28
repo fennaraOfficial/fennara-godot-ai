@@ -121,6 +121,20 @@ Project-local configuration and startup-directory behavior differ by host:
   project-local isolation. Advanced users may create separately named global
   entries with distinct explicit paths, but must choose the correct entry.
 
+### Worktree-Isolated Subagents
+
+Some hosts spawn a child agent in a separate Git worktree while inheriting the
+parent's MCP connections. Claude Code `isolation: worktree` and Grok Build
+`spawn_subagent` worktree isolation do this.
+
+Native file and shell tools then operate in the child worktree. Fennara stays
+bound to the parent project, so the child can edit one tree and inspect or
+mutate another.
+
+Give that subagent its own Fennara MCP connection bound to the child worktree,
+or keep the child in the parent project without worktree isolation. Codex and
+OpenCode stock subagents are not documented to inherit Fennara this way.
+
 Automatic project-local config generation and new Windsurf/Devin Local support
 are outside this workflow.
 

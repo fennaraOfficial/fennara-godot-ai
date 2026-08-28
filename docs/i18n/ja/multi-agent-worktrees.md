@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/multi-agent-worktrees.md sha256=037571da5f2479b968f6b74e8994d0272042d4a26616c50af5f62f3d2a9bbcf9 -->
+<!-- fennara-i18n: locale=ja source=docs/multi-agent-worktrees.md sha256=7b266e260017a37b18e3d8e36a6bed75e76c3bcc4ead88c49bec146302495014 -->
 <a id="multiple-agents-and-godot-worktrees"></a>
 # 複数エージェントと Godot worktree
 
@@ -97,6 +97,15 @@ tool_timeout_sec = 300
 - VS Code の単一フォルダーワークスペースでは、ホストが文書化している子プロセスの作業ディレクトリを利用できますが、それでも明示的なプロジェクトバインドが最も分かりやすい構成です。
 - Claude Code、Gemini CLI、Antigravity、Cline、Cursor、OpenCode、Kiro、Codex は、プロジェクトまたはワークスペースの構成を利用できます。分離を保証する必要がある場合は、明示的なバインドか、文書化されたプロジェクト起動ディレクトリを使ってください。
 - Claude Desktop と従来の Windsurf/Cascade の構成はグローバルです。既定の Fennara エントリは legacy-unbound のままで、プロジェクトローカルの自動分離を提供できません。上級ユーザーは、異なる明示的なパスを持つ別名のグローバルエントリを作成できますが、正しいエントリを自分で選ぶ必要があります。
+
+<a id="worktree-isolated-subagents"></a>
+### worktree で隔離されたサブエージェント
+
+一部のホストは、親の MCP 接続を継承したまま、別の Git worktree で子エージェントを起動します。Claude Code の `isolation: worktree` と Grok Build の `spawn_subagent` による worktree 隔離がこれに該当します。
+
+その場合、ネイティブのファイルおよびシェルツールは子 worktree で動作します。Fennara は親プロジェクトにバインドされたままなので、子は一方のツリーを編集しつつ、もう一方を調査または変更できます。
+
+そのサブエージェントには、子 worktree にバインドした専用の Fennara MCP 接続を渡すか、worktree 隔離を使わず親プロジェクト内に留めてください。Codex と OpenCode の標準サブエージェントは、この方法で Fennara を継承するとは文書化されていません。
 
 プロジェクトローカル構成の自動生成、および新しい Windsurf/Devin Local への対応は、このワークフローの対象外です。
 

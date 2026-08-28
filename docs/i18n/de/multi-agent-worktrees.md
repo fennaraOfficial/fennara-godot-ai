@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/multi-agent-worktrees.md sha256=037571da5f2479b968f6b74e8994d0272042d4a26616c50af5f62f3d2a9bbcf9 -->
+<!-- fennara-i18n: locale=de source=docs/multi-agent-worktrees.md sha256=7b266e260017a37b18e3d8e36a6bed75e76c3bcc4ead88c49bec146302495014 -->
 <a id="multiple-agents-and-godot-worktrees"></a>
 # Mehrere Agenten und Godot-Worktrees
 
@@ -136,6 +136,23 @@ sich je nach Host:
   automatische projektlokale Isolation bereitstellen. Fortgeschrittene Benutzer
   können getrennt benannte globale Einträge mit unterschiedlichen ausdrücklichen
   Pfaden erstellen, müssen jedoch den richtigen Eintrag auswählen.
+
+<a id="worktree-isolated-subagents"></a>
+### Worktree-isolierte Subagenten
+
+Manche Hosts starten einen Kind-Agenten in einem getrennten Git-Worktree und
+vererben dabei die MCP-Verbindungen des Elternprozesses. Claude Code
+`isolation: worktree` und die Worktree-Isolation von Grok Build
+`spawn_subagent` tun das.
+
+Native Datei- und Shell-Werkzeuge arbeiten dann im Kind-Worktree. Fennara
+bleibt an das Elternprojekt gebunden, sodass das Kind einen Baum bearbeiten
+und einen anderen untersuchen oder verändern kann.
+
+Gib diesem Subagenten eine eigene Fennara-MCP-Verbindung, die an den
+Kind-Worktree gebunden ist, oder behalte ihn ohne Worktree-Isolation im
+Elternprojekt. Codex- und OpenCode-Standard-Subagenten sind nicht so
+dokumentiert, dass sie Fennara auf diese Weise erben.
 
 Die automatische Erzeugung projektlokaler Konfiguration und neue Unterstützung für
 Windsurf/Devin Local gehören nicht zu diesem Arbeitsablauf.

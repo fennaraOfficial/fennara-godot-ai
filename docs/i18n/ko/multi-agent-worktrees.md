@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/multi-agent-worktrees.md sha256=037571da5f2479b968f6b74e8994d0272042d4a26616c50af5f62f3d2a9bbcf9 -->
+<!-- fennara-i18n: locale=ko source=docs/multi-agent-worktrees.md sha256=7b266e260017a37b18e3d8e36a6bed75e76c3bcc4ead88c49bec146302495014 -->
 <a id="multiple-agents-and-godot-worktrees"></a>
 # 여러 에이전트와 Godot 워크트리
 
@@ -96,6 +96,15 @@ tool_timeout_sec = 300
 - VS Code 단일 폴더 워크스페이스는 호스트에 문서화된 자식 작업 디렉터리에 의존할 수 있지만, 명시적 프로젝트 바인딩이 가장 분명한 구성입니다.
 - Claude Code, Gemini CLI, Antigravity, Cline, Cursor, OpenCode, Kiro, Codex는 프로젝트/워크스페이스 구성을 사용할 수 있습니다. 격리를 보장해야 한다면 명시적 바인딩이나 문서화된 프로젝트 시작 디렉터리를 사용하세요.
 - Claude Desktop과 레거시 Windsurf/Cascade 구성은 전역입니다. 기본 Fennara 항목은 레거시 미바인딩 상태로 남으며 자동 프로젝트 로컬 격리를 제공할 수 없습니다. 고급 사용자는 서로 다른 명시적 경로를 가진 별도의 전역 항목을 이름을 달리해 만들 수 있지만 올바른 항목을 선택해야 합니다.
+
+<a id="worktree-isolated-subagents"></a>
+### 워크트리로 격리된 서브에이전트
+
+일부 호스트는 부모의 MCP 연결을 상속한 채 별도의 Git 워크트리에서 자식 에이전트를 실행합니다. Claude Code `isolation: worktree`와 Grok Build `spawn_subagent` 워크트리 격리가 이에 해당합니다.
+
+그러면 네이티브 파일 및 셸 도구는 자식 워크트리에서 동작합니다. Fennara는 부모 프로젝트에 바인딩된 상태로 남으므로, 자식은 한 트리를 편집하면서 다른 트리를 검사하거나 변경할 수 있습니다.
+
+해당 서브에이전트에는 자식 워크트리에 바인딩된 자체 Fennara MCP 연결을 주거나, 워크트리 격리 없이 부모 프로젝트에 두세요. Codex와 OpenCode의 기본 서브에이전트는 이런 방식으로 Fennara를 상속한다고 문서화되어 있지 않습니다.
 
 프로젝트 로컬 구성 자동 생성과 새 Windsurf/Devin Local 지원은 이 워크플로의 범위 밖입니다.
 

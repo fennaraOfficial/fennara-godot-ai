@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/multi-agent-worktrees.md sha256=037571da5f2479b968f6b74e8994d0272042d4a26616c50af5f62f3d2a9bbcf9 -->
+<!-- fennara-i18n: locale=tr source=docs/multi-agent-worktrees.md sha256=7b266e260017a37b18e3d8e36a6bed75e76c3bcc4ead88c49bec146302495014 -->
 <a id="multiple-agents-and-godot-worktrees"></a>
 # Birden Fazla Ajan ve Godot Worktree'leri
 
@@ -131,6 +131,21 @@ değişir:
   Fennara girdileri eski bağlı olmayan modda kalır ve otomatik projeye özel
   yalıtım sağlayamaz. İleri düzey kullanıcılar farklı açık yollarla ayrı
   adlandırılmış genel girdiler oluşturabilir, ancak doğru girdiyi seçmelidir.
+
+<a id="worktree-isolated-subagents"></a>
+### Worktree ile yalıtılmış alt ajanlar
+
+Bazı host'lar, ebeveynin MCP bağlantılarını miras alarak ayrı bir Git
+worktree içinde çocuk ajan başlatır. Claude Code `isolation: worktree` ve
+Grok Build `spawn_subagent` worktree yalıtımı bunu yapar.
+
+Yerel dosya ve kabuk araçları o zaman çocuk worktree içinde çalışır.
+Fennara ebeveyn projeye bağlı kalır, böylece çocuk bir ağacı düzenleyip
+diğerini inceleyebilir veya değiştirebilir.
+
+Bu alt ajana çocuk worktree'ye bağlı kendi Fennara MCP bağlantısını verin
+ya da worktree yalıtımı olmadan ebeveyn projede tutun. Codex ve OpenCode
+stok alt ajanlarının Fennara'yı bu şekilde miras aldığı belgelenmemiştir.
 
 Otomatik projeye özel yapılandırma oluşturma ve yeni Windsurf/Devin Local desteği
 bu iş akışının dışındadır.
