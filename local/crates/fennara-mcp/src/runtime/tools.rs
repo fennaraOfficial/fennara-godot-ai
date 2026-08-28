@@ -831,7 +831,10 @@ mod tests {
             .to_string();
         assert!(text.contains("Routing mode: bound"));
         assert!(text.contains("Binding source: cli"));
-        assert!(text.contains(&format!("Bound project root: {project_root}")));
+        assert!(text.contains(&format!(
+            "Bound project root: {}",
+            markdown_escape(&project_root)
+        )));
         assert!(text.contains("Bound editor: connected"));
         assert!(text.contains("Selected editor project: Agent A"));
         assert!(text.contains("Editor filesystem: ready"));

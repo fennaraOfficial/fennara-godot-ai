@@ -442,7 +442,7 @@ mod tests {
         assert!(!upper.same_project(&lower));
     }
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     #[test]
     fn non_unicode_roots_are_rejected_at_the_protocol_seam() {
         use std::os::unix::ffi::OsStringExt;

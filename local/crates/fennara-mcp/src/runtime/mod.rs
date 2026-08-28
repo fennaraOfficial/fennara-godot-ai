@@ -327,7 +327,7 @@ mod tests {
         assert!(empty_environment.contains("invalid_project_binding"));
     }
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     #[test]
     fn native_cli_path_values_are_not_lossily_converted() {
         use std::os::unix::ffi::{OsStrExt, OsStringExt};

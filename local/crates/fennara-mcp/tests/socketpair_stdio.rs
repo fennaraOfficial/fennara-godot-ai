@@ -76,7 +76,9 @@ fn launcher_carries_its_project_binding_through_stdio_to_daemon_requests() {
         .expect("status text");
     assert!(status_text.contains("Routing mode: bound"));
     assert!(status_text.contains("Binding source: cli"));
-    assert!(status_text.contains(canonical_project.to_str().unwrap()));
+    assert!(status_text.contains(&markdown_escape(
+        canonical_project.to_str().unwrap()
+    )));
 
     mcp.request(&json!({
         "jsonrpc": "2.0",
@@ -148,13 +150,19 @@ impl Fixture {
         daemon_address: &str,
     ) -> McpProcess {
         let data_dir = self.root.join("data");
-        let token_dir = data_dir.join("fennara");
-        fs::create_dir_all(&token_dir).expect("create app-data directory");
-        fs::write(
-            token_dir.join("daemon-control-token"),
-            format!("{control_token}\n"),
-        )
-        .expect("write control token");
+        let xdg_token_dir = data_dir.join("fennara");
+        let macos_token_dir = self
+            .root
+            .join("Library")
+            .join("Application Support")
+            .join("Fennara");
+        fs::create_dir_all(&xdg_token_dir).expect("create XDG app-data directory");
+        fs::create_dir_all(&macos_token_dir).expect("create macOS app-data directory");
+        let token = format!("{control_token}\n");
+        fs::write(xdg_token_dir.join("daemon-control-token"), &token)
+            .expect("write XDG control token");
+        fs::write(macos_token_dir.join("daemon-control-token"), &token)
+            .expect("write macOS control token");
 
         let (stdin_parent, stdin_child) = UnixStream::pair().expect("stdin socketpair");
         let (stdout_parent, stdout_child) = UnixStream::pair().expect("stdout socketpair");
@@ -164,6 +172,7 @@ impl Fixture {
 
         let child = Command::new(self.root.join("app/bin/fennara-mcp"))
             .args(args)
+            .env("HOME", &self.root)
             .env("XDG_DATA_HOME", data_dir)
             .env("FENNARA_TEST_DAEMON_ADDR", daemon_address)
             .stdin(unsafe { Stdio::from_raw_fd(stdin_child.into_raw_fd()) })
@@ -357,6 +366,20 @@ fn read_http_request(stream: &mut TcpStream) -> String {
         }
     }
     String::from_utf8(request).expect("HTTP request should be UTF-8")
+}
+
+fn markdown_escape(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        if matches!(
+            ch,
+            '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '>' | '(' | ')'
+        ) {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
+    }
+    escaped
 }
 
 fn respond_json(stream: &mut TcpStream, value: &Value) {

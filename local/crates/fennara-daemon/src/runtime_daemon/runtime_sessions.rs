@@ -1902,6 +1902,7 @@ while :; do sleep 1; done
                 working_directory: self.root.to_string_lossy().into_owned(),
                 scene_path: "res://test_scene.tscn".to_string(),
                 artifact_dir: self.root.join(artifact_name).to_string_lossy().into_owned(),
+                user_args: Vec::new(),
                 max_run_seconds: Some(max_run_seconds),
             }
         }

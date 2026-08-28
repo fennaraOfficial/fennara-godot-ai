@@ -42,6 +42,7 @@ fn appends_user_args_unchanged_after_godot_separator() {
 #[test]
 fn start_request_defaults_missing_user_args_and_rejects_non_strings() {
     let base = json!({
+        "project_path": "project-root",
         "executable": "godot",
         "working_directory": "project-root",
         "scene_path": "res://Main.tscn",
