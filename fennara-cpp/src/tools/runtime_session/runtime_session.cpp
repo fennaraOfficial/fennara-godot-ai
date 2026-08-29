@@ -260,10 +260,15 @@ godot::Dictionary FennaraRuntimeSessionTool::execute_start_after_preflight(
             seconds = int64_t(raw);
             whole = seconds >= 0;
         } else if (raw.get_type() == godot::Variant::FLOAT) {
-            double value = double(raw);
-            whole = std::isfinite(value) && value >= 0.0 && value == std::floor(value) &&
-                    value <= static_cast<double>(INT64_MAX);
-            seconds = static_cast<int64_t>(value);
+            const double value = double(raw);
+            // static_cast<double>(INT64_MAX) rounds to 2^63, which is not a
+            // representable int64_t. Convert only after the value is a finite
+            // whole number strictly below that boundary.
+            if (std::isfinite(value) && value >= 0.0 && value == std::floor(value) &&
+                value < 0x1p63) {
+                seconds = static_cast<int64_t>(value);
+                whole = true;
+            }
         }
         if (!whole) {
             return make_runtime_session_error(
