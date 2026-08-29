@@ -426,7 +426,7 @@ Important limits and failures:
 - Failed startup gates prevent the scene from opening.
 - A C# runtime build can trigger the open editor's normal assembly reload.
 - Both `FENNARA_RUNTIME_SESSION_READY` and
-  `FENNARA_RUNTIME_ORIENTATION_NOTE` are required before the five-second
+  `FENNARA_RUNTIME_ORIENTATION_NOTE` are required before the 20-second
   startup deadline. If either marker is missing, the daemon kills and reaps the
   process before returning `startup_timeout`; it does not report initial success.
 - Managed sessions are separate Godot processes, not the scene manually running

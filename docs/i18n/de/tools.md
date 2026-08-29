@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/tools.md sha256=ed8da3ac5003a9dafd4a90594f6f1b1e03c5987f73328fd0458a9ee6f18f3d7d -->
+<!-- fennara-i18n: locale=de source=docs/tools.md sha256=dfa0baa54b981a1dee22d11aadb3ab230177a808a6ff2283f24403125057c20f -->
 <a id="tools"></a>
 # Werkzeuge
 
@@ -419,7 +419,7 @@ Wichtige Einschränkungen und Fehler:
 - Fehlgeschlagene Start-Gates verhindern das Öffnen der Szene.
 - Ein C#-Laufzeit-Build kann das normale Neuladen der Assembly im geöffneten Editor auslösen.
 - Sowohl `FENNARA_RUNTIME_SESSION_READY` als auch
-  `FENNARA_RUNTIME_ORIENTATION_NOTE` müssen vor Ablauf der fünfsekündigen
+  `FENNARA_RUNTIME_ORIENTATION_NOTE` müssen vor Ablauf der 20-sekündigen
   Startfrist erscheinen. Fehlt eine der Markierungen, beendet der Daemon den
   Prozess und wartet auf dessen Ende, bevor er `startup_timeout` zurückgibt;
   ein anfänglicher Erfolg wird nicht gemeldet.

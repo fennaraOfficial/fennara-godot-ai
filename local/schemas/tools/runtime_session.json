@@ -23,7 +23,7 @@
     "End the session with runtime_session.stop or with a final runtime_script that calls ctx.close_scene().",
     "`status` and `stop` are operational receipts; a stopped process or non-zero exit code after an intentional stop is not by itself proof of a scene failure.",
     "The returned runtime_session.log path is the full source of truth for scene startup output, runtime errors, runtime_script ctx.log output, capture events, and completion markers.",
-    "`start` requires both FENNARA_RUNTIME_SESSION_READY and the FENNARA_RUNTIME_ORIENTATION_NOTE startup orientation tail marker before its 5-second startup deadline. If either marker is missing at the deadline, the daemon kills and reaps the process before returning `status:\"startup_timeout\"`; it does not leave a runtime session running for a later status call.",
+    "`start` requires both FENNARA_RUNTIME_SESSION_READY and the FENNARA_RUNTIME_ORIENTATION_NOTE startup orientation tail marker before its 20-second startup deadline. If either marker is missing at the deadline, the daemon kills and reaps the process before returning `status:\"startup_timeout\"`; it does not leave a runtime session running for a later status call.",
     "Runtime receipts include a capped excerpt of new runtime log lines when available.",
     "Fennara tracks a per-session log cursor: runtime_session, runtime_script, status, and stop results show log lines after the last remembered line, report omitted/truncated counts when capped, then advance the cursor to the current end of the log.",
     "Read the full raw log when older history or omitted text matters.",
@@ -40,7 +40,7 @@
           "status",
           "stop"
         ],
-        "description": "The runtime session operation. `status` is safe anytime: without an owned session it reports anonymous machine-wide availability, while an owner receives detailed state and renews inactivity. `start` first short-circuits on busy, runs preflight when free, and then atomically claims the Runtime Slot; it can still return successful anonymous busy if another caller wins that race. After spawn, `start` succeeds only if both runtime-ready and orientation markers arrive before the 5-second startup deadline; otherwise the daemon kills and reaps the process before returning `startup_timeout`. `stop` closes the owning project's running session and releases the slot. Treat owner status/stop results as process receipts; for scene behavior and failure evidence, use the returned runtime log update and read the full runtime_session.log when older history or omitted text matters."
+        "description": "The runtime session operation. `status` is safe anytime: without an owned session it reports anonymous machine-wide availability, while an owner receives detailed state and renews inactivity. `start` first short-circuits on busy, runs preflight when free, and then atomically claims the Runtime Slot; it can still return successful anonymous busy if another caller wins that race. After spawn, `start` succeeds only if both runtime-ready and orientation markers arrive before the 20-second startup deadline; otherwise the daemon kills and reaps the process before returning `startup_timeout`. `stop` closes the owning project's running session and releases the slot. Treat owner status/stop results as process receipts; for scene behavior and failure evidence, use the returned runtime log update and read the full runtime_session.log when older history or omitted text matters."
       },
       "scene_path": {
         "type": "string",

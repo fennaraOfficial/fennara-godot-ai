@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/tools.md sha256=ed8da3ac5003a9dafd4a90594f6f1b1e03c5987f73328fd0458a9ee6f18f3d7d -->
+<!-- fennara-i18n: locale=ja source=docs/tools.md sha256=dfa0baa54b981a1dee22d11aadb3ab230177a808a6ff2283f24403125057c20f -->
 <a id="tools"></a>
 # ツール
 
@@ -312,7 +312,7 @@ Godot を通してシーンを読み込み、そのノード階層、ノード�
 - 自然終了、明示的な停止、起動失敗、無操作期限、絶対期限のいずれかによって Runtime Slot が解放されます。
 - スタートアップゲートに失敗すると、シーンは開きません。
 - C# ランタイムビルドによって、開いているエディターの通常のアセンブリ再読み込みが発生する場合があります。
-- `FENNARA_RUNTIME_SESSION_READY` と `FENNARA_RUNTIME_ORIENTATION_NOTE` の両マーカーは、5 秒の起動期限までに現れなければなりません。いずれかが欠けている場合、デーモンはプロセスを強制終了して回収してから `startup_timeout` を返し、初期成功を返してはなりません。
+- `FENNARA_RUNTIME_SESSION_READY` と `FENNARA_RUNTIME_ORIENTATION_NOTE` の両マーカーは、20 秒の起動期限までに現れなければなりません。いずれかが欠けている場合、デーモンはプロセスを強制終了して回収してから `startup_timeout` を返し、初期成功を返してはなりません。
 - 管理対象セッションは独立した Godot プロセスであり、エディター内で手動実行されているシーンではありません。
 
 <a id="runtimescript"></a>

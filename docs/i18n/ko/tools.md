@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/tools.md sha256=ed8da3ac5003a9dafd4a90594f6f1b1e03c5987f73328fd0458a9ee6f18f3d7d -->
+<!-- fennara-i18n: locale=ko source=docs/tools.md sha256=dfa0baa54b981a1dee22d11aadb3ab230177a808a6ff2283f24403125057c20f -->
 <a id="tools"></a>
 # 도구
 
@@ -330,7 +330,7 @@ Godot을 통해 씬을 불러오고 노드 계층, 노드 클래스, 연결된 �
 - 자연 종료, 명시적 중지, 시작 실패, 비활성 만료 또는 절대 만료는 Runtime Slot을 해제합니다.
 - 시작 게이트 실패는 씬이 열리지 않게 합니다.
 - C# 런타임 빌드는 열린 에디터의 일반 어셈블리 다시 불러오기를 일으킬 수 있습니다.
-- `FENNARA_RUNTIME_SESSION_READY`와 `FENNARA_RUNTIME_ORIENTATION_NOTE` 두 마커 모두 5초 시작 기한 전에 나타나야 합니다. 하나라도 없으면 데몬은 프로세스를 종료하고 회수한 뒤 `startup_timeout`을 반환하며, 초기 성공을 반환해서는 안 됩니다.
+- `FENNARA_RUNTIME_SESSION_READY`와 `FENNARA_RUNTIME_ORIENTATION_NOTE` 두 마커 모두 20초 시작 기한 전에 나타나야 합니다. 하나라도 없으면 데몬은 프로세스를 종료하고 회수한 뒤 `startup_timeout`을 반환하며, 초기 성공을 반환해서는 안 됩니다.
 - 관리 세션은 에디터 안에서 직접 실행한 씬이 아니라 별도 Godot 프로세스입니다.
 
 <a id="runtimescript"></a>

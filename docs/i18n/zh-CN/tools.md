@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/tools.md sha256=ed8da3ac5003a9dafd4a90594f6f1b1e03c5987f73328fd0458a9ee6f18f3d7d -->
+<!-- fennara-i18n: locale=zh-CN source=docs/tools.md sha256=dfa0baa54b981a1dee22d11aadb3ab230177a808a6ff2283f24403125057c20f -->
 <a id="tools"></a>
 # 工具
 
@@ -314,7 +314,7 @@ Codex、Claude Code、Cursor 和 Gemini 等外部 MCP 客户端通过本地 `fen
 - 自然退出、显式停止、启动失败、非活动过期或绝对过期都会释放运行时槽位。
 - 启动门禁失败会阻止场景打开。
 - C# 运行时构建可能触发已打开编辑器的普通程序集重载。
-- `FENNARA_RUNTIME_SESSION_READY` 和 `FENNARA_RUNTIME_ORIENTATION_NOTE` 两个标记都必须在五秒启动截止时间前出现。若缺少任一标记，守护进程会先终止并回收该进程，再返回 `startup_timeout`；不得先返回初始成功。
+- `FENNARA_RUNTIME_SESSION_READY` 和 `FENNARA_RUNTIME_ORIENTATION_NOTE` 两个标记都必须在 20 秒启动截止时间前出现。若缺少任一标记，守护进程会先终止并回收该进程，再返回 `startup_timeout`；不得先返回初始成功。
 - 受管理会话是独立 Godot 进程，不是编辑器内手动运行的场景。
 
 <a id="runtimescript"></a>

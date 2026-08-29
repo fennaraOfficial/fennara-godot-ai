@@ -24,7 +24,7 @@ mod launch_command_tests;
 
 #[cfg(target_os = "windows")]
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
-const STARTUP_READY_TIMEOUT_MS: u64 = 5_000;
+const STARTUP_READY_TIMEOUT_MS: u64 = 20_000;
 const STARTUP_CAPTURE_TIMEOUT_MS: u64 = 3_000;
 const STARTUP_CAPTURE_MAX_RESOLUTION: u16 = 1280;
 const SUPERVISOR_INTERVAL_MS: u64 = 500;
@@ -1294,6 +1294,191 @@ mod tests {
         assert!(!state.runtime_slot.is_occupied_now());
         assert!(state.runtime_sessions.lock().await.is_empty());
         assert!(state.runtime_session_receipts.lock().await.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn http_start_accepts_godot_float_max_run_seconds() {
+        let fixture = unix_fixture(
+            "float-lease",
+            r#"#!/bin/sh
+capture_path=$(sed -n 's/^[[:space:]]*"startup_capture_status_path": "\(.*\)"[,]\{0,1\}$/\1/p' "$FENNARA_RT_SPEC")
+printf '{"success":false}\n' > "$capture_path"
+printf 'FENNARA_RUNTIME_SESSION_READY: {}\n'
+printf 'FENNARA_RUNTIME_ORIENTATION_NOTE: startup\n'
+while :; do sleep 1; done
+"#,
+        );
+        let (shutdown_sender, _shutdown_receiver) = oneshot::channel();
+        let state = AppState::new(shutdown_sender);
+        let control_token: Arc<str> = Arc::from("runtime-float-lease-test-token");
+        let app = Router::new()
+            .route("/runtime/session/start", post(super::runtime_session_start))
+            .route("/runtime/session/stop", post(super::runtime_session_stop))
+            .route_layer(middleware::from_fn_with_state(
+                control_token.clone(),
+                control_auth::require_control_auth,
+            ))
+            .with_state(state.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let client = reqwest::Client::new();
+        let project_path = fixture.root.to_string_lossy().into_owned();
+        let started: Value = client
+            .post(format!("http://{address}/runtime/session/start"))
+            .header(CONTROL_HEADER, control_token.as_ref())
+            .json(&json!({
+                "project_path": project_path,
+                "executable": fixture.executable.to_string_lossy(),
+                "working_directory": project_path,
+                "scene_path": "res://test_scene.tscn",
+                "artifact_dir": fixture.root.join("artifacts").to_string_lossy(),
+                "max_run_seconds": 90.0
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(started["status"], "started", "{started}");
+        assert_eq!(started["max_run_seconds"], 90);
+        let session_id = started["session_id"].as_str().unwrap();
+        let stopped: Value = client
+            .post(format!("http://{address}/runtime/session/stop"))
+            .header(CONTROL_HEADER, control_token.as_ref())
+            .json(&json!({
+                "project_path": project_path,
+                "session_id": session_id,
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(stopped["status"], "stopped");
+        server.abort();
+        let _ = server.await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn installed_godot_and_godot_mono_report_ready_within_startup_deadline() {
+        if std::env::var_os("FENNARA_LIVE_GODOT").is_none() {
+            return;
+        }
+        if std::env::var_os("DISPLAY").is_none() {
+            eprintln!("skipping live Godot runtime test without DISPLAY");
+            return;
+        }
+
+        let editors = ["godot", "godot-mono"].into_iter().filter_map(|name| {
+            std::env::var_os("PATH").and_then(|paths| {
+                std::env::split_paths(&paths).find_map(|dir| {
+                    let candidate = dir.join(name);
+                    candidate.is_file().then_some((name, candidate))
+                })
+            })
+        });
+
+        let runtime_src = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .join("runtime");
+        let mut ran = 0usize;
+        for (name, executable) in editors {
+            let sequence = FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir().join(format!(
+                "fennara-live-godot-{}-{sequence}-{name}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(root.join("addons/fennara/runtime")).unwrap();
+            for entry in std::fs::read_dir(&runtime_src).unwrap() {
+                let entry = entry.unwrap();
+                if entry.path().extension().and_then(|ext| ext.to_str()) == Some("gd") {
+                    std::fs::copy(
+                        entry.path(),
+                        root.join("addons/fennara/runtime").join(entry.file_name()),
+                    )
+                    .unwrap();
+                }
+            }
+            std::fs::write(
+                root.join("project.godot"),
+                b"[application]\nconfig/name=\"Fennara Live Runtime\"\nrun/main_scene=\"res://Main.tscn\"\nconfig/features=PackedStringArray(\"4.7\")\n\n[autoload]\n_fennara_game_capture=\"*res://addons/fennara/runtime/game_capture_helper.gd\"\n\n[display]\nwindow/size/viewport_width=640\nwindow/size/viewport_height=360\n",
+            )
+            .unwrap();
+            std::fs::write(
+                root.join("Main.tscn"),
+                b"[gd_scene format=3 uid=\"uid://fennara_live_main\"]\n\n[node name=\"Main\" type=\"Node2D\"]\n",
+            )
+            .unwrap();
+            let import = std::process::Command::new(&executable)
+                .args([
+                    "--headless",
+                    "--path",
+                    root.to_str().unwrap(),
+                    "--import",
+                    "--quit",
+                ])
+                .output()
+                .unwrap();
+            assert!(
+                import.status.success(),
+                "{name} import failed: {}",
+                String::from_utf8_lossy(&import.stderr)
+            );
+
+            let (shutdown_sender, _shutdown_receiver) = oneshot::channel();
+            let state = AppState::new(shutdown_sender);
+            let request = RuntimeSessionStartRequest {
+                project_path: root.to_string_lossy().into_owned(),
+                executable: executable.to_string_lossy().into_owned(),
+                working_directory: root.to_string_lossy().into_owned(),
+                scene_path: "res://Main.tscn".to_string(),
+                artifact_dir: root.join("artifacts").to_string_lossy().into_owned(),
+                user_args: Vec::new(),
+                max_run_seconds: Some(90),
+            };
+            let started = tokio::time::timeout(
+                Duration::from_secs(45),
+                runtime_session_start_inner(&state, request),
+            )
+            .await
+            .unwrap_or_else(|_| panic!("{name} start timed out"))
+            .unwrap();
+            assert_eq!(started["status"], "started", "{name}: {started}");
+            assert_eq!(started["startup_ready_seen"], true, "{name}: {started}");
+            assert_eq!(
+                started["startup_orientation_seen"], true,
+                "{name}: {started}"
+            );
+            assert_eq!(started["max_run_seconds"], 90, "{name}: {started}");
+            let session_id = started["session_id"].as_str().unwrap().to_string();
+            let stopped = runtime_session_stop_inner(
+                &state,
+                RuntimeSessionIdRequest {
+                    project_path: root.to_string_lossy().into_owned(),
+                    session_id,
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(stopped["status"], "stopped", "{name}: {stopped}");
+            let _ = std::fs::remove_dir_all(&root);
+            ran += 1;
+        }
+        assert!(
+            ran >= 1,
+            "FENNARA_LIVE_GODOT=1 but no godot/godot-mono executable was found on PATH"
+        );
     }
 
     #[cfg(unix)]

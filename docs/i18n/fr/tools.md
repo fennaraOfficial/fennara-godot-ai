@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=fr source=docs/tools.md sha256=ed8da3ac5003a9dafd4a90594f6f1b1e03c5987f73328fd0458a9ee6f18f3d7d -->
+<!-- fennara-i18n: locale=fr source=docs/tools.md sha256=dfa0baa54b981a1dee22d11aadb3ab230177a808a6ff2283f24403125057c20f -->
 <a id="tools"></a>
 # Outils
 
@@ -468,7 +468,7 @@ Limites et échecs importants :
 - Une compilation d'exécution C# peut provoquer le rechargement normal des assemblages dans l'éditeur ouvert.
 - Les marqueurs `FENNARA_RUNTIME_SESSION_READY` et
   `FENNARA_RUNTIME_ORIENTATION_NOTE` doivent tous deux apparaître avant le
-  délai de démarrage de cinq secondes. Si l'un des deux manque, le daemon
+  délai de démarrage de 20 secondes. Si l'un des deux manque, le daemon
   arrête de force le processus et attend sa terminaison avant de renvoyer
   `startup_timeout` ; aucun succès initial n'est renvoyé.
 - Les sessions gérées sont des processus Godot distincts, pas la scène exécutée manuellement dans l'éditeur.

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/tools.md sha256=ed8da3ac5003a9dafd4a90594f6f1b1e03c5987f73328fd0458a9ee6f18f3d7d -->
+<!-- fennara-i18n: locale=tr source=docs/tools.md sha256=dfa0baa54b981a1dee22d11aadb3ab230177a808a6ff2283f24403125057c20f -->
 <a id="tools"></a>
 # Araçlar
 
@@ -365,7 +365,7 @@ Daemon tarafından yönetilen pencereli bir Godot sahnesini başlatır, denetler
 - Başarısız başlangıç kapıları sahnenin açılmasını engeller.
 - Bir C# çalışma zamanı derlemesi açık düzenleyicinin normal derleme yeniden yüklemesini tetikleyebilir.
 - `FENNARA_RUNTIME_SESSION_READY` ve `FENNARA_RUNTIME_ORIENTATION_NOTE`
-  işaretçilerinin ikisi de beş saniyelik başlatma son tarihinden önce
+  işaretçilerinin ikisi de 20 saniyelik başlatma son tarihinden önce
   görünmelidir. İşaretçilerden biri eksikse daemon, `startup_timeout`
   döndürmeden önce süreci sonlandırır ve tamamlanmasını bekler; ilk başarı
   yanıtı döndürülmez.
