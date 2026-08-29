@@ -84,8 +84,40 @@ pub(crate) struct RuntimeSessionStartRequest {
     artifact_dir: String,
     #[serde(default)]
     user_args: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_whole_u64")]
     max_run_seconds: Option<u64>,
+}
+
+fn deserialize_optional_whole_u64<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Number(number)) => {
+            if let Some(seconds) = number.as_u64() {
+                return Ok(Some(seconds));
+            }
+            if let Some(seconds) = number.as_i64().filter(|seconds| *seconds >= 0) {
+                return Ok(Some(seconds as u64));
+            }
+            if let Some(seconds) = number.as_f64().filter(|seconds| {
+                seconds.is_finite()
+                    && *seconds >= 0.0
+                    && *seconds == seconds.trunc()
+                    && *seconds <= u64::MAX as f64
+            }) {
+                return Ok(Some(seconds as u64));
+            }
+            Err(serde::de::Error::custom(
+                "max_run_seconds must be a whole number from 1 through 86400",
+            ))
+        }
+        Some(_) => Err(serde::de::Error::custom(
+            "max_run_seconds must be a whole number from 1 through 86400",
+        )),
+    }
 }
 
 #[derive(Debug, Deserialize)]

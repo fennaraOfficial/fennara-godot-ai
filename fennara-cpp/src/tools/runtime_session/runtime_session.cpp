@@ -15,6 +15,8 @@
 #include <godot_cpp/core/class_db.hpp>
 
 #include <chrono>
+#include <cmath>
+#include <cstdint>
 #include <mutex>
 #include <thread>
 
@@ -251,7 +253,23 @@ godot::Dictionary FennaraRuntimeSessionTool::execute_start_after_preflight(
         payload["user_args"] = values;
     }
     if (args.has("max_run_seconds")) {
-        payload["max_run_seconds"] = args["max_run_seconds"];
+        godot::Variant raw = args["max_run_seconds"];
+        int64_t seconds = 0;
+        bool whole = false;
+        if (raw.get_type() == godot::Variant::INT) {
+            seconds = int64_t(raw);
+            whole = seconds >= 0;
+        } else if (raw.get_type() == godot::Variant::FLOAT) {
+            double value = double(raw);
+            whole = std::isfinite(value) && value >= 0.0 && value == std::floor(value) &&
+                    value <= static_cast<double>(INT64_MAX);
+            seconds = static_cast<int64_t>(value);
+        }
+        if (!whole) {
+            return make_runtime_session_error(
+                "blocked", "`max_run_seconds` must be an integer from 1 through 86400.");
+        }
+        payload["max_run_seconds"] = seconds;
     }
     godot::Dictionary result = post_daemon("/runtime/session/start", payload);
     attach_runtime_result_fields(result);
