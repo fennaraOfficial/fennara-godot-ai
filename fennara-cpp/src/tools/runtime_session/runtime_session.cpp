@@ -26,6 +26,9 @@ namespace {
 
 constexpr const char *kLocalDaemonHost = "127.0.0.1";
 constexpr int kLocalDaemonPort = 41287;
+// Covers daemon STARTUP_READY_TIMEOUT_MS (20s) + STARTUP_CAPTURE_TIMEOUT_MS (3s)
+// plus HTTP/processing margin.
+constexpr int kRuntimeSessionStartTimeoutMs = 25000;
 
 godot::String &active_daemon_session_id() {
     static godot::String *session_id = memnew(godot::String);
@@ -276,7 +279,8 @@ godot::Dictionary FennaraRuntimeSessionTool::execute_start_after_preflight(
         }
         payload["max_run_seconds"] = seconds;
     }
-    godot::Dictionary result = post_daemon("/runtime/session/start", payload);
+    godot::Dictionary result =
+        post_daemon("/runtime/session/start", payload, kRuntimeSessionStartTimeoutMs);
     attach_runtime_result_fields(result);
     if (godot::String(result.get("status", "")) == "busy" &&
         !(bool)result.get("slot_acquired", false)) {
