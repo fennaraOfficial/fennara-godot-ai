@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
+<!-- fennara-i18n: locale=tr source=docs/architecture.md sha256=1bc08d075d4b48d0c781f954d4da4752d6c7223ff1636f01f06524b06dce256a -->
 <a id="architecture"></a>
 # Mimari
 
@@ -19,19 +19,22 @@ devretme davranışını açıklar.
 | Sürüm yapılarını anlamak | [Sürüm Süreci](release.md) |
 | Kullanılabilir model araçlarını incelemek | [Araçlar](tools.md) |
 
-Normal OSS yolunda bir Fennara bulut hizmeti yoktur. Harici bir MCP uygulaması
-daemon ile konuşan yerel MCP sürecini başlatır. Yerleşik sohbet doğrudan bu
-daemon ile konuşur. Daemon, açık Godot düzenleyicisindeki Fennara eklentisine
-ulaşır.
+Normal OSS yolunda bir Fennara bulut hizmeti yoktur. Her harici MCP bağlantısı,
+kullanıcı başına paylaşılan tek bir daemon ile konuşan yerel bir MCP işlemi
+başlatır. Yerleşik sohbet doğrudan bu daemon ile konuşur. Daemon, açık Godot
+editörlerindeki Fennara eklentilerine ulaşır.
 
 ```mermaid
 flowchart LR
-    A["External MCP app"] --> B["fennara-mcp launcher"]
-    B --> C["Versioned MCP runtime"]
-    C --> D["Local daemon"]
-    E["Built-in Fennara chat"] --> D
-    D --> F["Godot editor addon"]
-    F --> G["Open Godot project"]
+    A["External MCP app A"] --> B["MCP runtime A\nProject Binding A"]
+    C["External MCP app B"] --> E["MCP runtime B\nProject Binding B"]
+    B --> D["Shared local daemon"]
+    E --> D
+    J["Built-in Fennara chat"] --> D
+    D --> F["Godot editor addon A"]
+    D --> G["Godot editor addon B"]
+    F --> H["Godot Project Root A"]
+    G --> I["Godot Project Root B"]
 ```
 
 <a id="main-pieces"></a>
@@ -41,9 +44,10 @@ flowchart LR
 | --- | --- | --- |
 | CLI | `local/crates/fennara-cli/` | Eklentiyi bir Godot projesine kurar, yerel paketleri günceller, proje rehberini yazar ve MCP uygulamalarını `fennara mcp-setup` aracılığıyla yapılandırır. |
 | MCP başlatıcısı | `local/crates/fennara-mcp/` | MCP uygulamalarının çağırdığı kararlı çalıştırılabilir dosya. Etkin sürümü bulur ve çalışma zamanını başlatır. |
-| MCP çalışma zamanı | `local/crates/fennara-mcp/` | stdio üzerinden MCP konuşur ve araç çağrılarını yerel köprüye iletir. |
+| MCP çalışma zamanı | `local/crates/fennara-mcp/` | stdio üzerinden MCP konuşur, başlangıçta isteğe bağlı tek bir Proje Bağlamasını sabitler ve araç çağrılarını yerel köprüye iletir. |
 | Daemon başlatıcısı | `local/crates/fennara-daemon/` | Etkin daemon çalışma zamanını başlatmak için kullanılan kararlı çalıştırılabilir dosya. |
-| Daemon çalışma zamanı | `local/crates/fennara-daemon/` | Yerel durumu tutar, Godot ile koordinasyon sağlar, MCP çalışma zamanına hizmet eder ve yerleşik sohbet yollarını barındırır. |
+| Daemon çalışma zamanı | `local/crates/fennara-daemon/` | Paylaşılan yerel durumu tutar, MCP bağlantılarını eşleşen editörlere yönlendirir, makine genelindeki Çalışma Zamanı Yuvasının sahibidir, Godot ile koordinasyon sağlar ve yerleşik sohbet yollarını barındırır. |
+| Proje kimliği | `local/crates/fennara-project-identity/` | MCP çalışma zamanı ve daemon için Godot Proje Köklerini çözümler, doğrular, kanonikleştirir ve karşılaştırır. |
 | Sohbet arayüzü kaynağı | `ui/chat/` | Yerleşik sohbet, ayarlar, sağlayıcı kurulumu, MCP uygulaması kurulumu ve güncelleme arayüzü için HTML, CSS ve JavaScript. `godot_demo/addons/fennara/dist/` altındaki paketlenmiş eklentiye eşitlenir. |
 | Godot eklentisi | `godot_demo/addons/fennara/` | Kullanıcı projelerine kopyalanan eklenti yükü. |
 | Çalışma zamanı yardımcı kaynağı | `runtime/` | Çalışma zamanı oturumları ve çalışma zamanı betikleri için eklenti yüküne eşitlenen Godot tarafı çalışma zamanı yardımcı betikleri. |
@@ -115,12 +119,13 @@ eklenti zip'inden ayrıdır: Linux kurulumları paylaşılan bir uygulama verisi
 çalışma zamanı konumu kullanır ve CLI, sürüm tarafından yönetilen CEF yapısını
 kullanıcı başına bir kez buraya kurar.
 
-Aynı anda birden fazla Godot düzenleyicisi açık olabilir. Her gömülü sohbet
-websocket'i, sahip düzenleyicinin `chat_token` değeriyle kabul edilir ve sohbet
+Aynı anda birden fazla Godot editörü açık olabilir. Her gömülü sohbet
+websocket'i, sahip editörün `chat_token` değeriyle kabul edilir ve sohbet
 depolama kapsamı, anlık görüntüler, araç yürütme, iptal ve geri alma için o Godot
-oturumuna bağlı kalır. Harici MCP istemcileri yine daemon'ın etkin hedefi
-üzerinden yönlendirilir. Sohbet sağlayıcısı ayarları şimdilik geneldir, sohbetler
-ise proje kapsamlı kalır. Bulut sohbet sağlayıcıları yerel olarak saklanan API
+oturumuna bağlı kalır. Projeye bağlı harici bir MCP işlemi, kanonik Proje
+Köküyle eşleşen editöre yönlendirilir. Yalnızca bağlı olmayan bir işlem,
+daemon'ın panelden seçilen uyumluluk hedefini kullanır. Sohbet sağlayıcısı
+ayarları şimdilik geneldir, sohbetler ise proje kapsamlı kalır. Bulut sohbet sağlayıcıları yerel olarak saklanan API
 anahtarlarını kullanır; yerel sağlayıcılar daemon tarafından saklanan temel
 URL'leri kullanır. Geçerli yerleşik sohbet sağlayıcısı kümesi OpenAI,
 Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For
@@ -319,7 +324,9 @@ gerçek `.godot/mono/temp/bin/Debug` derlemesini yazar.
 ## MCP Kurulumu
 
 `fennara mcp-setup`, uygulamanın yerel başlatıcıyı başlatabilmesi için MCP
-uygulaması yapılandırmasını düzenler.
+uygulaması yapılandırmasını düzenler. Oluşturulan giriş genel ve projeden
+bağımsızdır; kurulumu bir Godot projesinden çalıştırmak gelecekteki her MCP
+işlemini o projeye bağlamaz.
 
 Örnekler:
 
@@ -336,6 +343,23 @@ gösterir. Başlatıcı `current.json` dosyasını okur, ardından eşleşen sü
 
 Bu, MCP uygulaması yapılandırmalarını güncellemeler boyunca kararlı tutar.
 
+Yalıtılmış depolar veya worktree'ler için MCP ana bilgisayarı, proje başına bir
+işlem ve bağlantı başlatır. Çalışma zamanı başlangıç dizinini yakalar ve işlem
+ömrü boyunca tek bir MCP Proje Bağlamasını sabitler. Bağlama keşfi sırasıyla
+açık `--project-path`, ardından `FENNARA_PROJECT_PATH`, ardından `project.godot`
+içeren en yakın başlangıç dizini üst öğesidir. Otomatik keşif bir proje bulamazsa
+çalışma zamanı eski bağlı olmayan uyumluluk moduna girer. Geçersiz açık
+bağlamalar geri dönüş yapmak yerine başlangıcı başarısız kılar.
+
+Paylaşılan `fennara-project-identity` crate'i hem MCP hem de daemon için kökleri
+kanonikleştirir ve doğrular. MCP, kanonik kökünü modelin gördüğü araç bağımsız
+değişkenlerinin dışında taşıma meta verisi olarak gönderir. Daemon bu konum
+belirleyicisini ve editörlerin bildirdiği kökleri yeniden çözümler, ardından tam
+olarak bir canlı dosya sistemi eşleşmesi olmasını şart koşar. Eksik bir editör
+yeniden denenebilir, yinelenen bir eşleşme belirsizdir ve iki durumda da panel
+hedefine geri dönülmez. Bkz.
+[Birden Fazla Ajan ve Worktree](multi-agent-worktrees.md).
+
 Bu kurulum yolu yerleşik sohbet sağlayıcısı yolundan ayrıdır. MCP uygulamaları
 kendi model hesaplarını kullanır; Fennara dock'u sohbet ayarlarında
 yapılandırılan sağlayıcıyı kullanır.
@@ -348,15 +372,21 @@ MCP client
   calls a Fennara tool
 MCP runtime
   validates the request against local schemas
+  attaches its process-scoped Project Binding as transport metadata
   forwards the call to the local daemon
 Daemon runtime
-  routes the request to the connected Godot project
+  resolves the binding and routes to exactly one matching Godot editor
 Godot addon
   runs the Godot-aware tool through GDExtension
   returns a concise markdown result
 MCP runtime
   sends the result back to the MCP client
 ```
+
+Dahili yerleşik sohbet çağrıları zaten açık bir Godot Editör Oturumu taşır.
+MCP Proje Bağlaması olmayan harici bir MCP ise eski MCP Hedefini kullanır: önce
+geçerli panel seçimi, ardından tek bağlı editör. Bağlı seçim, daemon genelindeki
+bu hedefi hiçbir zaman okumaz veya değiştirmez.
 
 MCP istemcisi normal dosyaları kendi başına okuyabilir ve yazabilir. Fennara
 araçları Godot'a özgü geri bildirime odaklanır: sahne yapısı, düğüm özellikleri,
@@ -412,10 +442,26 @@ bir düzenleyicinin altından sürüm değiştirilmesini önler. Tam sürüm pak
 önceki `current.json`, başlatıcı anlık görüntüleri ve önceki proje eklentisi,
 yeniden açılan düzenleyici yeni GDExtension'ı doğrulayana kadar tutulur.
 
-Daemon şu anda tüm bağlı Godot düzenleyicileri genelinde tek bir yönetilen
-`runtime_session` sahnesine izin verir. Başlatma isteği seçili veya sohbete bağlı
-Godot projesinde çalışır, ancak yeni bir tane başlatılmadan önce çalışan başka
-bir yönetilen sahnenin durdurulması gerekir.
+Daemon, bağlı tüm editörler genelinde makine çapında tek bir Çalışma Zamanı
+Yuvasına sahiptir. Bir başlatma isteği, işlem oluşturulmadan önce atomik olarak
+`Starting` durumunu talep eder ve bu talebi `Running` durumuna geçirir; yarışan
+bir çağıran, hata olmayan anonim bir `busy` sonucu alır ve hiçbir zaman ikinci
+bir oyun başlatmaz. FIFO kuyruğu yoktur.
+
+Her Çalışma Zamanı Oturumu, geçici bir editör işleminin değil kendi kanonik
+Proje Kökünün mülkiyetindedir. Yalnızca bu sahip ayrıntılı durumu inceleyebilir,
+kirayı yenileyebilir, betik çalıştırabilir veya oturumu durdurabilir. Diğer
+projeler anonim meşgul durumunu görür ve başka bir oturum tanımlayıcısını
+doğrulayamaz. Böylece sahiplik, editör yeniden bağlandığında da korunur.
+
+Varsayılan mutlak Çalışma Zamanı Kirası 900 saniyedir ve çağıranlar en fazla
+86.400 saniye olmak üzere pozitif bir `max_run_seconds` değeri isteyebilir.
+Sahip durum sorguları ve sınırlı sahip işlemleri 120 saniyelik hareketsizlik son
+tarihini yeniler; ajanlar normalde durumu jitter uygulayarak yaklaşık her 30
+saniyede bir sorgular. Mutlak son tarih hiçbir zaman duraklatılmaz. Bir gözetmen
+doğal çıkış, açık durdurma, başlangıç hatası, hareketsizlik süresinin dolması
+veya mutlak sürenin dolmasının ardından işlemi durdurur ya da toplar ve Çalışma
+Zamanı Yuvasını serbest bırakır.
 
 <a id="export-boundary"></a>
 ## Dışa Aktarma Sınırı

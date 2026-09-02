@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ru source=docs/README.md sha256=2f8fb6a711c8bb56af570d1657f802c63cbdf2ced6b2c620339c588c9c9211cb -->
+<!-- fennara-i18n: locale=ru source=docs/README.md sha256=ab01a3fd8024bccc8ad878eb0ec4cb15defa770ed3feccd0eef4c56270c7e763 -->
 <a id="fennara-documentation"></a>
 # Документация Fennara
 
@@ -33,6 +33,7 @@
 | Руководство | Что в нем описано |
 | --- | --- |
 | [MCP-приложения и встроенный чат](chat-vs-mcp.md) | Какая учетная запись модели используется каждым способом |
+| [Несколько агентов и рабочих деревьев](multi-agent-worktrees.md) | Привязка каждого MCP-подключения к своему проекту Godot при общем демоне |
 | [Инструменты](tools.md) | Инструменты, учитывающие особенности Godot, и случаи их применения |
 | [Примеры](examples.md) | Запросы для распространенных рабочих процессов Godot |
 | [Slash-команды](slash-commands.md) | `/provider` и `/model` на панели чата |

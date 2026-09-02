@@ -12,6 +12,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | --- | --- |
 | User setup or CLI behavior | `local/crates/fennara-cli/` |
 | External MCP protocol or schemas | `local/crates/fennara-mcp/`, `local/schemas/tools/` |
+| Project Root discovery or equality | `local/crates/fennara-project-identity/` |
 | Built-in chat or daemon behavior | `local/crates/fennara-daemon/` |
 | Godot editor integration | `fennara-cpp/` |
 | Chat UI | `ui/chat/` |
@@ -40,6 +41,7 @@ This is the quick map for contributors and coding agents working in this reposit
 | `README.md` | Short human-facing overview and quick start. |
 | `docs/README.md` | Task-oriented documentation index. |
 | `docs/setup.md` | User-facing addon-first setup, chat prerequisites, MCP connection, update flow, and troubleshooting. |
+| `docs/multi-agent-worktrees.md` | One-MCP-connection-per-project routing, supported-host boundaries, verification, and serialized Runtime Slot use. |
 | `docs/cli.md` | Terminal command reference, CLI-owned install/update behavior, recovery, diagnostics, app-data layout, and automation guidance. |
 | `docs/telemetry.md` | Anonymous activity payload, app-data state, delivery behavior, monthly-active definition, and opt-out controls. |
 | `CONTRIBUTING.md` | Contribution rules. |
@@ -63,8 +65,12 @@ This is the quick map for contributors and coding agents working in this reposit
 | `local/crates/fennara-cli/src/daemon_setup.rs` | Shared daemon health check, exact-version readiness, and startup used by install and doctor. |
 | `local/crates/fennara-cli/tests/operation_failures.rs` | Process-level failure, durable diagnostics, redaction, and fail-closed operation-log tests. |
 | `local/crates/fennara-cli/src/diagnostics.rs` | User-facing access to the latest or a named sanitized operation report. |
-| `local/crates/fennara-mcp/` | Local stdio MCP server and tool schema forwarding. |
-| `local/crates/fennara-daemon/` | Local daemon used for runtime sessions and Godot bridge work. |
+| `local/crates/fennara-project-identity/` | Shared Project Root discovery, validation, canonicalization, lossless protocol conversion, and live filesystem equality. |
+| `local/crates/fennara-mcp/` | Local stdio MCP server, process-scoped Project Binding discovery, status presentation, and tool schema forwarding. |
+| `local/crates/fennara-daemon/` | Shared local daemon used for Project Root routing, Runtime Slot ownership and leases, runtime sessions, and Godot bridge work. |
+| `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs` | Mutually exclusive editor-session, bound-project, and legacy-MCP target selection plus Godot request/response correlation. |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs` | Machine-wide atomic Runtime Slot admission, owner identity, and lease state. |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs` | Managed game process lifecycle, owner authorization, logs, expiry cleanup, and session receipts. |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry.rs` | Anonymous daily-active scheduler, bounded queue, HTTP delivery, and daemon lifecycle integration. |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry/state.rs` | Random installation identity validation, atomic app-data persistence, daily receipt state, and opt-out cleanup. |
 | `local/crates/fennara-daemon/src/runtime_daemon/permissions.rs` | Built-in chat approval modes, tool-risk classification, permission decisions, and pending approval request types. |
@@ -184,7 +190,10 @@ This is the quick map for contributors and coding agents working in this reposit
 | Change generated project guidance | `local/templates/` and `local/crates/fennara-cli/src/project_guidance.rs` |
 | Sync generated demo addon guidance | `local/templates/fennara-guidelines.md`, `local/templates/fennara-ai/`, `scripts/sync-guidance.mjs`, and `godot_demo/addons/fennara/ai/` |
 | Change MCP app setup | `local/crates/fennara-cli/src/mcp_setup.rs` and `docs/mcp-setup.md` |
+| Change MCP Project Binding discovery or Project Root equality | `local/crates/fennara-project-identity/`, `local/crates/fennara-mcp/src/runtime/`, `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs`, and `docs/multi-agent-worktrees.md` |
+| Change daemon target routing or bound status | `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs`, `local/crates/fennara-mcp/src/runtime/`, and `docs/multi-agent-worktrees.md` |
 | Change runtime session process/log behavior | `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`, `local/crates/fennara-daemon/src/runtime_daemon/runtime_log.rs`, `fennara-cpp/src/tools/runtime_session/`, and `fennara-cpp/src/tool_results/` |
+| Change Runtime Slot ownership, admission, or leases | `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs`, `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`, `fennara-cpp/src/tools/runtime_session/`, `fennara-cpp/src/tools/runtime_script.cpp`, and `local/schemas/tools/runtime_session.json` |
 | Change `runtime_script` ctx helpers, input, snapshots, waits, raycasts, captures, or cleanup | `runtime/`, `scripts/sync-runtime.mjs`, `godot_demo/addons/fennara/runtime/`, `local/schemas/tools/runtime_script.json`, and `docs/tools.md` |
 | Change in-editor chat UI, slash commands, or model/provider picker | `ui/chat/`, `godot_demo/addons/fennara/dist/`, `fennara-cpp/src/ui/dock.cpp`, and `fennara-cpp/src/ui/webview_host*` |
 | Change built-in chat providers | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/`, `local/crates/fennara-daemon/src/runtime_daemon/chat/models.rs`, `local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs`, and `ui/chat/` |

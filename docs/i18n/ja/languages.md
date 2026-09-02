@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/languages.md sha256=29ca1071b436e0ff29fa5d18d9e2b09cbe64749513ea7f4e1e6471569fcb6456 -->
+<!-- fennara-i18n: locale=ja source=docs/languages.md sha256=476e4afb5a17f76474a25864d08280c73ba0e4fdd1ebcfbbfd814d010dfac932 -->
 <a id="languages-and-translation-status"></a>
 # 言語と翻訳状況
 
@@ -12,16 +12,16 @@
 
 | 言語 | ドキュメント | 対応範囲 | レビュー状況 |
 | --- | --- | --- | --- |
-| English | [英語ドキュメント](../../README.md) | 30/30 | 正規版 |
-| 简体中文 | [簡体中文文档](../zh-CN/README.md) | 30/30 | ネイティブレビュー募集中 |
-| Español | [Documentación en español](../es/README.md) | 30/30 | ネイティブレビュー募集中 |
-| Português do Brasil | [Documentação em português](../pt-BR/README.md) | 30/30 | ネイティブレビュー募集中 |
-| 日本語 | [日本語ドキュメント](README.md) | 30/30 | ネイティブレビュー募集中 |
-| 한국어 | [한국어 문서](../ko/README.md) | 30/30 | ネイティブレビュー募集中 |
-| Русский | [Документация на русском](../ru/README.md) | 30/30 | ネイティブレビュー募集中 |
-| Français | [Documentation en français](../fr/README.md) | 30/30 | ネイティブレビュー募集中 |
-| Deutsch | [Deutsche Dokumentation](../de/README.md) | 30/30 | ネイティブレビュー募集中 |
-| Türkçe | [Türkçe belgeler](../tr/README.md) | 30/30 | ネイティブレビュー募集中 |
+| English | [英語ドキュメント](../../README.md) | 31/31 | 正規版 |
+| 简体中文 | [簡体中文文档](../zh-CN/README.md) | 31/31 | ネイティブレビュー募集中 |
+| Español | [Documentación en español](../es/README.md) | 31/31 | ネイティブレビュー募集中 |
+| Português do Brasil | [Documentação em português](../pt-BR/README.md) | 31/31 | ネイティブレビュー募集中 |
+| 日本語 | [日本語ドキュメント](README.md) | 31/31 | ネイティブレビュー募集中 |
+| 한국어 | [한국어 문서](../ko/README.md) | 31/31 | ネイティブレビュー募集中 |
+| Русский | [Документация на русском](../ru/README.md) | 31/31 | ネイティブレビュー募集中 |
+| Français | [Documentation en français](../fr/README.md) | 31/31 | ネイティブレビュー募集中 |
+| Deutsch | [Deutsche Dokumentation](../de/README.md) | 31/31 | ネイティブレビュー募集中 |
+| Türkçe | [Türkçe belgeler](../tr/README.md) | 31/31 | ネイティブレビュー募集中 |
 
 <a id="what-is-translated"></a>
 ## 翻訳対象

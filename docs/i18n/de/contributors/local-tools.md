@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=local/README.md sha256=a7dee6dc27d357ae479c13a0f950aa2664f2e7548f09f7623bbff0e07a49ad50 -->
+<!-- fennara-i18n: locale=de source=local/README.md sha256=29a4563cb548ac4612f1881d66af9e72f4de9b1c118920e0d14ba00d0279edec -->
 <a id="fennara-local-tools"></a>
 # Lokale Fennara-Werkzeuge
 
@@ -23,8 +23,21 @@ Endpunkte:
 
 - `GET /health`: Zustand des Daemons.
 - `GET /status`: Daemonstatus sowie Metadaten zum verbundenen Godot-Plugin.
+- `POST /status/bound`: privilegierter gebundener Status. Löst den kanonischen
+  Projektstamm eines MCP-Prozesses gegen die verbundenen Godot-Editor-Sitzungen
+  auf.
 - `POST /tools/call`: leitet einen Werkzeugaufruf an das verbundene Godot-Plugin weiter und wartet auf ein Werkzeugergebnis.
 - `WS /godot/ws`: lokale Brücke zum Godot-Plugin. Das Plugin sendet nach der Verbindung eine `hello`-Nachricht.
+
+Ein Daemon wird von allen Fennara-fähigen Editoren und externen MCP-Prozessen des
+aktuellen Benutzers gemeinsam verwendet. Gebundene externe Anfragen werden anhand
+des kanonischen Projektstamms weitergeleitet. Interne Anfragen des integrierten
+Chats bleiben an ihre Godot-Editor-Sitzung gebunden, und ungebundene Legacy-MCP-
+Anfragen verwenden das im Dock ausgewählte Kompatibilitätsziel.
+
+Der Daemon besitzt außerdem einen rechnerweiten Laufzeit-Slot. Eigentümerschaft und
+erneuerbarer Lease-Zustand einer Laufzeitsitzung sind einem Projektstamm zugeordnet,
+sodass ein Editor erneut verbunden werden kann, ohne die Kontrolle zu übertragen.
 
 Entwicklungsbinärdatei:
 
@@ -36,6 +49,19 @@ local/target/debug/fennara-daemon.exe
 ## MCP-Server
 
 `crates/fennara-mcp` ist der lokale MCP-Server. Er kommuniziert per JSON-RPC über stdio, damit MCP-Clients ihn als lokalen Prozess starten können.
+
+Jeder MCP-Prozess fixiert beim Start eine optionale Projektbindung. Die Auswahl
+erfolgt zuerst über `--project-path`, danach über `FENNARA_PROJECT_PATH` und
+schließlich über den nächsten Vorfahren des Startverzeichnisses, der
+`project.godot` enthält. Wenn kein Projekt gefunden wird, wechselt der Prozess
+automatisch in den ungebundenen Legacy-Kompatibilitätsmodus; ein ungültiger
+ausdrücklicher Pfad verhindert den Start. Verwende für projektübergreifende
+Isolation je einen MCP-Prozess und eine Verbindung pro Projekt.
+
+`crates/fennara-project-identity` wird gemeinsam von MCP-Laufzeit und Daemon
+verwendet. Es ist für Ermittlung, Validierung und Kanonisierung von
+Projektstämmen, verlustfreie Protokollkonvertierung und aktive
+Dateisystemgleichheit zuständig.
 
 `fennara-mcp` bettet seine ausgewählten MCP-seitigen Schemas aus `local/schemas/tools/`
 zur Build-Zeit ein und leitet diese Werkzeugaufrufe an den lokalen Daemon weiter. Zur Laufzeit
@@ -78,7 +104,9 @@ local/target/debug/fennara-mcp.exe
 
 Aktuelle Werkzeuge:
 
-- `fennara_status`: überprüft, ob der MCP-Server installiert und erreichbar ist, und meldet bei laufendem Daemon anschließend den Status von Daemon und Godot-Brücke.
+- `fennara_status`: überprüft, ob der MCP-Server installiert und erreichbar ist,
+  und meldet bei laufendem Daemon anschließend Routingmodus, Bindungsquelle und
+  -stamm, Zustand des ausgewählten Editors und Bereitschaft der Godot-Bridge.
 - Godot-Projektwerkzeuge wie `write_or_update_file`, `run_scene_edit_script`,
   `get_scene_tree`, `script_diagnostics` und `screenshot_scene` werden an
   den Daemon weitergeleitet, der sie an das verbundene Godot-Plugin weiterleitet.

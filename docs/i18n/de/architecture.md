@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
+<!-- fennara-i18n: locale=de source=docs/architecture.md sha256=1bc08d075d4b48d0c781f954d4da4752d6c7223ff1636f01f06524b06dce256a -->
 <a id="architecture"></a>
 # Architektur
 
@@ -19,19 +19,23 @@ das Übergabeverhalten bei Aktualisierungen.
 | Release-Artefakte verstehen | [Release-Prozess](release.md) |
 | Die verfügbaren Modellwerkzeuge untersuchen | [Werkzeuge](tools.md) |
 
-Im normalen OSS-Pfad gibt es keinen Fennara-Cloud-Dienst. Eine externe MCP-Anwendung
-startet den lokalen MCP-Prozess, der mit dem Daemon kommuniziert. Der integrierte Chat
-kommuniziert direkt mit diesem Daemon. Der Daemon erreicht das Fennara-Addon im
-geöffneten Godot-Editor.
+Im normalen OSS-Pfad gibt es keinen Fennara-Cloud-Dienst. Jede externe
+MCP-Verbindung startet einen lokalen MCP-Prozess, der mit einem gemeinsamen
+benutzerbezogenen Daemon kommuniziert. Der integrierte Chat kommuniziert direkt
+mit diesem Daemon. Der Daemon erreicht die Fennara-Addons in den geöffneten
+Godot-Editoren.
 
 ```mermaid
 flowchart LR
-    A["External MCP app"] --> B["fennara-mcp launcher"]
-    B --> C["Versioned MCP runtime"]
-    C --> D["Local daemon"]
-    E["Built-in Fennara chat"] --> D
-    D --> F["Godot editor addon"]
-    F --> G["Open Godot project"]
+    A["External MCP app A"] --> B["MCP runtime A\nProject Binding A"]
+    C["External MCP app B"] --> E["MCP runtime B\nProject Binding B"]
+    B --> D["Shared local daemon"]
+    E --> D
+    J["Built-in Fennara chat"] --> D
+    D --> F["Godot editor addon A"]
+    D --> G["Godot editor addon B"]
+    F --> H["Godot Project Root A"]
+    G --> I["Godot Project Root B"]
 ```
 
 <a id="main-pieces"></a>
@@ -41,9 +45,10 @@ flowchart LR
 | --- | --- | --- |
 | CLI | `local/crates/fennara-cli/` | Installiert das Addon in einem Godot-Projekt, aktualisiert lokale Pakete, schreibt Projektrichtlinien und konfiguriert MCP-Anwendungen über `fennara mcp-setup`. |
 | MCP-Launcher | `local/crates/fennara-mcp/` | Stabile ausführbare Datei, die von MCP-Anwendungen aufgerufen wird. Sie findet die aktive Version und startet die Laufzeit. |
-| MCP-Laufzeit | `local/crates/fennara-mcp/` | Kommuniziert über MCP per stdio und leitet Werkzeugaufrufe an die lokale Bridge weiter. |
+| MCP-Laufzeit | `local/crates/fennara-mcp/` | Kommuniziert über MCP per stdio, fixiert beim Start eine optionale Projektbindung und leitet Werkzeugaufrufe an die lokale Bridge weiter. |
 | Daemon-Launcher | `local/crates/fennara-daemon/` | Stabile ausführbare Datei zum Starten der aktiven Daemon-Laufzeit. |
-| Daemon-Laufzeit | `local/crates/fennara-daemon/` | Verwaltet lokalen Status, koordiniert sich mit Godot, bedient die MCP-Laufzeit und stellt Routen für den integrierten Chat bereit. |
+| Daemon-Laufzeit | `local/crates/fennara-daemon/` | Verwaltet gemeinsamen lokalen Status, leitet MCP-Verbindungen an passende Editoren weiter, besitzt den rechnerweiten Laufzeit-Slot, koordiniert sich mit Godot und stellt Routen für den integrierten Chat bereit. |
+| Projektidentität | `local/crates/fennara-project-identity/` | Löst Godot-Projektstämme für MCP-Laufzeit und Daemon auf, validiert und kanonisiert sie und vergleicht ihre Identität. |
 | Quellcode der Chat-UI | `ui/chat/` | HTML, CSS und JavaScript für den integrierten Chat, Einstellungen, Anbietereinrichtung, Einrichtung von MCP-Anwendungen und die Aktualisierungsoberfläche. Er wird mit dem paketierten Addon unter `godot_demo/addons/fennara/dist/` synchronisiert. |
 | Godot-Addon | `godot_demo/addons/fennara/` | Die Addon-Nutzlast, die in Benutzerprojekte kopiert wird. |
 | Quellcode der Laufzeit-Hilfsfunktionen | `runtime/` | Godot-seitige Laufzeit-Hilfsskripte, die für Laufzeitsitzungen und Laufzeitskripte in die Addon-Nutzlast synchronisiert werden. |
@@ -117,8 +122,10 @@ Release verwaltete CEF-Asset dort einmal pro Benutzer.
 Mehrere Godot-Editoren können gleichzeitig geöffnet sein. Jede Websocket-Verbindung des
 eingebetteten Chats wird mit dem `chat_token` des besitzenden Editors angenommen und
 bleibt für Speicherumfang des Chats, Snapshots, Werkzeugausführung, Abbruch und
-Rückgängigmachen an diese Godot-Sitzung gebunden. Externe MCP-Clients werden weiterhin
-über das aktive Ziel des Daemons weitergeleitet.
+Rückgängigmachen an diese Godot-Sitzung gebunden. Ein projektgebundener externer
+MCP-Prozess wird an den Editor weitergeleitet, dessen kanonischer Projektstamm
+übereinstimmt. Nur ein ungebundener Prozess verwendet das im Dock ausgewählte
+Kompatibilitätsziel des Daemons.
 Chat-Anbietereinstellungen sind derzeit global, während Chats projektbezogen bleiben.
 Cloud-Chat-Anbieter verwenden lokal gespeicherte API-Schlüssel, lokale Anbieter verwenden
 vom Daemon gespeicherte Basis-URLs. Die aktuelle Anbieterauswahl des integrierten Chats
@@ -320,7 +327,9 @@ Assembly nach `.godot/mono/temp/bin/Debug`.
 ## MCP-Einrichtung
 
 `fennara mcp-setup` bearbeitet die Konfiguration einer MCP-Anwendung, damit diese den
-lokalen Launcher starten kann.
+lokalen Launcher starten kann. Der erzeugte Eintrag ist global und projektneutral;
+wenn die Einrichtung in einem Godot-Projekt ausgeführt wird, bindet sie nicht alle
+künftigen MCP-Prozesse an dieses Projekt.
 
 Beispiele:
 
@@ -337,6 +346,25 @@ Laufzeit.
 
 Dadurch bleiben Konfigurationen von MCP-Anwendungen über Aktualisierungen hinweg stabil.
 
+Für isolierte Repositorys oder Worktrees startet der MCP-Host je einen Prozess und
+eine Verbindung pro Projekt. Die Laufzeit erfasst ihr Startverzeichnis und fixiert
+für die Lebensdauer des Prozesses eine MCP-Projektbindung. Die Bindungsermittlung
+verwendet zuerst den ausdrücklichen Parameter `--project-path`, danach
+`FENNARA_PROJECT_PATH` und schließlich den nächsten Vorfahren des Startverzeichnisses,
+der `project.godot` enthält. Findet die automatische Ermittlung kein Projekt,
+wechselt die Laufzeit in den ungebundenen Legacy-Kompatibilitätsmodus. Ungültige
+ausdrückliche Bindungen verhindern den Start, statt auf ein anderes Ziel
+zurückzufallen.
+
+Das gemeinsame Crate `fennara-project-identity` kanonisiert und validiert
+Projektstämme sowohl für MCP als auch für den Daemon. MCP sendet seinen kanonischen
+Stamm als Transportmetadaten außerhalb der modellseitigen Werkzeugargumente. Der
+Daemon löst diesen Locator und die von Editoren gemeldeten Stämme erneut auf und
+verlangt genau eine aktive Dateisystemübereinstimmung. Ein fehlender Editor ist
+wiederholbar, eine doppelte Übereinstimmung ist mehrdeutig, und keiner der beiden
+Fälle fällt auf das Dock-Ziel zurück. Siehe
+[Mehrere Agenten und Worktrees](multi-agent-worktrees.md).
+
 Dieser Einrichtungspfad ist vom Anbieterpfad des integrierten Chats getrennt. MCP-Anwendungen
 verwenden ihr eigenes Modellkonto. Das Fennara-Dock verwendet den in den Chat-Einstellungen
 konfigurierten Anbieter.
@@ -345,19 +373,26 @@ konfigurierten Anbieter.
 ## Ablauf eines Werkzeugaufrufs
 
 ```text
-MCP-Client
-  ruft ein Fennara-Werkzeug auf
-MCP-Laufzeit
-  validiert die Anfrage anhand lokaler Schemas
-  leitet den Aufruf an den lokalen Daemon weiter
-Daemon-Laufzeit
-  leitet die Anfrage an das verbundene Godot-Projekt weiter
-Godot-Addon
-  führt das Godot-bezogene Werkzeug über die GDExtension aus
-  gibt ein kompaktes Markdown-Ergebnis zurück
-MCP-Laufzeit
-  sendet das Ergebnis an den MCP-Client zurück
+MCP client
+  calls a Fennara tool
+MCP runtime
+  validates the request against local schemas
+  attaches its process-scoped Project Binding as transport metadata
+  forwards the call to the local daemon
+Daemon runtime
+  resolves the binding and routes to exactly one matching Godot editor
+Godot addon
+  runs the Godot-aware tool through GDExtension
+  returns a concise markdown result
+MCP runtime
+  sends the result back to the MCP client
 ```
+
+Interne Aufrufe des integrierten Chats enthalten bereits eine ausdrückliche
+Godot-Editor-Sitzung. Eine externe MCP-Verbindung ohne Projektbindung verwendet
+stattdessen das Legacy-MCP-Ziel: zuerst das gültige, im Dock ausgewählte Ziel und
+danach den einzigen verbundenen Editor. Die gebundene Auswahl liest oder ändert
+dieses daemonweite Ziel nie.
 
 Der MCP-Client kann normale Dateien selbst lesen und schreiben. Fennara-Werkzeuge
 konzentrieren sich auf Godot-spezifisches Feedback: Szenenstruktur, Knoteneigenschaften,
@@ -414,10 +449,27 @@ gewechselt wird. Pakete exakter Versionen, die vorherige `current.json`, Snapsho
 Launcher und das vorherige Projekt-Addon werden aufbewahrt, bis der neu geöffnete Editor
 die neue GDExtension validiert.
 
-Der Daemon erlaubt derzeit global über alle verbundenen Godot-Editoren hinweg eine
-verwaltete `runtime_session`-Szene. Eine Startanfrage wird im ausgewählten oder an den Chat
-gebundenen Godot-Projekt ausgeführt, aber eine andere laufende verwaltete Szene muss beendet
-werden, bevor eine neue gestartet werden kann.
+Der Daemon besitzt einen rechnerweiten Laufzeit-Slot für alle verbundenen Editoren.
+Eine Startanfrage beansprucht atomar den Zustand `Starting`, bevor der Prozess
+erstellt wird, und überführt diesen Anspruch anschließend in `Running`. Ein
+gleichzeitig konkurrierender Aufrufer erhält das normale, anonyme Ergebnis `busy`
+und startet niemals ein zweites Spiel. Es gibt keine FIFO-Warteschlange.
+
+Jede Laufzeitsitzung gehört zu ihrem kanonischen Projektstamm, nicht zu einem
+vorübergehenden Editorprozess. Nur dieser Eigentümer darf den detaillierten Status
+abrufen, die Lease erneuern, Skripte ausführen oder die Sitzung beenden. Andere
+Projekte sehen nur einen anonymen Belegungsstatus und können keine andere
+Sitzungskennung bestätigen. Die Eigentümerschaft überdauert daher eine erneute
+Editorverbindung.
+
+Die absolute Standarddauer der Laufzeit-Lease beträgt 900 Sekunden; Aufrufer
+können einen positiven Wert für `max_run_seconds` von bis zu 86.400 Sekunden
+anfordern. Statusabfragen des Eigentümers und begrenzte Eigentümeroperationen
+erneuern eine Inaktivitätsfrist von 120 Sekunden. Agenten fragen den Status in der
+Regel etwa alle 30 Sekunden mit Jitter ab. Die absolute Frist wird niemals
+angehalten. Ein Supervisor beendet oder bereinigt den Prozess und gibt den
+Laufzeit-Slot nach natürlichem Prozessende, ausdrücklichem Stopp, Startfehler,
+Inaktivitätsablauf oder absolutem Ablauf frei.
 
 <a id="export-boundary"></a>
 ## Exportgrenze

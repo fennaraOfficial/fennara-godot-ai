@@ -15,19 +15,22 @@ handoff behavior.
 | Understand release artifacts | [Release Process](release.md) |
 | Inspect the available model tools | [Tools](tools.md) |
 
-There is no Fennara cloud service in the normal OSS path. An external MCP app
-starts the local MCP process, which talks to the daemon. The built-in chat talks
-to that daemon directly. The daemon reaches the Fennara addon in the open Godot
-editor.
+There is no Fennara cloud service in the normal OSS path. Each external MCP
+connection starts a local MCP process, which talks to one shared per-user
+daemon. The built-in chat talks to that daemon directly. The daemon reaches the
+Fennara addons in the open Godot editors.
 
 ```mermaid
 flowchart LR
-    A["External MCP app"] --> B["fennara-mcp launcher"]
-    B --> C["Versioned MCP runtime"]
-    C --> D["Local daemon"]
-    E["Built-in Fennara chat"] --> D
-    D --> F["Godot editor addon"]
-    F --> G["Open Godot project"]
+    A["External MCP app A"] --> B["MCP runtime A\nProject Binding A"]
+    C["External MCP app B"] --> E["MCP runtime B\nProject Binding B"]
+    B --> D["Shared local daemon"]
+    E --> D
+    J["Built-in Fennara chat"] --> D
+    D --> F["Godot editor addon A"]
+    D --> G["Godot editor addon B"]
+    F --> H["Godot Project Root A"]
+    G --> I["Godot Project Root B"]
 ```
 
 ## Main Pieces
@@ -36,9 +39,10 @@ flowchart LR
 | --- | --- | --- |
 | CLI | `local/crates/fennara-cli/` | Installs the addon into a Godot project, updates local packages, writes project guidance, and configures MCP apps through `fennara mcp-setup`. |
 | MCP launcher | `local/crates/fennara-mcp/` | Stable executable that MCP apps call. It finds the active version and starts the runtime. |
-| MCP runtime | `local/crates/fennara-mcp/` | Speaks MCP over stdio and forwards tool calls to the local bridge. |
+| MCP runtime | `local/crates/fennara-mcp/` | Speaks MCP over stdio, freezes one optional Project Binding at startup, and forwards tool calls to the local bridge. |
 | Daemon launcher | `local/crates/fennara-daemon/` | Stable executable used to start the active daemon runtime. |
-| Daemon runtime | `local/crates/fennara-daemon/` | Keeps local state, coordinates with Godot, serves the MCP runtime, and hosts built-in chat routes. |
+| Daemon runtime | `local/crates/fennara-daemon/` | Keeps shared local state, routes MCP connections to matching editors, owns the machine-wide Runtime Slot, coordinates with Godot, and hosts built-in chat routes. |
+| Project identity | `local/crates/fennara-project-identity/` | Resolves, validates, canonicalizes, and compares Godot Project Roots for the MCP runtime and daemon. |
 | Chat UI source | `ui/chat/` | HTML, CSS, and JavaScript for the built-in chat, settings, provider setup, MCP app setup, and update UI. It is synced into the packaged addon under `godot_demo/addons/fennara/dist/`. |
 | Godot addon | `godot_demo/addons/fennara/` | The addon payload copied into user projects. |
 | Runtime helper source | `runtime/` | Godot-side runtime helper scripts synced into the addon payload for runtime sessions and runtime scripts. |
@@ -108,7 +112,9 @@ CLI installs the release-managed CEF asset there once per user.
 Multiple Godot editors may be open at the same time. Each embedded chat
 websocket is accepted with the owning editor's `chat_token` and remains bound to
 that Godot session for chat storage scope, snapshots, tool execution, cancel,
-and revert. External MCP clients still route through the daemon's active target.
+and revert. A project-bound external MCP process routes to the editor matching
+its canonical Project Root. An unbound process alone uses the daemon's
+dock-selected compatibility target.
 Chat provider settings are global for now, while chats remain project-scoped.
 Cloud chat providers use locally stored API keys; local providers use base URLs
 stored by the daemon. The current built-in chat provider set is OpenAI,
@@ -298,7 +304,8 @@ build, matching Godot's pre-Play build shape, and writes the real
 ## MCP Setup
 
 `fennara mcp-setup` edits MCP app config so the app can start the local
-launcher.
+launcher. The generated entry is global and project-neutral; running setup from
+a Godot project does not bind every future MCP process to that project.
 
 Examples:
 
@@ -315,6 +322,22 @@ versioned runtime.
 
 That keeps MCP app configs stable across updates.
 
+For isolated repositories or worktrees, the MCP host starts one process and
+connection per project. The runtime captures its startup directory and freezes
+one MCP Project Binding for the process lifetime. Binding discovery is explicit
+`--project-path`, then `FENNARA_PROJECT_PATH`, then the nearest startup-directory
+ancestor containing `project.godot`. If automatic discovery finds no project,
+the runtime enters legacy-unbound compatibility mode. Invalid explicit bindings
+fail startup rather than falling back.
+
+The shared `fennara-project-identity` crate canonicalizes and validates roots
+for both MCP and daemon. The MCP sends its canonical root as transport metadata,
+outside model-facing tool arguments. The daemon re-resolves that locator and
+editor-reported roots, then requires exactly one live filesystem match. A
+missing editor is retryable, a duplicate match is ambiguous, and neither case
+falls through to the dock target. See
+[Multiple Agents And Worktrees](multi-agent-worktrees.md).
+
 This setup path is separate from the built-in chat provider path. MCP apps use
 their own model account; the Fennara dock uses the provider configured in chat
 settings.
@@ -326,15 +349,21 @@ MCP client
   calls a Fennara tool
 MCP runtime
   validates the request against local schemas
+  attaches its process-scoped Project Binding as transport metadata
   forwards the call to the local daemon
 Daemon runtime
-  routes the request to the connected Godot project
+  resolves the binding and routes to exactly one matching Godot editor
 Godot addon
   runs the Godot-aware tool through GDExtension
   returns a concise markdown result
 MCP runtime
   sends the result back to the MCP client
 ```
+
+Internal built-in-chat calls already carry an explicit Godot Editor Session.
+An external MCP without a Project Binding instead uses the legacy MCP Target:
+the valid dock-selected target first, then the sole connected editor. Bound
+selection never reads or mutates that daemon-global target.
 
 The MCP client can read and write normal files by itself. Fennara tools focus on
 Godot-specific feedback: scene structure, node properties, diagnostics,
@@ -386,10 +415,22 @@ prevents a version switch underneath another editor. Exact version packages,
 the previous `current.json`, launcher snapshots, and the previous project addon
 are retained until the reopened editor validates the new GDExtension.
 
-The daemon currently allows one managed `runtime_session` scene globally across
-all connected Godot editors. A start request runs in the selected or
-chat-bound Godot project, but another running managed scene must be stopped
-before starting a new one.
+The daemon owns one machine-wide Runtime Slot across all connected editors. A
+start request atomically claims `Starting` before process creation and commits
+that claim to `Running`; a racing caller receives a non-error, anonymous `busy`
+result and never spawns a second game. There is no FIFO queue.
+
+Each Runtime Session belongs to its canonical Project Root, not to a transient
+editor process. Only that owner may inspect detailed status, renew, run scripts,
+or stop the session. Other projects see anonymous busy state and cannot confirm
+another session identifier. Ownership therefore survives an editor reconnect.
+
+The default absolute Runtime Lease is 900 seconds and callers may request a
+positive `max_run_seconds` up to 86,400 seconds. Owner status and bounded owner
+operations renew a 120-second inactivity deadline; agents normally poll status
+about every 30 seconds with jitter. The absolute deadline never pauses. A
+supervisor stops or reaps the process and frees the Runtime Slot after natural
+exit, explicit stop, startup failure, inactivity expiry, or absolute expiry.
 
 ## Export Boundary
 

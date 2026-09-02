@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=pt-BR source=docs/languages.md sha256=29ca1071b436e0ff29fa5d18d9e2b09cbe64749513ea7f4e1e6471569fcb6456 -->
+<!-- fennara-i18n: locale=pt-BR source=docs/languages.md sha256=476e4afb5a17f76474a25864d08280c73ba0e4fdd1ebcfbbfd814d010dfac932 -->
 <a id="languages-and-translation-status"></a>
 # Idiomas e status das traduções
 
@@ -14,16 +14,16 @@ para sua fonte atual em inglês e convida falantes nativos a revisá-la.
 
 | Idioma | Documentação | Cobertura | Status da revisão |
 | --- | --- | --- | --- |
-| English | [Documentação em inglês](../../README.md) | 30/30 | Canônica |
-| 简体中文 | [简体中文文档](../zh-CN/README.md) | 30/30 | Revisão nativa solicitada |
-| Español | [Documentación en español](../es/README.md) | 30/30 | Revisão nativa solicitada |
-| Português do Brasil | [Documentação em português](README.md) | 30/30 | Revisão nativa solicitada |
-| 日本語 | [日本語ドキュメント](../ja/README.md) | 30/30 | Revisão nativa solicitada |
-| 한국어 | [한국어 문서](../ko/README.md) | 30/30 | Revisão nativa solicitada |
-| Русский | [Документация на русском](../ru/README.md) | 30/30 | Revisão nativa solicitada |
-| Français | [Documentation en français](../fr/README.md) | 30/30 | Revisão nativa solicitada |
-| Deutsch | [Deutsche Dokumentation](../de/README.md) | 30/30 | Revisão nativa solicitada |
-| Türkçe | [Türkçe belgeler](../tr/README.md) | 30/30 | Revisão nativa solicitada |
+| English | [Documentação em inglês](../../README.md) | 31/31 | Canônica |
+| 简体中文 | [简体中文文档](../zh-CN/README.md) | 31/31 | Revisão nativa solicitada |
+| Español | [Documentación en español](../es/README.md) | 31/31 | Revisão nativa solicitada |
+| Português do Brasil | [Documentação em português](README.md) | 31/31 | Revisão nativa solicitada |
+| 日本語 | [日本語ドキュメント](../ja/README.md) | 31/31 | Revisão nativa solicitada |
+| 한국어 | [한국어 문서](../ko/README.md) | 31/31 | Revisão nativa solicitada |
+| Русский | [Документация на русском](../ru/README.md) | 31/31 | Revisão nativa solicitada |
+| Français | [Documentation en français](../fr/README.md) | 31/31 | Revisão nativa solicitada |
+| Deutsch | [Deutsche Dokumentation](../de/README.md) | 31/31 | Revisão nativa solicitada |
+| Türkçe | [Türkçe belgeler](../tr/README.md) | 31/31 | Revisão nativa solicitada |
 
 <a id="what-is-translated"></a>
 ## O que é traduzido

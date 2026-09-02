@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=pt-BR source=CONTEXT.md sha256=ee0d279d8a4916d5cf894616b1c72658669a36bf0ec958efef5a09ee196c704e -->
+<!-- fennara-i18n: locale=pt-BR source=CONTEXT.md sha256=7d76acbada75ade69b43dc52fcd543f90d678c04b3e9b50fc11601b8b1853fd4 -->
 <a id="fennara-context"></a>
 # Contexto do Fennara
 
@@ -46,7 +46,27 @@ Um aplicativo de IA externo configurado por `fennara mcp-setup`. A configuraçã
 
 **Destino MCP**
 
-O projeto Godot atualmente selecionado para receber chamadas MCP do Fennara.
+O destino de compatibilidade global do daemon, selecionado no dock, usado por
+uma conexão MCP externa que não tem uma Vinculação de projeto MCP. Conexões MCP
+vinculadas não leem nem alteram esse destino.
+
+**Vinculação de projeto MCP**
+
+A Raiz do projeto estável, selecionada uma única vez quando um processo MCP do
+Fennara é iniciado. Ela encaminha as chamadas desse processo para a Sessão do
+editor Godot correspondente sem usar o Destino MCP global do daemon.
+
+**Raiz do projeto**
+
+O diretório canônico do sistema de arquivos que contém o `project.godot` de um
+projeto Godot. O Fennara usa a identidade do sistema de arquivos, e não o nome
+do projeto, para distinguir repositórios e worktrees.
+
+**Sessão do editor Godot**
+
+Uma instância atualmente conectada do addon Fennara e do editor Godot. Ela tem
+um caminho de projeto e um ID de processo do Godot, e pode desconectar e se
+reconectar sem alterar a Vinculação de projeto de um processo MCP.
 
 **Esquema de ferramenta**
 
@@ -94,7 +114,23 @@ O serviço local que conecta chamadas MCP e solicitações do chat integrado ao 
 
 **Sessão de execução**
 
-Uma sessão de execução do Godot gerenciada pelo daemon, usada para inspeção em execução, logs, validação, capturas de tela e futuros fluxos de trabalho com cenas em execução.
+Um processo de jogo interativo do Godot gerenciado pelo daemon, usado para
+inspecionar cenas em execução, coletar logs e fazer capturas em runtime. Sua Raiz
+do projeto proprietária canônica mantém o controle mesmo que o editor desse
+projeto se reconecte. A validação limitada de cenas e as chamadas independentes
+de captura de tela usam caminhos separados e não ocupam o Slot de execução.
+
+**Slot de execução**
+
+O estado de admissão de toda a máquina que permite iniciar ou executar no
+máximo uma Sessão de execução gerenciada pelo daemon entre todos os projetos
+conectados.
+
+**Lease de execução**
+
+O direito renovável e limitado no tempo da Raiz do projeto proprietária de
+ocupar o Slot de execução. A atividade do proprietário renova seu prazo de
+inatividade, enquanto o prazo absoluto continua sempre em vigor.
 
 **Snapshot do Godot**
 

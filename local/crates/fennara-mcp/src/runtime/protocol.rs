@@ -1,4 +1,4 @@
-use super::tools;
+use super::{RuntimeConfig, tools};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -28,7 +28,7 @@ struct JsonRpcError {
     message: String,
 }
 
-pub(crate) fn handle_request(request: Value) -> Option<Value> {
+pub(crate) fn handle_request(request: Value, config: &RuntimeConfig) -> Option<Value> {
     let id = request.get("id").cloned();
     let method = request.get("method").and_then(Value::as_str);
 
@@ -38,7 +38,9 @@ pub(crate) fn handle_request(request: Value) -> Option<Value> {
         }
         Some("notifications/initialized") => None,
         Some("tools/list") => id.map(|id| success_response(id, tools::tools_list_result())),
-        Some("tools/call") => id.map(|id| tools::handle_tool_call(id, request.get("params"))),
+        Some("tools/call") => {
+            id.map(|id| tools::handle_tool_call(id, request.get("params"), config))
+        }
         Some(other) => id.map(|id| error_response(id, -32601, format!("Unknown method: {other}"))),
         None => id.map(|id| error_response(id, -32600, "Missing method".to_string())),
     }

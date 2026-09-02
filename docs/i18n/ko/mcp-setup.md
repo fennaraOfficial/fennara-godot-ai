@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/mcp-setup.md sha256=42086801de2de7b36545c45d5af394cca77a858878ed242ca2014555e79b76df -->
+<!-- fennara-i18n: locale=ko source=docs/mcp-setup.md sha256=86c9fe3fc7a69c2ade417dd01a0ccabb05ddaa91cf417fa8559c28d4b01811bd -->
 <a id="mcp-setup"></a>
 # MCP 설정
 
@@ -44,6 +44,40 @@ Fennara는 앱의 MCP 구성을 변경하기 전에 백업을 만듭니다. 결�
 
 설치된 CLI가 지원하는 대상 목록은 `fennara mcp-setup --help`를 실행해 확인하세요.
 
+설정은 전역적이고 프로젝트와 무관한 런처 항목을 작성합니다. 프로젝트 안에서 `fennara
+mcp-setup`을 실행해도 앞으로 시작할 모든 연결이 해당 프로젝트에 바인딩되지는 않습니다.
+
+<a id="bind-a-connection-to-one-project"></a>
+## 연결을 하나의 프로젝트에 바인딩
+
+같은 컴퓨터에 여러 저장소나 워크트리가 있다면 프로젝트마다 MCP 프로세스와 연결을
+하나씩 실행하세요. MCP 호스트의 프로젝트 또는 워크스페이스 설정에서 다음 중 하나를 사용해
+해당 프로세스를 구성하세요.
+
+```text
+--project-path /absolute/path/to/godot-project
+```
+
+또는:
+
+```text
+FENNARA_PROJECT_PATH=/absolute/path/to/godot-project
+```
+
+런타임은 시작할 때 한 번만 다음 순서로 Project Binding을 선택합니다.
+
+1. `--project-path`
+2. `FENNARA_PROJECT_PATH`
+3. `project.godot`이 있는 가장 가까운 시작 디렉터리 조상
+4. 검색에서 프로젝트를 찾지 못했을 때의 레거시 미바인딩 호환 모드
+
+잘못된 명시적 경로는 MCP 서버가 시작되지 못하게 합니다. 독 대상이나 다른 에디터로
+절대 대체하지 않습니다. 유효한 바인딩은 에디터가 일시적으로 없어도 유지되며 해당 Project
+Root가 재연결되면 복구됩니다. 모델에 노출되는 도구 호출별 프로젝트 재정의는 없습니다.
+
+구성 예시, 호스트 지원 범위, 상태 확인, 중복 에디터 동작, 직렬화된 플레이테스트는
+[여러 에이전트와 워크트리](multi-agent-worktrees.md)를 참고하세요.
+
 <a id="manual-setup"></a>
 ## 수동 설정
 
@@ -79,6 +113,20 @@ Linux:   ~/.local/share/fennara/bin/fennara-mcp
 ```
 
 일부 앱은 같은 `mcpServers` 키를 사용하지만 `command`만 필요합니다. 기존 구성에 다른 서버가 있다면 해당 항목을 보존하고 `fennara` 서버만 추가하세요.
+
+격리를 유지해야 하는 프로젝트 로컬 항목은 바인딩을 `args`에 추가하세요.
+
+```json
+{
+  "mcpServers": {
+    "fennara": {
+      "command": "/absolute/path/to/fennara-mcp",
+      "args": ["--project-path", "/absolute/path/to/godot-project"],
+      "env": {}
+    }
+  }
+}
+```
 
 Cline 형식의 구성에는 초 단위의 더 긴 도구 제한 시간을 포함할 수도 있습니다.
 
@@ -145,6 +193,16 @@ tool_timeout_sec = 300
 
 JSON 파일에 TOML을 붙여 넣거나 TOML 파일에 JSON을 붙여 넣지 마세요. 앱에서 이미 사용하는 형식을 따르세요.
 
+Codex 형식 항목을 바인딩하려면 안정적인 런처를 변경하지 말고 인수를 추가하세요.
+
+```toml
+[mcp_servers.fennara]
+command = "/absolute/path/to/fennara-mcp"
+args = ["--project-path", "/absolute/path/to/godot-project"]
+startup_timeout_sec = 30
+tool_timeout_sec = 300
+```
+
 <a id="common-config-locations"></a>
 ## 일반적인 구성 위치
 
@@ -164,6 +222,16 @@ OpenCode:       ~/.config/opencode/opencode.json
 Windsurf:       ~/.codeium/windsurf/mcp_config.json
 Kiro:           ~/.kiro/settings/mcp.json
 ```
+
+VS Code 단일 폴더 워크스페이스는 MCP 자식 프로세스의 시작 디렉터리로 프로젝트를 제공할 수
+있습니다. Claude Code, Gemini CLI, Antigravity, Cline, Cursor, OpenCode, Kiro, Codex는 프로젝트 또는
+워크스페이스 구성을 사용할 수 있습니다. 격리를 보장해야 한다면 명시적 바인딩이나 문서화된
+프로젝트 시작 디렉터리를 사용하세요.
+
+이 워크플로에서 Claude Desktop과 레거시 Windsurf/Cascade는 전역 구성을 사용합니다. 기본
+설정은 레거시 미바인딩 상태로 남습니다. 고급 사용자는 서로 다른 명시적 프로젝트 경로를 가진
+별도의 전역 항목을 이름을 달리해 만들 수 있지만, 이러한 앱은 자동 프로젝트 로컬 격리를 제공하지
+않습니다.
 
 <a id="timeout-guidance"></a>
 ## 제한 시간 안내
@@ -189,7 +257,13 @@ Godot 프로젝트를 연 다음 MCP 앱에 다음과 같이 요청하세요.
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-Godot 프로젝트가 여러 개 열려 있다면 Fennara 독의 **MCP target** 컨트롤에서 외부 MCP 도구 호출을 받을 프로젝트를 선택하세요.
+격리된 작업의 경우 상태가 라우팅 모드 `bound`, 예상한 바인딩 소스와 정규 Project Root,
+바인딩된 에디터 상태 `connected`, 해당 에디터의 파일 시스템 준비 상태를 보고하는지
+확인하세요.
+
+상태가 `legacy_unbound`를 보고하면 연결이 자동 Project Root를 찾지 못한 것입니다. 이 연결은
+독의 **MCP target** 호환 경로를 사용하며, 이 모드가 격리된 동시 작업에 안전하지 않다고
+경고합니다.
 
 <a id="troubleshooting"></a>
 ## 문제 해결
@@ -202,7 +276,10 @@ MCP 앱에 Fennara가 표시되지 않으면 다음을 확인하세요.
 - 앱이 편집한 구성 파일을 실제로 읽고 있음
 - MCP 앱을 완전히 종료하고 다시 열었음
 - Godot 프로젝트에 Fennara 애드온이 설치되어 있음
-- 원하는 Godot 프로젝트가 MCP 대상으로 선택되어 있음
+- 바인딩된 연결의 경우 명시적 경로나 시작 디렉터리가 의도한 Godot Project Root인지 확인
+- 상태가 `bound_project_not_connected`를 보고하면 해당 프로젝트를 Godot에서 열고 애드온이 연결될 때까지 대기
+- 상태가 `ambiguous_project_binding`을 보고하면 중복 에디터를 닫거나 서로 다른 워크트리에서 열기
+- 레거시 미바인딩 연결의 경우 의도한 프로젝트가 독의 MCP target으로 선택되었는지 확인
 
 <a id="unsupported-mcp-apps"></a>
 ## 지원되지 않는 MCP 앱

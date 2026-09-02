@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/faq.md sha256=dc4d4d61e292532de7c87813b66925ae4ead2b2fbc0417b2366d8b53b42f7c4f -->
+<!-- fennara-i18n: locale=zh-CN source=docs/faq.md sha256=3a644ba5c7ce06e847a4d6eb49ab232f9fa54eaecf1a97952ce69918dba4d677 -->
 <a id="faq"></a>
 # 常见问题
 
@@ -15,7 +15,7 @@
 | 需要提供商密钥吗？ | 仅内置聊天使用云端提供商时需要 |
 | 能改用外部 MCP 应用吗？ | 可以，它使用自己的模型账户 |
 | Fennara 会把项目上传到 Fennara 服务器吗？ | 不会 |
-| 可以同时打开多个 Godot 编辑器吗？ | 可以，请在面板中选择外部 MCP 目标 |
+| 可以同时打开多个 Godot 编辑器吗？ | 可以；将每个并发 MCP 连接绑定到各自的项目 |
 
 <a id="is-fennara-only-a-code-generator"></a>
 ## Fennara 只是代码生成器吗？
@@ -71,7 +71,19 @@
 <a id="which-project-receives-mcp-tool-calls-if-multiple-godot-editors-are-open"></a>
 ## 多个 Godot 编辑器打开时，哪个项目接收 MCP 工具调用？
 
-守护进程将外部 MCP 调用路由到当前 MCP 目标。请在 Godot 的 Fennara 面板中使用 MCP 目标控件选择项目。内置聊天会话则绑定到打开该聊天的 Godot 编辑器。
+已绑定项目的 MCP 进程会将每次调用路由到其规范项目根目录所对应的已连接编辑器。智能体在不同仓库或工作树中并发工作时，
+请为每个项目使用一个 MCP 进程和连接。
+
+未绑定的 MCP 进程保留兼容性行为：守护进程使用停靠面板选定的 MCP 目标；若只有一个已连接编辑器，则使用该编辑器。并发工作前运行
+`fennara_status`，并要求路由模式为 `bound`、根目录符合预期。内置聊天会话始终绑定到打开该聊天的编辑器。请参阅
+[多智能体与工作树](multi-agent-worktrees.md)。
+
+<a id="can-several-agents-run-their-games-at-the-same-time"></a>
+## 多个智能体可以同时运行各自的游戏吗？
+
+通过守护进程管理的运行时会话不可以。编辑、检查、有界场景验证和独立截图可以并发进行，但所有项目共享一个运行时槽位，
+用于交互式受管理游戏运行。未抢到槽位的启动请求会返回正常的匿名 `busy` 结果，因此智能体可以带抖动地轮询并重试，
+不会干扰当前运行。所属项目会在运行过程中通过轮询状态来续期非活动截止时间；绝对租约截止时间不会改变。
 
 <a id="why-does-linux-install-a-separate-cef-runtime"></a>
 ## 为什么 Linux 会安装单独的 CEF 运行时？

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=fr source=docs/faq.md sha256=dc4d4d61e292532de7c87813b66925ae4ead2b2fbc0417b2366d8b53b42f7c4f -->
+<!-- fennara-i18n: locale=fr source=docs/faq.md sha256=3a644ba5c7ce06e847a4d6eb49ab232f9fa54eaecf1a97952ce69918dba4d677 -->
 <a id="faq"></a>
 # FAQ
 
@@ -16,7 +16,7 @@ obtenir des réponses courtes et accéder aux références détaillées.
 | Ai-je besoin d'une clé de fournisseur ? | Uniquement pour un fournisseur cloud dans le chat intégré |
 | Puis-je utiliser une application MCP externe à la place ? | Oui, elle utilise son propre compte de modèle |
 | Fennara envoie-t-il mon projet à un serveur Fennara ? | Non |
-| Plusieurs éditeurs Godot peuvent-ils être ouverts ? | Oui, choisissez la cible MCP externe dans le dock |
+| Plusieurs éditeurs Godot peuvent-ils être ouverts ? | Oui ; liez chaque connexion MCP concurrente à son propre projet |
 
 <a id="is-fennara-only-a-code-generator"></a>
 ## Fennara est-il seulement un générateur de code ?
@@ -88,9 +88,30 @@ ou LM Studio local.
 <a id="which-project-receives-mcp-tool-calls-if-multiple-godot-editors-are-open"></a>
 ## Quel projet reçoit les appels d'outil MCP si plusieurs éditeurs Godot sont ouverts ?
 
-Le daemon dirige les appels MCP externes vers la cible MCP active. Utilisez le
-contrôle de cible MCP du dock Fennara dans Godot pour choisir le projet. Les sessions
-du chat intégré restent liées à l'éditeur Godot qui a ouvert ce chat.
+Un processus MCP lié à un projet dirige chaque appel vers l'éditeur connecté
+pour sa racine de projet canonique. Utilisez un processus et une connexion MCP
+par projet pour les agents qui travaillent simultanément dans différents dépôts
+ou arbres de travail.
+
+Un processus MCP non lié conserve le comportement de compatibilité : le daemon
+utilise la cible MCP sélectionnée dans le dock, ou l'unique éditeur connecté.
+Exécutez `fennara_status` avant le travail concurrent et exigez le mode de
+routage `bound` ainsi que la racine attendue. Les sessions du chat intégré
+restent liées à l'éditeur qui a ouvert le chat. Consultez [Plusieurs agents et
+arbres de travail](multi-agent-worktrees.md).
+
+<a id="can-several-agents-run-their-games-at-the-same-time"></a>
+## Plusieurs agents peuvent-ils exécuter leurs jeux en même temps ?
+
+Pas au moyen des sessions d'exécution gérées par le daemon. La modification,
+l'inspection, la validation bornée des scènes et les captures d'écran autonomes
+peuvent s'effectuer simultanément, mais tous les projets partagent un seul
+emplacement d'exécution pour les exécutions de jeu interactives gérées. Une
+tentative de démarrage perdante renvoie un résultat `busy` anonyme et normal ;
+l'agent peut donc interroger l'état avec une gigue puis réessayer sans perturber
+l'exécution en cours. Le projet propriétaire renouvelle son échéance
+d'inactivité en interrogeant l'état pendant l'exécution ; l'échéance absolue
+du bail ne change jamais.
 
 <a id="why-does-linux-install-a-separate-cef-runtime"></a>
 ## Pourquoi Linux installe-t-il un environnement d'exécution CEF distinct ?

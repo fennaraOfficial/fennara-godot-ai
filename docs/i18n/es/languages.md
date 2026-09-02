@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=es source=docs/languages.md sha256=29ca1071b436e0ff29fa5d18d9e2b09cbe64749513ea7f4e1e6471569fcb6456 -->
+<!-- fennara-i18n: locale=es source=docs/languages.md sha256=476e4afb5a17f76474a25864d08280c73ba0e4fdd1ebcfbbfd814d010dfac932 -->
 <a id="languages-and-translation-status"></a>
 # Idiomas y estado de las traducciones
 
@@ -15,16 +15,16 @@ revisarla.
 
 | Idioma | Documentación | Cobertura | Estado de revisión |
 | --- | --- | --- | --- |
-| Inglés | [Documentación en inglés](../../README.md) | 30/30 | Canónica |
-| 简体中文 | [简体中文文档](../zh-CN/README.md) | 30/30 | Se solicita revisión nativa |
-| Español | [Documentación en español](README.md) | 30/30 | Se solicita revisión nativa |
-| Português do Brasil | [Documentação em português](../pt-BR/README.md) | 30/30 | Se solicita revisión nativa |
-| 日本語 | [日本語ドキュメント](../ja/README.md) | 30/30 | Se solicita revisión nativa |
-| 한국어 | [한국어 문서](../ko/README.md) | 30/30 | Se solicita revisión nativa |
-| Русский | [Документация на русском](../ru/README.md) | 30/30 | Se solicita revisión nativa |
-| Français | [Documentation en français](../fr/README.md) | 30/30 | Se solicita revisión nativa |
-| Deutsch | [Deutsche Dokumentation](../de/README.md) | 30/30 | Se solicita revisión nativa |
-| Türkçe | [Türkçe belgeler](../tr/README.md) | 30/30 | Se solicita revisión nativa |
+| Inglés | [Documentación en inglés](../../README.md) | 31/31 | Canónica |
+| 简体中文 | [简体中文文档](../zh-CN/README.md) | 31/31 | Se solicita revisión nativa |
+| Español | [Documentación en español](README.md) | 31/31 | Se solicita revisión nativa |
+| Português do Brasil | [Documentação em português](../pt-BR/README.md) | 31/31 | Se solicita revisión nativa |
+| 日本語 | [日本語ドキュメント](../ja/README.md) | 31/31 | Se solicita revisión nativa |
+| 한국어 | [한국어 문서](../ko/README.md) | 31/31 | Se solicita revisión nativa |
+| Русский | [Документация на русском](../ru/README.md) | 31/31 | Se solicita revisión nativa |
+| Français | [Documentation en français](../fr/README.md) | 31/31 | Se solicita revisión nativa |
+| Deutsch | [Deutsche Dokumentation](../de/README.md) | 31/31 | Se solicita revisión nativa |
+| Türkçe | [Türkçe belgeler](../tr/README.md) | 31/31 | Se solicita revisión nativa |
 
 <a id="what-is-translated"></a>
 ## Contenido traducido

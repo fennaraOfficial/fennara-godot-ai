@@ -11,6 +11,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
+    ffi::OsStr,
     path::{Component, Path},
     sync::atomic::Ordering,
     time::{Duration, Instant},
@@ -32,14 +33,174 @@ const MAX_RUNTIME_MODEL_IMAGE_COUNT: usize = 6;
 const MAX_RUNTIME_MODEL_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_RUNTIME_MODEL_IMAGE_TOTAL_BYTES: u64 = 24 * 1024 * 1024;
 
+#[derive(Clone, Copy, Debug)]
+enum TargetSelector<'a> {
+    GodotEditorSession(&'a str),
+    McpProject(&'a str),
+    LegacyMcpTarget,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum BridgeRequestKind {
+    ToolCall,
+    PluginRequest,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct BridgeRequestProfile {
+    request_id_prefix: &'static str,
+    send_failure_message: &'static str,
+    disconnected_message: &'static str,
+    timeout_message: &'static str,
+}
+
+impl BridgeRequestKind {
+    fn profile(self) -> BridgeRequestProfile {
+        match self {
+            Self::ToolCall => BridgeRequestProfile {
+                request_id_prefix: "local-tool",
+                send_failure_message: "Failed to send tool call to the Godot plugin.",
+                disconnected_message: "Godot plugin disconnected before returning a tool result.",
+                timeout_message: "Timed out waiting for the Godot plugin tool result.",
+            },
+            Self::PluginRequest => BridgeRequestProfile {
+                request_id_prefix: "local-plugin",
+                send_failure_message: "Failed to send request to the Godot plugin.",
+                disconnected_message: "Godot plugin disconnected before returning a response.",
+                timeout_message: "Timed out waiting for the Godot plugin response.",
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
+struct BridgeRequest {
+    kind: BridgeRequestKind,
+    payload: Value,
+    timeout: Duration,
+    started_at: Instant,
+}
+
+impl BridgeRequest {
+    fn tool_call(payload: Value) -> Self {
+        Self {
+            kind: BridgeRequestKind::ToolCall,
+            payload,
+            timeout: Duration::from_secs(295),
+            started_at: Instant::now(),
+        }
+    }
+
+    fn plugin_request(payload: Value, timeout: Duration) -> Self {
+        Self {
+            kind: BridgeRequestKind::PluginRequest,
+            payload,
+            timeout,
+            started_at: Instant::now(),
+        }
+    }
+
+    fn trace_details(&self) -> Value {
+        match self.kind {
+            BridgeRequestKind::ToolCall => json!({
+                "tool": self.payload.get("tool").cloned().unwrap_or(Value::Null),
+                "args_bytes": self
+                    .payload
+                    .get("args")
+                    .map(trace::value_size)
+                    .unwrap_or_default(),
+            }),
+            BridgeRequestKind::PluginRequest => json!({
+                "request_type": self.payload.get("type").cloned().unwrap_or(Value::Null),
+                "payload_bytes": trace::value_size(&self.payload),
+            }),
+        }
+    }
+
+    fn trace_details_with_duration(&self) -> Value {
+        let mut details = self.trace_details();
+        details["duration_ms"] = json!(self.started_at.elapsed().as_millis() as i64);
+        details
+    }
+}
+
+#[derive(Debug)]
+struct RoutingError {
+    message: String,
+    code: Option<&'static str>,
+    retryable: Option<bool>,
+}
+
+impl RoutingError {
+    fn plain(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            code: None,
+            retryable: None,
+        }
+    }
+
+    fn bound_project_not_connected() -> Self {
+        Self {
+            message: "The bound Godot project is not connected. Keep this MCP process running and retry after its editor reconnects.".to_string(),
+            code: Some("bound_project_not_connected"),
+            retryable: Some(true),
+        }
+    }
+
+    fn ambiguous_project_binding() -> Self {
+        Self {
+            message: "More than one connected Godot editor resolves to the bound project. Close the duplicate editor instance before retrying.".to_string(),
+            code: Some("ambiguous_project_binding"),
+            retryable: Some(false),
+        }
+    }
+
+    fn legacy_target_ambiguous() -> Self {
+        Self {
+            message: "Multiple Fennara projects are open. In the Fennara dock, choose Set as MCP target for the project you want to control.".to_string(),
+            code: Some("legacy_target_ambiguous"),
+            retryable: Some(false),
+        }
+    }
+
+    fn into_value(self) -> Value {
+        let mut value = json!({
+            "ok": false,
+            "error": self.message,
+        });
+        if let Some(code) = self.code {
+            value["code"] = json!(code);
+        }
+        if let Some(retryable) = self.retryable {
+            value["retryable"] = json!(retryable);
+        }
+        value
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct ToolCallRequest {
     tool: String,
     args: Value,
+    #[serde(default)]
+    project_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct BoundStatusRequest {
+    project_path: String,
 }
 
 pub(crate) async fn status(State(state): State<AppState>) -> Json<DaemonStatus> {
     Json(current_status(&state).await)
+}
+
+pub(crate) async fn bound_status(
+    State(state): State<AppState>,
+    Json(request): Json<BoundStatusRequest>,
+) -> Json<Value> {
+    Json(bound_status_value(&state, &request.project_path).await)
 }
 
 pub(crate) async fn current_status_value(state: &AppState) -> Value {
@@ -68,7 +229,9 @@ pub(crate) async fn request_fennara_update(
     state: &AppState,
     session_id: &str,
 ) -> Result<(), String> {
-    let (_, sender) = select_session(state, Some(session_id)).await?;
+    let (_, sender) = select_session(state, TargetSelector::GodotEditorSession(session_id))
+        .await
+        .map_err(|error| error.message)?;
     sender
         .send(Message::Text(
             json!({ "type": "prepare_fennara_update" })
@@ -84,11 +247,25 @@ pub(crate) async fn call_tool(
     State(state): State<AppState>,
     Json(request): Json<ToolCallRequest>,
 ) -> Json<Value> {
-    Json(call_tool_value(&state, &request.tool, request.args).await)
+    Json(
+        call_tool_value_for_project(
+            &state,
+            request.project_path.as_deref(),
+            &request.tool,
+            request.args,
+        )
+        .await,
+    )
 }
 
-pub(crate) async fn call_tool_value(state: &AppState, tool: &str, args: Value) -> Value {
-    call_tool_value_for_session(state, None, tool, args).await
+pub(crate) async fn call_tool_value_for_project(
+    state: &AppState,
+    project_path: Option<&str>,
+    tool: &str,
+    args: Value,
+) -> Value {
+    let selector = project_path.map_or(TargetSelector::LegacyMcpTarget, TargetSelector::McpProject);
+    call_tool_value_for_target(state, selector, tool, args, None).await
 }
 
 pub(crate) async fn call_tool_value_for_session(
@@ -97,7 +274,11 @@ pub(crate) async fn call_tool_value_for_session(
     tool: &str,
     args: Value,
 ) -> Value {
-    call_tool_value_for_session_traced(state, session_id, tool, args, None).await
+    let selector = session_id.map_or(
+        TargetSelector::LegacyMcpTarget,
+        TargetSelector::GodotEditorSession,
+    );
+    call_tool_value_for_target(state, selector, tool, args, None).await
 }
 
 pub(crate) async fn call_tool_value_for_session_traced(
@@ -107,134 +288,28 @@ pub(crate) async fn call_tool_value_for_session_traced(
     args: Value,
     trace: Option<&TraceRecorder>,
 ) -> Value {
-    let started_at = Instant::now();
-    let request_id = format!(
-        "local-tool-{}",
-        state.request_counter.fetch_add(1, Ordering::Relaxed) + 1
+    let selector = session_id.map_or(
+        TargetSelector::LegacyMcpTarget,
+        TargetSelector::GodotEditorSession,
     );
-    let (session_id, sender) = match select_session(state, session_id).await {
-        Ok(target) => target,
-        Err(error) => {
-            if let Some(trace) = trace {
-                trace.error(
-                    "bridge.request.send",
-                    "failed",
-                    json!({
-                        "tool": tool,
-                        "args_bytes": trace::value_size(&args),
-                        "message": error.as_str()
-                    }),
-                );
-            }
-            return json!({ "ok": false, "error": error });
-        }
-    };
-    let bridge_trace =
-        trace.map(|trace| trace.with_bridge_request(request_id.clone(), session_id.clone()));
+    call_tool_value_for_target(state, selector, tool, args, trace).await
+}
 
-    let (response_tx, response_rx) = oneshot::channel();
-    state.pending_tool_calls.write().await.insert(
-        request_id.clone(),
-        PendingToolCall {
-            session_id: session_id.clone(),
-            sender: response_tx,
-        },
-    );
-
-    let payload = json!({
+async fn call_tool_value_for_target(
+    state: &AppState,
+    selector: TargetSelector<'_>,
+    tool: &str,
+    args: Value,
+    trace: Option<&TraceRecorder>,
+) -> Value {
+    let request = BridgeRequest::tool_call(json!({
         "type": "tool_call",
-        "request_id": request_id,
-        "session_id": session_id,
         "tool": tool,
         "args": args
-    });
-
-    if sender
-        .send(Message::Text(payload.to_string().into()))
-        .is_err()
-    {
-        state.pending_tool_calls.write().await.remove(&request_id);
-        if let Some(trace) = &bridge_trace {
-            trace.error(
-                "bridge.request.send",
-                "failed",
-                json!({
-                    "tool": tool,
-                    "args_bytes": trace::value_size(&args),
-                    "duration_ms": started_at.elapsed().as_millis() as i64,
-                    "message": "websocket_send_failed"
-                }),
-            );
-        }
-        return json!({
-            "ok": false,
-            "error": "Failed to send tool call to the Godot plugin."
-        });
-    }
-    if let Some(trace) = &bridge_trace {
-        trace.event_status(
-            "bridge.request.send",
-            "ok",
-            json!({
-                "tool": tool,
-                "args_bytes": trace::value_size(&args),
-                "duration_ms": started_at.elapsed().as_millis() as i64
-            }),
-        );
-    }
-
-    match tokio::time::timeout(Duration::from_secs(295), response_rx).await {
-        Ok(Ok(mut response)) => {
-            if let Some(trace) = &bridge_trace {
-                let ok = response.get("ok").and_then(Value::as_bool).unwrap_or(false);
-                trace.event_status(
-                    "bridge.response.received",
-                    if ok { "ok" } else { "failed" },
-                    json!({
-                        "tool": tool,
-                        "ok": ok,
-                        "duration_ms": started_at.elapsed().as_millis() as i64,
-                        "response_bytes": trace::value_size(&response)
-                    }),
-                );
-            }
-            attach_runtime_model_images(tool, &mut response).await;
-            response
-        }
-        Ok(Err(_)) => {
-            if let Some(trace) = &bridge_trace {
-                trace.error(
-                    "bridge.disconnected",
-                    "failed",
-                    json!({
-                        "tool": tool,
-                        "duration_ms": started_at.elapsed().as_millis() as i64
-                    }),
-                );
-            }
-            json!({
-                "ok": false,
-                "error": "Godot plugin disconnected before returning a tool result."
-            })
-        }
-        Err(_) => {
-            state.pending_tool_calls.write().await.remove(&request_id);
-            if let Some(trace) = &bridge_trace {
-                trace.error(
-                    "bridge.response.timeout",
-                    "timed_out",
-                    json!({
-                        "tool": tool,
-                        "duration_ms": started_at.elapsed().as_millis() as i64
-                    }),
-                );
-            }
-            json!({
-                "ok": false,
-                "error": "Timed out waiting for the Godot plugin tool result."
-            })
-        }
-    }
+    }));
+    let mut response = dispatch_bridge_request(state, selector, request, trace).await;
+    attach_runtime_model_images(tool, &mut response).await;
+    response
 }
 
 async fn attach_runtime_model_images(tool: &str, response: &mut Value) {
@@ -463,30 +538,39 @@ pub(crate) async fn open_project_file_for_session(
 async fn call_plugin_request(
     state: &AppState,
     session_id: Option<&str>,
-    mut payload: Value,
+    payload: Value,
     timeout: Duration,
     trace: Option<&TraceRecorder>,
 ) -> Value {
-    let started_at = Instant::now();
+    let selector = session_id.map_or(
+        TargetSelector::LegacyMcpTarget,
+        TargetSelector::GodotEditorSession,
+    );
+    let request = BridgeRequest::plugin_request(payload, timeout);
+    dispatch_bridge_request(state, selector, request, trace).await
+}
+
+async fn dispatch_bridge_request(
+    state: &AppState,
+    selector: TargetSelector<'_>,
+    mut request: BridgeRequest,
+    trace: Option<&TraceRecorder>,
+) -> Value {
+    let profile = request.kind.profile();
     let request_id = format!(
-        "local-plugin-{}",
+        "{}-{}",
+        profile.request_id_prefix,
         state.request_counter.fetch_add(1, Ordering::Relaxed) + 1
     );
-    let (session_id, sender) = match select_session(state, session_id).await {
+    let (session_id, sender) = match select_session(state, selector).await {
         Ok(target) => target,
         Err(error) => {
             if let Some(trace) = trace {
-                trace.error(
-                    "bridge.request.send",
-                    "failed",
-                    json!({
-                        "request_type": payload.get("type").and_then(Value::as_str),
-                        "payload_bytes": trace::value_size(&payload),
-                        "message": error.as_str()
-                    }),
-                );
+                let mut details = request.trace_details();
+                details["message"] = json!(error.message.as_str());
+                trace.error("bridge.request.send", "failed", details);
             }
-            return json!({ "ok": false, "error": error });
+            return error.into_value();
         }
     };
     let bridge_trace =
@@ -501,61 +585,43 @@ async fn call_plugin_request(
         },
     );
 
-    payload["request_id"] = json!(request_id);
-    payload["session_id"] = json!(session_id);
+    request.payload["request_id"] = json!(request_id);
+    request.payload["session_id"] = json!(session_id);
 
     if sender
-        .send(Message::Text(payload.to_string().into()))
+        .send(Message::Text(request.payload.to_string().into()))
         .is_err()
     {
-        state.pending_tool_calls.write().await.remove(
-            payload
-                .get("request_id")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-        );
+        state.pending_tool_calls.write().await.remove(&request_id);
         if let Some(trace) = &bridge_trace {
-            trace.error(
-                "bridge.request.send",
-                "failed",
-                json!({
-                    "request_type": payload.get("type").and_then(Value::as_str),
-                    "payload_bytes": trace::value_size(&payload),
-                    "duration_ms": started_at.elapsed().as_millis() as i64,
-                    "message": "websocket_send_failed"
-                }),
-            );
+            let mut details = request.trace_details_with_duration();
+            details["message"] = json!("websocket_send_failed");
+            trace.error("bridge.request.send", "failed", details);
         }
         return json!({
             "ok": false,
-            "error": "Failed to send request to the Godot plugin."
+            "error": profile.send_failure_message
         });
     }
     if let Some(trace) = &bridge_trace {
         trace.event_status(
             "bridge.request.send",
             "ok",
-            json!({
-                "request_type": payload.get("type").and_then(Value::as_str),
-                "payload_bytes": trace::value_size(&payload),
-                "duration_ms": started_at.elapsed().as_millis() as i64
-            }),
+            request.trace_details_with_duration(),
         );
     }
 
-    match tokio::time::timeout(timeout, response_rx).await {
+    match tokio::time::timeout(request.timeout, response_rx).await {
         Ok(Ok(response)) => {
             if let Some(trace) = &bridge_trace {
                 let ok = response.get("ok").and_then(Value::as_bool).unwrap_or(false);
+                let mut details = request.trace_details_with_duration();
+                details["ok"] = json!(ok);
+                details["response_bytes"] = json!(trace::value_size(&response));
                 trace.event_status(
                     "bridge.response.received",
                     if ok { "ok" } else { "failed" },
-                    json!({
-                        "request_type": payload.get("type").and_then(Value::as_str),
-                        "ok": ok,
-                        "duration_ms": started_at.elapsed().as_millis() as i64,
-                        "response_bytes": trace::value_size(&response)
-                    }),
+                    details,
                 );
             }
             response
@@ -565,37 +631,26 @@ async fn call_plugin_request(
                 trace.error(
                     "bridge.disconnected",
                     "failed",
-                    json!({
-                        "request_type": payload.get("type").and_then(Value::as_str),
-                        "duration_ms": started_at.elapsed().as_millis() as i64
-                    }),
+                    request.trace_details_with_duration(),
                 );
             }
             json!({
                 "ok": false,
-                "error": "Godot plugin disconnected before returning a response."
+                "error": profile.disconnected_message
             })
         }
         Err(_) => {
-            state.pending_tool_calls.write().await.remove(
-                payload
-                    .get("request_id")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default(),
-            );
+            state.pending_tool_calls.write().await.remove(&request_id);
             if let Some(trace) = &bridge_trace {
                 trace.error(
                     "bridge.response.timeout",
                     "timed_out",
-                    json!({
-                        "request_type": payload.get("type").and_then(Value::as_str),
-                        "duration_ms": started_at.elapsed().as_millis() as i64
-                    }),
+                    request.trace_details_with_duration(),
                 );
             }
             json!({
                 "ok": false,
-                "error": "Timed out waiting for the Godot plugin response."
+                "error": profile.timeout_message
             })
         }
     }
@@ -714,13 +769,7 @@ async fn handle_godot_socket(socket: WebSocket, state: AppState) {
                         value.get("type").and_then(Value::as_str),
                         Some("tool_result" | "snapshot_result" | "project_file_result")
                     ) {
-                        if let Some(request_id) = value.get("request_id").and_then(Value::as_str) {
-                            if let Some(pending) =
-                                state.pending_tool_calls.write().await.remove(request_id)
-                            {
-                                let _ = pending.sender.send(value);
-                            }
-                        }
+                        handle_tool_result_message(&state, session_id.as_deref(), &value).await;
                     } else if value.get("type").and_then(Value::as_str)
                         == Some("set_active_project")
                     {
@@ -789,6 +838,35 @@ async fn handle_godot_socket(socket: WebSocket, state: AppState) {
     }
 }
 
+async fn handle_tool_result_message(
+    state: &AppState,
+    responding_session_id: Option<&str>,
+    value: &Value,
+) -> bool {
+    let (Some(responding_session_id), Some(request_id)) = (
+        responding_session_id,
+        value.get("request_id").and_then(Value::as_str),
+    ) else {
+        return false;
+    };
+
+    let pending = {
+        let mut pending_calls = state.pending_tool_calls.write().await;
+        let response_matches_target = pending_calls
+            .get(request_id)
+            .is_some_and(|pending| pending.session_id == responding_session_id);
+        response_matches_target
+            .then(|| pending_calls.remove(request_id))
+            .flatten()
+    };
+    let Some(pending) = pending else {
+        return false;
+    };
+
+    let _ = pending.sender.send(value.clone());
+    true
+}
+
 #[cfg(test)]
 mod tests;
 
@@ -818,26 +896,110 @@ async fn current_status(state: &AppState) -> DaemonStatus {
     }
 }
 
+async fn bound_status_value(state: &AppState, project_path: &str) -> Value {
+    let active_session_id = state.active_session_id.read().await.clone();
+    let legacy_active_project = {
+        let projects = state.projects.read().await;
+        active_session_id
+            .as_ref()
+            .and_then(|session_id| projects.get(session_id))
+            .map(|project| {
+                json!({
+                    "project_name": project.project_name.clone(),
+                    "project_path": project.project_path.clone(),
+                })
+            })
+    };
+
+    let (canonical_project_path, matching_session_ids) =
+        match matching_bound_session_ids(state, project_path).await {
+            Ok((bound_root, session_ids)) => {
+                (bound_root.as_protocol_str().to_string(), session_ids)
+            }
+            Err(_) => (project_path.to_string(), Vec::new()),
+        };
+    let selected_project = if let [session_id] = matching_session_ids.as_slice() {
+        let sender_connected = state.godot_senders.read().await.contains_key(session_id);
+        if sender_connected {
+            state.projects.read().await.get(session_id).cloned()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let bound_editor_state = if selected_project.is_some() {
+        "connected"
+    } else if matching_session_ids.len() > 1 {
+        "ambiguous"
+    } else {
+        "not_connected"
+    };
+    let (routing_code, retryable) = match bound_editor_state {
+        "not_connected" => (Some("bound_project_not_connected"), Some(true)),
+        "ambiguous" => (Some("ambiguous_project_binding"), Some(false)),
+        _ => (None, None),
+    };
+    let editor_filesystem = selected_project
+        .as_ref()
+        .and_then(|project| project.editor_filesystem.clone());
+
+    json!({
+        "ok": true,
+        "daemon": "fennara-daemon",
+        "version": DAEMON_VERSION,
+        "godot_plugin_connected": !state.godot_senders.read().await.is_empty(),
+        "routing_mode": "bound",
+        "bound_editor_state": bound_editor_state,
+        "bound_project_path": canonical_project_path,
+        "code": routing_code,
+        "retryable": retryable,
+        "selected_project": selected_project,
+        "editor_filesystem": editor_filesystem,
+        "legacy_active_project": legacy_active_project,
+        "legacy_active_session_id": active_session_id,
+    })
+}
+
 async fn select_session(
     state: &AppState,
-    requested_session_id: Option<&str>,
-) -> Result<(String, mpsc::UnboundedSender<Message>), String> {
+    selector: TargetSelector<'_>,
+) -> Result<(String, mpsc::UnboundedSender<Message>), RoutingError> {
+    match selector {
+        TargetSelector::GodotEditorSession(session_id) => {
+            let senders = state.godot_senders.read().await;
+            senders
+                .get(session_id)
+                .cloned()
+                .map(|sender| (session_id.to_string(), sender))
+                .ok_or_else(|| {
+                    RoutingError::plain(
+                        "The Godot project that owns this chat is no longer connected.",
+                    )
+                })
+        }
+        TargetSelector::McpProject(project_path) => {
+            select_bound_project_session(state, project_path).await
+        }
+        TargetSelector::LegacyMcpTarget => select_legacy_mcp_session(state).await,
+    }
+}
+
+async fn select_legacy_mcp_session(
+    state: &AppState,
+) -> Result<(String, mpsc::UnboundedSender<Message>), RoutingError> {
+    let active_session_id = state.active_session_id.read().await.clone();
     let senders = state.godot_senders.read().await;
     if senders.is_empty() {
-        return Err("Open a Godot project with Fennara enabled.".to_string());
+        return Err(RoutingError::plain(
+            "Open a Godot project with Fennara enabled.",
+        ));
     }
 
-    if let Some(session_id) = requested_session_id {
-        if let Some(sender) = senders.get(session_id) {
-            return Ok((session_id.to_string(), sender.clone()));
-        }
-        return Err("The Godot project that owns this chat is no longer connected.".to_string());
-    }
-
-    if let Some(active_session_id) = state.active_session_id.read().await.clone() {
-        if let Some(sender) = senders.get(&active_session_id) {
-            return Ok((active_session_id, sender.clone()));
-        }
+    if let Some(active_session_id) = active_session_id
+        && let Some(sender) = senders.get(&active_session_id)
+    {
+        return Ok((active_session_id, sender.clone()));
     }
 
     if senders.len() == 1 {
@@ -845,7 +1007,74 @@ async fn select_session(
         return Ok((session_id.clone(), sender.clone()));
     }
 
-    Err("Multiple Fennara projects are open. In the Fennara dock, choose Set as MCP target for the project you want to control.".to_string())
+    Err(RoutingError::legacy_target_ambiguous())
+}
+
+async fn select_bound_project_session(
+    state: &AppState,
+    project_path: &str,
+) -> Result<(String, mpsc::UnboundedSender<Message>), RoutingError> {
+    let (_, matching_session_ids) = matching_bound_session_ids(state, project_path).await?;
+    let [session_id] = matching_session_ids.as_slice() else {
+        return if matching_session_ids.is_empty() {
+            Err(RoutingError::bound_project_not_connected())
+        } else {
+            Err(RoutingError::ambiguous_project_binding())
+        };
+    };
+
+    let sender = state
+        .godot_senders
+        .read()
+        .await
+        .get(session_id)
+        .cloned()
+        .ok_or_else(RoutingError::bound_project_not_connected)?;
+    Ok((session_id.clone(), sender))
+}
+
+async fn matching_bound_session_ids(
+    state: &AppState,
+    project_path: &str,
+) -> Result<(fennara_project_identity::ProjectRoot, Vec<String>), RoutingError> {
+    // Explicit configuration errors are rejected by the MCP process at startup.
+    // At this seam, a previously valid canonical locator can also be temporarily
+    // unavailable (for example, after an unmount), so keep the binding recoverable
+    // while still failing closed instead of entering legacy target selection.
+    let bound_root =
+        fennara_project_identity::ProjectRoot::resolve_absolute(OsStr::new(project_path))
+            .map_err(|_| RoutingError::bound_project_not_connected())?;
+    let candidates = {
+        let connected_session_ids = state
+            .godot_senders
+            .read()
+            .await
+            .keys()
+            .cloned()
+            .collect::<std::collections::HashSet<_>>();
+        let projects = state.projects.read().await;
+        projects
+            .values()
+            .filter(|project| connected_session_ids.contains(&project.session_id))
+            .filter_map(|project| {
+                project
+                    .project_path
+                    .clone()
+                    .map(|path| (project.session_id.clone(), path))
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let matching_session_ids = candidates
+        .into_iter()
+        .filter_map(|(session_id, path)| {
+            fennara_project_identity::ProjectRoot::resolve_absolute(OsStr::new(&path))
+                .ok()
+                .filter(|candidate| bound_root.same_project(candidate))
+                .map(|_| session_id)
+        })
+        .collect();
+    Ok((bound_root, matching_session_ids))
 }
 
 async fn ensure_active_project_after_connect(state: &AppState, session_id: &str) {
@@ -909,13 +1138,30 @@ async fn schedule_idle_shutdown_if_empty(state: AppState) {
     }
 
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(8)).await;
-        if !state.projects.read().await.is_empty() {
-            return;
-        }
+        loop {
+            tokio::time::sleep(Duration::from_secs(8)).await;
+            if !state.projects.read().await.is_empty() {
+                return;
+            }
+            if state.runtime_slot.is_occupied().await {
+                continue;
+            }
 
-        if let Some(sender) = state.shutdown_sender.lock().await.take() {
-            let _ = sender.send(());
+            let Some(sender) = state.shutdown_sender.lock().await.take() else {
+                return;
+            };
+            let shutdown_sealed = {
+                let projects = state.projects.read().await;
+                projects.is_empty() && state.runtime_slot.begin_shutdown()
+            };
+            if shutdown_sealed {
+                let _ = sender.send(());
+                return;
+            }
+            let mut shutdown_sender = state.shutdown_sender.lock().await;
+            if shutdown_sender.is_none() {
+                *shutdown_sender = Some(sender);
+            }
         }
     });
 }

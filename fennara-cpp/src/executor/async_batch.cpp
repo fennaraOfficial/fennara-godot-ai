@@ -426,10 +426,9 @@ void FennaraExecutor::cancel() {
     _runtime_session_cancelled.store(false);
     _runtime_session_thread_done = false;
     _runtime_session_thread_result = godot::Dictionary();
-    _runtime_session_phase = "";
+    _runtime_session_phase = RuntimeSessionPhase::Idle;
     _runtime_session_build_result = godot::Dictionary();
     _runtime_session_preflight_result = godot::Dictionary();
-    _runtime_session_script_context = godot::Dictionary();
     _pending_runtime_scripts.clear();
     _runtime_script_running = false;
     _runtime_script_tool_index = -1;

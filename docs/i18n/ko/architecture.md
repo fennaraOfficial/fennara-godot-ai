@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/architecture.md sha256=a69c3ec12609497a2960983409062e9483a85dc1f4eb10a49343d5e568c0a7db -->
+<!-- fennara-i18n: locale=ko source=docs/architecture.md sha256=1bc08d075d4b48d0c781f954d4da4752d6c7223ff1636f01f06524b06dce256a -->
 <a id="architecture"></a>
 # 아키텍처
 
@@ -17,16 +17,22 @@ Fennara는 AI 클라이언트와 열려 있는 Godot 에디터 프로젝트를 �
 | 릴리스 아티팩트 이해 | [릴리스 절차](release.md) |
 | 사용 가능한 모델 도구 검사 | [도구](tools.md) |
 
-일반 OSS 경로에는 Fennara 클라우드 서비스가 없습니다. 외부 MCP 앱은 로컬 MCP 프로세스를 시작하고, 이 프로세스가 데몬과 통신합니다. 내장 채팅은 데몬과 직접 통신합니다. 데몬은 열려 있는 Godot 에디터의 Fennara 애드온에 연결됩니다.
+일반 OSS 경로에는 Fennara 클라우드 서비스가 없습니다. 각 외부 MCP 연결은 로컬 MCP
+프로세스 하나를 시작하고, 이 프로세스는 사용자별 공유 데몬 하나와 통신합니다.
+내장 채팅은 데몬과 직접 통신합니다. 데몬은 열려 있는 Godot 에디터들의 Fennara
+애드온에 연결됩니다.
 
 ```mermaid
 flowchart LR
-    A["External MCP app"] --> B["fennara-mcp launcher"]
-    B --> C["Versioned MCP runtime"]
-    C --> D["Local daemon"]
-    E["Built-in Fennara chat"] --> D
-    D --> F["Godot editor addon"]
-    F --> G["Open Godot project"]
+    A["External MCP app A"] --> B["MCP runtime A\nProject Binding A"]
+    C["External MCP app B"] --> E["MCP runtime B\nProject Binding B"]
+    B --> D["Shared local daemon"]
+    E --> D
+    J["Built-in Fennara chat"] --> D
+    D --> F["Godot editor addon A"]
+    D --> G["Godot editor addon B"]
+    F --> H["Godot Project Root A"]
+    G --> I["Godot Project Root B"]
 ```
 
 <a id="main-pieces"></a>
@@ -36,9 +42,10 @@ flowchart LR
 | --- | --- | --- |
 | CLI | `local/crates/fennara-cli/` | 애드온을 Godot 프로젝트에 설치하고 로컬 패키지를 업데이트하며 프로젝트 지침을 작성하고 `fennara mcp-setup`으로 MCP 앱을 구성합니다. |
 | MCP 런처 | `local/crates/fennara-mcp/` | MCP 앱이 호출하는 안정적인 실행 파일입니다. 활성 버전을 찾아 런타임을 시작합니다. |
-| MCP 런타임 | `local/crates/fennara-mcp/` | stdio에서 MCP를 사용하고 도구 호출을 로컬 브리지로 전달합니다. |
+| MCP 런타임 | `local/crates/fennara-mcp/` | stdio로 MCP를 처리하고, 시작할 때 선택적 Project Binding 하나를 고정한 뒤 도구 호출을 로컬 브리지로 전달합니다. |
 | 데몬 런처 | `local/crates/fennara-daemon/` | 활성 데몬 런타임을 시작하는 데 사용하는 안정적인 실행 파일입니다. |
-| 데몬 런타임 | `local/crates/fennara-daemon/` | 로컬 상태를 유지하고 Godot과 조정하며 MCP 런타임을 지원하고 내장 채팅 경로를 호스팅합니다. |
+| 데몬 런타임 | `local/crates/fennara-daemon/` | 공유 로컬 상태를 유지하고, MCP 연결을 일치하는 에디터로 라우팅하며, 시스템 전역 Runtime Slot을 소유하고, Godot과 조정하며 내장 채팅 경로를 호스팅합니다. |
+| 프로젝트 식별 | `local/crates/fennara-project-identity/` | MCP 런타임과 데몬이 사용할 Godot Project Root를 해석하고, 검증하고, 정규화하고, 비교합니다. |
 | 채팅 UI 소스 | `ui/chat/` | 내장 채팅, 설정, 제공업체 설정, MCP 앱 설정, 업데이트 UI용 HTML, CSS, JavaScript입니다. `godot_demo/addons/fennara/dist/` 아래의 패키징된 애드온으로 동기화됩니다. |
 | Godot 애드온 | `godot_demo/addons/fennara/` | 사용자 프로젝트에 복사되는 애드온 페이로드입니다. |
 | 런타임 헬퍼 소스 | `runtime/` | 런타임 세션과 런타임 스크립트를 위해 애드온 페이로드에 동기화되는 Godot 측 런타임 헬퍼 스크립트입니다. |
@@ -69,7 +76,7 @@ flowchart LR
 
 Linux 경로는 Godot `Control` 안에 브라우저 픽셀을 렌더링하고 독 프로세스 훅을 통해 CEF 메시지 루프를 라우팅합니다. GDExtension은 공유 CEF 런타임을 찾고 `fennara-cef-runtime.json` 마커와 필수 파일을 검증하며 `libcef.so`를 동적으로 연 다음 집중된 브리지 로더를 통해 작은 `libfennara_linux_cef_bridge.so` 애드온 라이브러리를 dlopen합니다. 해당 브리지는 고정된 공식 CEF 139 `libcef_dll_wrapper` 소스에서 빌드되며, 창 없는 모드에서 CEF를 초기화하고 패키징된 채팅 URL용 브라우저를 만들며 페인트 버퍼를 Godot 텍스처로 복사하는 C++ CEF 객체(`CefClient`, `CefRenderHandler`, `CefRefPtr`)를 소유합니다. 전체 IME, 클립보드, 커서 처리는 별도 후속 작업입니다. CEF 런타임은 의도적으로 Godot 애드온 ZIP과 분리됩니다. Linux 설치는 사용자별 공유 앱 데이터 런타임 위치를 사용하며 CLI가 릴리스 관리 CEF 자산을 그곳에 한 번 설치합니다.
 
-Godot 에디터를 여러 개 동시에 열 수 있습니다. 각 임베디드 채팅 웹소켓은 소유 에디터의 `chat_token`으로 수락되고 채팅 저장 범위, 스냅샷, 도구 실행, 취소, 되돌리기에서 해당 Godot 세션에 계속 연결됩니다. 외부 MCP 클라이언트는 데몬의 활성 대상을 통해 계속 라우팅됩니다. 현재 채팅 제공업체 설정은 전역이지만 채팅은 프로젝트 범위로 유지됩니다. 클라우드 채팅 제공업체는 로컬에 저장된 API 키를 사용하고 로컬 제공업체는 데몬이 저장한 기본 URL을 사용합니다. 현재 내장 채팅 제공업체 집합은 OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, 로컬 Ollama, LM Studio입니다. Ollama 기본값은 `http://127.0.0.1:11434`, LM Studio 기본값은 `http://127.0.0.1:1234/v1`입니다. 데몬 채팅 런타임은 요청 전에 작은 제공업체 카탈로그를 통해 선택한 모델을 해석합니다. 정식 모델 참조는 `provider/model` 형식을 사용합니다. 사용자가 눈치채는 주요 예외는 OpenRouter입니다. OpenRouter 모델 슬러그 자체에 이미 제공업체 구간이 들어 있기 때문입니다. Fennara에서는 `openrouter/google/example`을 권장합니다. 사용자가 `google/example` 같은 원시 OpenRouter 슬러그를 붙여 넣어도 호환성을 위해 데몬이 계속 OpenRouter로 라우팅합니다. 네이티브 `openai/...` 및 `anthropic/...` 참조는 공식 제공업체를 사용합니다. OpenRouter를 통해 해당 업체를 사용하려면 `openrouter/openai/...` 또는 `openrouter/anthropic/...`을 사용하세요. 가능한 경우 제공업체는 OpenAI 호환 또는 Anthropic 호환 채팅 어댑터를 공유하고, 제공업체별 특이 사항은 제공업체 모듈에 격리하며 어댑터 경계 위에서는 스트림 및 오류 이벤트를 정규화합니다.
+Godot 에디터를 여러 개 동시에 열 수 있습니다. 각 임베디드 채팅 웹소켓은 소유 에디터의 `chat_token`으로 수락되고 채팅 저장 범위, 스냅샷, 도구 실행, 취소, 되돌리기에서 해당 Godot 세션에 계속 연결됩니다. 프로젝트에 바인딩된 외부 MCP 프로세스는 정규 Project Root가 일치하는 에디터로 라우팅됩니다. 바인딩되지 않은 프로세스만 데몬의 독 선택 호환 대상을 사용합니다. 현재 채팅 제공업체 설정은 전역이지만 채팅은 프로젝트 범위로 유지됩니다. 클라우드 채팅 제공업체는 로컬에 저장된 API 키를 사용하고 로컬 제공업체는 데몬이 저장한 기본 URL을 사용합니다. 현재 내장 채팅 제공업체 집합은 OpenAI, Anthropic, OpenRouter, Ollama Cloud, DeepSeek, Z.AI, Moonshot AI, Kimi For Coding, MiniMax, 로컬 Ollama, LM Studio입니다. Ollama 기본값은 `http://127.0.0.1:11434`, LM Studio 기본값은 `http://127.0.0.1:1234/v1`입니다. 데몬 채팅 런타임은 요청 전에 작은 제공업체 카탈로그를 통해 선택한 모델을 해석합니다. 정식 모델 참조는 `provider/model` 형식을 사용합니다. 사용자가 눈치채는 주요 예외는 OpenRouter입니다. OpenRouter 모델 슬러그 자체에 이미 제공업체 구간이 들어 있기 때문입니다. Fennara에서는 `openrouter/google/example`을 권장합니다. 사용자가 `google/example` 같은 원시 OpenRouter 슬러그를 붙여 넣어도 호환성을 위해 데몬이 계속 OpenRouter로 라우팅합니다. 네이티브 `openai/...` 및 `anthropic/...` 참조는 공식 제공업체를 사용합니다. OpenRouter를 통해 해당 업체를 사용하려면 `openrouter/openai/...` 또는 `openrouter/anthropic/...`을 사용하세요. 가능한 경우 제공업체는 OpenAI 호환 또는 Anthropic 호환 채팅 어댑터를 공유하고, 제공업체별 특이 사항은 제공업체 모듈에 격리하며 어댑터 경계 위에서는 스트림 및 오류 이벤트를 정규화합니다.
 
 내장 채팅 턴은 대화 기록 테이블과 분리된 `chat_trace_events`에 있는 같은 `chat.sqlite` 앱 데이터 데이터베이스에 로컬 전용 진단 추적도 작성합니다. 추적 행은 안정적인 턴, 생성, 도구, 브리지 ID와 함께 타이밍, 상태, 개수, 제한된 요약을 사용합니다. 원시 프롬프트와 전체 도구 결과는 기본적으로 캡처하지 않습니다. 데몬은 `chat_id`, `trace_id`, `turn_id`, `generation_id`로 필터링하는 작은 로컬 디버그 읽기 엔드포인트 `/chat/traces`를 제공합니다.
 
@@ -169,7 +176,9 @@ Godot 에디터 파일 시스템 검사가 끝나면 애드온이 즉시 플러�
 <a id="mcp-setup"></a>
 ## MCP 설정
 
-`fennara mcp-setup`은 MCP 앱 구성을 편집하여 앱이 로컬 런처를 시작하게 합니다.
+`fennara mcp-setup`은 MCP 앱 구성을 편집하여 앱이 로컬 런처를 시작하게 합니다. 생성된
+항목은 전역적이고 프로젝트와 무관하며, Godot 프로젝트 안에서 설정을 실행해도 앞으로
+시작할 모든 MCP 프로세스가 해당 프로젝트에 바인딩되지는 않습니다.
 
 예:
 
@@ -184,6 +193,20 @@ fennara mcp-setup --gemini
 
 따라서 업데이트 뒤에도 MCP 앱 구성이 안정적으로 유지됩니다.
 
+격리된 저장소나 워크트리의 경우 MCP 호스트는 프로젝트마다 하나의 프로세스와 연결을
+시작합니다. 런타임은 시작 디렉터리를 캡처하고 프로세스 수명 동안 사용할 MCP Project
+Binding 하나를 고정합니다. 바인딩 검색 순서는 명시적 `--project-path`,
+`FENNARA_PROJECT_PATH`, `project.godot`이 있는 가장 가까운 시작 디렉터리 조상
+순입니다. 자동 검색에서 프로젝트를 찾지 못하면 런타임은 레거시 미바인딩 호환 모드로
+진입합니다. 잘못된 명시적 바인딩은 다른 대상으로 대체하지 않고 시작을 실패합니다.
+
+공유 `fennara-project-identity` 크레이트는 MCP와 데몬 모두가 사용할 루트를 정규화하고
+검증합니다. MCP는 정규 루트를 모델 대상 도구 인수 밖의 전송 메타데이터로 보냅니다.
+데몬은 해당 위치 표시자와 에디터가 보고한 루트를 다시 해석한 뒤, 실행 중인 파일 시스템
+일치가 정확히 하나일 때만 허용합니다. 에디터가 없으면 재시도할 수 있고, 중복 일치는 모호하며,
+두 경우 모두 독 대상으로 대체하지 않습니다. [여러 에이전트와 워크트리](multi-agent-worktrees.md)를
+참고하세요.
+
 이 설정 경로는 내장 채팅 제공업체 경로와 별개입니다. MCP 앱은 자체 모델 계정을 사용하고 Fennara 독은 채팅 설정에서 구성한 제공업체를 사용합니다.
 
 <a id="tool-call-flow"></a>
@@ -194,15 +217,20 @@ MCP client
   calls a Fennara tool
 MCP runtime
   validates the request against local schemas
+  attaches its process-scoped Project Binding as transport metadata
   forwards the call to the local daemon
 Daemon runtime
-  routes the request to the connected Godot project
+  resolves the binding and routes to exactly one matching Godot editor
 Godot addon
   runs the Godot-aware tool through GDExtension
   returns a concise markdown result
 MCP runtime
   sends the result back to the MCP client
 ```
+
+내부 내장 채팅 호출에는 이미 명시적 Godot Editor Session이 포함됩니다. Project Binding이 없는
+외부 MCP는 대신 레거시 MCP Target, 즉 유효한 독 선택 대상을 우선 사용하고 그다음으로
+연결된 유일한 에디터를 사용합니다. 바인딩 선택은 데몬 전역 대상을 읽거나 변경하지 않습니다.
 
 MCP 클라이언트는 일반 파일을 직접 읽고 쓸 수 있습니다. Fennara 도구는 씬 구조, 노드 속성, 진단, 검증, 런타임 상태, 스크린샷, 에디터 인식 편집 같은 Godot 전용 피드백에 집중합니다.
 
@@ -229,7 +257,21 @@ MCP 앱이 현재 런처를 실행 중이면 업데이트가 해당 런처를 �
 
 공유 활성화는 한 번에 하나의 활성 Fennara 버전을 지원합니다. 다른 Godot 프로젝트가 연결된 동안 데몬은 업데이트 종료를 거부하여 다른 에디터가 사용 중일 때 버전이 바뀌지 않게 합니다. 정확한 버전 패키지, 이전 `current.json`, 런처 스냅샷, 이전 프로젝트 애드온은 다시 열린 에디터가 새 GDExtension을 검증할 때까지 유지됩니다.
 
-현재 데몬은 연결된 모든 Godot 에디터를 통틀어 관리되는 `runtime_session` 씬 하나만 허용합니다. 시작 요청은 선택되었거나 채팅에 연결된 Godot 프로젝트에서 실행되지만, 다른 관리 씬이 실행 중이면 새 씬을 시작하기 전에 중지해야 합니다.
+데몬은 연결된 모든 에디터가 공유하는 시스템 전역 Runtime Slot 하나를 소유합니다. 시작
+요청은 프로세스를 생성하기 전에 `Starting`을 원자적으로 확보하고 해당 확보를 `Running`으로
+커밋합니다. 경쟁에서 진 호출자는 오류가 아닌 익명의 `busy` 결과를 받고 두 번째 게임을
+절대 시작하지 않습니다. FIFO 대기열은 없습니다.
+
+각 Runtime Session은 일시적인 에디터 프로세스가 아닌 정규 Project Root에 속합니다. 해당 소유자만
+상세 상태를 검사하고, 갱신하고, 스크립트를 실행하거나 세션을 중지할 수 있습니다. 다른 프로젝트는
+익명의 busy 상태만 보며 다른 세션 식별자가 있는지도 확인할 수 없습니다. 따라서 에디터가 재연결되어도
+소유권이 유지됩니다.
+
+기본 절대 Runtime Lease는 900초이며, 호출자는 최대 86,400초의 양의 `max_run_seconds`를 요청할
+수 있습니다. 소유자 상태와 제한된 소유자 작업은 120초의 비활성 마감을 갱신하며,
+에이전트는 일반적으로 약 30초마다 지터를 적용해 상태를 폴링합니다. 절대 마감은 중지되지
+않습니다. 감독기는 자연 종료, 명시적 중지, 시작 실패, 비활성 만료 또는 절대 만료 후 프로세스를
+중지하거나 회수하고 Runtime Slot을 해제합니다.
 
 <a id="export-boundary"></a>
 ## 내보내기 경계

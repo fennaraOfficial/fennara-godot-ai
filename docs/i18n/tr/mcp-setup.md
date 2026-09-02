@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/mcp-setup.md sha256=42086801de2de7b36545c45d5af394cca77a858878ed242ca2014555e79b76df -->
+<!-- fennara-i18n: locale=tr source=docs/mcp-setup.md sha256=86c9fe3fc7a69c2ade417dd01a0ccabb05ddaa91cf417fa8559c28d4b01811bd -->
 <a id="mcp-setup"></a>
 # MCP Kurulumu
 
@@ -50,6 +50,43 @@ yapılandırır. **Gemini & Antigravity** ise iki paylaşılan hedefi de yapıla
 Kurulu CLI'ınızın desteklediği hedef listesi için
 `fennara mcp-setup --help` çalıştırın.
 
+Kurulum, genel ve projeden bağımsız bir başlatıcı girdisi yazar. Bir projenin
+içinde `fennara mcp-setup` çalıştırmak gelecekteki her bağlantıyı o projeye
+bağlamaz.
+
+<a id="bind-a-connection-to-one-project"></a>
+## Bir Bağlantıyı Tek Bir Projeye Bağlama
+
+Aynı makinedeki birden fazla depo veya worktree için proje başına bir MCP işlemi
+ve bağlantısı çalıştırın. Bu işlemi MCP ana bilgisayarının proje veya çalışma
+alanı ayarlarında aşağıdakilerden biriyle yapılandırın:
+
+```text
+--project-path /absolute/path/to/godot-project
+```
+
+veya:
+
+```text
+FENNARA_PROJECT_PATH=/absolute/path/to/godot-project
+```
+
+Çalışma zamanı, başlangıçta Proje Bağlamasını şu sırayla ve bir kez seçer:
+
+1. `--project-path`
+2. `FENNARA_PROJECT_PATH`
+3. `project.godot` içeren en yakın başlangıç dizini üst öğesi
+4. keşif hiçbir proje bulamazsa eski bağlı olmayan uyumluluk modu
+
+Geçersiz bir açık yol MCP sunucusunun başlamasını engeller. Panel hedefine veya
+başka bir editöre hiçbir zaman geri dönmez. Geçerli bir bağlama, editörü geçici
+olarak yoksa canlı kalır ve o Proje Kökü yeniden bağlandığında toparlanır.
+Modelin gördüğü, araç çağrısı başına bir proje geçersiz kılması yoktur.
+
+Yapılandırma örnekleri, ana bilgisayar destek sınırları, durum doğrulaması,
+yinelenen editör davranışı ve sıraya alınmış oyun testleri için [Birden Fazla
+Ajan ve Worktree](multi-agent-worktrees.md) sayfasına bakın.
+
 <a id="manual-setup"></a>
 ## Elle Kurulum
 
@@ -94,6 +131,21 @@ Birçok MCP uygulaması üst düzey bir `mcpServers` nesnesi kullanır:
 Bazı uygulamalar aynı `mcpServers` anahtarını kullanır, ancak yalnızca
 `command` gerektirir. Mevcut yapılandırmada zaten başka sunucular varsa bu
 girdileri koruyun ve yalnızca `fennara` sunucusunu ekleyin.
+
+Yalıtılmış kalması gereken projeye özel bir girdi için bağlamayı `args`
+alanına ekleyin:
+
+```json
+{
+  "mcpServers": {
+    "fennara": {
+      "command": "/absolute/path/to/fennara-mcp",
+      "args": ["--project-path", "/absolute/path/to/godot-project"],
+      "env": {}
+    }
+  }
+}
+```
 
 Cline biçimli yapılandırmalar saniye cinsinden daha uzun bir araç zaman aşımı da içerebilir:
 
@@ -163,6 +215,17 @@ tool_timeout_sec = 300
 JSON'ı bir TOML dosyasına veya TOML'ı bir JSON dosyasına yapıştırmayın.
 Uygulamanın zaten kullandığı biçimle eşleştirin.
 
+Codex biçimli bir girdiyi bağlamak için kararlı başlatıcısını değiştirmeden
+argümanı ekleyin:
+
+```toml
+[mcp_servers.fennara]
+command = "/absolute/path/to/fennara-mcp"
+args = ["--project-path", "/absolute/path/to/godot-project"]
+startup_timeout_sec = 30
+tool_timeout_sec = 300
+```
+
 <a id="common-config-locations"></a>
 ## Yaygın Yapılandırma Konumları
 
@@ -185,6 +248,17 @@ OpenCode:       ~/.config/opencode/opencode.json
 Windsurf:       ~/.codeium/windsurf/mcp_config.json
 Kiro:           ~/.kiro/settings/mcp.json
 ```
+
+VS Code tek klasörlü çalışma alanları, projeyi MCP alt işleminin başlangıç
+dizini olarak sağlayabilir. Claude Code, Gemini CLI, Antigravity, Cline, Cursor,
+OpenCode, Kiro ve Codex proje/çalışma alanı yapılandırmasını kullanabilir;
+yalıtımın garanti edilmesi gerektiğinde açık bir bağlama veya belgelenmiş bir
+proje başlangıç dizini kullanın.
+
+Claude Desktop ile eski Windsurf/Cascade bu iş akışı için genel yapılandırma
+kullanır. Varsayılan kurulumları eski bağlı olmayan modda kalır. İleri düzey
+kullanıcılar farklı açık proje yollarıyla ayrı adlandırılmış genel girdiler
+oluşturabilir, ancak bu uygulamalar otomatik projeye özel yalıtım sağlamaz.
 
 <a id="timeout-guidance"></a>
 ## Zaman Aşımı Rehberi
@@ -214,8 +288,13 @@ Godot projesini açın, ardından MCP uygulamanıza şunu sorun:
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-Birden fazla Godot projesi açıksa harici MCP araç çağrılarını hangi projenin
-alacağını seçmek için Fennara dock'unun **MCP target** denetimini kullanın.
+Yalıtılmış çalışma için durumun `bound` yönlendirme modunu, beklenen bağlama
+kaynağını ve kanonik Proje Kökünü, `connected` bağlı editör durumunu ve o
+editörün dosya sistemi hazır olma durumunu bildirdiğini doğrulayın.
+
+Durum `legacy_unbound` bildiriyorsa bağlantı otomatik bir Proje Kökü bulamamıştır.
+Paneldeki **MCP target** uyumluluk yolunu kullanır ve bu modun yalıtılmış
+eşzamanlı çalışma için güvenli olmadığı konusunda uyarır.
 
 <a id="troubleshooting"></a>
 ## Sorun Giderme
@@ -228,7 +307,14 @@ Fennara MCP uygulamasında görünmüyorsa:
 - uygulamanın düzenlediğiniz yapılandırma dosyasını okuduğunu doğrulayın
 - MCP uygulamasından tamamen çıkıp yeniden açın
 - Godot projesinde Fennara eklentisinin kurulu olduğunu doğrulayın
-- amaçlanan Godot projesinin MCP hedefi olarak seçildiğini doğrulayın
+- bağlı bir bağlantı için açık yolunun veya başlangıç dizininin amaçlanan Godot
+  Proje Kökü olduğunu doğrulayın
+- durum `bound_project_not_connected` bildiriyorsa o projeyi Godot'da açın ve
+  eklentinin bağlanmasını bekleyin
+- durum `ambiguous_project_binding` bildiriyorsa yinelenen editörü kapatın veya
+  onu ayrı bir worktree'den açın
+- eski bağlı olmayan bir bağlantı için amaçlanan projenin panelde MCP hedefi
+  olarak seçildiğini doğrulayın
 
 <a id="unsupported-mcp-apps"></a>
 ## Desteklenmeyen MCP Uygulamaları

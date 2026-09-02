@@ -291,6 +291,7 @@ version = "0.4.2"
 dependencies = [
  "axum",
  "base64",
+ "fennara-project-identity",
  "futures-util",
  "getrandom 0.3.4",
  "hmac",
@@ -303,6 +304,7 @@ dependencies = [
  "subtle",
  "sysinfo",
  "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]
@@ -310,11 +312,20 @@ name = "fennara-mcp"
 version = "0.4.2"
 dependencies = [
  "base64",
+ "fennara-project-identity",
  "getrandom 0.3.4",
  "hmac",
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "fennara-project-identity"
+version = "0.4.2"
+dependencies = [
+ "thiserror",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

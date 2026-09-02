@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/mcp-setup.md sha256=42086801de2de7b36545c45d5af394cca77a858878ed242ca2014555e79b76df -->
+<!-- fennara-i18n: locale=de source=docs/mcp-setup.md sha256=86c9fe3fc7a69c2ade417dd01a0ccabb05ddaa91cf417fa8559c28d4b01811bd -->
 <a id="mcp-setup"></a>
 # MCP-Einrichtung
 
@@ -44,6 +44,44 @@ Führe zuerst `fennara install` im Godot-Projekt aus und wähle anschließend ei
 
 Führe `fennara mcp-setup --help` aus, um die von deiner installierten CLI unterstützte Zielliste anzuzeigen.
 
+Die Einrichtung schreibt einen globalen, projektneutralen Launcher-Eintrag. Wenn
+`fennara mcp-setup` innerhalb eines Projekts ausgeführt wird, bindet dies nicht alle
+künftigen Verbindungen an dieses Projekt.
+
+<a id="bind-a-connection-to-one-project"></a>
+## Eine Verbindung an ein Projekt binden
+
+Führe für mehrere Repositorys oder Worktrees auf demselben Rechner je einen
+MCP-Prozess und eine Verbindung pro Projekt aus. Konfiguriere diesen Prozess in den
+Projekt- oder Workspace-Einstellungen des MCP-Hosts entweder mit:
+
+```text
+--project-path /absolute/path/to/godot-project
+```
+
+oder:
+
+```text
+FENNARA_PROJECT_PATH=/absolute/path/to/godot-project
+```
+
+Die Laufzeit wählt ihre Projektbindung einmal beim Start in dieser Reihenfolge aus:
+
+1. `--project-path`
+2. `FENNARA_PROJECT_PATH`
+3. der nächste Vorfahr des Startverzeichnisses, der `project.godot` enthält
+4. ungebundener Legacy-Kompatibilitätsmodus, wenn die Ermittlung kein Projekt findet
+
+Ein ungültiger ausdrücklicher Pfad verhindert den Start des MCP-Servers. Er fällt
+niemals auf das Dock-Ziel oder einen anderen Editor zurück. Eine gültige Bindung
+bleibt aktiv, wenn ihr Editor vorübergehend fehlt, und nimmt den Betrieb wieder auf,
+sobald dieser Projektstamm erneut verbunden wird. Es gibt keine modellseitige
+Projektüberschreibung pro Werkzeugaufruf.
+
+Unter [Mehrere Agenten und Worktrees](multi-agent-worktrees.md) findest du
+Konfigurationsbeispiele, Grenzen der Host-Unterstützung, Statusprüfung, Verhalten
+bei doppelten Editoren und serialisierte Spieltests.
+
 <a id="manual-setup"></a>
 ## Manuelle Einrichtung
 
@@ -79,6 +117,21 @@ Viele MCP-Apps verwenden ein Objekt `mcpServers` auf der obersten Ebene:
 ```
 
 Einige Apps verwenden denselben Schlüssel `mcpServers`, benötigen jedoch nur `command`. Falls die vorhandene Konfiguration bereits andere Server enthält, behalte diese Einträge bei und füge ausschließlich den Server `fennara` hinzu.
+
+Füge für einen projektlokalen Eintrag, der isoliert bleiben muss, dessen Bindung
+zu `args` hinzu:
+
+```json
+{
+  "mcpServers": {
+    "fennara": {
+      "command": "/absolute/path/to/fennara-mcp",
+      "args": ["--project-path", "/absolute/path/to/godot-project"],
+      "env": {}
+    }
+  }
+}
+```
 
 Konfigurationen im Stil von Cline können außerdem ein längeres Werkzeug-Zeitlimit in Sekunden enthalten:
 
@@ -145,6 +198,17 @@ tool_timeout_sec = 300
 
 Füge kein JSON in eine TOML-Datei und kein TOML in eine JSON-Datei ein. Verwende das Format, das die App bereits nutzt.
 
+Füge das Argument hinzu, um einen Codex-Eintrag zu binden, ohne dessen stabilen
+Launcher zu ändern:
+
+```toml
+[mcp_servers.fennara]
+command = "/absolute/path/to/fennara-mcp"
+args = ["--project-path", "/absolute/path/to/godot-project"]
+startup_timeout_sec = 30
+tool_timeout_sec = 300
+```
+
 <a id="common-config-locations"></a>
 ## Übliche Speicherorte der Konfiguration
 
@@ -164,6 +228,19 @@ OpenCode:       ~/.config/opencode/opencode.json
 Windsurf:       ~/.codeium/windsurf/mcp_config.json
 Kiro:           ~/.kiro/settings/mcp.json
 ```
+
+VS-Code-Workspaces mit einem einzelnen Ordner können das Projekt über das
+Startverzeichnis des MCP-Kindprozesses bereitstellen. Claude Code, Gemini CLI,
+Antigravity, Cline, Cursor, OpenCode, Kiro und Codex können Projekt- oder
+Workspace-Konfiguration verwenden. Nutze eine ausdrückliche Bindung oder ein
+dokumentiertes Projekt-Startverzeichnis, wenn die Isolation gewährleistet sein
+muss.
+
+Claude Desktop und ältere Windsurf-/Cascade-Versionen verwenden für diesen
+Arbeitsablauf eine globale Konfiguration. Ihre Standardeinrichtung bleibt
+im ungebundenen Legacy-Modus. Fortgeschrittene Benutzer können getrennt benannte Einträge mit
+unterschiedlichen ausdrücklichen Projektpfaden erstellen, diese Apps bieten jedoch
+keine automatische projektlokale Isolation.
 
 <a id="timeout-guidance"></a>
 ## Hinweise zu Zeitlimits
@@ -189,7 +266,15 @@ Wenn ein Client keine Zeitlimits pro Server unterstützt, verwende die dokumenti
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-Wenn mehr als ein Godot-Projekt geöffnet ist, wähle mit dem Steuerelement **MCP target** im Fennara-Dock aus, welches Projekt externe MCP-Werkzeugaufrufe empfangen soll.
+Bestätige für isolierte Arbeit, dass der Status den Routingmodus `bound`, die
+erwartete Bindungsquelle und den kanonischen Projektstamm, den Zustand des
+gebundenen Editors `connected` und die Dateisystembereitschaft dieses Editors
+meldet.
+
+Wenn der Status `legacy_unbound` meldet, wurde für die Verbindung kein
+automatischer Projektstamm gefunden. Sie verwendet den Kompatibilitätsweg über
+das **MCP target** im Dock und warnt, dass dieser Modus für isolierte gleichzeitige
+Arbeit unsicher ist.
 
 <a id="troubleshooting"></a>
 ## Fehlerbehebung
@@ -202,7 +287,14 @@ Wenn Fennara nicht in der MCP-App erscheint:
 - Prüfe, ob die App die von dir bearbeitete Konfigurationsdatei liest.
 - Beende die MCP-App vollständig und öffne sie erneut.
 - Prüfe, ob im Godot-Projekt das Fennara-Addon installiert ist.
-- Prüfe, ob das vorgesehene Godot-Projekt als MCP-Ziel ausgewählt ist.
+- Prüfe bei einer gebundenen Verbindung, ob ihr ausdrücklicher Pfad oder
+  Startverzeichnis dem vorgesehenen Godot-Projektstamm entspricht.
+- Wenn der Status `bound_project_not_connected` meldet, öffne dieses Projekt in
+  Godot und warte, bis sich das Addon verbindet.
+- Wenn der Status `ambiguous_project_binding` meldet, schließe den doppelten
+  Editor oder öffne ihn aus einem anderen Worktree.
+- Prüfe bei einer ungebundenen Legacy-Verbindung, ob das vorgesehene Projekt als
+  MCP-Ziel im Dock ausgewählt ist.
 
 <a id="unsupported-mcp-apps"></a>
 ## Nicht unterstützte MCP-Apps

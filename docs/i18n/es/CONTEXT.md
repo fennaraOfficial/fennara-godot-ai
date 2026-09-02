@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=es source=CONTEXT.md sha256=ee0d279d8a4916d5cf894616b1c72658669a36bf0ec958efef5a09ee196c704e -->
+<!-- fennara-i18n: locale=es source=CONTEXT.md sha256=7d76acbada75ade69b43dc52fcd543f90d678c04b3e9b50fc11601b8b1853fd4 -->
 <a id="fennara-context"></a>
 # Contexto de Fennara
 
@@ -46,7 +46,27 @@ Una aplicación externa de IA configurada mediante `fennara mcp-setup`. La confi
 
 **Destino MCP**
 
-El proyecto de Godot seleccionado actualmente para recibir llamadas MCP de Fennara.
+El destino de compatibilidad global del daemon, seleccionado en el panel, que
+utiliza una conexión MCP externa sin una Vinculación de proyecto MCP. Las
+conexiones MCP vinculadas no leen ni cambian este destino.
+
+**Vinculación de proyecto MCP**
+
+La Raíz del proyecto estable que se selecciona una vez al iniciar un proceso MCP
+de Fennara. Enruta las llamadas de ese proceso a la Sesión del editor de Godot
+correspondiente sin utilizar el Destino MCP global del daemon.
+
+**Raíz del proyecto**
+
+El directorio canónico del sistema de archivos que contiene el `project.godot`
+de un proyecto de Godot. Fennara utiliza la identidad del sistema de archivos,
+no el nombre del proyecto, para distinguir repositorios y árboles de trabajo.
+
+**Sesión del editor de Godot**
+
+Una instancia actualmente conectada del addon de Fennara y del editor de Godot.
+Tiene una ruta de proyecto y un ID de proceso de Godot, y puede desconectarse y
+volver a conectarse sin cambiar la Vinculación de proyecto de un proceso MCP.
 
 **Esquema de herramienta**
 
@@ -94,7 +114,25 @@ El servicio local que conecta las llamadas MCP y las solicitudes del chat integr
 
 **Sesión de ejecución**
 
-Una sesión de ejecución de Godot administrada por el daemon que se utiliza para inspección durante la ejecución, registros, validación, capturas de pantalla y futuros flujos de trabajo sobre escenas activas.
+Un proceso de juego interactivo de Godot administrado por el daemon que se
+utiliza para inspeccionar escenas activas, recopilar registros y realizar
+capturas durante la ejecución. Su Raíz del proyecto canónica propietaria conserva
+el control aunque el editor de ese proyecto vuelva a conectarse. La validación
+acotada de escenas y las llamadas independientes de captura de pantalla usan
+rutas separadas y no ocupan la Ranura de ejecución.
+
+**Ranura de ejecución**
+
+El estado de admisión de todo el equipo que permite iniciar o ejecutar como
+máximo una Sesión de ejecución administrada por el daemon entre todos los
+proyectos conectados.
+
+**Concesión de ejecución**
+
+El derecho renovable y limitado en el tiempo de la Raíz del proyecto
+propietaria a ocupar la Ranura de ejecución. La actividad del propietario
+renueva su plazo de inactividad, mientras que el plazo absoluto siempre se
+aplica.
 
 **Instantánea de Godot**
 

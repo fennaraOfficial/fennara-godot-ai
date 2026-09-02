@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/chat-vs-mcp.md sha256=03cb522aed8f8e305feaca0c2ed51f7ba29b2657a721df4196b15bc6ccf12c9c -->
+<!-- fennara-i18n: locale=zh-CN source=docs/chat-vs-mcp.md sha256=b6f27b2c7e905515aba56b75bf6736644a9c36c885f4cab61555c82cd6c47fda -->
 <a id="mcp-apps-or-built-in-chat"></a>
 # MCP 应用还是内置聊天？
 
@@ -48,11 +48,19 @@ fennara mcp-setup --help
 
 两条路径都通过本地 Fennara 守护进程获取 Godot 反馈。
 
-- 外部 MCP 调用会发送到面板的 **MCP target** 控件所选项目。
+- 外部 MCP 进程可在启动时一次性绑定到一个规范的 Godot 项目根目录。其调用会路由到匹配的编辑器，不会读取或更改
+  停靠面板的 **MCP target**。
+- 未绑定的外部 MCP 进程保留兼容性行为：它使用由停靠面板选定的 MCP 目标；如果未选定有效目标且仅有一个已连接编辑器，
+  则使用该编辑器。
 - 内置聊天始终绑定到打开该聊天的 Godot 编辑器。
+
+对于在不同仓库或工作树中隔离工作的智能体，请为每个项目使用一个 MCP 进程和连接。有关设置和运行时槽位行为，请参阅
+[多智能体与工作树](multi-agent-worktrees.md)。
 
 要验证外部 MCP 连接，请询问：
 
 ```text
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
+
+开始并发工作前，请确认状态报告的路由模式为 `bound`，并且规范项目根目录符合预期。旧式未绑定模式会包含并发性警告。

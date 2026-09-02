@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=local/README.md sha256=a7dee6dc27d357ae479c13a0f950aa2664f2e7548f09f7623bbff0e07a49ad50 -->
+<!-- fennara-i18n: locale=tr source=local/README.md sha256=29a4563cb548ac4612f1881d66af9e72f4de9b1c118920e0d14ba00d0279edec -->
 <a id="fennara-local-tools"></a>
 # Fennara Yerel Araçları
 
@@ -23,8 +23,20 @@ Uç noktalar:
 
 - `GET /health`: daemon durumu.
 - `GET /status`: daemon durumu ve bağlı Godot eklentisi meta verileri.
+- `POST /status/bound`: ayrıcalıklı bağlı durum. Tek bir MCP işleminin kanonik
+  Proje Kökünü bağlı Godot editör oturumlarıyla çözümler.
 - `POST /tools/call`: bir araç çağrısını bağlı Godot eklentisine iletir ve araç sonucunu bekler.
 - `WS /godot/ws`: yerel Godot eklentisi köprüsü. Eklenti bağlandıktan sonra bir `hello` mesajı gönderir.
+
+Geçerli kullanıcı için Fennara'nın etkin olduğu tüm editörler ve harici MCP
+işlemleri tek bir daemon'ı paylaşır. Bağlı harici istekler kanonik Proje Köküne
+göre yönlendirilir; dahili yerleşik sohbet istekleri Godot Editör Oturumlarına
+bağlı kalır, eski bağlı olmayan MCP istekleri ise panelden seçilen uyumluluk
+hedefini kullanır.
+
+Daemon ayrıca makine genelinde tek bir Çalışma Zamanı Yuvasına sahiptir. Çalışma
+Zamanı Oturumu sahipliği ve yenilenebilir kira durumu bir Proje Köküyle
+ilişkilendirilir; böylece editör denetimi devretmeden yeniden bağlanabilir.
 
 Geliştirme ikilisi:
 
@@ -36,6 +48,17 @@ local/target/debug/fennara-daemon.exe
 ## MCP Sunucusu
 
 `crates/fennara-mcp` yerel MCP sunucusudur. MCP istemcilerinin yerel bir işlem olarak başlatabilmesi için stdio üzerinden JSON-RPC konuşur.
+
+Her MCP işlemi, başlangıçta isteğe bağlı tek bir Proje Bağlamasını sabitler.
+Seçim sırasıyla `--project-path`, `FENNARA_PROJECT_PATH` ve başlangıç dizininin
+en yakın `project.godot` üst öğesidir. Hiçbir proje bulunmaması otomatik olarak
+eski bağlı olmayan uyumluluk moduna geçer; geçersiz bir açık yol başlangıcın
+başarısız olmasına neden olur. Projeler arası yalıtım için proje başına bir MCP
+işlemi ve bağlantısı kullanın.
+
+`crates/fennara-project-identity`, MCP çalışma zamanı ile daemon tarafından
+paylaşılır. Proje Kökü keşfinin, doğrulamasının, kanonikleştirmesinin, kayıpsız
+protokol dönüşümünün ve canlı dosya sistemi eşitliğinin sahibidir.
 
 `fennara-mcp`, seçtiği MCP'ye yönelik şemaları derleme zamanında `local/schemas/tools/` içinden gömer ve bu araç çağrılarını yerel daemon'a iletir. Çalışma zamanında harici bir şema hizmetine ihtiyaç duymaz. Yerleşik sohbet aynı şema dizininden ilişkili, ancak farklı bir araç kümesi seçer.
 
@@ -74,7 +97,9 @@ local/target/debug/fennara-mcp.exe
 
 Geçerli araçlar:
 
-- `fennara_status`: MCP sunucusunun kurulu ve erişilebilir olduğunu doğrular, ardından daemon çalışıyorsa daemon ve Godot köprüsü durumunu bildirir.
+- `fennara_status`: MCP sunucusunun kurulu ve erişilebilir olduğunu doğrular,
+  ardından daemon çalışıyorsa yönlendirme modunu, bağlama kaynağını/kökünü,
+  seçilen editör durumunu ve Godot köprüsü hazırlığını bildirir.
 - `write_or_update_file`, `run_scene_edit_script`, `get_scene_tree`, `script_diagnostics` ve `screenshot_scene` gibi Godot proje araçları daemon'a, oradan da bağlı Godot eklentisine iletilir.
 
 Windows'ta daha sonra kurulan kullanıcı yolu:

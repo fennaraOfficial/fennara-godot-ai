@@ -75,13 +75,63 @@ void append_if_present(godot::PackedStringArray &lines,
     }
 }
 
+void append_integer_if_present(godot::PackedStringArray &lines,
+                               const godot::String &label,
+                               const godot::Dictionary &raw_result,
+                               const godot::String &key,
+                               const godot::String &suffix = "") {
+    godot::Variant value = raw_result.get(key, godot::Variant());
+    if (value.get_type() == godot::Variant::INT) {
+        lines.append(label + godot::String(": ") +
+                     godot::String::num_int64(static_cast<int64_t>(value)) +
+                     suffix);
+    }
+}
+
 } // namespace
 
-godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
+godot::Dictionary format_runtime_session(const godot::Dictionary &raw_input) {
+    godot::Dictionary raw_result = raw_input;
+    bool anonymous_busy =
+        godot::String(raw_input.get("status", "")) == "busy" &&
+        !(bool)raw_input.get("slot_acquired", false);
+    if (anonymous_busy) {
+        // Anonymous contention is deliberately capability-only. Do not let an
+        // accidental daemon field expose another project's runtime details.
+        godot::Dictionary sanitized;
+        sanitized["success"] = raw_input.get("success", false);
+        sanitized["ok"] = raw_input.get("ok", false);
+        sanitized["tool_name"] = "runtime_session";
+        sanitized["format_version"] = "runtime-session-result-v1";
+        sanitized["status"] = "busy";
+        sanitized["availability"] = "busy";
+        sanitized["slot_acquired"] = false;
+        if (raw_input.has("retry_after_ms")) {
+            sanitized["retry_after_ms"] = raw_input["retry_after_ms"];
+        }
+        raw_result = sanitized;
+    }
+
     godot::String status = status_value(raw_result);
     godot::PackedStringArray lines;
     lines.append("Tool: runtime_session");
     lines.append("Status: " + status);
+    append_if_present(lines, "End reason", raw_result, "end_reason");
+    append_if_present(lines, "Code", raw_result, "code");
+
+    godot::String availability = raw_result.get("availability", "");
+    if (!availability.is_empty()) {
+        lines.append("Runtime slot availability: " + availability);
+    }
+    if (raw_result.has("slot_acquired")) {
+        lines.append(
+            "Runtime slot owned by this project: " +
+            godot::String((bool)raw_result.get("slot_acquired", false)
+                              ? "yes"
+                              : "no"));
+    }
+    append_integer_if_present(
+        lines, "Suggested retry delay", raw_result, "retry_after_ms", " ms");
 
     if (raw_result.has("error")) {
         lines.append("");
@@ -136,10 +186,10 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
             " ms");
         if (!(bool)raw_result.get("startup_ready_seen", false)) {
             lines.append(
-                "Runtime helper did not report scene ready during this startup wait. Use `runtime_session` action `status` or read the `runtime_session.log` log file to see whether the scene became ready afterward.");
+                "Runtime helper did not report scene ready before the startup deadline. The daemon stopped and reaped the process; inspect `runtime_session.log` before retrying.");
         } else if (!(bool)raw_result.get("startup_orientation_seen", false)) {
             lines.append(
-                "Runtime helper reported scene ready, but startup orientation lines were not complete during this startup wait. Use `runtime_session` action `status` or read the `runtime_session.log` log file to see the orientation block.");
+                "Runtime helper reported scene ready without completing startup orientation before the deadline. The daemon stopped and reaped the process; inspect `runtime_session.log` before retrying.");
         }
     }
     if (raw_result.has("max_run_seconds")) {
@@ -147,6 +197,30 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
             raw_result.get("max_run_seconds", 0.0));
         if (seconds > 0.0) {
             lines.append("Max run seconds: " + godot::String::num(seconds));
+        }
+    }
+    if ((bool)raw_result.get("slot_acquired", false)) {
+        append_integer_if_present(
+            lines,
+            "Absolute lease remaining",
+            raw_result,
+            "absolute_remaining_seconds",
+            " seconds");
+        append_integer_if_present(
+            lines,
+            "Inactivity lease remaining",
+            raw_result,
+            "inactivity_remaining_seconds",
+            " seconds");
+        append_integer_if_present(
+            lines, "Absolute lease deadline", raw_result, "absolute_deadline_ms", " ms Unix time");
+        append_integer_if_present(
+            lines, "Inactivity lease deadline", raw_result, "inactivity_deadline_ms", " ms Unix time");
+        if (raw_result.has("inactivity_deadline_ms") &&
+            raw_result.get("inactivity_deadline_ms", godot::Variant()).get_type() ==
+                godot::Variant::NIL) {
+            lines.append(
+                "Inactivity lease: suspended while this project's bounded runtime operation is active");
         }
     }
 
@@ -387,6 +461,16 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
         lines.append(
             "Resolve the active or stale runtime state before starting another scene.");
     }
+    if (status == "idle" && availability == "free") {
+        lines.append("");
+        lines.append(
+            "The machine-wide Runtime Slot is free. A following start still performs the authoritative atomic claim after preflight.");
+    }
+    if (anonymous_busy) {
+        lines.append("");
+        lines.append(
+            "Another project is using the machine-wide Runtime Slot. Retry after the suggested delay with a small random jitter; this receipt intentionally omits owner and session details.");
+    }
 
     godot::Dictionary metadata = make_base_metadata(
         "runtime_session",
@@ -424,6 +508,22 @@ godot::Dictionary format_runtime_session(const godot::Dictionary &raw_result) {
     metadata["msbuild_issues_path"] = raw_result.get("msbuild_issues_path", "");
     metadata["msbuild_log_path"] = raw_result.get("msbuild_log_path", "");
     metadata["runtime_log"] = raw_result.get("runtime_log", godot::Dictionary());
+    metadata["availability"] = availability;
+    metadata["end_reason"] = raw_result.get("end_reason", "");
+    metadata["code"] = raw_result.get("code", "");
+    metadata["slot_acquired"] = raw_result.get("slot_acquired", false);
+    metadata["retry_after_ms"] = raw_result.get("retry_after_ms", 0);
+    metadata["max_run_seconds"] = raw_result.get("max_run_seconds", 0);
+    metadata["absolute_deadline_ms"] =
+        raw_result.get("absolute_deadline_ms", godot::Variant());
+    metadata["absolute_remaining_seconds"] =
+        raw_result.get("absolute_remaining_seconds", godot::Variant());
+    metadata["inactivity_deadline_ms"] =
+        raw_result.get("inactivity_deadline_ms", godot::Variant());
+    metadata["inactivity_remaining_seconds"] =
+        raw_result.get("inactivity_remaining_seconds", godot::Variant());
+    metadata["heartbeat_interval_ms"] =
+        raw_result.get("heartbeat_interval_ms", godot::Variant());
 
     godot::Dictionary envelope = make_envelope(
         godot::String("\n").join(lines),

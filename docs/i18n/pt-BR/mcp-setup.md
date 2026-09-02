@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=pt-BR source=docs/mcp-setup.md sha256=42086801de2de7b36545c45d5af394cca77a858878ed242ca2014555e79b76df -->
+<!-- fennara-i18n: locale=pt-BR source=docs/mcp-setup.md sha256=86c9fe3fc7a69c2ade417dd01a0ccabb05ddaa91cf417fa8559c28d4b01811bd -->
 <a id="mcp-setup"></a>
 # Configuração de MCP
 
@@ -48,6 +48,45 @@ Primeiro, execute `fennara install` dentro do projeto Godot e depois escolha um 
 
 Execute `fennara mcp-setup --help` para ver a lista de destinos compatíveis com a CLI instalada.
 
+A configuração grava uma entrada de inicializador global e neutra em relação
+ao projeto. Executar `fennara mcp-setup` dentro de um projeto não vincula todas
+as conexões futuras a esse projeto.
+
+<a id="bind-a-connection-to-one-project"></a>
+## Vincular uma conexão a um projeto
+
+Para vários repositórios ou worktrees na mesma máquina, execute um processo e
+uma conexão MCP por projeto. Configure esse processo nas configurações de projeto
+ou workspace do host MCP usando:
+
+```text
+--project-path /absolute/path/to/godot-project
+```
+
+ou:
+
+```text
+FENNARA_PROJECT_PATH=/absolute/path/to/godot-project
+```
+
+O runtime seleciona sua Vinculação de projeto uma única vez na inicialização,
+nesta ordem:
+
+1. `--project-path`
+2. `FENNARA_PROJECT_PATH`
+3. o ancestral mais próximo do diretório de inicialização que contenha `project.godot`
+4. modo de compatibilidade não vinculado legado quando a descoberta não encontra um projeto
+
+Um caminho explícito inválido impede a inicialização do servidor MCP. Ele nunca
+recorre ao destino do dock ou a outro editor. Uma vinculação válida permanece
+ativa se o editor estiver temporariamente ausente e se recupera quando essa
+Raiz do projeto se reconecta. Não há substituição de projeto por ferramenta
+voltada ao modelo.
+
+Consulte [Vários agentes e worktrees](multi-agent-worktrees.md) para ver exemplos
+de configuração, limites de suporte dos hosts, verificação de status,
+comportamento com editores duplicados e playtests serializados.
+
 <a id="manual-setup"></a>
 ## Configuração manual
 
@@ -90,6 +129,21 @@ Muitos aplicativos MCP usam um objeto `mcpServers` de nível superior:
 Alguns usam a mesma chave `mcpServers`, mas exigem apenas `command`. Se a
 configuração existente já tiver outros servidores, preserve essas entradas e
 adicione somente o servidor `fennara`.
+
+Para uma entrada local do projeto que precisa permanecer isolada, adicione a
+vinculação a `args`:
+
+```json
+{
+  "mcpServers": {
+    "fennara": {
+      "command": "/absolute/path/to/fennara-mcp",
+      "args": ["--project-path", "/absolute/path/to/godot-project"],
+      "env": {}
+    }
+  }
+}
+```
 
 Configurações no estilo Cline também podem incluir um tempo limite maior para ferramentas, em segundos:
 
@@ -157,6 +211,17 @@ tool_timeout_sec = 300
 
 Não cole JSON em um arquivo TOML nem TOML em um arquivo JSON. Use o formato já utilizado pelo aplicativo.
 
+Para vincular uma entrada no estilo Codex, adicione o argumento sem alterar o
+inicializador estável:
+
+```toml
+[mcp_servers.fennara]
+command = "/absolute/path/to/fennara-mcp"
+args = ["--project-path", "/absolute/path/to/godot-project"]
+startup_timeout_sec = 30
+tool_timeout_sec = 300
+```
+
 <a id="common-config-locations"></a>
 ## Locais comuns de configuração
 
@@ -179,6 +244,18 @@ OpenCode:       ~/.config/opencode/opencode.json
 Windsurf:       ~/.codeium/windsurf/mcp_config.json
 Kiro:           ~/.kiro/settings/mcp.json
 ```
+
+Workspaces de pasta única do VS Code podem fornecer o projeto como diretório de
+inicialização do processo filho MCP. Claude Code, Gemini CLI, Antigravity,
+Cline, Cursor, OpenCode, Kiro e Codex podem usar configurações de projeto ou
+workspace; use uma vinculação explícita ou um diretório de inicialização do
+projeto documentado quando o isolamento precisar ser garantido.
+
+Claude Desktop e Windsurf/Cascade legado usam configuração global neste fluxo
+de trabalho. A configuração padrão deles permanece no modo não vinculado legado.
+Usuários avançados podem criar entradas globais com nomes distintos e caminhos
+de projeto explícitos diferentes, mas esses aplicativos não fornecem isolamento
+local automático por projeto.
 
 <a id="timeout-guidance"></a>
 ## Orientações sobre tempos limite
@@ -206,7 +283,14 @@ Abra o projeto Godot e pergunte ao aplicativo MCP:
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-Se mais de um projeto Godot estiver aberto, use o controle **MCP target** do dock do Fennara para selecionar qual recebe chamadas MCP externas.
+Para trabalho isolado, confirme que o status informa o modo de roteamento
+`bound`, a fonte da vinculação e a Raiz do projeto canônica esperadas, o estado
+do editor vinculado como `connected` e a prontidão do sistema de arquivos desse
+editor.
+
+Se o status informar `legacy_unbound`, a conexão não encontrou uma Raiz do
+projeto automaticamente. Ela usa a rota de compatibilidade do **MCP target** do
+dock e avisa que esse modo não é seguro para trabalho concorrente isolado.
 
 <a id="troubleshooting"></a>
 ## Solução de problemas
@@ -219,7 +303,14 @@ Se o Fennara não aparecer no aplicativo MCP:
 - confirme que o aplicativo está lendo o arquivo que você editou
 - encerre completamente e reabra o aplicativo MCP
 - confirme que o projeto Godot tem o addon Fennara instalado
-- confirme que o projeto Godot desejado está selecionado como destino MCP
+- para uma conexão vinculada, confirme se o caminho explícito ou diretório de
+  inicialização é a Raiz do projeto Godot desejada
+- se o status informar `bound_project_not_connected`, abra esse projeto no
+  Godot e aguarde a conexão do addon
+- se o status informar `ambiguous_project_binding`, feche o editor duplicado ou
+  abra-o a partir de uma worktree diferente
+- para uma conexão não vinculada legada, confirme se o projeto desejado está
+  selecionado como destino MCP no dock
 
 <a id="unsupported-mcp-apps"></a>
 ## Aplicativos MCP sem suporte

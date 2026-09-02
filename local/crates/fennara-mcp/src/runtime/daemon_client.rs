@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const DAEMON_ADDR: &str = "127.0.0.1:41287";
+#[cfg(debug_assertions)]
+const TEST_DAEMON_ADDR_ENV: &str = "FENNARA_TEST_DAEMON_ADDR";
 const CONTROL_HEADER: &str = "X-Fennara-Control-Token";
 const CONTROL_TOKEN_FILE: &str = "daemon-control-token";
 const MAX_DAEMON_RESPONSE_BYTES: usize = 32 * 1024 * 1024;
@@ -17,56 +19,74 @@ const MAX_CHALLENGE_RESPONSE_BYTES: usize = 4096;
 type HmacSha256 = Hmac<Sha256>;
 
 pub(crate) fn daemon_status() -> Result<Value, String> {
-    daemon_get("/status")
+    daemon_request("GET", "/status", None, Duration::from_secs(2))
 }
 
-pub(crate) fn daemon_tool_call(tool: &str, args: Value) -> Result<Value, String> {
-    let body = json!({
+pub(crate) fn daemon_bound_status(project_path: &str) -> Result<Value, String> {
+    let body = bound_status_body(project_path);
+    daemon_request(
+        "POST",
+        "/status/bound",
+        Some(&body.to_string()),
+        Duration::from_secs(2),
+    )
+}
+
+pub(crate) fn daemon_tool_call(
+    tool: &str,
+    args: Value,
+    project_path: Option<&str>,
+) -> Result<Value, String> {
+    let body = tool_call_body(tool, args, project_path);
+    daemon_request(
+        "POST",
+        "/tools/call",
+        Some(&body.to_string()),
+        Duration::from_secs(300),
+    )
+}
+
+fn tool_call_body(tool: &str, args: Value, project_path: Option<&str>) -> Value {
+    json!({
         "tool": tool,
-        "args": args
+        "args": args,
+        "project_path": project_path
     })
-    .to_string();
-    daemon_post("/tools/call", &body)
 }
 
-fn daemon_get(path: &str) -> Result<Value, String> {
+fn bound_status_body(project_path: &str) -> Value {
+    json!({
+        "project_path": project_path
+    })
+}
+
+fn daemon_request(
+    method: &str,
+    path: &str,
+    body: Option<&str>,
+    read_timeout: Duration,
+) -> Result<Value, String> {
     let control_token = daemon_control_token()?;
-    verify_daemon(&control_token)?;
-    let mut stream = TcpStream::connect(DAEMON_ADDR)
+    let address = daemon_addr();
+    verify_daemon_at(&control_token, &address)?;
+    let mut stream = TcpStream::connect(address)
         .map_err(|error| format!("Open a Godot project with Fennara enabled. ({error})"))?;
     stream
-        .set_read_timeout(Some(Duration::from_secs(2)))
+        .set_read_timeout(Some(read_timeout))
         .map_err(|error| error.to_string())?;
     stream
         .set_write_timeout(Some(Duration::from_secs(2)))
         .map_err(|error| error.to_string())?;
 
-    let request = format!(
-        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n{CONTROL_HEADER}: {control_token}\r\nConnection: close\r\n\r\n"
-    );
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|error| error.to_string())?;
-
-    read_http_json_response(stream)
-}
-
-fn daemon_post(path: &str, body: &str) -> Result<Value, String> {
-    let control_token = daemon_control_token()?;
-    verify_daemon(&control_token)?;
-    let mut stream = TcpStream::connect(DAEMON_ADDR)
-        .map_err(|error| format!("Open a Godot project with Fennara enabled. ({error})"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(300)))
-        .map_err(|error| error.to_string())?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(2)))
-        .map_err(|error| error.to_string())?;
-
-    let request = format!(
-        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n{CONTROL_HEADER}: {control_token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    );
+    let request = match body {
+        Some(body) => format!(
+            "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n{CONTROL_HEADER}: {control_token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        ),
+        None => format!(
+            "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n{CONTROL_HEADER}: {control_token}\r\nConnection: close\r\n\r\n"
+        ),
+    };
     stream
         .write_all(request.as_bytes())
         .map_err(|error| error.to_string())?;
@@ -103,7 +123,7 @@ fn daemon_control_token() -> Result<String, String> {
 }
 
 fn daemon_control_token_at(path: &Path) -> Result<String, String> {
-    let raw = fs::read_to_string(&path)
+    let raw = fs::read_to_string(path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
     let token = raw.trim();
     let valid = URL_SAFE_NO_PAD
@@ -118,8 +138,12 @@ fn daemon_control_token_at(path: &Path) -> Result<String, String> {
     Ok(token.to_string())
 }
 
-fn verify_daemon(control_token: &str) -> Result<(), String> {
-    verify_daemon_at(control_token, DAEMON_ADDR)
+fn daemon_addr() -> String {
+    #[cfg(debug_assertions)]
+    if let Ok(address) = env::var(TEST_DAEMON_ADDR_ENV) {
+        return address;
+    }
+    DAEMON_ADDR.to_string()
 }
 
 fn verify_daemon_at(control_token: &str, address: &str) -> Result<(), String> {
@@ -271,5 +295,25 @@ mod tests {
 
         assert!(error.contains("failed identity verification"));
         server.join().unwrap();
+    }
+
+    #[test]
+    fn daemon_tool_call_keeps_project_selector_outside_tool_arguments() {
+        let body = tool_call_body(
+            "project_settings",
+            json!({ "action": "get", "key": "display/window/size/viewport_width" }),
+            Some("/worktrees/agent-a"),
+        );
+
+        assert_eq!(body["project_path"], "/worktrees/agent-a");
+        assert_eq!(body["args"]["action"], "get");
+        assert!(body["args"].get("project_path").is_none());
+    }
+
+    #[test]
+    fn bound_status_sends_the_process_binding_as_transport_metadata() {
+        let body = bound_status_body("/worktrees/agent-a");
+
+        assert_eq!(body, json!({ "project_path": "/worktrees/agent-a" }));
     }
 }

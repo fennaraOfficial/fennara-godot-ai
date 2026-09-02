@@ -2,5 +2,11 @@
 mod runtime;
 
 fn main() {
-    runtime::run_stdio();
+    match runtime::RuntimeConfig::from_process() {
+        Ok(config) => runtime::run_stdio(config),
+        Err(error) => {
+            eprintln!("fennara-mcp-runtime failed: {error}");
+            std::process::exit(2);
+        }
+    }
 }

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=es source=docs/chat-vs-mcp.md sha256=03cb522aed8f8e305feaca0c2ed51f7ba29b2657a721df4196b15bc6ccf12c9c -->
+<!-- fennara-i18n: locale=es source=docs/chat-vs-mcp.md sha256=b6f27b2c7e905515aba56b75bf6736644a9c36c885f4cab61555c82cd6c47fda -->
 <a id="mcp-apps-or-built-in-chat"></a>
 # ¿Aplicaciones MCP o chat integrado?
 
@@ -58,12 +58,25 @@ para configurar proveedores y modelos.
 
 Ambas opciones utilizan el daemon local de Fennara para obtener información de Godot.
 
-- Las llamadas MCP externas se envían al proyecto seleccionado mediante el control
-  **MCP target** del panel.
+- Un proceso MCP externo puede vincularse una vez durante el inicio a una Raíz
+  de proyecto de Godot canónica. Sus llamadas se enrutan al editor
+  correspondiente sin leer ni cambiar el **MCP target** del panel.
+- Un proceso MCP externo sin vinculación mantiene el comportamiento de
+  compatibilidad: utiliza el Destino MCP seleccionado en el panel o el único
+  editor conectado cuando no hay un destino válido seleccionado.
 - El chat integrado permanece vinculado al editor de Godot que lo abrió.
+
+Utiliza un proceso y una conexión MCP por proyecto para agentes aislados que
+trabajen en repositorios o árboles de trabajo distintos. Consulta
+[Varios agentes y árboles de trabajo](multi-agent-worktrees.md) para conocer la
+configuración y el comportamiento de la Ranura de ejecución.
 
 Para verificar una conexión MCP externa, pregunta:
 
 ```text
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
+
+Antes de trabajar en paralelo, comprueba que el estado indique el modo de
+enrutamiento `bound` y la Raíz del proyecto canónica esperada. El modo heredado
+sin vinculación incluye una advertencia de concurrencia.

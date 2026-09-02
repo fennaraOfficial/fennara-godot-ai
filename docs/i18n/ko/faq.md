@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/faq.md sha256=dc4d4d61e292532de7c87813b66925ae4ead2b2fbc0417b2366d8b53b42f7c4f -->
+<!-- fennara-i18n: locale=ko source=docs/faq.md sha256=3a644ba5c7ce06e847a4d6eb49ab232f9fa54eaecf1a97952ce69918dba4d677 -->
 <a id="faq"></a>
 # 자주 묻는 질문
 
@@ -15,7 +15,7 @@
 | 제공업체 키가 필요한가요? | 내장 채팅에서 클라우드 제공업체를 사용할 때만 필요합니다 |
 | 외부 MCP 앱을 대신 사용할 수 있나요? | 예, 외부 앱은 자체 모델 계정을 사용합니다 |
 | Fennara가 프로젝트를 Fennara 서버에 업로드하나요? | 아니요 |
-| Godot 에디터 여러 개를 열 수 있나요? | 예, 독에서 외부 MCP 대상을 선택하세요 |
+| Godot 에디터 여러 개를 열 수 있나요? | 예, 동시에 사용할 각 MCP 연결을 자신의 프로젝트에 바인딩하세요 |
 
 <a id="is-fennara-only-a-code-generator"></a>
 ## Fennara는 코드 생성기일 뿐인가요?
@@ -71,7 +71,24 @@ Fennara 내장 채팅 독의 슬래시 명령입니다. `/provider`는 제공업
 <a id="which-project-receives-mcp-tool-calls-if-multiple-godot-editors-are-open"></a>
 ## Godot 에디터를 여러 개 열면 어느 프로젝트가 MCP 도구 호출을 받나요?
 
-데몬은 외부 MCP 호출을 활성 MCP 대상으로 라우팅합니다. Godot의 Fennara 독에서 MCP target 컨트롤을 사용해 프로젝트를 선택하세요. 내장 채팅 세션은 해당 채팅을 연 Godot 에디터에 연결된 상태를 유지합니다.
+프로젝트에 바인딩된 MCP 프로세스는 모든 호출을 정규 Project Root에 해당하는
+연결된 에디터로 라우팅합니다. 서로 다른 저장소나 워크트리에서 에이전트가
+동시에 작업하려면 프로젝트마다 하나의 MCP 프로세스와 연결을 사용하세요.
+
+바인딩되지 않은 MCP 프로세스는 호환 동작을 유지합니다. 데몬은 독에서 선택한
+MCP Target을 사용하거나, 에디터가 하나만 연결되었다면 해당 에디터를 사용합니다.
+동시 작업 전에 `fennara_status`를 실행하고, 라우팅 모드가 예상한 루트를 가리키는
+`bound`인지 확인하세요. 내장 채팅 세션은 해당 채팅을 연 에디터에 계속
+연결됩니다. [여러 에이전트와 워크트리](multi-agent-worktrees.md)를 참고하세요.
+
+<a id="can-several-agents-run-their-games-at-the-same-time"></a>
+## 여러 에이전트가 각자의 게임을 동시에 실행할 수 있나요?
+
+데몬이 관리하는 Runtime Session으로는 그렇게 할 수 없습니다. 편집, 검사, 범위가 제한된 씬 검증,
+독립형 스크린샷은 동시에 진행할 수 있지만, 모든 프로젝트가 대화형 관리 게임 실행을 위해 하나의
+Runtime Slot을 공유합니다. 시작 경쟁에서 진 호출은 정상적이고 익명인 `busy` 결과를 반환하므로,
+에이전트는 현재 실행을 방해하지 않고 지터를 적용해 폴링하고 재시도할 수 있습니다. 소유 프로젝트는
+실행되는 동안 상태를 폴링하여 비활성 기한을 갱신합니다. 절대 리스 기한은 변경되지 않습니다.
 
 <a id="why-does-linux-install-a-separate-cef-runtime"></a>
 ## Linux가 별도의 CEF 런타임을 설치하는 이유는 무엇인가요?

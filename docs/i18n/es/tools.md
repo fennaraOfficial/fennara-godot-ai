@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=es source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
+<!-- fennara-i18n: locale=es source=docs/tools.md sha256=dfa0baa54b981a1dee22d11aadb3ab230177a808a6ff2283f24403125057c20f -->
 <a id="tools"></a>
 # Herramientas
 
@@ -34,6 +34,11 @@ y del modelo pertenece al chat integrado, no al servidor MCP.
 `fennara_status` está disponible para clientes MCP externos. El chat integrado ya
 recibe del daemon el estado de conexión y del proyecto activo.
 
+Cada proceso MCP externo elige un modo de enrutamiento al iniciarse. Un proceso
+`bound` se enruta mediante la Raíz del proyecto canónica. Un proceso
+`legacy_unbound` utiliza el destino de compatibilidad seleccionado en el panel y
+no es adecuado para trabajo concurrente aislado.
+
 <a id="typical-workflow"></a>
 ## Flujo de trabajo habitual
 
@@ -53,13 +58,19 @@ está preparado.
 <a id="fennarastatus"></a>
 ### `fennara_status`
 
-Informa sobre el servidor MCP, el daemon, el proyecto activo de Godot, las sesiones
-conectadas del editor, las versiones de los componentes, el contexto de renderizado,
-las herramientas anunciadas y la disponibilidad del sistema de archivos del editor.
+Informa sobre el servidor MCP, el daemon, el modo de enrutamiento, el editor de
+Godot seleccionado, las sesiones conectadas del editor, las versiones de los
+componentes, el contexto de renderizado, las herramientas anunciadas y la
+disponibilidad del sistema de archivos del editor.
 
 Comportamiento correcto:
 
 - Devuelve un bloque de estado de texto sin formato.
+- Para un proceso vinculado, indica la fuente de vinculación (`cli`,
+  `environment` o `cwd`), la Raíz del proyecto canónica y el estado del editor
+  (`connected`, `not_connected` o `ambiguous`).
+- Indica el Destino MCP heredado seleccionado en el panel por separado de una
+  Vinculación de proyecto.
 - Distingue entre un sistema de archivos del editor preparado y uno que está examinando o importando.
 - Informa si las herramientas orientadas a recursos están preparadas en ese momento.
 - Muestra las diferencias de versión para poder diagnosticar instalaciones que no coinciden.
@@ -67,7 +78,16 @@ Comportamiento correcto:
 Limitaciones y fallos importantes:
 
 - Informa sobre la disponibilidad a nivel de proyecto, no sobre la disponibilidad de una ruta de recurso concreta.
-- Un daemon desconectado, la ausencia de un proyecto activo o un plugin de Godot desconectado se comunican directamente, en lugar de tratarse como un proyecto preparado.
+- Una raíz vinculada sin un editor correspondiente indica el error reintentable
+  `bound_project_not_connected` y nunca recurre al destino del panel.
+- Los editores duplicados para una raíz vinculada indican
+  `ambiguous_project_binding`; no se selecciona ningún editor.
+- Un daemon desconectado, la ausencia de un destino de compatibilidad o un plugin
+  de Godot desconectado se comunican directamente, en lugar de tratarse como un
+  proyecto preparado.
+- Una coincidencia vinculada fallida nunca muestra la disponibilidad del sistema
+  de archivos ni un éxito aparente de un editor ajeno.
+- El modo heredado sin vinculación muestra una advertencia de concurrencia.
 - La disponibilidad puede cambiar brevemente mientras Godot vuelve a importar archivos.
 
 <a id="inspection"></a>
@@ -268,6 +288,9 @@ Comportamiento correcto:
 - Las comprobaciones estructurales cubren scripts y recursos ausentes, rutas de nodos no válidas, nombres duplicados entre hermanos, dependencias cíclicas entre escenas y referencias exportadas pertinentes.
 - Las referencias exportadas opcionales o asignadas durante el runtime se comunican como notas, en lugar de fallos incondicionales.
 - Las escenas creadas con resultados estructurales sin problemas reciben una pasada de inicio sin interfaz de tres segundos, conservando los registros y los artefactos.
+- Estos trabajadores de validación acotada no ocupan la Ranura de ejecución
+  interactiva; la validación puede continuar mientras otro proyecto posee una
+  Sesión de ejecución.
 - Los hallazgos repetidos se agrupan para que las escenas grandes no saturen el resultado.
 
 Limitaciones y fallos importantes:
@@ -317,6 +340,10 @@ Comportamiento correcto:
 
 - Las barreras de inicio se ejecutan antes de iniciar un proceso de escena.
 - Un inicio correcto devuelve un identificador de sesión, el estado del proceso, las rutas de registros, los hallazgos de inicio y la información de captura disponible.
+- Una Ranura de ejecución ocupada en todo el equipo devuelve un resultado de
+  dominio `busy` correcto con `availability: "busy"`, `slot_acquired: false` y
+  un valor sugerido de `retry_after_ms`. No revela el proyecto ni la sesión
+  propietarios.
 - El estado devuelve nuevos resultados del runtime sin descartar el registro completo de la sesión.
 - La detención devuelve la información final del proceso y del registro.
 - Los proyectos de C# reciben una compilación real del runtime en el resultado Debug normal de Godot antes de iniciarse, para que el proceso use ensamblados actuales.
@@ -325,10 +352,32 @@ Comportamiento correcto:
 
 Limitaciones y fallos importantes:
 
-- Solo puede haber activa globalmente una sesión del runtime administrada por el daemon a la vez.
+- Solo puede haber una Sesión de ejecución administrada por el daemon iniciándose
+  o ejecutándose globalmente. Consulta un resultado `busy` con variación
+  aleatoria y trata cada nuevo inicio como la reclamación atómica definitiva; un
+  estado libre anterior es solo orientativo.
+- Una Sesión de ejecución pertenece a su Raíz del proyecto canónica. Solo ese
+  propietario puede consultar el estado detallado, renovarla, ejecutar scripts
+  o detenerla. Los demás proyectos ven un estado de ocupado anónimo.
+- El estado del propietario renueva un plazo de inactividad de 120 segundos. Una
+  operación de ejecución acotada del propietario suspende el vencimiento por
+  inactividad mientras está activa y renueva el plazo solo después de devolver un
+  resultado terminal del script; un tiempo de espera agotado, un error de
+  preparación o una cancelación no lo renuevan. Consulta el estado del propietario
+  aproximadamente cada 30 segundos con variación aleatoria mientras continúa la
+  ejecución.
+- `max_run_seconds` es un entero positivo, con un valor predeterminado de 900
+  segundos y un máximo de 86.400. Una regresión de una hora puede solicitar
+  4.500 segundos para disponer de margen. El plazo absoluto nunca se suspende.
+- Una salida natural, una detención explícita, un fallo de inicio, el vencimiento
+  por inactividad o el vencimiento absoluto liberan la Ranura de ejecución.
 - Las barreras de inicio fallidas impiden que se abra la escena.
 - Una compilación del runtime de C# puede activar la recarga normal de ensamblados del editor abierto.
-- Los marcadores de disponibilidad del inicio pueden llegar después de la respuesta inicial y aparecer en una llamada de estado posterior.
+- Tanto `FENNARA_RUNTIME_SESSION_READY` como
+  `FENNARA_RUNTIME_ORIENTATION_NOTE` deben aparecer antes de que venza el plazo
+  de inicio de 20 segundos. Si falta cualquiera de los marcadores, el daemon
+  finaliza el proceso y espera a que sea recolectado antes de devolver
+  `startup_timeout`; no se devuelve un éxito inicial.
 - Las sesiones administradas son procesos de Godot independientes, no son la escena ejecutada manualmente dentro del editor.
 
 <a id="runtimescript"></a>
@@ -347,6 +396,14 @@ Comportamiento correcto:
 Limitaciones y fallos importantes:
 
 - Requiere un identificador válido de una `runtime_session` activa.
+- Solo la Raíz del proyecto propietaria de la sesión puede ejecutar una prueba.
+  Quien no sea propietario recibe `runtime_session_not_owned_or_found`, que no
+  revela si existe el identificador de otro proyecto.
+- Una prueba limitada del propietario suspende el vencimiento por inactividad
+  mientras se ejecuta. Un resultado terminal del script que se haya devuelto
+  renueva el plazo de inactividad; un tiempo de espera agotado, un error de
+  preparación o una cancelación no lo hacen. Ninguna prueba amplía la Concesión
+  de ejecución absoluta.
 - Los scripts del runtime no son scripts `@tool` del editor y no pueden usarse como trabajadores de edición de escenas.
 - Se comunican los diagnósticos no válidos, los tiempos de espera agotados, los errores del runtime, las sesiones cerradas o los nodos no disponibles.
 - Las pruebas deben permanecer limitadas. No sustituyen un framework permanente de automatización del juego.

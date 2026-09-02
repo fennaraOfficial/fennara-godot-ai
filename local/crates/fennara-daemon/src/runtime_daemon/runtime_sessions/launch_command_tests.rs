@@ -42,6 +42,7 @@ fn appends_user_args_unchanged_after_godot_separator() {
 #[test]
 fn start_request_defaults_missing_user_args_and_rejects_non_strings() {
     let base = json!({
+        "project_path": "project-root",
         "executable": "godot",
         "working_directory": "project-root",
         "scene_path": "res://Main.tscn",
@@ -54,4 +55,27 @@ fn start_request_defaults_missing_user_args_and_rejects_non_strings() {
     let mut invalid = base;
     invalid["user_args"] = json!(["--valid", 42]);
     assert!(serde_json::from_value::<RuntimeSessionStartRequest>(invalid).is_err());
+}
+
+#[test]
+fn start_request_accepts_godot_whole_float_max_run_seconds() {
+    let mut payload = json!({
+        "project_path": "project-root",
+        "executable": "godot",
+        "working_directory": "project-root",
+        "scene_path": "res://Main.tscn",
+        "artifact_dir": "artifacts",
+        "max_run_seconds": 90.0
+    });
+    let request: RuntimeSessionStartRequest =
+        serde_json::from_value(payload.clone()).expect("90.0 should coerce to 90");
+    assert_eq!(request.max_run_seconds, Some(90));
+
+    payload["max_run_seconds"] = json!(90);
+    let request: RuntimeSessionStartRequest =
+        serde_json::from_value(payload.clone()).expect("integer seconds should parse");
+    assert_eq!(request.max_run_seconds, Some(90));
+
+    payload["max_run_seconds"] = json!(90.5);
+    assert!(serde_json::from_value::<RuntimeSessionStartRequest>(payload).is_err());
 }

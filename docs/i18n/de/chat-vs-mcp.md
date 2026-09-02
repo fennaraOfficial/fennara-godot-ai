@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=de source=docs/chat-vs-mcp.md sha256=03cb522aed8f8e305feaca0c2ed51f7ba29b2657a721df4196b15bc6ccf12c9c -->
+<!-- fennara-i18n: locale=de source=docs/chat-vs-mcp.md sha256=b6f27b2c7e905515aba56b75bf6736644a9c36c885f4cab61555c82cd6c47fda -->
 <a id="mcp-apps-or-built-in-chat"></a>
 # MCP-Apps oder integrierter Chat?
 
@@ -55,12 +55,26 @@ von Anbieter und Modell.
 
 Beide Wege verwenden den lokalen Fennara-Daemon für Godot-Feedback.
 
-- Externe MCP-Aufrufe gehen an das Projekt, das im Dock über **MCP target**
-  ausgewählt wurde.
+- Ein externer MCP-Prozess kann sich beim Start einmalig an den kanonischen
+  Stamm eines Godot-Projekts binden. Seine Aufrufe werden an den passenden
+  Editor weitergeleitet, ohne das **MCP target** im Dock zu lesen oder zu
+  ändern.
+- Ein ungebundener externer MCP-Prozess behält das Kompatibilitätsverhalten bei:
+  Er verwendet das im Dock ausgewählte MCP-Ziel oder den einzigen verbundenen
+  Editor, wenn kein gültiges Ziel ausgewählt ist.
 - Der integrierte Chat bleibt an den Godot-Editor gebunden, der den Chat geöffnet hat.
+
+Verwende für isolierte Agenten, die in getrennten Repositorys oder Worktrees
+arbeiten, je einen MCP-Prozess und eine Verbindung pro Projekt. Unter
+[Mehrere Agenten und Worktrees](multi-agent-worktrees.md) findest du die Einrichtung
+und das Verhalten des Laufzeit-Slots.
 
 Um eine externe MCP-Verbindung zu überprüfen, frage:
 
 ```text
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
+
+Prüfe vor gleichzeitiger Arbeit, dass der Status den Routingmodus `bound` und den
+erwarteten kanonischen Projektstamm meldet. Der Legacy-unbound-Modus enthält eine
+Warnung zur gleichzeitigen Nutzung.

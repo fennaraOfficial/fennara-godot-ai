@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/README.md sha256=2f8fb6a711c8bb56af570d1657f802c63cbdf2ced6b2c620339c588c9c9211cb -->
+<!-- fennara-i18n: locale=tr source=docs/README.md sha256=ab01a3fd8024bccc8ad878eb0ec4cb15defa770ed3feccd0eef4c56270c7e763 -->
 <a id="fennara-documentation"></a>
 # Fennara Belgeleri
 
@@ -32,6 +32,7 @@ Aynı sayfanın başka bir dildeki sürümünde kalmak için yukarıdaki dil men
 | Kılavuz | Kapsadığı konular |
 | --- | --- |
 | [MCP uygulamaları ve yerleşik sohbet](chat-vs-mcp.md) | Her yolun hangi model hesabını kullandığı |
+| [Birden fazla ajan ve worktree](multi-agent-worktrees.md) | Tek bir daemon'ı paylaşırken her MCP bağlantısını kendi Godot projesine bağlama |
 | [Araçlar](tools.md) | Godot bilgisine sahip araçlar ve bunların ne zaman kullanılacağı |
 | [Örnekler](examples.md) | Yaygın Godot iş akışları için istemler |
 | [Eğik çizgi komutları](slash-commands.md) | Sohbet panelindeki `/provider` ve `/model` |

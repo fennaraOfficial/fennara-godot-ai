@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/mcp-setup.md sha256=42086801de2de7b36545c45d5af394cca77a858878ed242ca2014555e79b76df -->
+<!-- fennara-i18n: locale=zh-CN source=docs/mcp-setup.md sha256=86c9fe3fc7a69c2ade417dd01a0ccabb05ddaa91cf417fa8559c28d4b01811bd -->
 <a id="mcp-setup"></a>
 # MCP 设置
 
@@ -49,6 +49,37 @@ Fennara 会在更改应用的 MCP 配置前创建备份。组合的
 运行 `fennara mcp-setup --help`，查看已安装
 CLI 所支持的目标列表。
 
+设置会写入一个全局且与项目无关的启动器条目。在项目内运行 `fennara
+mcp-setup` 不会将今后每个连接都绑定到该项目。
+
+<a id="bind-a-connection-to-one-project"></a>
+## 将连接绑定到单个项目
+
+在同一台机器上使用多个仓库或工作树时，请为每个项目运行一个 MCP 进程和连接。在 MCP 主机的项目或工作区设置中，使用以下任一方式配置该进程：
+
+```text
+--project-path /absolute/path/to/godot-project
+```
+
+或：
+
+```text
+FENNARA_PROJECT_PATH=/absolute/path/to/godot-project
+```
+
+运行时在启动时一次性选定项目绑定，优先级如下：
+
+1. `--project-path`
+2. `FENNARA_PROJECT_PATH`
+3. 启动目录的最近祖先目录，且该目录包含 `project.godot`
+4. 自动发现未找到项目时，进入旧式未绑定兼容模式
+
+无效的显式路径会阻止 MCP 服务器启动。它绝不会回退到停靠面板目标或其他编辑器。如果所属编辑器暂时不在，有效绑定仍会保持运行，
+并在该项目根目录重新连接时恢复。没有面向模型、按工具调用的项目覆盖参数。
+
+有关配置示例、主机支持边界、状态验证、重复编辑器行为和串行化试玩，请参阅
+[多智能体与工作树](multi-agent-worktrees.md)。
+
 <a id="manual-setup"></a>
 ## 手动设置
 
@@ -90,6 +121,20 @@ Linux:   ~/.local/share/fennara/bin/fennara-mcp
 有些应用使用相同的 `mcpServers` 键，但只要求 `command`。如果
 现有配置中已经有其他服务器，请保留这些条目，只添加
 `fennara` 服务器。
+
+对于必须保持隔离的项目本地条目，请将绑定添加到 `args`：
+
+```json
+{
+  "mcpServers": {
+    "fennara": {
+      "command": "/absolute/path/to/fennara-mcp",
+      "args": ["--project-path", "/absolute/path/to/godot-project"],
+      "env": {}
+    }
+  }
+}
+```
 
 Cline 风格的配置还可以包含以秒为单位的更长工具超时：
 
@@ -159,6 +204,16 @@ tool_timeout_sec = 300
 不要把 JSON 粘贴到 TOML 文件中，也不要把 TOML 粘贴到 JSON 文件中。请匹配
 应用已经使用的格式。
 
+要绑定 Codex 风格的条目，请添加参数，但不要更改其稳定启动器：
+
+```toml
+[mcp_servers.fennara]
+command = "/absolute/path/to/fennara-mcp"
+args = ["--project-path", "/absolute/path/to/godot-project"]
+startup_timeout_sec = 30
+tool_timeout_sec = 300
+```
+
 <a id="common-config-locations"></a>
 ## 常见配置位置
 
@@ -182,6 +237,12 @@ Windsurf:       ~/.codeium/windsurf/mcp_config.json
 Kiro:           ~/.kiro/settings/mcp.json
 ```
 
+VS Code 单文件夹工作区可能会将项目作为 MCP 子进程的启动目录。Claude Code、Gemini CLI、Antigravity、Cline、
+Cursor、OpenCode、Kiro 和 Codex 可以使用项目或工作区配置；必须保证隔离时，请使用显式绑定或有文档说明的项目启动目录。
+
+Claude Desktop 和旧版 Windsurf/Cascade 在此工作流中使用全局配置。它们的默认设置仍为旧式未绑定模式。高级用户可以创建名称各异、具有不同显式项目路径的全局条目，
+但这些应用不提供自动项目本地隔离。
+
 <a id="timeout-guidance"></a>
 ## 超时指南
 
@@ -192,9 +253,9 @@ Kiro:           ~/.kiro/settings/mcp.json
 当客户端支持时，请使用更长的单工具超时：
 
 ```text
-服务器启动用 30 秒
-工具调用用 300 秒
-超时字段以毫秒为单位的客户端使用 300000 毫秒
+30 seconds for server startup
+300 seconds for tool calls
+300000 milliseconds for clients whose timeout field is in milliseconds
 ```
 
 如果客户端不支持单服务器超时，请使用该客户端文档中说明的
@@ -206,11 +267,12 @@ Kiro:           ~/.kiro/settings/mcp.json
 打开 Godot 项目，然后向你的 MCP 应用询问：
 
 ```text
-使用 Fennara MCP 运行 fennara_status，并告诉我连接的是哪个 Godot 项目。
+Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-如果打开了多个 Godot 项目，请使用 Fennara 停靠面板的 **MCP target**
-控件，选择哪个项目接收外部 MCP 工具调用。
+对于隔离工作，请确认状态报告的路由模式为 `bound`、绑定来源和规范项目根目录符合预期、绑定编辑器状态为 `connected`，并且该编辑器的文件系统就绪。
+
+如果状态报告 `legacy_unbound`，则连接未自动找到项目根目录。它会使用停靠面板的 **MCP target** 兼容路由，并警告此模式不适合隔离的并发工作。
 
 <a id="troubleshooting"></a>
 ## 故障排除
@@ -223,7 +285,10 @@ Kiro:           ~/.kiro/settings/mcp.json
 - 确认应用正在读取你编辑的配置文件
 - 完全退出并重新打开 MCP 应用
 - 确认 Godot 项目已经安装 Fennara 插件
-- 确认预期的 Godot 项目已被选为 MCP 目标
+- 对于已绑定连接，确认其显式路径或启动目录是预期的 Godot 项目根目录
+- 如果状态报告 `bound_project_not_connected`，请在 Godot 中打开该项目并等待插件连接
+- 如果状态报告 `ambiguous_project_binding`，请关闭重复编辑器，或从不同的工作树打开它
+- 对于旧式未绑定连接，确认预期项目已被选为停靠面板的 MCP 目标
 
 <a id="unsupported-mcp-apps"></a>
 ## 不受支持的 MCP 应用
@@ -232,18 +297,18 @@ Kiro:           ~/.kiro/settings/mcp.json
 格式。然后请 LLM 给出最小且安全的编辑：
 
 ```text
-我有一个本地 stdio MCP 服务器可执行文件，路径为：
+I have a local stdio MCP server executable at:
 <paste the full path to fennara-mcp here>
 
-我想把它添加到 <app name>。
-该应用的 MCP 配置文件是：
+I want to add it to <app name>.
+The app's MCP config file is:
 <paste config path here>
 
-配置格式是 <JSON/TOML/YAML/etc>。
+The config format is <JSON/TOML/YAML/etc>.
 
-请展示添加名为 "fennara" 的服务器所需的最小安全编辑。
-保留所有现有配置。如果该应用需要 "mcpServers"、"servers"、"mcp"
-或其他顶层键，请使用该应用官方文档所要求的键。
+Please show the smallest safe edit to add a server named "fennara".
+Preserve all existing config. If the app needs "mcpServers", "servers", "mcp",
+or another top-level key, use the key required by that app's official docs.
 ```
 
 保存前请检查结果，然后重新启动 MCP 应用。

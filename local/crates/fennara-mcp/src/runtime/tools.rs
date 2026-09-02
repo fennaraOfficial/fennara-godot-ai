@@ -1,5 +1,6 @@
 use super::{
-    daemon_client::{daemon_status, daemon_tool_call},
+    RuntimeConfig,
+    daemon_client::{daemon_bound_status, daemon_status, daemon_tool_call},
     protocol::{SERVER_NAME, SERVER_VERSION, error_response, success_response},
     schemas::{is_forwarded_tool, load_embedded_tool_schemas},
 };
@@ -9,11 +10,12 @@ use serde_json::{Value, json};
 const MAX_MCP_TOOL_IMAGE_COUNT: usize = 6;
 const MAX_MCP_TOOL_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_MCP_TOOL_IMAGE_TOTAL_BYTES: usize = 24 * 1024 * 1024;
+const LEGACY_CONCURRENCY_WARNING: &str = "Legacy-unbound routing uses the dock MCP Target or sole-editor fallback and is not safe for concurrent multi-project work.";
 
 pub(crate) fn tools_list_result() -> Value {
     let mut tools = vec![json!({
         "name": "fennara_status",
-        "description": "Return local Fennara MCP status. This verifies the MCP server is installed and reachable.",
+        "description": "Return local Fennara MCP status. This verifies the MCP server is installed and reachable, and shows this MCP process's effective project route.",
         "inputSchema": {
             "type": "object",
             "properties": {},
@@ -28,19 +30,26 @@ pub(crate) fn tools_list_result() -> Value {
     })
 }
 
-pub(crate) fn handle_tool_call(id: Value, params: Option<&Value>) -> Value {
+pub(crate) fn handle_tool_call(id: Value, params: Option<&Value>, config: &RuntimeConfig) -> Value {
     let tool_name = params
         .and_then(|params| params.get("name"))
         .and_then(Value::as_str);
 
     match tool_name {
-        Some("fennara_status") => success_response(id, status_tool_result(status_payload())),
+        Some("fennara_status") => success_response(id, status_tool_result(status_payload(config))),
         Some(name) if is_forwarded_tool(name) => {
-            let args = params
-                .and_then(|params| params.get("arguments"))
-                .cloned()
-                .unwrap_or_else(|| json!({}));
-            let result = match daemon_tool_call(name, args) {
+            let args = tool_arguments(params);
+            if !args.is_object() {
+                return success_response(
+                    id,
+                    forwarded_tool_result(
+                        name,
+                        &json!({ "ok": false, "error": "Tool arguments must be a JSON object." }),
+                        true,
+                    ),
+                );
+            }
+            let result = match daemon_tool_call(name, args, config.project_path()) {
                 Ok(payload) => payload,
                 Err(error) => json!({
                     "ok": false,
@@ -55,42 +64,112 @@ pub(crate) fn handle_tool_call(id: Value, params: Option<&Value>) -> Value {
     }
 }
 
-fn status_payload() -> Value {
-    match daemon_status() {
-        Ok(status) => connected_status_payload(status),
+fn tool_arguments(params: Option<&Value>) -> Value {
+    params
+        .and_then(|params| params.get("arguments"))
+        .cloned()
+        .unwrap_or_else(|| json!({}))
+}
+
+fn status_payload(config: &RuntimeConfig) -> Value {
+    let status = match config.project_path() {
+        Some(project_path) => daemon_bound_status(project_path),
+        None => daemon_status(),
+    };
+    match status {
+        Ok(status) => connected_status_payload_for_config(status, config),
         Err(error) => json!({
             "ok": true,
             "server": SERVER_NAME,
             "version": SERVER_VERSION,
             "daemon_connected": false,
             "godot_plugin_connected": false,
+            "routing_mode": if config.project_path().is_some() { "bound" } else { "legacy_unbound" },
+            "binding_source": config.binding_source().map(|source| source.as_str()),
+            "bound_project_path": config.project_path(),
+            "concurrency_warning": if config.project_path().is_some() {
+                Value::Null
+            } else {
+                Value::String(LEGACY_CONCURRENCY_WARNING.to_string())
+            },
             "message": format!("Open a Godot project with Fennara enabled. The local daemon is not reachable yet: {error}")
         }),
     }
 }
 
+#[cfg(test)]
 fn connected_status_payload(status: Value) -> Value {
-    let editor_filesystem = status
-        .get("active_project")
-        .and_then(|project| project.get("editor_filesystem"))
-        .filter(|status| status.is_object())
-        .cloned();
+    connected_status_payload_for_config(status, &RuntimeConfig::default())
+}
+
+fn connected_status_payload_for_config(status: Value, config: &RuntimeConfig) -> Value {
+    let is_bound = config.project_path().is_some();
+    let bound_editor_state = status.get("bound_editor_state").and_then(Value::as_str);
+    let selected_project = if is_bound && bound_editor_state == Some("connected") {
+        status
+            .get("selected_project")
+            .filter(|project| project.is_object())
+            .cloned()
+    } else {
+        None
+    };
+    let editor_filesystem =
+        if is_bound && bound_editor_state == Some("connected") && selected_project.is_some() {
+            status
+                .get("editor_filesystem")
+                .filter(|filesystem| filesystem.is_object())
+                .or_else(|| {
+                    selected_project
+                        .as_ref()
+                        .and_then(|project| project.get("editor_filesystem"))
+                        .filter(|filesystem| filesystem.is_object())
+                })
+                .cloned()
+        } else {
+            status
+                .get("active_project")
+                .filter(|project| project.is_object())
+                .and_then(|project| project.get("editor_filesystem"))
+                .filter(|filesystem| filesystem.is_object())
+                .cloned()
+        };
     json!({
         "ok": true,
         "server": SERVER_NAME,
         "version": SERVER_VERSION,
         "daemon_connected": true,
-        "daemon": daemon_status_for_mcp(status),
-        "editor_filesystem": editor_filesystem
+        "routing_mode": if is_bound { "bound" } else { "legacy_unbound" },
+        "binding_source": config.binding_source().map(|source| source.as_str()),
+        "bound_project_path": config.project_path(),
+        "bound_editor_state": bound_editor_state,
+        "routing_code": status.get("code").cloned().unwrap_or(Value::Null),
+        "retryable": status.get("retryable").cloned().unwrap_or(Value::Null),
+        "daemon": daemon_status_for_mcp(status, is_bound),
+        "editor_filesystem": editor_filesystem,
+        "selected_project": selected_project,
+        "concurrency_warning": if is_bound {
+            Value::Null
+        } else {
+            Value::String(LEGACY_CONCURRENCY_WARNING.to_string())
+        }
     })
 }
 
-fn daemon_status_for_mcp(mut status: Value) -> Value {
+fn daemon_status_for_mcp(mut status: Value, is_bound: bool) -> Value {
     if let Some(active_project) = status
         .get("active_project")
         .filter(|active_project| active_project.is_object())
     {
         status["active_project"] = active_project_summary(active_project);
+    }
+    if let Some(legacy_active_project) = status
+        .get("legacy_active_project")
+        .filter(|project| project.is_object())
+    {
+        status["legacy_active_project"] = active_project_summary(legacy_active_project);
+    }
+    if is_bound && let Some(object) = status.as_object_mut() {
+        object.remove("connected_projects");
     }
     status
 }
@@ -135,8 +214,11 @@ fn status_markdown(payload: &Value) -> String {
         .unwrap_or(false);
     lines.push(format!("Daemon: {}", connection_state(daemon_connected)));
 
+    append_routing_lines(&mut lines, payload);
+
     if daemon_connected {
-        append_daemon_status_lines(&mut lines, payload.get("daemon"));
+        let is_bound = string_field(payload, "routing_mode").as_deref() == Some("bound");
+        append_daemon_status_lines(&mut lines, payload.get("daemon"), is_bound);
         append_editor_filesystem_status(&mut lines, payload.get("editor_filesystem"));
     } else {
         if let Some(plugin_connected) = payload
@@ -154,6 +236,54 @@ fn status_markdown(payload: &Value) -> String {
     }
 
     lines.join("\n")
+}
+
+fn append_routing_lines(lines: &mut Vec<String>, payload: &Value) {
+    let routing_mode =
+        string_field(payload, "routing_mode").unwrap_or_else(|| "legacy_unbound".to_string());
+    lines.push(format!("Routing mode: {routing_mode}"));
+
+    if routing_mode == "bound" {
+        if let Some(source) = string_field(payload, "binding_source") {
+            lines.push(format!("Binding source: {}", markdown_escape(&source)));
+        }
+        if let Some(project_path) = string_field(payload, "bound_project_path") {
+            lines.push(format!(
+                "Bound project root: {}",
+                markdown_escape(&project_path)
+            ));
+        }
+        if let Some(state) = string_field(payload, "bound_editor_state") {
+            lines.push(format!("Bound editor: {state}"));
+        }
+        if let Some(project) = payload
+            .get("selected_project")
+            .filter(|project| project.is_object())
+        {
+            let project_name = string_field(project, "project_name")
+                .unwrap_or_else(|| "connected project".to_string());
+            lines.push(format!(
+                "Selected editor project: {}",
+                markdown_escape(&project_name)
+            ));
+            append_project_field(lines, project, "project_path", "Selected project path");
+            append_project_field(lines, project, "session_id", "Selected editor session");
+        }
+        if let Some(code) = string_field(payload, "routing_code") {
+            lines.push(format!("Routing code: {code}"));
+        }
+        if let Some(retryable) = payload.get("retryable").and_then(Value::as_bool) {
+            lines.push(format!(
+                "Retryable: {}",
+                if retryable { "yes" } else { "no" }
+            ));
+        }
+    } else if let Some(warning) = string_field(payload, "concurrency_warning") {
+        lines.push(format!(
+            "Concurrency warning: {}",
+            markdown_escape(&warning)
+        ));
+    }
 }
 
 fn append_editor_filesystem_status(lines: &mut Vec<String>, status: Option<&Value>) {
@@ -187,7 +317,7 @@ fn append_editor_filesystem_status(lines: &mut Vec<String>, status: Option<&Valu
     }
 }
 
-fn append_daemon_status_lines(lines: &mut Vec<String>, daemon: Option<&Value>) {
+fn append_daemon_status_lines(lines: &mut Vec<String>, daemon: Option<&Value>, is_bound: bool) {
     let Some(daemon) = daemon else {
         return;
     };
@@ -205,35 +335,76 @@ fn append_daemon_status_lines(lines: &mut Vec<String>, daemon: Option<&Value>) {
         ));
     }
 
-    if let Some(project) = daemon
-        .get("active_project")
-        .filter(|value| value.is_object())
-    {
-        append_active_project_summary(lines, project);
+    let legacy_active_project = daemon
+        .get(if is_bound {
+            "legacy_active_project"
+        } else {
+            "active_project"
+        })
+        .or_else(|| is_bound.then(|| daemon.get("active_project")).flatten());
+    if let Some(project) = legacy_active_project.filter(|value| value.is_object()) {
+        append_active_project_summary(lines, project, is_bound);
     } else {
-        lines.push("Active project: none".to_string());
+        lines.push(format!(
+            "{}: none",
+            if is_bound {
+                "Dock MCP target"
+            } else {
+                "Active project"
+            }
+        ));
     }
 
-    let active_session_id = string_field(daemon, "active_session_id");
+    let active_session_id = string_field(
+        daemon,
+        if is_bound {
+            "legacy_active_session_id"
+        } else {
+            "active_session_id"
+        },
+    )
+    .or_else(|| {
+        is_bound
+            .then(|| string_field(daemon, "active_session_id"))
+            .flatten()
+    });
     if let Some(session_id) = active_session_id.as_deref() {
-        lines.push(format!("Active session: {}", markdown_escape(session_id)));
+        lines.push(format!(
+            "{}: {}",
+            if is_bound {
+                "Dock MCP target session"
+            } else {
+                "Active session"
+            },
+            markdown_escape(session_id)
+        ));
     }
     if let Some(projects) = daemon.get("connected_projects").and_then(Value::as_array) {
         append_connected_projects(lines, projects, active_session_id.as_deref());
     }
 }
 
-fn append_active_project_summary(lines: &mut Vec<String>, project: &Value) {
+fn append_active_project_summary(lines: &mut Vec<String>, project: &Value, is_bound: bool) {
     let project_name =
         string_field(project, "project_name").unwrap_or_else(|| "connected project".to_string());
     lines.push(format!(
-        "Active project: {}",
+        "{}: {}",
+        if is_bound {
+            "Dock MCP target"
+        } else {
+            "Active project"
+        },
         markdown_escape(&project_name)
     ));
 
     if let Some(project_path) = string_field(project, "project_path") {
         lines.push(format!(
-            "Active project path: {}",
+            "{}: {}",
+            if is_bound {
+                "Dock MCP target path"
+            } else {
+                "Active project path"
+            },
             markdown_escape(&project_path)
         ));
     }
@@ -563,7 +734,26 @@ fn text_from_plugin_result(tool_name: &str, response: &Value) -> String {
     }
 
     if let Some(error) = response.get("error").and_then(Value::as_str) {
-        return format!("Tool: {tool_name}\nStatus: failed\nError: {error}");
+        let mut lines = vec![
+            format!("Tool: {tool_name}"),
+            "Status: failed".to_string(),
+            format!("Error: {error}"),
+        ];
+        if let Some(code) = response
+            .get("code")
+            .and_then(Value::as_str)
+            .map(single_line)
+            .filter(|code| !code.is_empty())
+        {
+            lines.push(format!("Code: {code}"));
+        }
+        if let Some(retryable) = response.get("retryable").and_then(Value::as_bool) {
+            lines.push(format!(
+                "Retryable: {}",
+                if retryable { "yes" } else { "no" }
+            ));
+        }
+        return lines.join("\n");
     }
 
     format!("Tool: {tool_name}\nStatus: failed\nError: Tool returned an unsupported result shape.")
@@ -572,8 +762,123 @@ fn text_from_plugin_result(tool_name: &str, response: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{
+        ffi::OsString,
+        fs,
+        sync::atomic::{AtomicU64, Ordering},
+    };
 
     const PNG_1X1: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+    static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
+
+    fn bound_config() -> (RuntimeConfig, String) {
+        let sequence = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "fennara-mcp-status-{}-{sequence}",
+            std::process::id()
+        ));
+        fs::create_dir(&root).expect("create status fixture");
+        fs::write(root.join("project.godot"), b"[application]\n").expect("write project.godot");
+        let config = RuntimeConfig::from_args_and_env(
+            [
+                OsString::from("--project-path"),
+                root.clone().into_os_string(),
+            ],
+            None,
+            &root,
+        )
+        .expect("bind status fixture");
+        let canonical = config
+            .project_path()
+            .expect("bound project root")
+            .to_string();
+        fs::remove_dir_all(root).expect("remove status fixture");
+        (config, canonical)
+    }
+
+    #[test]
+    fn bound_status_uses_daemon_authoritative_editor_selection() {
+        let (config, project_root) = bound_config();
+        let payload = connected_status_payload_for_config(
+            json!({
+                "ok": true,
+                "version": "0.4.2",
+                "godot_plugin_connected": true,
+                "routing_mode": "bound",
+                "bound_editor_state": "connected",
+                "bound_project_path": project_root.clone(),
+                "selected_project": {
+                    "project_name": "Agent A",
+                    "project_path": project_root.clone(),
+                    "session_id": "agent-a#10",
+                    "editor_filesystem": {
+                        "state": "ready",
+                        "asset_tools_ready": true
+                    }
+                },
+                "legacy_active_project": {
+                    "project_name": "Agent B",
+                    "project_path": "/worktrees/agent-b"
+                },
+                "legacy_active_session_id": "agent-b#11"
+            }),
+            &config,
+        );
+
+        let text = status_tool_result(payload)["content"][0]["text"]
+            .as_str()
+            .expect("status text")
+            .to_string();
+        assert!(text.contains("Routing mode: bound"));
+        assert!(text.contains("Binding source: cli"));
+        assert!(text.contains(&format!(
+            "Bound project root: {}",
+            markdown_escape(&project_root)
+        )));
+        assert!(text.contains("Bound editor: connected"));
+        assert!(text.contains("Selected editor project: Agent A"));
+        assert!(text.contains("Editor filesystem: ready"));
+        assert!(text.contains("Dock MCP target: Agent B"));
+    }
+
+    #[test]
+    fn failed_bound_status_never_falls_back_to_dock_filesystem_readiness() {
+        let (config, project_root) = bound_config();
+        let payload = connected_status_payload_for_config(
+            json!({
+                "ok": true,
+                "version": "0.4.2",
+                "godot_plugin_connected": true,
+                "routing_mode": "bound",
+                "bound_editor_state": "not_connected",
+                "bound_project_path": project_root,
+                "code": "bound_project_not_connected",
+                "retryable": true,
+                "selected_project": null,
+                "editor_filesystem": null,
+                "legacy_active_project": {
+                    "project_name": "Unrelated Dock Project",
+                    "project_path": "/worktrees/unrelated",
+                    "editor_filesystem": {
+                        "state": "ready",
+                        "asset_tools_ready": true
+                    }
+                }
+            }),
+            &config,
+        );
+
+        let text = status_tool_result(payload)["content"][0]["text"]
+            .as_str()
+            .expect("status text")
+            .to_string();
+        assert!(text.contains("Bound editor: not_connected"));
+        assert!(text.contains("Routing code: bound_project_not_connected"));
+        assert!(text.contains("Retryable: yes"));
+        assert!(text.contains("Dock MCP target: Unrelated Dock Project"));
+        assert!(!text.contains("Editor filesystem:"));
+        assert!(!text.contains("Asset tools ready:"));
+    }
 
     #[test]
     fn status_tool_result_uses_plain_text_without_duplicate_structured_content() {
@@ -649,6 +954,8 @@ mod tests {
             "version": "0.3.7",
             "daemon_connected": false,
             "godot_plugin_connected": false,
+            "routing_mode": "legacy_unbound",
+            "concurrency_warning": LEGACY_CONCURRENCY_WARNING,
             "message": "Open a Godot project with Fennara enabled."
         });
 
@@ -657,6 +964,8 @@ mod tests {
         let text = result["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("Daemon: not connected"));
         assert!(text.contains("Godot plugin: not connected"));
+        assert!(text.contains("Routing mode: legacy_unbound"));
+        assert!(text.contains("Concurrency warning:"));
         assert!(text.contains("Message: Open a Godot project with Fennara enabled."));
     }
 
@@ -759,6 +1068,23 @@ mod tests {
             result["content"][0]["text"],
             "Tool: project_settings\nStatus: failed\nError: Godot plugin disconnected before returning a tool result."
         );
+        assert_eq!(result["isError"], true);
+    }
+
+    #[test]
+    fn forwarded_routing_error_preserves_stable_code_and_retryability() {
+        let response = json!({
+            "ok": false,
+            "error": "No connected Godot editor matches this MCP Project Binding.",
+            "code": "bound_project_not_connected",
+            "retryable": true
+        });
+
+        let result = forwarded_tool_result("project_settings", &response, true);
+        let text = result["content"][0]["text"].as_str().unwrap();
+
+        assert!(text.contains("Code: bound_project_not_connected"));
+        assert!(text.contains("Retryable: yes"));
         assert_eq!(result["isError"], true);
     }
 

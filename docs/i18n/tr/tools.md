@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/tools.md sha256=19addf243a4e722ffaa39a8ba63d59c63511c9afc8bd5cc62932c2b84f338991 -->
+<!-- fennara-i18n: locale=tr source=docs/tools.md sha256=dfa0baa54b981a1dee22d11aadb3ab230177a808a6ff2283f24403125057c20f -->
 <a id="tools"></a>
 # Araçlar
 
@@ -33,6 +33,10 @@ sohbete aittir.
 `fennara_status` harici MCP istemcileri tarafından kullanılabilir. Yerleşik
 sohbet bağlantı ve etkin proje durumunu zaten daemon'dan alır.
 
+Her harici MCP işlemi başladığında bir yönlendirme modu seçer. `bound` işlemi
+kanonik Proje Köküne göre yönlendirir. `legacy_unbound` işlemi panelden seçilen
+uyumluluk hedefini kullanır ve yalıtılmış eşzamanlı çalışma için uygun değildir.
+
 <a id="typical-workflow"></a>
 ## Tipik İş Akışı
 
@@ -51,21 +55,34 @@ olabilir. Yapı araçları hazır olduğunu bildirdikten sonra kullanılmalıdı
 <a id="fennarastatus"></a>
 ### `fennara_status`
 
-MCP sunucusunu, daemon'ı, etkin Godot projesini, bağlı düzenleyici oturumlarını,
-bileşen sürümlerini, işleme bağlamını, duyurulan araçları ve düzenleyici dosya
-sistemi hazırlığını bildirir.
+MCP sunucusunu, daemon'ı, yönlendirme modunu, seçilen Godot editörünü, bağlı
+editör oturumlarını, bileşen sürümlerini, işleme bağlamını, duyurulan araçları ve
+editör dosya sistemi hazırlığını bildirir.
 
 Çalışma davranışı:
 
 - Tek bir düz metin durum bloğu döndürür.
-- Hazır bir düzenleyici dosya sistemini tarama veya içe aktarma yapan bir sistemden ayırır.
+- Bağlı bir işlem için bağlama kaynağını (`cli`, `environment` veya `cwd`),
+  kanonik Proje Kökünü ve editör durumunu (`connected`, `not_connected` veya
+  `ambiguous`) bildirir.
+- Panelden seçilen eski MCP Hedefini Proje Bağlamasından ayrı olarak bildirir.
+- Hazır bir editör dosya sistemini tarama veya içe aktarma yapan bir sistemden ayırır.
 - Yapılara dönük araçların o anda hazır olup olmadığını bildirir.
 - Eşleşmeyen kurulumların tanılanabilmesi için sürüm farklılıklarını gösterir.
 
 Önemli sınırlar ve hatalar:
 
 - Belirli tek bir yapı yolunun hazırlığını değil, proje düzeyi hazırlığı bildirir.
-- Bağlantısı kesilmiş bir daemon, eksik etkin proje veya bağlantısı kesilmiş Godot eklentisi hazır proje olarak ele alınmak yerine doğrudan bildirilir.
+- Eşleşen editörü olmayan bağlı bir kök yeniden denenebilir
+  `bound_project_not_connected` durumunu bildirir ve hiçbir zaman panel hedefine
+  geri dönmez.
+- Aynı bağlı köke ait yinelenen editörler `ambiguous_project_binding` bildirir;
+  hiçbir editör seçilmez.
+- Bağlantısı kesilmiş bir daemon, eksik uyumluluk hedefi veya bağlantısı kesilmiş
+  Godot eklentisi hazır proje olarak ele alınmak yerine doğrudan bildirilir.
+- Başarısız bir bağlı eşleşme, ilgisiz bir editörün dosya sistemi hazırlığını
+  veya görünürdeki başarısını hiçbir zaman göstermez.
+- Eski bağlı olmayan mod bir eşzamanlılık uyarısı bildirir.
 - Godot dosyaları yeniden içe aktarırken hazırlık kısa süreliğine değişebilir.
 
 <a id="inspection"></a>
@@ -265,6 +282,9 @@ kısa bir headless başlangıç geçişi çalıştırır.
 - Yapısal denetimler eksik betikleri ve kaynakları, geçersiz düğüm yollarını, yinelenen kardeş adlarını, döngüsel sahne bağımlılıklarını ve ilgili dışa aktarılmış başvuruları kapsar.
 - İsteğe bağlı veya çalışma zamanında atanan dışa aktarılmış başvurular koşulsuz hata yerine not olarak bildirilir.
 - Temiz yapısal sonuçlara sahip yazılmış sahneler, günlükler ve yapılar tutularak üç saniyelik bir headless başlangıç geçişi alır.
+- Bu sınırlı doğrulama çalışanları etkileşimli Çalışma Zamanı Yuvasını işgal
+  etmez; başka bir proje bir Çalışma Zamanı Oturumuna sahipken doğrulama devam
+  edebilir.
 - Büyük sahnelerin sonucu taşırmaması için yinelenen bulgular gruplanır.
 
 Önemli sınırlar ve hatalar:
@@ -313,6 +333,9 @@ Daemon tarafından yönetilen pencereli bir Godot sahnesini başlatır, denetler
 
 - Bir sahne süreci başlatılmadan önce başlangıç kapıları çalışır.
 - Başarılı bir başlatma bir oturum tanımlayıcısı, süreç durumu, günlük yolları, başlangıç bulguları ve kullanılabilir yakalama bilgileri döndürür.
+- Meşgul olan makine genelindeki Çalışma Zamanı Yuvası, `availability: "busy"`,
+  `slot_acquired: false` ve önerilen bir `retry_after_ms` ile başarılı bir
+  `busy` etki alanı sonucu döndürür. Sahip projeyi veya oturumu açığa çıkarmaz.
 - Durum, tam oturum günlüğünü atmadan yeni çalışma zamanı çıktısını döndürür.
 - Durdurma, son süreç ve günlük bilgilerini döndürür.
 - C# projeleri başlatmadan önce Godot'un normal Debug çıktısına gerçek bir çalışma zamanı derlemesi alır, böylece süreç güncel derlemeleri kullanır.
@@ -321,10 +344,31 @@ Daemon tarafından yönetilen pencereli bir Godot sahnesini başlatır, denetler
 
 Önemli sınırlar ve hatalar:
 
-- Aynı anda genel olarak yalnızca daemon tarafından yönetilen bir çalışma zamanı oturumu etkindir.
+- Genel olarak yalnızca daemon tarafından yönetilen bir Çalışma Zamanı Oturumu
+  başlıyor veya çalışıyor olabilir. Bir `busy` sonucunu jitter ile sorgulayın ve
+  her yeni başlatmayı nihai atomik talep olarak ele alın; önceki bir boş durum
+  yalnızca tavsiye niteliğindedir.
+- Bir Çalışma Zamanı Oturumu kendi kanonik Proje Köküne aittir. Yalnızca bu
+  sahip ayrıntılı durumu inceleyebilir, kirayı yenileyebilir, betik çalıştırabilir
+  veya oturumu durdurabilir. Diğer projeler anonim meşgul durumunu görür.
+- Sahip durum sorgusu 120 saniyelik hareketsizlik son tarihini yeniler. Sahibe
+  ait sınırlı bir çalışma zamanı işlemi, etkin olduğu sürece hareketsizlik
+  süresinin dolmasını askıya alır ve son tarihi yalnızca nihai bir betik sonucu
+  döndürdükten sonra yeniler; zaman aşımı, hazırlık hatası veya iptal son
+  tarihi yenilemez. Bir çalışma sürerken sahip durumunu jitter ile yaklaşık her
+  30 saniyede bir sorgulayın.
+- `max_run_seconds`, varsayılan değeri 900 ve üst sınırı 86.400 saniye olan
+  pozitif bir tamsayıdır. Bir saatlik regresyon, pay bırakmak için 4.500 saniye
+  isteyebilir. Mutlak son tarih hiçbir zaman duraklatılmaz.
+- Doğal çıkış, açık durdurma, başlangıç hatası, hareketsizlik süresinin dolması
+  veya mutlak sürenin dolması Çalışma Zamanı Yuvasını serbest bırakır.
 - Başarısız başlangıç kapıları sahnenin açılmasını engeller.
 - Bir C# çalışma zamanı derlemesi açık düzenleyicinin normal derleme yeniden yüklemesini tetikleyebilir.
-- Başlangıç hazırlığı işaretçileri ilk yanıttan sonra gelebilir ve sonraki durum çağrısında görünebilir.
+- `FENNARA_RUNTIME_SESSION_READY` ve `FENNARA_RUNTIME_ORIENTATION_NOTE`
+  işaretçilerinin ikisi de 20 saniyelik başlatma son tarihinden önce
+  görünmelidir. İşaretçilerden biri eksikse daemon, `startup_timeout`
+  döndürmeden önce süreci sonlandırır ve tamamlanmasını bekler; ilk başarı
+  yanıtı döndürülmez.
 - Yönetilen oturumlar ayrı Godot süreçleridir, düzenleyicinin içinde elle çalışan sahne değildir.
 
 <a id="runtimescript"></a>
@@ -343,6 +387,13 @@ araştırması veya girdi sürücüsü çalıştırır.
 Önemli sınırlar ve hatalar:
 
 - Geçerli, etkin bir `runtime_session` tanımlayıcısı gerektirir.
+- Yalnızca oturumun sahibi olan Proje Kökü bir araştırma çalıştırabilir. Sahip
+  olmayan taraf, başka bir projenin tanımlayıcısının var olup olmadığını açığa
+  çıkarmayan `runtime_session_not_owned_or_found` yanıtını alır.
+- Sınırlı bir sahip araştırması, yürütülürken hareketsizlik süresinin
+  dolmasını askıya alır. Döndürülen nihai betik sonucu hareketsizlik son
+  tarihini yeniler; zaman aşımı, hazırlık hatası veya iptal yenilemez. Hiçbir
+  araştırma mutlak Çalışma Zamanı Kirasını uzatmaz.
 - Çalışma zamanı betikleri düzenleyici `@tool` betikleri değildir ve sahne düzenleme çalışanları olarak kullanılamaz.
 - Geçersiz tanılamalar, zaman aşımları, çalışma zamanı hataları, kapalı oturumlar veya kullanılamayan düğümler bildirilir.
 - Araştırmalar sınırlı kalmalıdır. Kalıcı bir oyun otomasyonu çatısının yerini almazlar.

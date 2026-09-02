@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/setup.md sha256=ab1b11ff7dd3472ab14185e920004b6504fa14eb1c29e7c7b1d7a322780af1dd -->
+<!-- fennara-i18n: locale=tr source=docs/setup.md sha256=d470da8cda3e69aacb89ee5f06f1d7831df5ab7f50c94a599bfab5bfe22157e3 -->
 <a id="setup"></a>
 # Kurulum
 
@@ -154,6 +154,11 @@ fennara mcp-setup --help
 Uygulamanız listede yoksa desteklenen tüm hedefler ve elle yapılandırma
 biçimleri için [MCP Kurulumu](mcp-setup.md) sayfasına bakın.
 
+Kurulum girdisi genel ve projeden bağımsızdır. Birden fazla ajan ayrı depolar
+veya worktree'ler kullanıyorsa kurulumdan sonra her Proje Kökü için projeye
+bağlı ayrı bir MCP bağlantısı yapılandırın. Bkz.
+[Birden Fazla Ajan ve Worktree](multi-agent-worktrees.md).
+
 Harici MCP uygulamaları kendi model hesaplarını kullanır. Yerleşik sohbet
 Fennara Chat Settings içinde seçilen sağlayıcıyı kullanır. Ayrım için
 [MCP Uygulamaları ve Yerleşik Sohbet](chat-vs-mcp.md) sayfasına bakın.
@@ -167,7 +172,15 @@ Godot projesini açın, ardından MCP uygulamanıza şunu sorun:
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-Yanlış projeyi bildirirse Fennara dock'undan doğru MCP hedefini seçin.
+Yalıtılmış çalışma için `bound` yönlendirme modunu, beklenen kanonik Proje
+Kökünü, `connected` bağlı editör durumunu ve o editörün dosya sistemi hazır olma
+durumunu bildirdiğini doğrulayın. Eşleşen açık editörü olmayan bağlı bir bağlantı
+canlı kalır ve editör yeniden bağlanana kadar yeniden denenebilir
+`bound_project_not_connected` durumunu bildirir.
+
+Durum `legacy_unbound` bildiriyorsa panelin MCP hedefi uyumluluk yoludur. Tek
+istemcili kullanım için amaçlanan hedefi seçin veya eşzamanlı çalışmadan önce
+açık bir Proje Bağlaması yapılandırın.
 
 <a id="update-fennara"></a>
 ## Fennara'yı Güncelleyin
@@ -262,7 +275,14 @@ addons/fennara/fennara.gdextension
 <a id="fennarastatus-shows-the-wrong-project"></a>
 ### `fennara_status` Yanlış Projeyi Gösteriyor
 
-Amaçlanan projeyi açın ve Fennara dock'undaki MCP hedef denetimiyle seçin.
+Önce bildirilen yönlendirme modunu okuyun. `bound` için MCP işlemini amaçlanan
+`--project-path`, `FENNARA_PROJECT_PATH` veya proje başlangıç diziniyle yeniden
+başlatın. `legacy_unbound` için amaçlanan projeyi açın ve Fennara panelindeki
+MCP hedef denetimiyle seçin.
+
+Bağlı bir kök `not_connected` durumundaysa o projeyi açın ve eklentisinin
+bağlanmasını bekleyin. `ambiguous` durumundaysa yinelenen editörü kapatın veya
+onu ayrı bir worktree'den başlatın.
 
 <a id="c-diagnostics-are-missing"></a>
 ### C# Tanılamaları Eksik

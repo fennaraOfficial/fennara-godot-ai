@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=pt-BR source=docs/repo-map.md sha256=dd8616d3a3f73e8f05b95898cd34041186e47818eefe9f41f1f0a951f1c27fdb -->
+<!-- fennara-i18n: locale=pt-BR source=docs/repo-map.md sha256=48c47152f755d34f1f6526d58c15c3d16205d5389a00442e4f1409efa514e73c -->
 <a id="repo-map"></a>
 # Mapa do repositório
 
@@ -17,6 +17,7 @@ Este é o mapa rápido para contribuidores e agentes de programação que trabal
 | --- | --- |
 | Configuração do usuário ou comportamento da CLI | `local/crates/fennara-cli/` |
 | Protocolo MCP externo ou esquemas | `local/crates/fennara-mcp/`, `local/schemas/tools/` |
+| Descoberta ou igualdade da Raiz do projeto | `local/crates/fennara-project-identity/` |
 | Chat integrado ou comportamento do daemon | `local/crates/fennara-daemon/` |
 | Integração com o editor Godot | `fennara-cpp/` |
 | UI de chat | `ui/chat/` |
@@ -46,6 +47,7 @@ Este é o mapa rápido para contribuidores e agentes de programação que trabal
 | `README.md` | Visão geral curta voltada a pessoas e início rápido. |
 | `docs/README.md` | Índice da documentação orientado por tarefas. |
 | `docs/setup.md` | Configuração voltada ao usuário com o addon primeiro, pré-requisitos do chat, conexão MCP, fluxo de atualização e solução de problemas. |
+| `docs/multi-agent-worktrees.md` | Roteamento de uma conexão MCP por projeto, limites dos hosts compatíveis, verificação e uso serializado do Slot de execução. |
 | `docs/cli.md` | Referência de comandos do terminal, comportamento de instalação/atualização de responsabilidade da CLI, recuperação, diagnósticos, layout dos dados do aplicativo e orientações para automação. |
 | `docs/telemetry.md` | Payload de atividade anônima, estado nos dados do aplicativo, comportamento de entrega, definição de atividade mensal e controles de desativação. |
 | `CONTRIBUTING.md` | Regras de contribuição. |
@@ -70,8 +72,12 @@ Este é o mapa rápido para contribuidores e agentes de programação que trabal
 | `local/crates/fennara-cli/src/daemon_setup.rs` | Verificação de integridade compartilhada do daemon, prontidão da versão exata e inicialização usadas pela instalação e pelo doctor. |
 | `local/crates/fennara-cli/tests/operation_failures.rs` | Testes no nível do processo para falhas, diagnósticos duráveis, redação e registro de operações com falha segura. |
 | `local/crates/fennara-cli/src/diagnostics.rs` | Acesso voltado ao usuário ao relatório de operação sanitizado mais recente ou a um relatório nomeado. |
-| `local/crates/fennara-mcp/` | Servidor MCP stdio local e encaminhamento dos esquemas das ferramentas. |
-| `local/crates/fennara-daemon/` | Daemon local usado para sessões de runtime e trabalho da ponte do Godot. |
+| `local/crates/fennara-project-identity/` | Descoberta, validação, transformação em forma canônica, conversão de protocolo sem perdas e igualdade ativa no sistema de arquivos, compartilhadas para a Raiz do projeto. |
+| `local/crates/fennara-mcp/` | Servidor MCP stdio local, descoberta de Vinculação de projeto com escopo de processo, apresentação de status e encaminhamento dos esquemas das ferramentas. |
+| `local/crates/fennara-daemon/` | Daemon local compartilhado usado para roteamento por Raiz do projeto, propriedade e leases do Slot de execução, Sessões de execução e trabalho da ponte do Godot. |
+| `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs` | Seleção mutuamente exclusiva por sessão do editor, projeto vinculado e destino MCP legado, além da correlação entre solicitações e respostas do Godot. |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs` | Admissão atômica do Slot de execução para toda a máquina, identidade do proprietário e estado do lease. |
+| `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs` | Ciclo de vida dos processos de jogo gerenciados, autorização do proprietário, logs, limpeza por expiração e recibos de sessão. |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry.rs` | Agendador anônimo de atividade diária, fila limitada, entrega HTTP e integração com o ciclo de vida do daemon. |
 | `local/crates/fennara-daemon/src/runtime_daemon/telemetry/state.rs` | Validação de identidade aleatória da instalação, persistência atômica nos dados do aplicativo, estado de recibo diário e limpeza na desativação. |
 | `local/crates/fennara-daemon/src/runtime_daemon/permissions.rs` | Modos de aprovação do chat integrado, classificação de risco das ferramentas, decisões de permissão e tipos de solicitação de aprovação pendente. |
@@ -196,7 +202,10 @@ Este é o mapa rápido para contribuidores e agentes de programação que trabal
 | Alterar orientações do projeto geradas | `local/templates/` e `local/crates/fennara-cli/src/project_guidance.rs` |
 | Sincronizar orientações geradas do addon de demonstração | `local/templates/fennara-guidelines.md`, `local/templates/fennara-ai/`, `scripts/sync-guidance.mjs` e `godot_demo/addons/fennara/ai/` |
 | Alterar a configuração de aplicativos MCP | `local/crates/fennara-cli/src/mcp_setup.rs` e `docs/mcp-setup.md` |
+| Alterar a descoberta da Vinculação de projeto MCP ou a igualdade da Raiz do projeto | `local/crates/fennara-project-identity/`, `local/crates/fennara-mcp/src/runtime/`, `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs` e `docs/multi-agent-worktrees.md` |
+| Alterar o roteamento de destinos do daemon ou o status vinculado | `local/crates/fennara-daemon/src/runtime_daemon/godot_bridge.rs`, `local/crates/fennara-mcp/src/runtime/` e `docs/multi-agent-worktrees.md` |
 | Alterar o comportamento de processos/logs das sessões de runtime | `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`, `local/crates/fennara-daemon/src/runtime_daemon/runtime_log.rs`, `fennara-cpp/src/tools/runtime_session/` e `fennara-cpp/src/tool_results/` |
+| Alterar a propriedade, admissão ou os leases do Slot de execução | `local/crates/fennara-daemon/src/runtime_daemon/runtime_slot.rs`, `local/crates/fennara-daemon/src/runtime_daemon/runtime_sessions.rs`, `fennara-cpp/src/tools/runtime_session/`, `fennara-cpp/src/tools/runtime_script.cpp` e `local/schemas/tools/runtime_session.json` |
 | Alterar auxiliares ctx de `runtime_script`, entrada, snapshots, esperas, raycasts, capturas ou limpeza | `runtime/`, `scripts/sync-runtime.mjs`, `godot_demo/addons/fennara/runtime/`, `local/schemas/tools/runtime_script.json` e `docs/tools.md` |
 | Alterar a UI do chat integrado, comandos de barra ou seletor de modelo/provedor | `ui/chat/`, `godot_demo/addons/fennara/dist/`, `fennara-cpp/src/ui/dock.cpp` e `fennara-cpp/src/ui/webview_host*` |
 | Alterar provedores do chat integrado | `local/crates/fennara-daemon/src/runtime_daemon/chat/providers/`, `local/crates/fennara-daemon/src/runtime_daemon/chat/models.rs`, `local/crates/fennara-daemon/src/runtime_daemon/chat/settings.rs` e `ui/chat/` |

@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ja source=docs/mcp-setup.md sha256=42086801de2de7b36545c45d5af394cca77a858878ed242ca2014555e79b76df -->
+<!-- fennara-i18n: locale=ja source=docs/mcp-setup.md sha256=86c9fe3fc7a69c2ade417dd01a0ccabb05ddaa91cf417fa8559c28d4b01811bd -->
 <a id="mcp-setup"></a>
 # MCP セットアップ
 
@@ -44,6 +44,34 @@ Fennara はアプリの MCP 構成を変更する前にバックアップを作�
 
 インストール済み CLI が対応する対象の一覧を確認するには、`fennara mcp-setup --help` を実行します。
 
+セットアップでは、グローバルでプロジェクトに依存しないランチャーエントリが書き込まれます。プロジェクト内で `fennara mcp-setup` を実行しても、以後のすべての接続がそのプロジェクトへバインドされるわけではありません。
+
+<a id="bind-a-connection-to-one-project"></a>
+## 接続を 1 つのプロジェクトへバインドする
+
+同じマシン上に複数のリポジトリや worktree がある場合は、プロジェクトごとに 1 つの MCP プロセスと接続を実行します。そのプロセスを MCP ホストのプロジェクト設定またはワークスペース設定で、次のいずれかを使って構成します。
+
+```text
+--project-path /absolute/path/to/godot-project
+```
+
+または:
+
+```text
+FENNARA_PROJECT_PATH=/absolute/path/to/godot-project
+```
+
+ランタイムは起動時に一度だけ、次の優先順位で Project Binding を選択します。
+
+1. `--project-path`
+2. `FENNARA_PROJECT_PATH`
+3. 起動ディレクトリから最も近い、`project.godot` を含む祖先ディレクトリ
+4. 検出でプロジェクトが見つからない場合の legacy-unbound 互換モード
+
+明示的なパスが無効な場合、MCP サーバーは起動しません。ドックのターゲットや別のエディターへフォールスルーすることはありません。有効なバインドは、対応するエディターが一時的に不在でも存続し、その Project Root が再接続すると復旧します。モデル向けのツール呼び出し単位でプロジェクトを上書きする機能はありません。
+
+構成例、ホストごとの対応範囲、ステータスの確認方法、重複エディターの動作、直列化されたプレイテストについては、[複数エージェントと worktree](multi-agent-worktrees.md) を参照してください。
+
 <a id="manual-setup"></a>
 ## 手動セットアップ
 
@@ -79,6 +107,20 @@ Linux:   ~/.local/share/fennara/bin/fennara-mcp
 ```
 
 同じ `mcpServers` キーを使いながら `command` だけを必要とするアプリもあります。既存の構成に他のサーバーがすでに含まれている場合は、それらのエントリを維持し、`fennara` サーバーだけを追加してください。
+
+分離したままにする必要があるプロジェクトローカルのエントリでは、バインドを `args` に追加します。
+
+```json
+{
+  "mcpServers": {
+    "fennara": {
+      "command": "/absolute/path/to/fennara-mcp",
+      "args": ["--project-path", "/absolute/path/to/godot-project"],
+      "env": {}
+    }
+  }
+}
+```
 
 Cline 形式の構成では、秒単位のより長いツールタイムアウトを含めることもできます。
 
@@ -145,6 +187,16 @@ tool_timeout_sec = 300
 
 TOML ファイルへ JSON を貼り付けたり、JSON ファイルへ TOML を貼り付けたりしないでください。アプリですでに使用されている形式に合わせます。
 
+Codex 形式のエントリをバインドするには、安定したランチャーは変えずに引数を追加します。
+
+```toml
+[mcp_servers.fennara]
+command = "/absolute/path/to/fennara-mcp"
+args = ["--project-path", "/absolute/path/to/godot-project"]
+startup_timeout_sec = 30
+tool_timeout_sec = 300
+```
+
 <a id="common-config-locations"></a>
 ## 一般的な構成ファイルの場所
 
@@ -164,6 +216,10 @@ OpenCode:       ~/.config/opencode/opencode.json
 Windsurf:       ~/.codeium/windsurf/mcp_config.json
 Kiro:           ~/.kiro/settings/mcp.json
 ```
+
+VS Code の単一フォルダーワークスペースでは、プロジェクトが MCP 子プロセスの起動ディレクトリとして渡されることがあります。Claude Code、Gemini CLI、Antigravity、Cline、Cursor、OpenCode、Kiro、Codex はプロジェクトまたはワークスペース単位の構成を利用できます。分離を保証する必要がある場合は、明示的なバインドか、文書化されたプロジェクト起動ディレクトリを使ってください。
+
+Claude Desktop と従来の Windsurf/Cascade は、このワークフローではグローバル構成を使用します。既定のセットアップは legacy-unbound のままです。上級ユーザーは、異なる明示的なプロジェクトパスを設定した、別名のグローバルエントリを作成できますが、これらのアプリはプロジェクトローカルの自動分離を提供しません。
 
 <a id="timeout-guidance"></a>
 ## タイムアウトの指針
@@ -189,7 +245,9 @@ Godot プロジェクトを開き、MCP アプリへ次のように依頼しま�
 Use Fennara MCP to run fennara_status and tell me which Godot project is connected.
 ```
 
-複数の Godot プロジェクトを開いている場合は、Fennara ドックの **MCP target** コントロールを使って、外部 MCP ツール呼び出しを受け取るプロジェクトを選択します。
+分離した作業では、ステータスがルーティングモード `bound`、想定するバインド元と正規 Project Root、バインド先エディターの状態 `connected`、およびそのエディターのファイルシステム準備状況を報告することを確認してください。
+
+ステータスが `legacy_unbound` を報告する場合、その接続では Project Root を自動検出できていません。ドックの **MCP target** 互換ルートを使用し、このモードが分離された並行作業には安全でないことを警告します。
 
 <a id="troubleshooting"></a>
 ## トラブルシューティング
@@ -202,7 +260,10 @@ Fennara が MCP アプリに表示されない場合:
 - 編集した構成ファイルをアプリが読み込んでいることを確認する
 - MCP アプリを完全に終了してから、もう一度開く
 - Godot プロジェクトに Fennara アドオンがインストールされていることを確認する
-- 目的の Godot プロジェクトが MCP target として選択されていることを確認する
+- バインド済み接続では、明示的なパスまたは起動ディレクトリが想定する Godot Project Root であることを確認する
+- ステータスが `bound_project_not_connected` を報告する場合は、そのプロジェクトを Godot で開き、アドオンが接続するまで待つ
+- ステータスが `ambiguous_project_binding` を報告する場合は、重複しているエディターを閉じるか、別の worktree から開く
+- legacy-unbound 接続では、想定するプロジェクトがドックの MCP target として選択されていることを確認する
 
 <a id="unsupported-mcp-apps"></a>
 ## 未対応の MCP アプリ

@@ -1,4 +1,5 @@
 use axum::extract::ws::Message;
+use fennara_project_identity::ProjectRoot;
 use serde::Serialize;
 use serde_json::Value;
 use std::{
@@ -14,6 +15,7 @@ use tokio::sync::{Mutex, RwLock, mpsc, oneshot};
 
 use super::chat::context::ChatContextSnippet;
 use super::permissions::PendingToolApproval;
+use super::runtime_slot::RuntimeSlot;
 use super::telemetry::TelemetryHandle;
 
 #[derive(Clone)]
@@ -30,7 +32,9 @@ pub(crate) struct AppState {
     pub(crate) cancelled_chats: Arc<RwLock<HashSet<String>>>,
     pub(crate) active_chat_turns: Arc<RwLock<HashSet<String>>>,
     pub(crate) revertable_chats: Arc<RwLock<HashSet<String>>>,
+    pub(crate) runtime_slot: RuntimeSlot,
     pub(crate) runtime_sessions: Arc<Mutex<HashMap<String, RuntimeSession>>>,
+    pub(crate) runtime_session_receipts: Arc<Mutex<HashMap<String, RuntimeSessionReceipt>>>,
     pub(crate) shutdown_sender: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     pub(crate) docs_warmup_running: Arc<AtomicBool>,
     pub(crate) telemetry: Arc<RwLock<Option<TelemetryHandle>>>,
@@ -52,7 +56,9 @@ impl AppState {
             cancelled_chats: Arc::new(RwLock::new(HashSet::new())),
             active_chat_turns: Arc::new(RwLock::new(HashSet::new())),
             revertable_chats: Arc::new(RwLock::new(HashSet::new())),
+            runtime_slot: RuntimeSlot::new(),
             runtime_sessions: Arc::new(Mutex::new(HashMap::new())),
+            runtime_session_receipts: Arc::new(Mutex::new(HashMap::new())),
             shutdown_sender: Arc::new(Mutex::new(Some(shutdown_tx))),
             docs_warmup_running: Arc::new(AtomicBool::new(false)),
             telemetry: Arc::new(RwLock::new(None)),
@@ -91,19 +97,74 @@ pub(crate) struct PendingToolCall {
     pub(crate) sender: oneshot::Sender<Value>,
 }
 
-pub(crate) struct RuntimeSession {
+#[derive(Clone)]
+pub(crate) struct RuntimeSessionMetadata {
     pub(crate) session_id: String,
+    pub(crate) owner: ProjectRoot,
     pub(crate) scene_path: String,
-    pub(crate) working_directory: PathBuf,
     pub(crate) artifact_dir: PathBuf,
     pub(crate) captures_dir: PathBuf,
-    pub(crate) command_dir: PathBuf,
     pub(crate) raw_log_path: PathBuf,
     pub(crate) startup_capture: Option<Value>,
+    pub(crate) started_ms: u128,
+    pub(crate) max_run_seconds: u64,
+}
+
+pub(crate) struct RuntimeSession {
+    pub(crate) metadata: RuntimeSessionMetadata,
+    pub(crate) working_directory: PathBuf,
+    pub(crate) command_dir: PathBuf,
     pub(crate) log_cursor: RuntimeLogCursor,
     pub(crate) script_log_start_offsets: HashMap<String, u64>,
     pub(crate) child: tokio::process::Child,
-    pub(crate) started_ms: u128,
+}
+
+#[derive(Clone)]
+pub(crate) struct RuntimeSessionReceipt {
+    pub(crate) metadata: RuntimeSessionMetadata,
+    pub(crate) ended_ms: u128,
+    pub(crate) end_reason: RuntimeEndReason,
+    pub(crate) exit_code: Option<i32>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RuntimeEndReason {
+    Stopped,
+    NaturalExit,
+    AbsoluteLeaseExpired,
+    InactivityLeaseExpired,
+}
+
+impl RuntimeEndReason {
+    pub(crate) const fn wire_value(self) -> &'static str {
+        match self {
+            Self::Stopped => "stopped",
+            Self::NaturalExit => "natural_exit",
+            Self::AbsoluteLeaseExpired => "runtime_lease_expired",
+            Self::InactivityLeaseExpired => "runtime_inactivity_expired",
+        }
+    }
+
+    pub(crate) const fn code(self) -> Option<&'static str> {
+        match self {
+            Self::AbsoluteLeaseExpired | Self::InactivityLeaseExpired => {
+                Some("runtime_lease_expired")
+            }
+            Self::Stopped | Self::NaturalExit => None,
+        }
+    }
+
+    pub(crate) const fn should_terminate(self) -> bool {
+        !matches!(self, Self::NaturalExit)
+    }
+
+    pub(crate) const fn log_mode(self) -> &'static str {
+        match self {
+            Self::Stopped => "stop",
+            Self::NaturalExit => "natural_exit",
+            Self::AbsoluteLeaseExpired | Self::InactivityLeaseExpired => "lease_expiry",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]

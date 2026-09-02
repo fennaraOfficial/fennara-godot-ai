@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=tr source=docs/languages.md sha256=29ca1071b436e0ff29fa5d18d9e2b09cbe64749513ea7f4e1e6471569fcb6456 -->
+<!-- fennara-i18n: locale=tr source=docs/languages.md sha256=476e4afb5a17f76474a25864d08280c73ba0e4fdd1ebcfbbfd814d010dfac932 -->
 <a id="languages-and-translation-status"></a>
 # Diller ve Çeviri Durumu
 
@@ -12,16 +12,16 @@
 
 | Dil | Belgeler | Kapsam | İnceleme durumu |
 | --- | --- | --- | --- |
-| English | [İngilizce belgeler](../../README.md) | 30/30 | Temel kaynak |
-| 简体中文 | [Basitleştirilmiş Çince belgeler](../zh-CN/README.md) | 30/30 | Ana dil incelemesi istendi |
-| Español | [İspanyolca belgeler](../es/README.md) | 30/30 | Ana dil incelemesi istendi |
-| Português do Brasil | [Brezilya Portekizcesi belgeler](../pt-BR/README.md) | 30/30 | Ana dil incelemesi istendi |
-| 日本語 | [Japonca belgeler](../ja/README.md) | 30/30 | Ana dil incelemesi istendi |
-| 한국어 | [Korece belgeler](../ko/README.md) | 30/30 | Ana dil incelemesi istendi |
-| Русский | [Rusça belgeler](../ru/README.md) | 30/30 | Ana dil incelemesi istendi |
-| Français | [Fransızca belgeler](../fr/README.md) | 30/30 | Ana dil incelemesi istendi |
-| Deutsch | [Almanca belgeler](../de/README.md) | 30/30 | Ana dil incelemesi istendi |
-| Türkçe | [Türkçe belgeler](README.md) | 30/30 | Ana dil incelemesi istendi |
+| English | [İngilizce belgeler](../../README.md) | 31/31 | Temel kaynak |
+| 简体中文 | [Basitleştirilmiş Çince belgeler](../zh-CN/README.md) | 31/31 | Ana dil incelemesi istendi |
+| Español | [İspanyolca belgeler](../es/README.md) | 31/31 | Ana dil incelemesi istendi |
+| Português do Brasil | [Brezilya Portekizcesi belgeler](../pt-BR/README.md) | 31/31 | Ana dil incelemesi istendi |
+| 日本語 | [Japonca belgeler](../ja/README.md) | 31/31 | Ana dil incelemesi istendi |
+| 한국어 | [Korece belgeler](../ko/README.md) | 31/31 | Ana dil incelemesi istendi |
+| Русский | [Rusça belgeler](../ru/README.md) | 31/31 | Ana dil incelemesi istendi |
+| Français | [Fransızca belgeler](../fr/README.md) | 31/31 | Ana dil incelemesi istendi |
+| Deutsch | [Almanca belgeler](../de/README.md) | 31/31 | Ana dil incelemesi istendi |
+| Türkçe | [Türkçe belgeler](README.md) | 31/31 | Ana dil incelemesi istendi |
 
 <a id="what-is-translated"></a>
 ## Neler Çevrilir

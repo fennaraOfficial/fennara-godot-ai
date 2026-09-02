@@ -3,6 +3,7 @@ members = [
     "crates/fennara-cli",
     "crates/fennara-daemon",
     "crates/fennara-mcp",
+    "crates/fennara-project-identity",
 ]
 resolver = "3"
 

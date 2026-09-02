@@ -16,6 +16,7 @@ pub(crate) mod permissions;
 pub(crate) mod process_helpers;
 pub(crate) mod runtime_log;
 pub(crate) mod runtime_sessions;
+pub(crate) mod runtime_slot;
 pub(crate) mod scene_runner;
 #[cfg(test)]
 mod shutdown_tests;
@@ -37,6 +38,7 @@ pub async fn run() {
 
     let privileged = Router::new()
         .route("/status", get(godot_bridge::status))
+        .route("/status/bound", post(godot_bridge::bound_status))
         .route("/shutdown", post(shutdown))
         .route("/chat/traces", get(chat::chat_traces))
         .route("/tools/call", post(godot_bridge::call_tool))
@@ -94,16 +96,18 @@ pub async fn run() {
     let telemetry =
         telemetry::TelemetryRuntime::start(chat::settings::load_settings().telemetry_is_enabled());
     *state.telemetry.write().await = Some(telemetry.handle());
+    let runtime_supervisor = runtime_sessions::spawn_runtime_supervisor(state.clone());
 
     eprintln!("fennara-daemon listening on http://{addr}");
-    axum::serve(listener, app)
+    let server_result = axum::serve(listener, app)
         .with_graceful_shutdown(async {
             let _ = shutdown_rx.await;
         })
-        .await
-        .expect("fennara daemon stopped unexpectedly");
+        .await;
+    runtime_supervisor.shutdown().await;
     state.telemetry.write().await.take();
     telemetry.shutdown().await;
+    server_result.expect("fennara daemon stopped unexpectedly");
 }
 
 async fn health() -> Json<Value> {
@@ -118,7 +122,8 @@ async fn shutdown(
     axum::extract::State(state): axum::extract::State<AppState>,
 ) -> (StatusCode, Json<Value>) {
     let connected_projects = state.projects.read().await.len();
-    if let Some(error) = connected_shutdown_error(connected_projects) {
+    let runtime_occupied = state.runtime_slot.is_occupied().await;
+    if let Some(error) = shutdown_error(connected_projects, runtime_occupied) {
         return (StatusCode::CONFLICT, Json(error));
     }
     if let Some(sender) = state.shutdown_sender.lock().await.take() {
@@ -147,12 +152,14 @@ async fn shutdown(
 
 async fn finish_deferred_shutdown(state: AppState, sender: oneshot::Sender<()>, delay: Duration) {
     tokio::time::sleep(delay).await;
-    let projects = state.projects.read().await;
-    if connected_shutdown_error(projects.len()).is_none() {
+    let shutdown_sealed = {
+        let projects = state.projects.read().await;
+        projects.is_empty() && state.runtime_slot.begin_shutdown()
+    };
+    if shutdown_sealed {
         let _ = sender.send(());
         return;
     }
-    drop(projects);
     let mut shutdown_sender = state.shutdown_sender.lock().await;
     if shutdown_sender.is_none() {
         *shutdown_sender = Some(sender);
@@ -165,6 +172,18 @@ fn connected_shutdown_error(connected_projects: usize) -> Option<Value> {
             "ok": false,
             "error": "connected_godot_projects",
             "connected_project_count": connected_projects
+        })
+    })
+}
+
+fn shutdown_error(connected_projects: usize, runtime_occupied: bool) -> Option<Value> {
+    connected_shutdown_error(connected_projects).or_else(|| {
+        runtime_occupied.then(|| {
+            json!({
+                "ok": false,
+                "error": "runtime_slot_busy",
+                "message": "A daemon-managed Runtime Session is still starting or running."
+            })
         })
     })
 }

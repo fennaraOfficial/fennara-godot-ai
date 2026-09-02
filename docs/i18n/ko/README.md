@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=ko source=docs/README.md sha256=2f8fb6a711c8bb56af570d1657f802c63cbdf2ced6b2c620339c588c9c9211cb -->
+<!-- fennara-i18n: locale=ko source=docs/README.md sha256=ab01a3fd8024bccc8ad878eb0ec4cb15defa770ed3feccd0eef4c56270c7e763 -->
 <a id="fennara-documentation"></a>
 # Fennara 문서
 
@@ -32,6 +32,7 @@
 | 가이드 | 다루는 내용 |
 | --- | --- |
 | [MCP 앱과 내장 채팅](chat-vs-mcp.md) | 각 경로에서 사용하는 모델 계정 |
+| [여러 에이전트와 워크트리](multi-agent-worktrees.md) | 하나의 데몬을 공유하면서 각 MCP 연결을 자신의 Godot 프로젝트에 바인딩 |
 | [도구](tools.md) | Godot 인식 도구와 사용 시점 |
 | [예제](examples.md) | 일반적인 Godot 워크플로용 프롬프트 |
 | [슬래시 명령](slash-commands.md) | 채팅 독의 `/provider`와 `/model` |

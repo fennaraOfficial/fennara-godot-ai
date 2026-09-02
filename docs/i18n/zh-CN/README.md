@@ -1,4 +1,4 @@
-<!-- fennara-i18n: locale=zh-CN source=docs/README.md sha256=2f8fb6a711c8bb56af570d1657f802c63cbdf2ced6b2c620339c588c9c9211cb -->
+<!-- fennara-i18n: locale=zh-CN source=docs/README.md sha256=ab01a3fd8024bccc8ad878eb0ec4cb15defa770ed3feccd0eef4c56270c7e763 -->
 <a id="fennara-documentation"></a>
 # Fennara 文档
 
@@ -32,6 +32,7 @@
 | 指南 | 内容 |
 | --- | --- |
 | [MCP 应用与内置聊天](chat-vs-mcp.md) | 两条路径分别使用哪个模型账户 |
+| [多智能体与工作树](multi-agent-worktrees.md) | 在共享一个守护进程的同时，将每个 MCP 连接绑定到各自的 Godot 项目 |
 | [工具](tools.md) | 能够理解 Godot 的工具及其使用时机 |
 | [示例](examples.md) | 常见 Godot 工作流的提示词 |
 | [斜杠命令](slash-commands.md) | 聊天面板中的 `/provider` 和 `/model` |
