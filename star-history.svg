@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="360" viewBox="0 0 700 360" role="img" aria-labelledby="title desc">
+  <title id="title">GitHub star history for fennaraOfficial/fennara-godot-ai</title>
+  <desc id="desc">fennaraOfficial/fennara-godot-ai grew from 1 star on 2026-06-01 to 311 stars on 2026-10-24.</desc>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #1f2328;
+      --muted: #59636e;
+      --border: #d1d9e0;
+      --grid: #d8dee4;
+      --accent: #8250df;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --text: #f0f6fc;
+        --muted: #9198a1;
+        --border: #30363d;
+        --grid: #21262d;
+        --accent: #a371f7;
+      }
+    }
+    text { fill: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-weight: 400; }
+    .surface { fill: var(--bg); stroke: var(--border); }
+    .repo { font-size: 12px; font-weight: 500; }
+    .descriptor, .updated, .axes text { fill: var(--muted); }
+    .descriptor, .updated { font-size: 11px; }
+    .axes text { font-size: 10px; }
+    .axes line { stroke: var(--grid); stroke-width: 1; }
+    .area { fill: var(--accent); opacity: 0.07; }
+    .curve { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    .endpoint { fill: var(--accent); }
+    .current { font-size: 12px; font-weight: 500; }
+  </style>
+  <rect class="surface" x="1" y="1" width="698" height="358" rx="14"/>
+  <text class="repo" x="36" y="42">fennaraOfficial/fennara-godot-ai</text>
+  <text class="descriptor" x="664" y="42" text-anchor="end">GitHub stars over time</text>
+  <g class="axes">
+    <line x1="62" x2="664" y1="292" y2="292"/>
+    <text x="52" y="295" text-anchor="end">0</text>
+    <line x1="62" x2="664" y1="238" y2="238"/>
+    <text x="52" y="241" text-anchor="end">100</text>
+    <line x1="62" x2="664" y1="184" y2="184"/>
+    <text x="52" y="187" text-anchor="end">200</text>
+    <line x1="62" x2="664" y1="130" y2="130"/>
+    <text x="52" y="133" text-anchor="end">300</text>
+    <line x1="62" x2="664" y1="76" y2="76"/>
+    <text x="52" y="79" text-anchor="end">400</text>
+    <text x="62" y="314" text-anchor="start">Jun 2026</text>
+    <text x="315.3" y="314" text-anchor="middle">Aug</text>
+    <text x="568.5" y="314" text-anchor="middle">Oct</text>
+  </g>
+  <path class="area" d="M 62 291.5 L 78.6 289.8 L 111.8 289.3 L 116 288.8 L 120.1 288.2 L 124.3 287.7 L 136.7 285.5 L 145 285 L 149.2 283.9 L 153.3 274.2 L 157.5 270.9 L 161.6 270.4 L 165.8 256.9 L 169.9 241.8 L 174.1 234.2 L 178.2 224.5 L 182.4 220.7 L 186.6 212.6 L 190.7 209.4 L 194.9 199.1 L 199 193.7 L 203.2 191.6 L 207.3 189.9 L 211.5 187.8 L 215.6 185.1 L 219.8 183.5 L 223.9 181.3 L 228.1 180.8 L 232.2 180.2 L 236.4 178.6 L 240.5 177.5 L 244.7 175.9 L 248.8 174.8 L 253 171.6 L 261.3 171 L 265.4 170 L 273.7 169.4 L 277.9 168.9 L 286.2 167.8 L 290.3 166.2 L 294.5 165.1 L 298.6 164.6 L 302.8 164.6 L 307 164.6 L 311.1 164 L 315.3 163.5 L 319.4 160.8 L 323.6 160.2 L 327.7 160.2 L 331.9 159.7 L 336 159.7 L 340.2 159.7 L 344.3 159.2 L 348.5 159.2 L 352.6 158.6 L 356.8 158.6 L 360.9 158.6 L 365.1 157.5 L 369.2 157.5 L 373.4 157.5 L 377.5 157.5 L 381.7 157.5 L 385.8 157.5 L 390 156.5 L 394.1 155.9 L 398.3 155.4 L 402.4 153.8 L 406.6 153.8 L 410.7 152.7 L 414.9 151.1 L 419 148.4 L 423.2 146.7 L 427.4 146.2 L 431.5 146.2 L 435.7 144 L 439.8 142.4 L 444 141.9 L 448.1 141.3 L 452.3 141.3 L 456.4 140.8 L 460.6 140.3 L 464.7 140.3 L 468.9 139.2 L 473 139.2 L 477.2 139.2 L 481.3 138.6 L 485.5 138.6 L 489.6 137.6 L 493.8 137.6 L 497.9 137.6 L 502.1 137 L 506.2 135.4 L 510.4 134.9 L 514.5 134.9 L 518.7 134.3 L 522.8 133.8 L 527 133.8 L 531.1 133.2 L 535.3 133.2 L 539.4 132.7 L 543.6 132.7 L 547.8 132.7 L 551.9 133.2 L 556.1 133.2 L 560.2 132.2 L 564.4 131.6 L 568.5 131.1 L 572.7 131.1 L 576.8 131.1 L 581 130.5 L 585.1 130 L 589.3 130 L 593.4 128.9 L 597.6 129.5 L 601.7 128.4 L 605.9 128.4 L 610 127.8 L 614.2 126.8 L 618.3 126.2 L 622.5 126.8 L 626.6 126.8 L 630.8 126.8 L 634.9 125.1 L 639.1 124.6 L 643.2 124.6 L 647.4 125.1 L 651.5 124.6 L 655.7 124.1 L 659.8 124.1 L 664 124.1 L 664 292 L 62 292 Z"/>
+  <path class="curve" d="M 62 291.5 L 78.6 289.8 L 111.8 289.3 L 116 288.8 L 120.1 288.2 L 124.3 287.7 L 136.7 285.5 L 145 285 L 149.2 283.9 L 153.3 274.2 L 157.5 270.9 L 161.6 270.4 L 165.8 256.9 L 169.9 241.8 L 174.1 234.2 L 178.2 224.5 L 182.4 220.7 L 186.6 212.6 L 190.7 209.4 L 194.9 199.1 L 199 193.7 L 203.2 191.6 L 207.3 189.9 L 211.5 187.8 L 215.6 185.1 L 219.8 183.5 L 223.9 181.3 L 228.1 180.8 L 232.2 180.2 L 236.4 178.6 L 240.5 177.5 L 244.7 175.9 L 248.8 174.8 L 253 171.6 L 261.3 171 L 265.4 170 L 273.7 169.4 L 277.9 168.9 L 286.2 167.8 L 290.3 166.2 L 294.5 165.1 L 298.6 164.6 L 302.8 164.6 L 307 164.6 L 311.1 164 L 315.3 163.5 L 319.4 160.8 L 323.6 160.2 L 327.7 160.2 L 331.9 159.7 L 336 159.7 L 340.2 159.7 L 344.3 159.2 L 348.5 159.2 L 352.6 158.6 L 356.8 158.6 L 360.9 158.6 L 365.1 157.5 L 369.2 157.5 L 373.4 157.5 L 377.5 157.5 L 381.7 157.5 L 385.8 157.5 L 390 156.5 L 394.1 155.9 L 398.3 155.4 L 402.4 153.8 L 406.6 153.8 L 410.7 152.7 L 414.9 151.1 L 419 148.4 L 423.2 146.7 L 427.4 146.2 L 431.5 146.2 L 435.7 144 L 439.8 142.4 L 444 141.9 L 448.1 141.3 L 452.3 141.3 L 456.4 140.8 L 460.6 140.3 L 464.7 140.3 L 468.9 139.2 L 473 139.2 L 477.2 139.2 L 481.3 138.6 L 485.5 138.6 L 489.6 137.6 L 493.8 137.6 L 497.9 137.6 L 502.1 137 L 506.2 135.4 L 510.4 134.9 L 514.5 134.9 L 518.7 134.3 L 522.8 133.8 L 527 133.8 L 531.1 133.2 L 535.3 133.2 L 539.4 132.7 L 543.6 132.7 L 547.8 132.7 L 551.9 133.2 L 556.1 133.2 L 560.2 132.2 L 564.4 131.6 L 568.5 131.1 L 572.7 131.1 L 576.8 131.1 L 581 130.5 L 585.1 130 L 589.3 130 L 593.4 128.9 L 597.6 129.5 L 601.7 128.4 L 605.9 128.4 L 610 127.8 L 614.2 126.8 L 618.3 126.2 L 622.5 126.8 L 626.6 126.8 L 630.8 126.8 L 634.9 125.1 L 639.1 124.6 L 643.2 124.6 L 647.4 125.1 L 651.5 124.6 L 655.7 124.1 L 659.8 124.1 L 664 124.1"/>
+  <circle class="endpoint" cx="664" cy="124.1" r="4"/>
+  <text class="current" x="654" y="114.1" text-anchor="end">311 stars</text>
+  <text class="updated" x="664" y="334" text-anchor="end">updated 2026-10-24</text>
+</svg>
